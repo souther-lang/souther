@@ -1,8 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.CompileException;
 
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class HighValueDiagnosticTest {
         assertEquals("Int", Type.show(Type.INT));
         assertEquals("Bool", Type.show(Type.BOOL));
         assertEquals("List<Int>", Type.show(Type.list(Type.INT)));
-        assertEquals("N", Type.show(Type.ref("N")));
+        assertEquals("N", Type.show(Type.ref(new souther.compiler.types.TypeName("demo", "N"))));
         assertEquals("Int?", Type.show(Type.option(Type.INT)));
     }
 
@@ -56,7 +57,7 @@ class HighValueDiagnosticTest {
                 """);
         assertEquals(2, d.secondary().size(), "the then and else branches are each pointed at");
         assertNull(d.diff());
-        assertEquals("check.if.title", d.titleKey());
+        assertEquals("check.type.mismatch.title", d.titleKey());
     }
 
     @Test
@@ -69,6 +70,68 @@ class HighValueDiagnosticTest {
                 """);
         assertEquals("check.unknown.title", d.titleKey());
         assertEquals("amount", d.suggestion());
+    }
+
+    @Test
+    void foldOverEmptySeedWithNoContextPointsAtTheSeed() {
+        // No expected type reaches the fold: its value is bound to a local the source left
+        // un-annotated, so the accumulator's value type is genuinely unknown. The error must point at
+        // the empty seed and say how to type it — annotate the binding (issue #71) or move the fold
+        // into a typed position — not at the arithmetic deep inside the inlined Map.updateOrInsert (issue #70,
+        // the misleading-location half).
+        Diagnostic d = diagnosticOf("""
+                module demo
+                import List ( fold )
+                data In = { keys: List<String> }
+                data Out = { m: Map<String, Int> }
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = {
+                    let counts = fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
+                    Out { m = counts }
+                }
+                """);
+        assertEquals("check.fold.seed.title", d.titleKey());
+        // the primary caret is on the Map.empty seed (line 7), not the `+` inside upsert
+        assertEquals(7, d.pos().line());
+    }
+
+    @Test
+    void anUnrelatedErrorInAFoldStepIsNotReattributedToTheSeed() {
+        // The step over a Map.empty seed references an undefined identifier `bogus`. Even though the
+        // accumulator is a bottom, the failure is NOT the unresolved-bottom error, so it must surface
+        // as the unknown-identifier error at `bogus`, not be masked by the seed-inference message.
+        Diagnostic d = diagnosticOf("""
+                module demo
+                import List ( fold )
+                data In = { keys: List<String> }
+                data Out = { m: Map<String, Int> }
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = {
+                    let counts = fold((acc, k) -> Map.updateOrInsert(k, 1, n -> bogus, acc), Map.empty, i.keys)
+                    Out { m = counts }
+                }
+                """);
+        assertEquals("check.unknown.title", d.titleKey());
+    }
+
+    @Test
+    void aMapOverEmptyLiteralIsNotReattributedToAFoldSeed() {
+        // `List.map` over an empty literal cannot infer its element type, so its closure fails on the
+        // bottom-typed parameter. `List.map` inlines to a `List.foldFrom` whose accumulator seed is
+        // the combinator's own internal `[]`, stamped onto the call site — not a seed the caller
+        // wrote. The failure must surface as its own step error, not a misleading `check.fold.seed.*`
+        // naming `List.foldFrom`, a helper the user never called (issue #70 review).
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data Out = { xs: List<Int> }
+                behavior run : (i: Int) -> Out constructs Out
+                let run (i) = {
+                    let ys = List.map(n -> n + 1, [])
+                    Out { xs = ys }
+                }
+                """);
+        assertEquals("check.type.mismatch.title", d.titleKey(),
+                "a non-fold combinator over [] surfaces its own step error, not a fold-seed message");
     }
 
     @Test
@@ -112,7 +175,7 @@ class HighValueDiagnosticTest {
                     | A as a -> a
                 """);
         assertEquals("E1201", d.code());
-        assertTrue(d.notes().stream().anyMatch(n -> "e1201.hint".equals(n.messageKey())),
+        assertTrue(d.notes().stream().anyMatch(n -> n.said() instanceof DeclarationMessage.AddACaseFor),
                 "the missing cases should be listed in a hint");
     }
 }

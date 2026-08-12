@@ -80,6 +80,6 @@ class CompileOrderingTest {
 
                 let run (i) = Out { ys = sort(i.xs) }
                 """));
-        assertTrue(e.getMessage().contains("sort needs a list of ordered values"), e.getMessage());
+        assertTrue(e.getMessage().contains("`sort` needs a list of ordered values"), e.getMessage());
     }
 }

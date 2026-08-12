@@ -1,0 +1,325 @@
+package souther.compiler.codegen;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.types.ValueName;
+import souther.compiler.check.ConstEval;
+import souther.compiler.types.Type;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Maps a newtype's invariant onto Raoh's decoder constraints (issue #83), so a violation reported by
+ * a derived decoder carries the code and metadata of the rule it broke — {@code too_short} with
+ * {@code min}, {@code invalid_format} with {@code pattern} — instead of one {@code
+ * invariant_violation} for every invariant in the model. The failure itself is Raoh's: the code, the
+ * metadata, the default message and the path all come from the constraint, so a
+ * {@code MessageResolver} keyed on the standard codes works unchanged.
+ *
+ * <p>Only exact equivalences are mapped. A constraint weaker than the invariant would be caught by
+ * {@code __construct}, which still runs; a constraint stronger than it would reject values the
+ * domain accepts, and would do so at the boundary where it reads as bad input. Anything this cannot
+ * prove equivalent is left to the emitter's fallback.
+ */
+public final class InvariantConstraints {
+
+    private InvariantConstraints() {}
+
+    /** The name a newtype's single field carries, and so the name its invariant reads it by. */
+    private static final String VALUE = "value";
+
+    public sealed interface Constraint {}
+
+    /** A {@code StringDecoder} constraint. */
+    public sealed interface OfString extends Constraint {}
+
+    public record MinLength(int n) implements OfString {}
+
+    public record MaxLength(int n) implements OfString {}
+
+    public record FixedLength(int n) implements OfString {}
+
+    public record Pattern(String regex) implements OfString {}
+
+    /** A {@code LongDecoder} constraint — Souther's {@code Int} is carried as a long. */
+    public sealed interface OfInt extends Constraint {}
+
+    public record Min(long n) implements OfInt {}
+
+    public record Max(long n) implements OfInt {}
+
+    public record Positive() implements OfInt {}
+
+    public record NonNegative() implements OfInt {}
+
+    /** A {@code DecimalDecoder} constraint. */
+    public sealed interface OfDecimal extends Constraint {}
+
+    public record DecimalMin(BigDecimal n) implements OfDecimal {}
+
+    public record DecimalMax(BigDecimal n) implements OfDecimal {}
+
+    public record DecimalPositive() implements OfDecimal {}
+
+    public record DecimalNonNegative() implements OfDecimal {}
+
+    /** A {@code ListDecoder} constraint — a newtype over a {@code List}, whose decoder Raoh answers
+     * typed until something untyped is chained onto it. */
+    public sealed interface OfList extends Constraint {}
+
+    /** {@code nonempty()} rather than {@code minSize(1)}: Raoh states emptiness on its own, and says so
+     * in the message. */
+    public record NonEmpty() implements OfList {}
+
+    public record MinSize(int n) implements OfList {}
+
+    public record MaxSize(int n) implements OfList {}
+
+    public record FixedSize(int n) implements OfList {}
+
+    /** {@code unique()}: no element appears twice, compared by value as Souther compares. */
+    public record Unique() implements OfList {}
+
+    /** A {@code RecordDecoder} constraint — a newtype over a {@code Map}, which crosses the boundary as
+     * an object and is decoded as a record of its values. */
+    public sealed interface OfMap extends Constraint {}
+
+    public record MapMinSize(int n) implements OfMap {}
+
+    public record MapMaxSize(int n) implements OfMap {}
+
+    /**
+     * The Raoh constraint equivalent to {@code clause} on a newtype whose value is {@code base}, or
+     * empty when this cannot prove one.
+     */
+    public static Optional<Constraint> of(Ast.Expr clause, Type base) {
+        if (clause instanceof Ast.Apply call) {
+            return ofCall(call, base);
+        }
+        if (!(clause instanceof Ast.Binary bin)) {
+            return Optional.empty();
+        }
+        // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
+        Ast.Expr left = bin.left();
+        Ast.Expr right = bin.right();
+        Ast.BinOp op = bin.op();
+        if (!bearsValue(left) && bearsValue(right)) {
+            Ast.Expr swap = left;
+            left = right;
+            right = swap;
+            op = mirrored(op);
+        }
+        if (base == Type.STRING) {
+            return ofStringLength(op, left, right);
+        }
+        if (base == Type.INT) {
+            return ofInt(op, left, right);
+        }
+        if (base == Type.DECIMAL) {
+            return ofDecimal(op, left, right);
+        }
+        if (base instanceof Type.ListOf) {
+            return ofListSize(op, left, right);
+        }
+        if (base instanceof Type.MapOf) {
+            return ofMapSize(op, left, right);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * A bound on how many elements a list has: {@code List.length(value) >= 1} is Raoh's
+     * {@code nonempty()}, {@code >= 3} its {@code minSize(3)}, and so on. A size is a whole number, so a
+     * strict bound is the adjacent inclusive one — read the same way a string's length is.
+     *
+     * <p>A {@code Set} has no entry of its own here. Souther decodes one as a list and drops the
+     * duplicates while mapping it (spec §collections), so a constraint chained after that mapping is no
+     * longer on a typed decoder, and one chained before it would count the duplicates.
+     */
+    private static Optional<Constraint> ofListSize(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+        Integer n = sizeBound("List.length", left, right);
+        if (n == null) {
+            return Optional.empty();
+        }
+        return switch (op) {
+            case GE -> Optional.of(n == 1 ? new NonEmpty() : new MinSize(n));
+            case GT -> n == Integer.MAX_VALUE ? Optional.empty()
+                    : Optional.of(n == 0 ? new NonEmpty() : new MinSize(n + 1));
+            case LE -> Optional.of(new MaxSize(n));
+            case LT -> n == 0 ? Optional.empty() : Optional.of(new MaxSize(n - 1));
+            case EQ -> Optional.of(new FixedSize(n));
+            default -> Optional.empty();
+        };
+    }
+
+    /** The same for a map, which Raoh decodes as a record of its values and bounds by entry count.
+     * There is no emptiness constraint of its own there, so {@code >= 1} is a minimum of one. */
+    private static Optional<Constraint> ofMapSize(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+        Integer n = sizeBound("Map.size", left, right);
+        if (n == null) {
+            return Optional.empty();
+        }
+        return switch (op) {
+            case GE -> Optional.of(new MapMinSize(n));
+            case GT -> n == Integer.MAX_VALUE ? Optional.empty() : Optional.of(new MapMinSize(n + 1));
+            case LE -> Optional.of(new MapMaxSize(n));
+            case LT -> n == 0 ? Optional.empty() : Optional.of(new MapMaxSize(n - 1));
+            default -> Optional.empty();
+        };
+    }
+
+    /** The literal bound {@code size(value)} is compared against, or null when this is not that shape. */
+    private static Integer sizeBound(String size, Ast.Expr left, Ast.Expr right) {
+        if (!(left instanceof Ast.Apply call) || !call.reaches().equals(size)
+                || call.args().size() != 1 || !isValue(call.args().get(0))) {
+            return null;
+        }
+        Long bound = intLiteral(right);
+        if (bound == null || bound < 0 || bound > Integer.MAX_VALUE) {
+            return null;
+        }
+        return bound.intValue();
+    }
+
+    private static Optional<Constraint> ofCall(Ast.Apply call, Type base) {
+        // `String.matches(p, value)` is whole-string anchored (Strings.matches), and so is Raoh's
+        // pattern (Matcher.matches), so the two accept the same strings. The regex is asked for the
+        // same way the check asks — one reading of which expressions are compile-time strings and of
+        // what one composes to, so a pattern the check accepted cannot arrive here unrecognised and
+        // lose its constraint. It has been compiled once at check time, so it is known well-formed.
+        if (base == Type.STRING && "String.matches".equals(call.reaches()) && call.args().size() == 2
+                && isValue(call.args().get(1))) {
+            return ConstEval.evalString(call.args().get(0)).map(Pattern::new);
+        }
+        // `List.allDistinctBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
+        // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
+        // is not the identity says it of something else — the elements' products, their ids — and Raoh
+        // has no constraint for that, so the clause keeps its own check.
+        if (base instanceof Type.ListOf && "List.allDistinctBy".equals(call.reaches())
+                && call.args().size() == 2 && isValue(call.args().get(1))
+                && isIdentity(call.args().get(0))) {
+            return Optional.of(new Unique());
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Constraint> ofStringLength(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+        if (!(left instanceof Ast.Apply call) || !"String.length".equals(call.reaches())
+                || call.args().size() != 1 || !isValue(call.args().get(0))) {
+            return Optional.empty();
+        }
+        Long bound = intLiteral(right);
+        if (bound == null || bound < 0 || bound > Integer.MAX_VALUE) {
+            return Optional.empty();
+        }
+        int n = bound.intValue();
+        // A length is a whole number, so `> n` admits exactly what `>= n + 1` admits — except at the
+        // top of the range, where there is no such length to name.
+        return switch (op) {
+            case GE -> Optional.of(new MinLength(n));
+            case GT -> n == Integer.MAX_VALUE ? Optional.empty() : Optional.of(new MinLength(n + 1));
+            case LE -> Optional.of(new MaxLength(n));
+            case LT -> n == 0 ? Optional.empty() : Optional.of(new MaxLength(n - 1));
+            case EQ -> Optional.of(new FixedLength(n));
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<Constraint> ofInt(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+        if (!isValue(left)) {
+            return Optional.empty();
+        }
+        Long bound = intLiteral(right);
+        if (bound == null) {
+            return Optional.empty();
+        }
+        long n = bound;
+        // An Int is discrete, so a strict bound is the adjacent inclusive one. At the extremes there
+        // is no adjacent value, so those forms are left to the fallback rather than wrapped around.
+        return switch (op) {
+            case GE -> Optional.of(n == 0 ? new NonNegative() : new Min(n));
+            case GT -> n == 0 ? Optional.of(new Positive())
+                    : n == Long.MAX_VALUE ? Optional.empty() : Optional.of(new Min(n + 1));
+            case LE -> Optional.of(new Max(n));
+            case LT -> n == Long.MIN_VALUE ? Optional.empty() : Optional.of(new Max(n - 1));
+            default -> Optional.empty();
+        };
+    }
+
+    private static Optional<Constraint> ofDecimal(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+        if (!isValue(left)) {
+            return Optional.empty();
+        }
+        BigDecimal bound = decimalLiteral(right);
+        if (bound == null) {
+            return Optional.empty();
+        }
+        boolean zero = bound.signum() == 0;
+        // A Decimal has no adjacent value, so a strict bound has no inclusive equivalent — except
+        // against zero, which Raoh states directly as positive().
+        return switch (op) {
+            case GE -> Optional.of(zero ? new DecimalNonNegative() : new DecimalMin(bound));
+            case GT -> zero ? Optional.of(new DecimalPositive()) : Optional.empty();
+            case LE -> Optional.of(new DecimalMax(bound));
+            default -> Optional.empty();
+        };
+    }
+
+    /** Whether the expression reads the newtype's value — directly, or through {@code String.length}. */
+    private static boolean bearsValue(Ast.Expr e) {
+        if (isValue(e)) {
+            return true;
+        }
+        return e instanceof Ast.Apply call && call.args().size() == 1 && isValue(call.args().get(0));
+    }
+
+    private static boolean isValue(Ast.Expr e) {
+        return e instanceof Ast.Var v && v.name().equals(VALUE);
+    }
+
+    /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is
+     * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). The body reads
+     * the parameter when it reads that binding; a name spelled like it, bound elsewhere, is another
+     * value. */
+    private static boolean isIdentity(Ast.Expr e) {
+        return e instanceof Ast.Block b && b.params().size() == 1
+                && b.body() instanceof Ast.Var v
+                && v.denotes() instanceof ValueName.Local local
+                && local.id().equals(b.params().get(0).id());
+    }
+
+    private static Ast.BinOp mirrored(Ast.BinOp op) {
+        return switch (op) {
+            case LT -> Ast.BinOp.GT;
+            case LE -> Ast.BinOp.GE;
+            case GT -> Ast.BinOp.LT;
+            case GE -> Ast.BinOp.LE;
+            default -> op;   // == and /= read the same either way
+        };
+    }
+
+    /** An Int literal, negation included ({@code -1}), or null when the operand is not one. */
+    private static Long intLiteral(Ast.Expr e) {
+        if (e instanceof Ast.IntLit lit) {
+            return lit.value();
+        }
+        if (e instanceof Ast.Neg neg && neg.operand() instanceof Ast.IntLit lit
+                && lit.value() != Long.MIN_VALUE) {
+            return -lit.value();
+        }
+        return null;
+    }
+
+    /** A Decimal literal; an Int literal counts, since a bare literal takes the other side's type. */
+    private static BigDecimal decimalLiteral(Ast.Expr e) {
+        if (e instanceof Ast.DecimalLit lit) {
+            return lit.value();
+        }
+        if (e instanceof Ast.Neg neg && neg.operand() instanceof Ast.DecimalLit lit) {
+            return lit.value().negate();
+        }
+        Long asInt = intLiteral(e);
+        return asInt == null ? null : BigDecimal.valueOf(asInt);
+    }
+}

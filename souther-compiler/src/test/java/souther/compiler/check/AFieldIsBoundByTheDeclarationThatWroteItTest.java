@@ -1,0 +1,191 @@
+package souther.compiler.check;
+
+import souther.compiler.Compiler;
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.core.Core;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Severity;
+import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Names;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.TypeName;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A declaration's fields are bound where the declaration is written, and every reader gets those
+ * bindings.
+ *
+ * <p>A clause reads its declaration's fields as the bindings they are, and it is resolved once, by
+ * the module that wrote it. A reader that computes those bindings under its own module name gets a
+ * different binding for the same field, so the clause it was carried in with resolves against
+ * nothing — and {@code Clauses.typed} answers null, which every caller reads as a rule the language
+ * cannot express rather than one that was looked up in the wrong place.
+ *
+ * <p>Held over each way a reader can reach a declaration another module wrote. They break together
+ * today and need not stay that way: how a name arrives is the import representation's business, and
+ * a binding is not a function of it.
+ *
+ * <p>Held at three depths, because one alone would pass while the defect stood. The identity is
+ * where it goes wrong; the elaboration is what stops working; the diagnostic is what an author sees.
+ */
+class AFieldIsBoundByTheDeclarationThatWroteItTest {
+
+    private static final TypeName RANGE = new TypeName("up", "Range");
+
+    private static final String DECLARING = """
+            module up exposing ( Range )
+            data Range = { lo: Int, hi: Int }
+                invariant ordered = lo <= hi
+            """;
+
+    /** What the reader writes to reach {@code up.Range}, and what it calls it once it has. */
+    private enum Reached {
+        BY_NAME("import up ( Range )", "Range"),
+        QUALIFIED("", "up.Range"),
+        THROUGH_AN_ALIAS("import up as u", "u.Range"),
+        BESIDE_THE_READERS_OWN("data Range = { lo: Int, hi: Int }", "up.Range");
+
+        private final String preamble;
+        private final String written;
+
+        Reached(String preamble, String written) {
+            this.preamble = preamble;
+            this.written = written;
+        }
+
+        /** A reader whose own obligation is discharged only by what {@code up.Range} states. */
+        String reader() {
+            return "module demo\n" + preamble + """
+
+                    data Gap = Int
+                        invariant value >= 0
+
+                    behavior measure : (r: %s) -> Gap constructs Gap
+                    let measure (r) = Gap(r.hi - r.lo)
+                    """.formatted(written);
+        }
+    }
+
+    private static Compilation compiled(Reached reached) {
+        Compilation c = Compilation.ofSources(List.of(DECLARING, reached.reader()),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        return c;
+    }
+
+    private static Ast.Data range(Compilation c) {
+        Ast.Def def = c.db().ask(new Names.ResolvedDeclaration(RANGE)).value();
+        assertNotNull(def, "the model under test compiles");
+        return (Ast.Data) def;
+    }
+
+    /** The clauses as the module named {@code reading} reads them. */
+    private static Clauses readBy(Compilation c, String reading) {
+        return new Clauses(c.db().ask(new Names.NameScope(reading)).value(), Map.of());
+    }
+
+    /**
+     * The identity, where it is decided. A field of {@code up.Range} is {@code up.Range}'s field
+     * however it was reached, and the reader's own module name never stands in for the declaring one.
+     */
+    @Test
+    void aReaderBindsAnImportedDeclarationsFieldsWhereTheyWereWritten() {
+        BindingOwner declaring = new BindingOwner.OfFields(RANGE);
+
+        for (Reached reached : Reached.values()) {
+            Compilation c = compiled(reached);
+
+            assertEquals(Map.of("lo", new BindingId(declaring, 0), "hi", new BindingId(declaring, 1)),
+                    readBy(c, "demo").bindingsOf(RANGE, range(c)),
+                    "reached " + reached + ": a field is bound by the declaration that wrote it");
+        }
+    }
+
+    /**
+     * What stops working when it goes wrong: the clause no longer resolves, and E1023 says the field
+     * is unknown though the scope has it under another identity.
+     *
+     * <p>Asserted as the same {@code Core} the declaring module reads, not merely as something: a
+     * clause that typed to a different term would be a second reading of one rule. Asserted non-null
+     * beside it, because two readings that both answer nothing are also equal.
+     */
+    @Test
+    void anImportedClauseIsTypedAsItIsWhereItIsDeclared() {
+        for (Reached reached : Reached.values()) {
+            Compilation c = compiled(reached);
+            Ast.Data range = range(c);
+            Ast.Expr clause = range.invariants().get(0).expr();
+
+            Core athome = readBy(c, "up").typed(clause, RANGE, range);
+            assertNotNull(athome, "the declaring module reads its own rule");
+            assertEquals(athome, readBy(c, "demo").typed(clause, RANGE, range),
+                    "reached " + reached + ": one rule, read the same either side of the boundary");
+        }
+    }
+
+    /**
+     * What an author sees. The obligation is the reader's own ({@code Gap.value >= 0}) and what
+     * discharges it is the imported declaration's ({@code lo <= hi}), so the two do not go missing
+     * together — which is how this stayed invisible: a check that loses both reports nothing either
+     * way.
+     */
+    @Test
+    void anImportedRuleDischargesWhatItWouldDischargeAtHome() {
+        for (Reached reached : Reached.values()) {
+            assertEquals(List.of(), warnings(Compiler.compileModulesWithWarnings(
+                            List.of(DECLARING, reached.reader()))),
+                    "reached " + reached + ": `lo <= hi` discharges `hi - lo >= 0`");
+        }
+    }
+
+    /** The same model in one module, which is what the four above are held against. */
+    @Test
+    void theSameModelInOneModuleDischargesToo() {
+        assertEquals(List.of(), warnings(Compiler.compileModulesWithWarnings(List.of("""
+                module demo
+                data Range = { lo: Int, hi: Int }
+                    invariant ordered = lo <= hi
+
+                data Gap = Int
+                    invariant value >= 0
+
+                behavior measure : (r: Range) -> Gap constructs Gap
+                let measure (r) = Gap(r.hi - r.lo)
+                """))));
+    }
+
+    /**
+     * Two declarations of one spelling are two declarations. A reader that writes its own
+     * {@code Range} and reaches {@code up.Range} beside it must not have them share a binding: a
+     * field standing for two values is a clause read against the wrong one, which is worse than a
+     * clause not read at all.
+     */
+    @Test
+    void aReadersOwnDeclarationDoesNotShareABindingWithAnImportedNamesake() {
+        Compilation c = compiled(Reached.BESIDE_THE_READERS_OWN);
+        Clauses read = readBy(c, "demo");
+
+        TypeName ours = new TypeName("demo", "Range");
+        Ast.Data mine = (Ast.Data) c.db().ask(new Names.ResolvedDeclaration(ours)).value();
+
+        assertTrue(Collections.disjoint(read.bindingsOf(RANGE, range(c)).values(),
+                        read.bindingsOf(ours, mine).values()),
+                "two declarations of `Range` bind two sets of fields");
+    }
+
+    private static List<String> warnings(Compiler.Compiled c) {
+        return c.warnings().stream().filter(d -> d.severity() == Severity.WARNING)
+                .map(Diagnostic::code).sorted().toList();
+    }
+}

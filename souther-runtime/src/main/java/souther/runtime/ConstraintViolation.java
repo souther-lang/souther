@@ -1,15 +1,15 @@
 package souther.runtime;
 
 /**
- * A domain invariant broken inside the domain — the abort of spec 7.3 / 9.4 / 19.7. When a
- * behavior constructs invariant-bearing data whose invariant fails, the computation aborts by
- * throwing this instead of returning a business case: an invariant violation is a model bug, not
- * a business result, so it has no place in the output sum (spec 2.6).
+ * A domain invariant broken inside the domain — the abort of spec §algebraic-types, §violation-destination,
+ * §jvm-abort. When a behavior constructs invariant-bearing data whose invariant fails, the computation aborts
+ * by throwing this instead of returning a business case: an invariant violation is a model bug, not a
+ * business result, so it has no place in the output sum (spec §unmarked-sum).
  *
  * <p>Souther code cannot catch it (there is no catch syntax), so it never drives business flow
- * (spec 3). A boundary (e.g. HTTP) may catch it and map it to a 500 — distinct from a business
- * failure, which arrives as an output case and maps to a 400 (spec 19.7). Decode-side violations
- * are different: they are carried by Raoh's {@code Result} failure, not by this (spec 10.5).
+ * (spec §out-of-scope). A boundary (e.g. HTTP) may catch it and map it to a 500 — distinct from a business
+ * failure, which arrives as an output case and maps to a 400 (spec §jvm-abort). Decode-side violations
+ * are different: they are carried by Raoh's {@code Result} failure, not by this (spec §decoder-error).
  */
 public final class ConstraintViolation extends RuntimeException {
 

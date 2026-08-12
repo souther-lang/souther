@@ -1,11 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -178,5 +180,31 @@ class CompileClosureTest {
         Object order = Codecs.decoded(loader, "demo.Order", Map.of("v", 10L));
         Object r = Codecs.apply(check, order);
         assertEquals(15L, ((Map<?, ?>) Codecs.encode(loader, "demo.Result", r)).get("n"));   // (x -> x + 5)(10)
+    }
+
+    /**
+     * A helper that answers a function has its own arguments read like any other call's. What the
+     * callee answers decides what is done with its body and nothing about what it was given.
+     */
+    @Test
+    void aHelperAnsweringAFunctionStillHoldsItsArgumentsToWhatItDeclared() {
+        String src = """
+                module demo
+
+                data Order = { v: Int }
+                data Result = { n: Int }
+
+                behavior check : (o: Order) -> Result
+                    constructs Result
+
+                let check (o) = {
+                    let add = maker("not an Int")
+                    Result { n = add(o.v) }
+                }
+
+                let maker (n: Int) = (x) -> x
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertInstanceOf(DeclarationMessage.ItExpectsAnotherType.class, e.diagnostic().said(), e.getMessage());
     }
 }

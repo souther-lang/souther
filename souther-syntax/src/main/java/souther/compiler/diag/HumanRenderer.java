@@ -1,20 +1,29 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.text.DisplayColumns;
+
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Renders a diagnostic Elm-style: a title bar with the error name and location, the offending source
  * line with a caret underline, then the message, any found-vs-expected type blocks, and hints. Color
  * is applied only when {@code useColor} is set (the caller decides from TTY and {@code NO_COLOR}).
+ *
+ * <p>A region in another file is quoted from that file and says where it is, so a problem written
+ * in two of them reads as one block rather than as two diagnostics the reader has to pair up.
  */
 public final class HumanRenderer implements DiagnosticRenderer {
 
+    /** How wide the title bar is written, in display columns — a translated title holds full-width
+     *  characters, and padding it by character count is what makes the bar overrun. */
     private static final int WIDTH = 60;
 
     private static final String RESET = "[0m";
     private static final String CYAN = "[36m";
     private static final String RED = "[31m";
+    private static final String YELLOW = "[33m";
     private static final String DIM = "[2m";
 
     private final boolean useColor;
@@ -24,15 +33,26 @@ public final class HumanRenderer implements DiagnosticRenderer {
     }
 
     @Override
-    public String render(Diagnostic d, SourceContext src, Locale locale) {
+    public String render(Located located, SourceContextResolver sources, Locale locale) {
+        Diagnostic d = located.diagnostic();
+        String own = located.primarySourceId();
+        DiagnosticView view = DiagnosticView.of(d, own, own);
+        SourceContext anchorSource = sources.sourceOf(view.anchor().sourceId());
         StringBuilder out = new StringBuilder();
-        header(out, d, src, locale);
+        header(out, d, anchorSource, locale);
         out.append('\n');
-        snippet(out, d.region(), src, RED);
-        for (LabeledRegion sec : d.secondary()) {
+        snippet(out, view.anchor().region(), anchorSource,
+                d.severity() == Severity.WARNING ? YELLOW : RED);
+        for (Spot other : view.others()) {
             out.append('\n');
-            snippet(out, sec.region(), src, CYAN);
-            out.append(color(DIM, Messages.get(sec.labelKey(), locale, sec.labelArgs()))).append('\n');
+            SourceContext src = sources.sourceOf(other.sourceId());
+            if (!Objects.equals(other.sourceId(), view.anchor().sourceId())) {
+                out.append(color(DIM, location(startOf(other.region()), src))).append('\n');
+            }
+            snippet(out, other.region(), src, CYAN);
+            if (other.labelled()) {
+                out.append(color(DIM, Messages.render(other.said(), locale))).append('\n');
+            }
         }
         out.append('\n').append(DiagnosticRenderer.body(d, locale)).append('\n');
         if (d.diff() != null) {
@@ -48,7 +68,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
         }
         for (Note note : d.notes()) {
             out.append(hintLabel(locale))
-                    .append(Messages.get(note.messageKey(), locale, note.args())).append('\n');
+                    .append(Messages.render(note.said(), locale)).append('\n');
         }
         return out.toString();
     }
@@ -58,7 +78,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
         String code = d.code() == null ? "" : "  " + d.code();
         String left = "-- " + title + code + " ";
         String loc = location(d.pos(), src);
-        int dashes = WIDTH - left.length() - loc.length();
+        int dashes = WIDTH - DisplayColumns.width(left) - DisplayColumns.width(loc);
         StringBuilder bar = new StringBuilder(left);
         for (int i = 0; i < dashes; i++) {
             bar.append('-');
@@ -69,17 +89,29 @@ public final class HumanRenderer implements DiagnosticRenderer {
         out.append(color(CYAN, bar.toString())).append('\n');
     }
 
+    /**
+     * The header's title: the category the diagnostic states, with its severity beside it, or the
+     * severity alone when it states none. A warning is marked either way, since the code and the
+     * message read the same for both and the bar is the only place the difference can be seen.
+     *
+     * <p>The title is not derived from the code. A code names a rule and a title names a category,
+     * and one category holds many rules — deriving one from the other would put a per-code title in
+     * the catalog for every rule and print the same category under a different wording each time.
+     * A coded diagnostic is given its title by {@link DiagnosticCode}, before it reaches here.
+     */
     private String title(Diagnostic d, Locale locale) {
-        if (d.titleKey() != null && Messages.has(d.titleKey(), locale)) {
-            return Messages.get(d.titleKey(), locale);
+        String about = d.titleKey() != null && Messages.has(d.titleKey(), locale)
+                ? Messages.get(d.titleKey(), locale)
+                : null;
+        if (d.severity() != Severity.WARNING) {
+            return about != null ? about : Messages.get("diag.error.title", locale);
         }
-        if (d.code() != null) {
-            String key = d.code().toLowerCase(Locale.ROOT) + ".title";
-            if (Messages.has(key, locale)) {
-                return Messages.get(key, locale);
-            }
-        }
-        return Messages.get("diag.error.title", locale);
+        String warning = Messages.get("diag.warning.title", locale);
+        return about != null ? about + " (" + warning + ")" : warning;
+    }
+
+    private static SourcePos startOf(Region region) {
+        return region == null ? null : region.start();
     }
 
     private String location(SourcePos pos, SourceContext src) {
@@ -101,15 +133,16 @@ public final class HumanRenderer implements DiagnosticRenderer {
         }
         String gutter = start.line() + "| ";
         out.append(color(DIM, gutter)).append(line).append('\n');
-        StringBuilder caret = new StringBuilder();
-        for (int i = 0; i < gutter.length() + start.column() - 1; i++) {
-            caret.append(' ');
-        }
-        int width = region.caretWidth();
-        for (int i = 0; i < width; i++) {
-            caret.append('^');
-        }
-        out.append(color(caretColor, caret.toString())).append('\n');
+        // A region says where it is in UTF-16 units, which is where it is in the text and not
+        // where it is on the screen. The two are asked separately: where the line before the
+        // region ends, and how far the region itself carries on from there. A tab in either is
+        // measured from the column it starts at, and the gutter is part of that column, since the
+        // quoted line and the carets under it are written on the same terminal line.
+        int from = Math.min(Math.max(start.column() - 1, 0), line.length());
+        int to = Math.min(from + region.sourceSpan(), line.length());
+        int at = DisplayColumns.advance(line.substring(0, from), DisplayColumns.width(gutter));
+        int span = Math.max(1, DisplayColumns.advance(line.substring(from, to), at) - at);
+        out.append(color(caretColor, " ".repeat(at) + "^".repeat(span))).append('\n');
     }
 
     private String hintLabel(Locale locale) {

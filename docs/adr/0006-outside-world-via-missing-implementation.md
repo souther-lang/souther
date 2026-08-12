@@ -6,7 +6,7 @@ Status: Accepted
 
 Souther must not implement outside-world effects — database queries, HTTP calls, file
 access, clock reads, id generation, message sending. These are exactly the things the
-specification DSL annotates with `// 依存:` (depends on) and `// 副作用:` (side effect).
+specification DSL annotates with `// depends:` (depends on) and `// side effect:` (side effect).
 The language needs a way to name such a dependency as a type while leaving its
 implementation outside, and to do so without adding surface that the spec DSL does not
 have.
@@ -23,25 +23,41 @@ behavior with neither is the injection target.
 
 The spec DSL has no `required` word either; a dependency is marked only by a comment
 note. Because Souther also uses no keyword, the DSL line survives verbatim — `behavior
-現在時刻 = () -> DateTime` with no `let` is the whole declaration.
+now = () -> DateTime` with no `let` is the whole declaration.
 
-Code that uses such a behavior lists its name under `requires`, which then surfaces as an
-argument of the using `let` (see ADR-0016). The read-only "// 依存" versus mutating
-"// 副作用" distinction is documentation of intent only; it does not affect the value
+Code that uses such a behavior lists its name under `depends on`, which then surfaces as an
+argument of the using `let` (see ADR-0016). The read-only "// depends" versus mutating
+"// side effect" distinction is documentation of intent only; it does not affect the value
 composition rules.
 
 `constructs` is still required on a non-implemented behavior (`[#constructs]`): the declaration
 reads the same as if it were implemented in Souther — `findMember` mints its failure cases
-but does *not* mint `会員` (it reads an outside value through a decoder). The generated
+but does *not* mint `Member` (it reads an outside value through a decoder). The generated
 Java base class (`[#java-base-class]`) hands out factories for the declared unit cases from here.
 
+The base class an implementation extends is public whatever `exposing` says, so the
+implementation overrides `apply` from outside the module and *writes* the behavior's input
+and output types where it does. A type the module keeps to itself cannot be written there,
+and no raw-typed override stands in for it — javac reports the erased signature as clashing
+with the one being overridden rather than overriding it. So an injected behavior's input and
+output are exposed by the module that declares them, whether or not the behavior itself is in
+`exposing` (issue #187). This is the same rule an exposed name follows, applied to the one
+other thing a module reaches out with (`[#exposed-surface]`).
+
+The *cases* of a multi-case output are not reached by it: that output is generated as a union
+interface of its own, public regardless, and a case is returned through the `protected`
+factory or through the decoder without being named — measured, not stipulated, since javac
+accepts and runs such an implementation from another package. That is what E1305's unit-data
+allowance rests on.
+
 Which behaviors get a `let` and which are injected is not mechanically derivable from the
-DSL: `// 依存:` is a note, not an obligation, so its absence does not prove a behavior is
+DSL: `// depends:` is a note, not an obligation, so its absence does not prove a behavior is
 internal. The one-to-one correspondence (ADR-0001) is therefore at the level of the
 *declaration*, not the implementation form (`let` / injection / `>->`); the modeler chooses
-the form using the `// 依存:` / `// 副作用:` notes as a guide.
+the form using the `// depends:` / `// side effect:` notes as a guide.
 
 ## References
 
-- Specification: `[#no-impl-for-outside]`, `[#injected-behavior]`, `[#java-base-class]`
+- Specification: `[#no-impl-for-outside]`, `[#injected-behavior]`, `[#java-base-class]`, `[#exposed-surface]`
 - ADR-0001 (one-to-one with the spec DSL), ADR-0016 (requirements as arguments)
+- ADR-0015 (what reaches out may not rest on what is kept), issue #187

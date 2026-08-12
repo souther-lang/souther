@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import net.unit8.raoh.Err;
+import net.unit8.raoh.Issue;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
@@ -10,11 +11,13 @@ import tools.jackson.databind.json.JsonMapper;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
- * Per-source decoder generation (spec 10.6): each data whose shape supports it gets a
+ * Per-source decoder generation (spec §codec-generation): each data whose shape supports it gets a
  * {@code jsonDecoder()} (reads a Jackson {@code JsonNode}) and a {@code recordDecoder()}
  * (reads a jOOQ {@code Record}) beside the neutral {@code decoder()}. This exercises the
  * JSON source end-to-end; the jOOQ {@code $DecRecord} is loaded to verify its bytecode.
@@ -99,6 +102,127 @@ class CompileJsonSourceTest {
         Result<?> r = Codecs.decode(loader, "demo.Person", "jsonDecoder",
                 mapper.readTree("{\"name\":\"amy\",\"born\":\"1990-05-01\"}"));
         assertInstanceOf(Ok.class, r);
+    }
+
+    /**
+     * A node that is not an object is one fact about the node, so it is reported once, where the node
+     * is. Read field by field it becomes one issue per declared field, each blaming a field the
+     * author wrote correctly — a four-field data turns one mistake into four reports.
+     */
+    @Test
+    void jsonDecoderReportsANonObjectOnceAtTheNodeItself() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Account", "jsonDecoder", mapper.readTree("5"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), "one node, one issue: " + issues);
+        assertEquals("", issues.get(0).path().toString(), "reported at the node, not at a field");
+        assertEquals("type_mismatch", issues.get(0).code());
+    }
+
+    /** The same for a nested one: the record's own path, not its first field's. */
+    @Test
+    void jsonDecoderReportsANestedNonObjectAtTheRecordNotItsField() throws Exception {
+        String src = """
+                module demo
+                data Note = { body: String, tag: String }
+                data Envelope = { note: Note }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Result<?> r = Codecs.decode(loader, "demo.Envelope", "jsonDecoder",
+                mapper.readTree("{\"note\":5}"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), "one node, one issue: " + issues);
+        assertEquals("/note", issues.get(0).path().toString());
+    }
+
+    /**
+     * A data whose fields are all optional read a non-object as a record of absent fields and
+     * succeeded: an optional field makes nothing of a node it cannot read, so no field objected.
+     */
+    @Test
+    void jsonDecoderDoesNotReadANonObjectAsARecordOfAbsentFields() throws Exception {
+        String src = """
+                module demo
+                data Draft = { body: String?, tag: String? }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+
+        assertInstanceOf(Ok.class,
+                Codecs.decode(loader, "demo.Draft", "jsonDecoder", mapper.readTree("{}")));
+        assertInstanceOf(Err.class,
+                Codecs.decode(loader, "demo.Draft", "jsonDecoder", mapper.readTree("5")));
+    }
+
+    /** A JSON null is the absent value every other decoder calls required, not a shape mismatch. */
+    @Test
+    void jsonDecoderCallsANullNodeRequired() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Account", "jsonDecoder", mapper.readTree("null"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), issues.toString());
+        assertEquals("required", issues.get(0).code());
+    }
+
+    /**
+     * A sum is read as an object too — its discriminator is a field — so the same rule holds for it.
+     * Read through the discriminator alone, the shape mismatch is blamed on the discriminator key,
+     * which is the one field the author had no chance to write.
+     */
+    @Test
+    void jsonDecoderReportsANonObjectSumAtTheSumItself() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Application", "jsonDecoder",
+                mapper.readTree("5"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), "one node, one issue: " + issues);
+        assertEquals("", issues.get(0).path().toString(), "reported at the sum, not at its tag");
+        assertEquals("type_mismatch", issues.get(0).code());
+    }
+
+    @Test
+    void jsonDecoderReportsANestedNonObjectSumAtTheFieldNotItsTag() throws Exception {
+        String src = """
+                module demo
+                data Submitted = { note: String }
+                data Rejected = { reason: String }
+                data Application = Submitted | Rejected
+                data Envelope = { content: Application }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Result<?> r = Codecs.decode(loader, "demo.Envelope", "jsonDecoder",
+                mapper.readTree("{\"content\":5}"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), "one node, one issue: " + issues);
+        assertEquals("/content", issues.get(0).path().toString());
+    }
+
+    @Test
+    void jsonDecoderCallsANullSumRequired() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Application", "jsonDecoder",
+                mapper.readTree("null"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), issues.toString());
+        assertEquals("", issues.get(0).path().toString());
+        assertEquals("required", issues.get(0).code());
+    }
+
+    /** An object still accumulates every field's error, which is what makes the guard a guard. */
+    @Test
+    void jsonDecoderStillAccumulatesEveryFieldErrorOfAnObject() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Account", "jsonDecoder",
+                mapper.readTree("{\"id\":5,\"balance\":\"nope\"}"));
+
+        assertInstanceOf(Err.class, r);
+        assertEquals(3, ((Err<?>) r).issues().asList().size());
     }
 
     @Test

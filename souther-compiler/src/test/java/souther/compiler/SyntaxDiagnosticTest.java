@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.diag.CompileException;
 
 import souther.compiler.diag.Diagnostic;
@@ -10,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,7 +37,7 @@ class SyntaxDiagnosticTest {
     @Test
     void expectedFoundUsesFriendlyTokenNamesAndLocalizes() {
         Diagnostic d = diagnosticOf("module demo\ndata M = { name String }\n");
-        assertEquals("parse.expected", d.messageKey());
+        assertInstanceOf(ParseMessage.ADeclarationExpectedSomethingElse.class, d.said());
         SourceContext src = new SourceContext("m.sou", "module demo\ndata M = { name String }\n");
         String en = new HumanRenderer(false).render(d, src, Locale.ENGLISH);
         String ja = new HumanRenderer(false).render(d, src, Locale.JAPANESE);
@@ -44,9 +47,49 @@ class SyntaxDiagnosticTest {
     }
 
     @Test
+    void aBlockOfOnlyStatementsIsASyntaxError() {
+        String source = """
+                module demo
+                let run (i) = {
+                    let a = i
+                }
+                """;
+        Diagnostic d = diagnosticOf(source);
+        assertEquals("parse.title", d.titleKey());
+        assertInstanceOf(ParseMessage.ABlockEndsInOneExpression.class, d.said());
+        SourceContext src = new SourceContext("m.sou", source);
+        String en = new HumanRenderer(false).render(d, src, Locale.ENGLISH);
+        String ja = new HumanRenderer(false).render(d, src, Locale.JAPANESE);
+        assertTrue(en.contains("A block ends in one expression, which is its value"), en);
+        assertTrue(ja.contains("ブロックは最後に値となる式を1つ置きます"), ja);
+    }
+
+    /**
+     * A result written under a statement that ends in a name is that result. An argument list must
+     * begin on the line its callee ends on, and that rule is now the only one: {@code i} and the
+     * following line's {@code (a)} were read as one call while an applied name was a shape of its
+     * own, which left the block with no result (issue #75) — and made a name applied across a line
+     * break mean something a name applied to the result of an expression never did (issue #274).
+     */
+    @Test
+    void aResultUnderAStatementIsNotAppliedToTheNameAboveIt() {
+        String source = """
+                module demo
+                data Out = { n: Int }
+                let run (i: Int) = {
+                    let a = i
+                    (a)
+                }
+                behavior go : (n: Int) -> Out constructs Out
+                let go (n) = Out { n = run(n) }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(source));
+    }
+
+    @Test
     void lexerErrorIsLocalized() {
         Diagnostic d = diagnosticOf("module demo\ndata M = Int\nlet x = 1.5\n");
         assertEquals("parse.title", d.titleKey());
-        assertEquals("lex.decimal.m", d.messageKey());
+        assertInstanceOf(ParseMessage.AFractionalLiteralNeedsTheMSuffix.class, d.said());
     }
 }

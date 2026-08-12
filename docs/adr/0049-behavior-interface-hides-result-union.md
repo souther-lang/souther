@@ -7,7 +7,7 @@ Status: Accepted (decided 2026-07-21). Revises `[#jvm-behavior]` (`[#jvm-behavio
 A behavior whose output is an anonymous union (`-> A | B`) has no anonymous sum type on the
 JVM to land in. To let a Java caller receive the result as one value and check it exhaustively
 with a `switch` that has no `default`, the backend synthesises a sealed interface the leaf
-cases implement — the `<Behavior名>結果` type (ADR-0008, `[#jvm-anonymous-union]`). The model
+cases implement — the `<BehaviorName>Result` type (ADR-0008, `[#jvm-anonymous-union]`). The model
 author never writes that name.
 
 The name still leaked into Java code, in two places:
@@ -16,20 +16,20 @@ The name still leaked into Java code, in two places:
   that implemented `Behavior<In, Out>`. That class defined its own erased `apply(Object)Object`,
   so a reference **typed as the behavior class** got `Object` back from `apply`, not the union —
   the covariant return from the interface was shadowed by the class's own method. To get a typed
-  result the caller had to type the field `Behavior<Cart, Quote結果>`, spelling the synthetic
+  result the caller had to type the field `Behavior<Cart, QuoteResult>`, spelling the synthetic
   name. (An injected behavior's abstract base carried the generic signature and no `apply`, so
   *its* name already gave a typed `apply` — which is why injected fields could be declared by the
   behavior name alone. The concrete let/pipe class was the odd one out.)
 - **A multi-input behavior** did not implement `Behavior` at all (that interface takes one
   argument), so it was a bare class with `apply(Object, Object)Object`. A caller cast the
-  `Object` result to `Quote結果` — the synthetic name again.
+  `Object` result to `QuoteResult` — the synthetic name again.
 
-Separately, the `結果` suffix is a Japanese word inside otherwise-Latin generated Java identifiers.
+Separately, the `Result` suffix is a Japanese word inside otherwise-Latin generated Java identifiers.
 
 ## Decision
 
 **Generate each fn/`>->` behavior as a public interface named after the behavior, with the
-implementation in a `<Behavior名>$Impl` class.** Java declares the behavior by the interface name
+implementation in a `<BehaviorName>$Impl` class.** Java declares the behavior by the interface name
 and never names the implementation.
 
 - A **single-input** behavior's interface `extends Behavior<In, Out>`. Because the interface
@@ -43,11 +43,11 @@ and never names the implementation.
 - The interface carries the static factory: `of()` for an empty requirement set, `bind(...)`
   for one that injects dependencies. Both return the interface and build the `$Impl`.
 
-A caller writes `private final Quote quote;` (not `Behavior<Cart, Quote結果>`), calls
+A caller writes `private final Quote quote;` (not `Behavior<Cart, QuoteResult>`), calls
 `quote.apply(cart)`, and matches the cases with `switch` — the result-union name appears nowhere
 in the caller's source.
 
-**Rename the synthetic result union `<Behavior名>結果` to `<Behavior名>Result`.**
+**Rename the synthetic result union `<BehaviorName>Result` to `<BehaviorName>Result`.**
 
 An **injected behavior** (a `behavior` with no `let`) stays an abstract class the Java
 implementation extends (`[#java-base-class]`), unchanged apart from the rename: it needs a class

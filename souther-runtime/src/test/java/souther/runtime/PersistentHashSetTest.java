@@ -98,4 +98,76 @@ class PersistentHashSetTest {
         assertFalse(e.contains(1));
         assertFalse(e.iterator().hasNext());
     }
+
+    /** Every operation that produces a fresh set now goes through the backing map's bulk builder,
+     *  which fills nodes in place. Each must still agree with the same set built element by element,
+     *  down to the deterministic iteration order. */
+    @Test
+    void bulkBuiltSetsAgreeWithElementWiseOnes() {
+        Random rnd = new Random(11);
+        for (int n : new int[] {0, 1, 31, 32, 33, 1025, 5000}) {
+            Set<Integer> oracle = new LinkedHashSet<>();
+            for (int i = 0; i < n; i++) {
+                oracle.add(rnd.nextInt(n * 2 + 1));
+            }
+            PersistentHashSet<Integer> elementWise = PersistentHashSet.empty();
+            for (Integer e : oracle) {
+                elementWise = elementWise.with(e);
+            }
+            PersistentHashSet<Integer> bulk = PersistentHashSet.from(oracle);
+            assertEquals(oracle.size(), bulk.size(), "size at n=" + n);
+            assertEquals(elementWise, bulk, "contents at n=" + n);
+            assertEquals(List.copyOf(elementWise), List.copyOf(bulk), "order at n=" + n);
+        }
+    }
+
+    /** The set algebra builds its result in one pass now; it has to answer what the JDK's own set
+     *  operations do. */
+    @Test
+    void unionIntersectDifferenceMatchTheJdk() {
+        Random rnd = new Random(13);
+        for (int trial = 0; trial < 30; trial++) {
+            Set<Integer> a = new LinkedHashSet<>();
+            Set<Integer> b = new LinkedHashSet<>();
+            for (int i = 0; i < 200; i++) {
+                a.add(rnd.nextInt(300));
+                b.add(rnd.nextInt(300));
+            }
+            Set<Integer> expectedUnion = new HashSet<>(a);
+            expectedUnion.addAll(b);
+            Set<Integer> expectedIntersect = new HashSet<>(a);
+            expectedIntersect.retainAll(b);
+            Set<Integer> expectedDifference = new HashSet<>(a);
+            expectedDifference.removeAll(b);
+
+            assertEquals(expectedUnion, PersistentHashSet.union(a, b));
+            assertEquals(expectedIntersect, PersistentHashSet.intersect(a, b));
+            assertEquals(expectedDifference, PersistentHashSet.difference(a, b));
+        }
+        assertEquals(PersistentHashSet.EMPTY, PersistentHashSet.intersect(Set.of(1), Set.of(2)));
+        assertEquals(PersistentHashSet.EMPTY, PersistentHashSet.difference(Set.of(1), Set.of(1)));
+        assertEquals(Set.of(1), PersistentHashSet.union(Set.of(1), Set.of()));
+    }
+
+    /** A bulk-built set must be an ordinary persistent one afterwards: adding to it may not disturb
+     *  what it was built as. */
+    @Test
+    void aBulkBuiltSetIsPersistentAfterwards() {
+        Set<Integer> seed = new LinkedHashSet<>();
+        for (int i = 0; i < 500; i++) {
+            seed.add(i);
+        }
+        PersistentHashSet<Integer> built = PersistentHashSet.from(seed);
+        PersistentHashSet<Integer> more = built.with(1000);
+        PersistentHashSet<Integer> fewer = built.without(3);
+
+        assertEquals(500, built.size(), "the built set changed");
+        assertTrue(built.contains(3));
+        assertFalse(built.contains(1000));
+        assertEquals(501, more.size());
+        assertEquals(499, fewer.size());
+        for (int i = 0; i < 500; i++) {
+            assertTrue(built.contains(i), "built lost " + i);
+        }
+    }
 }

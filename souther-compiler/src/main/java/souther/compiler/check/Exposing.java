@@ -1,24 +1,32 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.Prelude;
-import souther.compiler.ast.Ast;
+import souther.compiler.diag.msg.ImportMessage;
+import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
- * Resolves standard-library {@code exposing} imports (spec §stdlib). Souther auto-imports nothing:
- * a module reaches the library either qualified ({@code List.map}) or by importing the names it
- * wants — {@code import List ( map, filter )} — after which it may write them bare. This pass turns
- * each such bare call into its qualified form up front, so the rest of the compiler only ever sees
- * qualified library calls; the {@code import List ( ... )} lines are then dropped from the module.
+ * Reads standard-library {@code exposing} imports (spec §stdlib). Souther auto-imports nothing: a
+ * module reaches the library either qualified ({@code List.map}) or by importing the names it wants
+ * — {@code import List ( map, filter )} — after which it may write them bare.
+ *
+ * <p>What the imports bring in is answered as a table ({@link #read}) and nothing in the
+ * module is rewritten. A name written bare stays written bare, and what it means where it is written
+ * is settled once, by resolution, with the bindings in force — an import is the last thing consulted
+ * and a binding in force wins over it. A declaration of that name does not shadow it: the two are a
+ * conflict, refused on the import line, and the declaration standing as the name's meaning after
+ * that is what recovery does with a module that will not be emitted. The
+ * {@code import List ( ... )} lines are then dropped ({@link #withoutLibraryImports}), having been
+ * checked.
  *
  * <p>It mirrors Elm's {@code import List exposing (map)}: the qualified access always works, and the
  * import merely lets a name be written without its qualifier. A name exposed from two libraries at
@@ -26,15 +34,38 @@ import java.util.Set;
  */
 public final class Exposing {
 
-    private final Map<String, String> exposed;   // bare name → qualified, e.g. "map" → "List.map"
+    private Exposing() {}
 
-    private Exposing(Map<String, String> exposed) {
-        this.exposed = exposed;
+    /**
+     * What the imports bring in, the imports that are not the library's, and the import lines that
+     * name something this module already declares.
+     *
+     * <p>A collision is answered rather than thrown because it is one module's mistake and not a
+     * reason to stop reading. Thrown, it escaped the question that asked for this module and took
+     * every other file's diagnostics with it — an editor showed "the compiler could not finish
+     * reading this file" for the whole workspace while the author was part-way through writing a
+     * {@code let}.
+     */
+    public record Validated(Map<String, ValueName.Stdlib> exposed, List<Ast.Import> kept,
+                            List<Diagnostic> conflicts) {}
+
+    /** Both answers at once, for a reader that wants them both and should ask once. */
+    public static Validated read(Ast.Module module) {
+        return validate(module);
     }
 
-    /** Rewrites {@code module}'s exposed bare library calls to qualified form and strips its
-     *  {@code import List ( ... )} lines. User-module imports are left untouched. */
-    public static Ast.Module rewrite(Ast.Module module) {
+    /**
+     * The library names an import brings in, with the three things an import can get wrong reported:
+     * a name the library does not have, one name brought in from two modules at once, and one that
+     * collides with something this module declares.
+     *
+     * <p>Which kind of declaration it collides with does not enter into it. A data, a {@code let}
+     * and a behavior all reach the value namespace under the name they are written with, so any of
+     * them beside an import of that name is one spelling with two answers. A binding in force is a
+     * different thing and still wins over both: it is written inside a body, and what an import
+     * says is what a name means where no binding answers it.
+     */
+    private static Validated validate(Ast.Module module) {
         Set<String> ownNames = new HashSet<>();
         for (Ast.FnDef fn : module.fns()) {
             ownNames.add(fn.name());
@@ -43,121 +74,64 @@ public final class Exposing {
             ownNames.add(b.name());
         }
 
-        Map<String, String> exposed = new HashMap<>();
-        List<Ast.Import> keptImports = new ArrayList<>();
+        Set<String> declaredData = new HashSet<>();
+        for (Ast.Def def : module.defs()) {
+            declaredData.add(def.name());
+        }
+
+        Map<String, ValueName.Stdlib> exposed = new HashMap<>();
+        List<Ast.Import> kept = new ArrayList<>();
+        List<Diagnostic> conflicts = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
             if (!Prelude.isQualifier(imp.module())) {
-                keptImports.add(imp);   // an ordinary user-module import — resolved elsewhere
+                kept.add(imp);   // an ordinary user-module import — resolved elsewhere
                 continue;
             }
             for (String name : imp.names()) {
-                String qualified = imp.module() + "." + name;
-                if (!Prelude.hasQualified(qualified)) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.notstdfn").title("check.module.title")
-                                    .at(imp.pos()).args(name, imp.module()).build(),
-                            "`" + name + "` is not a function in the standard library module `"
-                                    + imp.module() + "` (spec §stdlib).");
+                // The import line writes both halves of a library name: the module it names is the
+                // alias, and each name in its list is the operation. What is brought in is that pair,
+                // so nothing downstream has to take a spelling apart to get at either.
+                ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
+                String qualified = operation.qualified();
+                if (!Prelude.isLibraryFunction(qualified)) {
+                    throw CompileException.of(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.NameIsNotAStandardLibraryFunction(
+                                    name, imp.module()))
+                            .build());
                 }
-                if (ownNames.contains(name)) {
-                    continue;   // the module defines its own `name`; that shadows the import
+                if (declaredData.contains(name) || ownNames.contains(name)) {
+                    conflicts.add(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(name))
+                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
+                            .build());
+                    continue;   // the name is refused; what it means until then is the declaration
                 }
-                String prior = exposed.putIfAbsent(name, qualified);
-                if (prior != null && !prior.equals(qualified)) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.ambiguous").title("check.module.title")
-                                    .at(imp.pos()).args(name, prior, qualified).build(),
-                            "`" + name + "` is exposed from both `" + prior + "` and `" + qualified
-                                    + "` — call it qualified instead of importing both (spec §stdlib).");
+                ValueName.Stdlib prior = exposed.putIfAbsent(name, operation);
+                if (prior != null && !prior.equals(operation)) {
+                    throw CompileException.of(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.NameIsPublishedByTwoModules(
+                                    name, prior.qualified(), qualified))
+                            .build());
                 }
             }
         }
+        return new Validated(exposed, kept, conflicts);
+    }
 
-        // Nothing to qualify and no stdlib import to strip — the common case for a module that
-        // reaches the library only through explicit qualifiers, or none at all. Skip the AST rebuild.
-        if (exposed.isEmpty() && keptImports.size() == module.imports().size()) {
+    /**
+     * {@code module} with its {@code import List ( ... )} lines dropped, having checked them.
+     *
+     * <p>What they brought in is answered by {@link #read} and settled where the bindings
+     * are known. Nothing in the module is rewritten here: a name written bare is still written bare,
+     * and what it means is one question asked in one place.
+     */
+    public static Ast.Module withoutLibraryImports(Ast.Module module, List<Ast.Import> kept) {
+        if (kept.size() == module.imports().size()) {
             return module;
         }
-
-        Exposing pass = new Exposing(exposed);
-        List<Ast.Def> defs = new ArrayList<>();
-        for (Ast.Def def : module.defs()) {
-            defs.add(pass.rewriteDef(def));
-        }
-        List<Ast.FnDef> fns = new ArrayList<>();
-        for (Ast.FnDef fn : module.fns()) {
-            fns.add(new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
-                    pass.rw(fn.body()), fn.partial(), fn.pos()));
-        }
         return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                keptImports, defs, module.behaviors(), fns,
+                kept, module.defs(), module.behaviors(), module.fns(), module.takenOn(),
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
-    private Ast.Def rewriteDef(Ast.Def def) {
-        if (def instanceof Ast.Data d && d.invariant().isPresent()) {
-            return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
-                    Optional.of(rw(d.invariant().get())), d.decoder(), d.encoder(), d.pos());
-        }
-        return def;
-    }
-
-    private Ast.Expr rw(Ast.Expr e) {
-        return switch (e) {
-            case Ast.Call c -> {
-                List<Ast.Expr> args = new ArrayList<>();
-                for (Ast.Expr a : c.args()) {
-                    args.add(rw(a));
-                }
-                String fn = c.fn();
-                if (fn.indexOf('.') < 0 && exposed.containsKey(fn)) {
-                    fn = exposed.get(fn);
-                }
-                yield new Ast.Call(fn, args, c.pos());
-            }
-            case Ast.Binary b -> new Ast.Binary(b.op(), rw(b.left()), rw(b.right()), b.pos());
-            case Ast.If iff -> new Ast.If(rw(iff.cond()), rw(iff.then()), rw(iff.els()), iff.pos());
-            case Ast.Match m -> {
-                List<Ast.Case> cases = new ArrayList<>();
-                for (Ast.Case cs : m.cases()) {
-                    cases.add(new Ast.Case(cs.caseTypes(), cs.binding(), rw(cs.body()), cs.unwrapAsserts(), cs.pos()));
-                }
-                yield new Ast.Match(rw(m.scrutinee()), cases, m.pos());
-            }
-            case Ast.FieldAccess fa -> new Ast.FieldAccess(rw(fa.target()), fa.field(), fa.pos());
-            case Ast.NewData nd -> {
-                List<Ast.FieldInit> inits = new ArrayList<>();
-                for (Ast.FieldInit fi : nd.inits()) {
-                    inits.add(new Ast.FieldInit(fi.name(), rw(fi.value()), fi.pos()));
-                }
-                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.pos());
-            }
-            case Ast.LetIn li -> new Ast.LetIn(li.name(), rw(li.value()), li.declaredType(), rw(li.body()), li.pos());
-            case Ast.Block bl -> new Ast.Block(bl.params(), rw(bl.body()), bl.pos());
-            case Ast.ListLit ll -> {
-                List<Ast.Expr> elems = new ArrayList<>();
-                for (Ast.Expr x : ll.elements()) {
-                    elems.add(rw(x));
-                }
-                yield new Ast.ListLit(elems, ll.pos());
-            }
-            case Ast.ListComp lc -> {
-                List<Ast.Expr> guards = new ArrayList<>();
-                for (Ast.Expr g : lc.guards()) {
-                    guards.add(rw(g));
-                }
-                yield new Ast.ListComp(rw(lc.element()), guards, lc.pos());
-            }
-            case Ast.Neg n -> new Ast.Neg(rw(n.operand()), n.pos());
-            case Ast.Tuple tup -> {
-                List<Ast.Expr> els = new ArrayList<>();
-                for (Ast.Expr x : tup.elements()) {
-                    els.add(rw(x));
-                }
-                yield new Ast.Tuple(els, tup.pos());
-            }
-            case Ast.TupleGet tg -> new Ast.TupleGet(rw(tg.tuple()), tg.index(), tg.arity(), tg.pos());
-            default -> e;   // Var and the literals carry no nested calls
-        };
-    }
 }

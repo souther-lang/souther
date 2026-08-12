@@ -1,0 +1,495 @@
+// Quoting, and the part of CPQ that is rules rather than plumbing: what a line may be discounted by, who
+// has to sign off on it, how long the price is good for, and what accepting one means.
+//
+// The distinction this module is built around is when to make the states the type and when to make an
+// attribute the sum. example.pipeline's stages are the type, because a NegotiationReview carries a floor a
+// Prospecting does not and the transitions differ per stage. A quote is the same document before and after
+// approval: the lines do not change, the total does not change, every reader reads the same fields. What has
+// alternatives is one attribute, so the attribute is the sum.
+//
+//   Where the states differ in fields, make the states the type.
+//   Where one attribute has alternatives, make the attribute a sum.
+//
+// What is on show:
+//   - A product invariant across three fields, and a ratio rule written as a multiplication because a
+//     division cannot appear in an invariant at all.
+//   - The blended discount, which is the rule real CPQ has and a per-line cap alone does not catch: a rep
+//     who needs 30% off takes 30% off one line and nothing off the rest. Stated, again, without dividing.
+//   - `ApprovalState` as a four-case sum where Salesforce has a flag and three nullable columns, one of
+//     whose cases — approved automatically — has nobody to name.
+//   - An injected behavior whose success value belongs to another module, so the implementation builds it
+//     through that module's decoder rather than through a constructor this declaration could grant.
+//   - An expiry window and an approval read as one expression, because both are cases and neither is a
+//     boolean anybody can misread.
+//
+// Findings recorded here: F18 at discountExposureOf.
+module example.quoting exposing (
+    ProductCode,
+    ProductName,
+    Quantity,
+    UnitPrice,
+    DiscountRate,
+    ValidityDays,
+    RejectionNote,
+    QuoteLine,
+    QuoteLines,
+    LineRequest,
+    ApproverRole,
+    SalesManager,
+    RegionalVp,
+    Cfo,
+    NotSubmitted,
+    AutoApproved,
+    PendingApproval,
+    ApprovedQuote,
+    RejectedQuote,
+    Decided,
+    ApprovalState,
+    Quote,
+    AcceptedQuote,
+    Verdict,
+    Approve,
+    Reject,
+    WithinAuthority,
+    NeedsApproval,
+    QuoteExpired,
+    DiscountExposure,
+    approverFor,
+    buildQuote,
+    approvalNeeded,
+    submitForApproval,
+    decideApproval,
+    acceptQuote,
+    renewQuote,
+    discountExposureOf
+)
+import example.crm ( AccountId, UserId, Amount )
+import example.pipeline ( OpportunityId, QuoteNumber, PerceptionAnalysis )
+
+// === Values ===
+
+data ProductCode = String
+    invariant String.matches("[A-Z]{2}-[0-9]{4}", value)
+
+data ProductName = String
+    invariant String.length(value) >= 1
+
+data Quantity = Int
+    invariant value >= 1
+
+data UnitPrice = Decimal
+    invariant value >= 0.0m
+
+// The discount authority ceiling. Past half off, a deal is not a bigger discount — it is a different process
+// (a special bid, priced from cost rather than from list), and this type refuses to represent one. A rate
+// above 0.5 is not a rate this business has.
+data DiscountRate = Decimal
+    invariant value >= 0.0m && value <= 0.5m
+
+// A quote is good for a window. Ninety days is the longest any list price is honoured for, because past a
+// quarter the price list itself has moved.
+data ValidityDays = Int
+    invariant value >= 1 && value <= 90
+
+data RejectionNote = String
+    invariant String.length(value) >= 1
+
+// === The line ===
+
+data QuoteLine =
+    { product: ProductCode
+    , name: ProductName
+    , quantity: Quantity
+    , listPrice: UnitPrice
+    , discount: DiscountRate
+    , net: Amount
+    }
+    // The rule is net = quantity × list × (1 − discount), rounded to two places. It is written as that
+    // multiplication rather than as a ratio, and the reason is not that a ratio cannot be written: the bare
+    // `/` aborts on a zero denominator and a zero list price is representable, but a guarded helper —
+    // `if b == 0.0m then fallback else a / b` — is total, invariant-legal, and answers with a Decimal.
+    //
+    // What the product form saves is the fallback. A ratio needs a value to stand for "no list price to take
+    // a fraction of", and every candidate lies about something; the multiplication needs none, because the
+    // case it would have covered makes both sides zero. Every ratio rule in this file is written that way.
+    invariant Decimal.compare(net.value,
+                  Decimal.round(2, HALF_UP, Decimal.fromInt(quantity.value) * listPrice.value
+                                * (1.0m - discount.value))) == 0
+
+// One line per product, and at least one line. Both are properties of the list, so the list is named and
+// carries them; at the boundary it stays a bare JSON array. They are named because a caller departs by a
+// different case for each, and the attempt in `buildQuote` chooses that case by the name.
+data QuoteLines = List<QuoteLine>
+    invariant nonEmpty = List.length(value) >= 1
+    invariant uniqueProducts = List.allDistinctBy(.product, value)
+
+// What a caller hands over: the raw figures, before any of them has been checked or the net worked out.
+data LineRequest =
+    { product: ProductCode
+    , name: ProductName
+    , quantity: Int
+    , listPrice: Decimal
+    , discount: Decimal
+    }
+
+// === Approval ===
+// Salesforce spells this IsApproved plus ApprovedBy? plus ApprovedDate? plus RejectionReason?: a flag and
+// three nullable columns for what is four states. Written as four cases, the combinations that mean nothing
+// — approved with no approver, rejected with no reason — cannot be written down, and the one state that has
+// nobody to name says so by having no fields.
+
+data ApproverRole = SalesManager | RegionalVp | Cfo
+
+data PendingApproval = { submittedOn: Date, role: ApproverRole, approver: UserId }
+data ApprovedQuote   = { approvedOn: Date, approver: UserId }
+data RejectedQuote   = { rejectedOn: Date, approver: UserId, note: RejectionNote }
+
+// A decision has a decider and a date, whichever way it went. That is what the two cases share and why they
+// nest: approverOf answers for exactly these two and for nothing else.
+data Decided = ApprovedQuote | RejectedQuote
+
+data ApprovalState = NotSubmitted | AutoApproved | PendingApproval | Decided
+
+// === The quote ===
+
+data Quote =
+    { number: QuoteNumber            // example.pipeline's, received and carried, never built here
+    , opportunityId: OpportunityId
+    , accountId: AccountId
+    , lines: QuoteLines
+    , subtotal: Amount           // at list
+    , total: Amount              // after the line discounts
+    , issuedOn: Date
+    , expiresOn: Date
+    , approval: ApprovalState
+    }
+    invariant Date.daysBetween(issuedOn, expiresOn) >= 1
+           && Decimal.compare(total.value, subtotal.value) <= 0
+
+data AcceptedQuote = { number: QuoteNumber, acceptedOn: Date, total: Amount }
+
+data Verdict = Approve | Reject
+
+data NeedsApproval = { role: ApproverRole, worstDiscount: DiscountRate }
+data QuoteExpired  = { expiredOn: Date, daysLate: Int }
+
+// Keyed by the role itself: every case of ApproverRole is a unit data, so it crosses the boundary as the
+// case's name and keys the map directly. It used to be keyed by a hand-written display string.
+data DiscountExposure =
+    { byRole: Map<ApproverRole, Amount>
+    , worst: DiscountRate
+    }
+
+// === buildQuote ===
+// A quote for a deal nobody took through discovery is not a call anybody can write: the input is a
+// PerceptionAnalysis, which is the stage at which the risks have been recorded and a price is the next thing
+// the customer is waiting for.
+//
+// Three guard-then-wraps and two caps. The per-line cap is what an authority matrix is written against;
+// the blended cap is the one that actually holds, because a rep who needs thirty per cent off a deal takes
+// thirty per cent off one line and nothing off the others, and every per-line check passes. Both caps are
+// stated as multiplications for the same reason the line invariant is.
+
+let lineNet (r: LineRequest): Decimal =
+    Decimal.round(2, HALF_UP, Decimal.fromInt(r.quantity) * r.listPrice * (1.0m - r.discount))
+
+let lineList (r: LineRequest): Decimal =
+    Decimal.round(2, HALF_UP, Decimal.fromInt(r.quantity) * r.listPrice)
+
+let sumOf (xs: List<Decimal>): Decimal =
+    List.fold((acc, x) -> Decimal.add(acc, x), 0.0m, xs)
+
+let withinLineCaps (lines: List<LineRequest>): Bool =
+    List.all(r -> Decimal.compare(r.discount, 0.5m) <= 0
+              && Decimal.compare(r.discount, 0.0m) >= 0, lines)
+
+// The blended cap: the discount across the whole quote is at most 40%, which is the same as saying the total
+// is at least 60% of list. No division, so no zero to guard and no rounding mode to choose.
+let withinBlendedCap (lines: List<LineRequest>): Bool =
+    Decimal.compare(sumOf(List.map(r -> lineNet(r), lines)),
+                    sumOf(List.map(r -> lineList(r), lines)) * 0.6m) >= 0
+
+let toLine (r: LineRequest): QuoteLine =
+    QuoteLine { product = r.product
+              , name = r.name
+              , quantity = Quantity(r.quantity)
+              , listPrice = UnitPrice(r.listPrice)
+              , discount = DiscountRate(r.discount)
+              , net = Amount(lineNet(r))
+              }
+
+behavior buildQuote : (number: QuoteNumber, opp: PerceptionAnalysis, lines: List<LineRequest>,
+                       issuedOn: Date, validity: Int)
+        -> Quote | NoLines | DuplicateProduct | ValidityOutOfRange
+         | LineDiscountOverCap | BlendedDiscountOverCap
+    constructs Quote, QuoteLine, QuoteLines, Quantity, UnitPrice, DiscountRate, Amount,
+               ValidityDays, NotSubmitted, NoLines, DuplicateProduct, ValidityOutOfRange,
+               LineDiscountOverCap, BlendedDiscountOverCap
+
+let buildQuote (number, opp, lines, issuedOn, validity) = {
+    guard List.all(r -> r.quantity >= 1, lines) else NoLines
+    guard withinLineCaps(lines) else LineDiscountOverCap
+    guard withinBlendedCap(lines) else BlendedDiscountOverCap
+
+    // Both rules of QuoteLines are its own, and each departs by its own case: the attempt names the clause
+    // that did not hold instead of the two guards that used to restate the rules here.
+    guard QuoteLines(List.map(r -> toLine(r), lines)) as quoteLines else
+        | nonEmpty       -> NoLines
+        | uniqueProducts -> DuplicateProduct
+
+    // The range lives in ValidityDays and nowhere else: attempting the construction both applies it and
+    // names the value, where before the range was restated in a guard and the newtype wrapped after it.
+    guard ValidityDays(validity) as days else ValidityOutOfRange
+
+    Quote { number = number
+          , opportunityId = opp.id
+          , accountId = opp.accountId
+          , lines = quoteLines
+          , subtotal = Amount(sumOf(List.map(r -> lineList(r), lines)))
+          , total = Amount(sumOf(List.map(r -> lineNet(r), lines)))
+          , issuedOn = issuedOn
+          , expiresOn = Date.addDays(days.value, issuedOn)
+          , approval = NotSubmitted
+          }
+}
+
+// === approvalNeeded: the authority matrix ===
+// Ten per cent is a rep's own call; past that somebody signs. The bands are the ones an enterprise sales org
+// runs, and the matrix reads the worst line rather than the blend, because that is the number an approver is
+// being asked about.
+//
+// The matrix is a helper because two behaviors read it, and it answers the list rather than the outcome:
+// what `approvalNeeded` says is whether approval is needed, and what submitting needs is the role.
+let worstDiscountOf (QuoteLines(lines)): DiscountRate =
+    Option.withDefault(DiscountRate(0.0m), List.max(List.map(l -> l.discount, lines)))
+
+let roleFor (quote: Quote): List<ApproverRole> = {
+    let worst = worstDiscountOf(quote.lines)
+    if Decimal.compare(worst.value, 0.10m) <= 0 then [ ]
+    else if Decimal.compare(worst.value, 0.20m) <= 0 then [ SalesManager ]
+    else if Decimal.compare(worst.value, 0.35m) <= 0 then [ RegionalVp ]
+    else [ Cfo ]
+}
+
+behavior approvalNeeded : (quote: Quote) -> WithinAuthority | NeedsApproval
+    constructs WithinAuthority, NeedsApproval, DiscountRate, SalesManager, RegionalVp, Cfo
+
+let approvalNeeded (quote) =
+    match List.get(0, roleFor(quote)) with
+        | None      -> WithinAuthority
+        | Some role -> NeedsApproval { role = role, worstDiscount = worstDiscountOf(quote.lines) }
+
+// === The quote the rows are about ===
+// One quote, ten platform licences at a thousand each, stated at a discount. `quoteAt` takes the rate and
+// the net it comes to rather than working the net out: a fixture that recomputed the rule would keep
+// passing a row the rule had stopped holding, and the line's own invariant is what checks the pair agrees.
+let quoteAt (discount: DiscountRate, net: Amount): Quote =
+    Quote { number = QuoteNumber("0Q0000000000001")
+          , opportunityId = OpportunityId("006000000000001")
+          , accountId = AccountId("001000000000100")
+          , lines = QuoteLines(
+                [ QuoteLine { product = ProductCode("SW-1001"), name = ProductName("Platform licence")
+                            , quantity = Quantity(10), listPrice = UnitPrice(1000.00m)
+                            , discount = discount, net = net } ])
+          , subtotal = Amount(10000.00m)
+          , total = net
+          , issuedOn = Date("2026-08-10")
+          , expiresOn = Date("2026-09-09")
+          , approval = NotSubmitted
+          }
+
+// A tenth off is the rep's own call; a fifth and a fraction needs the VP. The two ends of the matrix the
+// approval rows are stated against, and the two verdicts the acceptance rows start from.
+let repQuote = quoteAt(DiscountRate(0.10m), Amount(9000.00m))
+let vpQuote  = quoteAt(DiscountRate(0.21m), Amount(7900.00m))
+
+let approvedQuote = Quote { ...vpQuote
+                          , approval = ApprovedQuote { approvedOn = Date("2026-08-12")
+                                                     , approver = UserId("u-vp") }
+                          }
+
+let rejectedQuote = Quote { ...vpQuote
+                          , approval = RejectedQuote { rejectedOn = Date("2026-08-12")
+                                                     , approver = UserId("u-vp")
+                                                     , note = RejectionNote("margin too thin") }
+                          }
+
+// Four rows, one per band, and both sides of the first two boundaries. A matrix nobody has checked at its
+// edges is a matrix that lets a rep sign off their own thirty per cent.
+example approvalNeeded
+    | "a tenth off is a rep's own call" :
+        (quoteAt(DiscountRate(0.10m), Amount(9000.00m)))
+        -> WithinAuthority
+    | "a fraction past a tenth needs a manager" :
+        (quoteAt(DiscountRate(0.11m), Amount(8900.00m)))
+        -> NeedsApproval { role = SalesManager, worstDiscount = DiscountRate(0.11m) }
+    | "a fifth is still the manager's, and a fraction past it is the VP's" :
+        (quoteAt(DiscountRate(0.21m), Amount(7900.00m)))
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.21m) }
+    | "past thirty-five per cent only the CFO signs" :
+        (quoteAt(DiscountRate(0.40m), Amount(6000.00m)))
+        -> NeedsApproval { role = Cfo, worstDiscount = DiscountRate(0.40m) }
+
+// === approverFor: who holds that authority ===
+// An org's approval matrix is administered outside the model — it changes when somebody is promoted, not when
+// the rules change — so resolving a role to a person is injected. Its success value is crm's UserId, which the
+// implementation builds through crm's public decoder — the path a value arriving from outside takes, invariant
+// and all. That is the ordinary shape for an injected behavior returning another context's type.
+behavior approverFor : (role: ApproverRole) -> UserId
+
+// === submitForApproval ===
+// Every state says what submitting means from there, which is what an exhaustive match over an attribute
+// buys: there is no state in which submitting quietly does nothing.
+behavior submitForApproval : (quote: Quote, on: Date) -> Quote | AlreadySubmitted | NothingToApprove
+    depends on approverFor
+    // The role and the worst discount are what `approvalNeeded` built, carried through.
+    constructs Quote, PendingApproval, AutoApproved, AlreadySubmitted, NothingToApprove
+
+// Whether this quote needs approving is `approvalNeeded`'s answer, so this behavior asks it rather than
+// reading the matrix a second time: a behavior whose own requirement set is empty is called by name.
+let submitForApproval (quote, on, approverFor) =
+    match quote.approval with
+        | PendingApproval -> AlreadySubmitted
+        | Decided         -> AlreadySubmitted
+        | AutoApproved    -> NothingToApprove
+        | NotSubmitted    ->
+            match approvalNeeded(quote) with
+                | WithinAuthority     -> Quote { ...quote, approval = AutoApproved }
+                | NeedsApproval as n  -> Quote { ...quote
+                                               , approval = PendingApproval { submittedOn = on
+                                                                            , role = n.role
+                                                                            , approver = approverFor(n.role) } }
+
+// The fake is the org chart, and the `_` row is what makes an unrouted role impossible to forget.
+fake approverFor
+    | (SalesManager) -> UserId("u-manager")
+    | (RegionalVp)   -> UserId("u-vp")
+    | _              -> UserId("u-cfo")
+
+example submitForApproval
+    | "a quote past the rep's authority goes to the role that holds it, and to the person in that role" :
+        (vpQuote, Date("2026-08-12"))
+        -> Quote
+    | "a quote already waiting on somebody is not submitted twice" :
+        (Quote { ...vpQuote
+               , approval = PendingApproval { submittedOn = Date("2026-08-11"), role = RegionalVp
+                                            , approver = UserId("u-vp") }
+               }, Date("2026-08-12"))
+        -> AlreadySubmitted
+    | "a quote inside the rep's own authority has nobody to submit it to" :
+        (Quote { ...repQuote, approval = AutoApproved }, Date("2026-08-12"))
+        -> NothingToApprove
+
+// === decideApproval ===
+// A rejection with no reason is a thing approvers do and a thing the model refuses: the note is required, and
+// the requirement is a case rather than an abort because it is a form somebody has to fill in again.
+behavior decideApproval : (quote: Quote, approver: UserId, on: Date, verdict: Verdict, note: String)
+        -> Quote | NotPending | RejectionNoteMissing
+    constructs Quote, ApprovedQuote, RejectedQuote, RejectionNote, NotPending, RejectionNoteMissing
+
+let decideApproval (quote, approver, on, verdict, note) =
+    match quote.approval with
+        | NotSubmitted    -> NotPending
+        | AutoApproved    -> NotPending
+        | Decided         -> NotPending
+        | PendingApproval ->
+            match verdict with
+                | Approve -> Quote { ...quote
+                                   , approval = ApprovedQuote { approvedOn = on, approver = approver } }
+                | Reject  -> {
+                    guard RejectionNote(String.trim(note)) as reason else RejectionNoteMissing
+
+                    Quote { ...quote
+                          , approval = RejectedQuote { rejectedOn = on
+                                                     , approver = approver
+                                                     , note = reason } }
+                }
+
+// === acceptQuote ===
+// Only an approved, unexpired quote is accepted, and both halves are one expression. The outer match reaches
+// Decided, the inner one reaches ApprovedQuote, and every other state is a case the caller has to handle
+// rather than a boolean it can read the wrong way round.
+behavior acceptQuote : (quote: Quote, on: Date) -> AcceptedQuote | QuoteExpired | ApprovalMissing
+    constructs AcceptedQuote, QuoteExpired, ApprovalMissing
+
+let acceptQuote (quote, on) = {
+    guard Date.daysBetween(on, quote.expiresOn) >= 0
+        else QuoteExpired { expiredOn = quote.expiresOn
+                          , daysLate = Date.daysBetween(quote.expiresOn, on) }
+    match quote.approval with
+        | AutoApproved -> AcceptedQuote { number = quote.number, acceptedOn = on, total = quote.total }
+        | Decided as d ->
+            match d with
+                | ApprovedQuote -> AcceptedQuote { number = quote.number, acceptedOn = on
+                                                 , total = quote.total }
+                | RejectedQuote -> ApprovalMissing
+        | NotSubmitted    -> ApprovalMissing
+        | PendingApproval -> ApprovalMissing
+}
+
+example acceptQuote
+    | "an approved quote inside its window is accepted" :
+        (approvedQuote, Date("2026-09-01"))
+        -> AcceptedQuote { number = QuoteNumber("0Q0000000000001"), acceptedOn = Date("2026-09-01")
+                         , total = Amount(7900.00m) }
+    | "the last day of the window still counts" :
+        (approvedQuote, Date("2026-09-09"))
+        -> AcceptedQuote { number = QuoteNumber("0Q0000000000001"), acceptedOn = Date("2026-09-09")
+                         , total = Amount(7900.00m) }
+    | "the day after it does not, and the answer says how late" :
+        (approvedQuote, Date("2026-09-10"))
+        -> QuoteExpired { expiredOn = Date("2026-09-09"), daysLate = 1 }
+    | "a rejected quote is not accepted however fresh it is" :
+        (rejectedQuote, Date("2026-09-01"))
+        -> ApprovalMissing
+    | "a quote nobody has signed off is not accepted either" :
+        (vpQuote, Date("2026-09-01"))
+        -> ApprovalMissing
+
+// === renewQuote ===
+// An expired quote is re-issued, not edited, and re-issuing resets the approval: the discount is being stated
+// again, so the authority to state it has to be given again. A quote that has not expired is not renewed —
+// that is a case, because asking to renew a live quote is a mistake worth naming.
+behavior renewQuote : (quote: Quote, on: Date, validity: Int) -> Quote | StillValid | ValidityOutOfRange
+    constructs Quote, ValidityDays, NotSubmitted, StillValid, ValidityOutOfRange
+
+let renewQuote (quote, on, validity) = {
+    guard Date.daysBetween(quote.expiresOn, on) >= 1 else StillValid
+    guard ValidityDays(validity) as days else ValidityOutOfRange
+
+    Quote { ...quote
+          , issuedOn = on
+          , expiresOn = Date.addDays(days.value, on)
+          , approval = NotSubmitted
+          }
+}
+
+// === discountExposureOf ===
+// What finance asks for at quarter end: how much revenue is sitting behind each approver's signature. The
+// three roles are unit data, so the role keys the map and no display string is written down beside them.
+// F18 is why this behavior is not called `discountExposure`.
+let pendingRoleOf (quote: Quote): List<ApproverRole> =
+    match quote.approval with
+        | PendingApproval { role } -> [ role ]
+        | NotSubmitted             -> [ ]
+        | AutoApproved             -> [ ]
+        | Decided                  -> [ ]
+
+let roleTotalsOf (quotes: List<Quote>): Map<ApproverRole, Amount> =
+    List.fold((acc, quote) -> addQuoteToRole(acc, quote), Map.empty, quotes)
+
+let addQuoteToRole (acc: Map<ApproverRole, Amount>, quote: Quote): Map<ApproverRole, Amount> =
+    List.fold((inner, role) ->
+                  Map.updateOrInsert(role, quote.total,
+                             sofar -> Amount(Decimal.add(sofar.value, quote.total.value)), inner),
+              acc, pendingRoleOf(quote))
+
+behavior discountExposureOf : (quotes: List<Quote>) -> DiscountExposure
+    constructs DiscountExposure, Amount, DiscountRate
+
+let discountExposureOf (quotes) =
+    DiscountExposure
+        { byRole = roleTotalsOf(quotes)
+        , worst = Option.withDefault(DiscountRate(0.0m),
+                                     List.max(List.map(q -> worstDiscountOf(q.lines), quotes)))
+        }

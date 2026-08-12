@@ -14,11 +14,11 @@ Both halves of that claim were wrong. A `data` may already refer to itself — a
 ordinary business data:
 
 ```
-data 社員 = { 上司: 社員?, 氏名: String }
+data Employee = { manager: Employee?, name: String }
 ```
 
 The compiler accepts this, and the derived decoder/encoder already traverse it: a nested
-`{"氏名":"a","上司":{"氏名":"b"}}` decodes to a `社員` whose `上司` is a `社員`. Self-referential
+`{"name":"a","manager":{"name":"b"}}` decodes to a `Employee` whose `manager` is a `Employee`. Self-referential
 data is not absent from Souther; it works. What was missing is the ability to *compute* over it.
 `fold` is the one loop primitive and it folds a `List` of fixed structure; it cannot walk a
 reporting line to the top, collect all ancestors, or measure the depth of a tree, because the
@@ -39,7 +39,7 @@ helpers.
   and emitted as `static` methods on a package-private `$Fns` class; a self- or mutual call is a
   plain `invokestatic`. Non-recursive helpers are still inlined, unchanged — combinators keep
   self-hosting over `fold`, and the inliner keeps stamping prelude-helper errors at the call site.
-- **A recursive helper must declare its return type**: `let 深さ (s: 社員): Int = ...`. The result
+- **A recursive helper must declare its return type**: `let depth (s: Employee): Int = ...`. The result
   cannot be inferred through the cycle without a fixpoint; the declared type lets a self-call be
   typed before the body is checked. Parameter types are already declared for helpers. A
   non-recursive helper still infers its return type, so the annotation is required only when the
@@ -47,9 +47,13 @@ helpers.
 - **Mutual recursion is allowed.** Every member of a call cycle is lowered together, so
   `ping`/`pong` calling each other work the same as a self-call — the cycle detector already
   identifies the whole group.
-- **A recursive helper is pure.** It is a `static` method with no injected fields, so it cannot
-  call an injected behavior (a `requires`); the effect belongs in the behavior that calls the
-  helper. Recursion is for traversing data, not for reaching the outside world.
+- **A recursive helper is pure.** Its own body may not call an injected behavior (a `depends on`);
+  the effect belongs in the behavior that calls the helper. Recursion is for traversing data, not
+  for reaching the outside world. What the helper may do is apply a function it is handed, and the
+  caller may hand it a dependency — the effect is then the caller's, declared in the caller's
+  `depends on` and carried in by the closure. The emitted form follows: the helper is a `static`
+  method with no injected fields, and the closure that holds the dependency is built by the
+  behavior and passed in as an argument.
 - **A recursive helper may construct data**, and its constructions are attributed to the behavior
   that calls it. Because the helper is not inlined, a caller's body shows only a call, not the
   construction inside it; the `constructs` inference follows the call into the helper (transitively,
@@ -66,7 +70,7 @@ helpers.
 
 Because self-referential data is now a deliberate, supported shape, one soundness gap is closed
 alongside: a `data` whose construction requires constructing itself through **mandatory** fields
-with no base case is uninhabitable and is rejected at compile time. `上司: 社員` (no `?`) is a
+with no base case is uninhabitable and is rejected at compile time. `manager: Employee` (no `?`) is a
 base-less cycle — no value can ever be built — so it is a compile error, not a runtime overflow.
 An optional (`?`) field or a `List`/`Map` field is a base case (`None`, the empty collection) and
 breaks the cycle. A sum is OR-composed, so the check does not propagate through one.

@@ -8,10 +8,10 @@ Souther aims to sit where Elm sits — a bounded, domain-facing language — whi
 core shapes (railway output, unmarked sums, `->`) from F#. Users of both languages reach for
 the value pipe `|>` constantly: they read a transformation top to bottom, `x |> f |> g`, not
 inside-out as `g(f(x))`. Souther had no such pipe, and its nested combinator calls read
-inside-out. A representative line from the `tagging` example:
+inside-out. A representative line from the `issuetracker` example (then named `tagging`):
 
 ```
-sort(filter(map(split(入力.生, ","), 片 -> lowercase(trim(片))), 片 -> String.length(片) >= 1))
+sort(filter(map(split(input.raw, ","), piece -> lowercase(trim(piece))), piece -> String.length(piece) >= 1))
 ```
 
 ADR-0028 explicitly left `|>` out, with the reason that Souther's combinators take the
@@ -28,7 +28,7 @@ Adopt the value pipe `|>`, and change the standard library's argument order to m
   is `f(a, e)`; a bare function name `e |> f` is `f(e)`. It binds looser than everything else
   and is left-associative, so `a |> f |> g` is `g(f(a))`. The right side must be a call or a
   function name — `e |> 3` is a compile error.
-- **It desugars at parse time**, like `require` → `if`, so no later pass sees a pipe node. This
+- **It desugars at parse time**, like `guard` → `if`, so no later pass sees a pipe node. This
   matters concretely: bare stdlib names are rewritten to their qualified form (`sort` →
   `List.sort`) by an early pass, so a pipe surviving into a later stage would leave `|> sort`
   unqualified. Desugaring in the parser turns it into an ordinary call before that pass runs.
@@ -46,13 +46,13 @@ This reverses two choices ADR-0028 recorded; that ADR is annotated accordingly.
 ## Consequences
 
 The pipe is pure sugar: it exists only in the lexer and parser, adds no AST node, and no type
-checker or backend case. The `tagging` example above becomes a chain read top to bottom:
+checker or backend case. The example above becomes a chain read top to bottom:
 
 ```
-入力.生
+input.raw
     |> split(",")
-    |> map(片 -> 片 |> trim |> lowercase)
-    |> filter(片 -> String.length(片) >= 1)
+    |> map(piece -> piece |> trim |> lowercase)
+    |> filter(piece -> String.length(piece) >= 1)
     |> sort
 ```
 

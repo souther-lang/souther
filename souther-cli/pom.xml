@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc3</version>
+        <version>0.1.0-rc4</version>
     </parent>
 
     <artifactId>souther-cli</artifactId>
@@ -28,12 +28,75 @@
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <!-- The uber jar is `souther.jar` and the prepended launcher is `souther`. -->
         <finalName>souther</finalName>
         <plugins>
+            <!-- The `*IT` tests run the shaded jar itself, after `package` has produced it. What
+                 they cover is what only packaging decides: that the specification and the doc sets
+                 are inside the artifact, and that two jars' set registries were merged rather than
+                 one replacing the other. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.6</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <souther.jar>${project.build.directory}/souther.jar</souther.jar>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- `souther japi` reads javadoc out of a library's sources. The shaded jar has its
+                 dependencies inside it and nothing beside it, so without the sources bundled here
+                 the javadoc it promises would never appear on the ordinary invocation. Only the
+                 boundary libraries a Souther author actually meets are unpacked; the rest would
+                 add tens of megabytes for classes nobody asks `japi` about. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>bundle-boundary-sources</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>net.unit8.raoh</groupId>
+                                    <artifactId>raoh</artifactId>
+                                    <version>${raoh.version}</version>
+                                    <classifier>sources</classifier>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>net.unit8.raoh</groupId>
+                                    <artifactId>raoh-json</artifactId>
+                                    <version>${raoh.version}</version>
+                                    <classifier>sources</classifier>
+                                </artifactItem>
+                            </artifactItems>
+                            <includes>**/*.java</includes>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/souther-sources</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Merge every dependency into one jar with Main-Class set. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -63,12 +126,18 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>souther.compiler.Main</mainClass>
+                                    <mainClass>souther.cli.Main</mainClass>
                                     <manifestEntries>
                                         <Multi-Release>true</Multi-Release>
                                     </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <!-- Every jar that ships documentation registers its set in a file
+                                     at the same path. Without appending, one jar's registry would
+                                     replace the other's and `souther doc` would lose a whole set. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/souther-docs/sets</resource>
+                                </transformer>
                             </transformers>
                         </configuration>
                     </execution>
@@ -83,6 +152,14 @@
                 <version>2.1.1</version>
                 <configuration>
                     <programFile>souther</programFile>
+                    <!-- The stack this compiler is supported on. What a definition may say is
+                         bounded ([#source-structural-complexity-is-bounded]), and holding that
+                         bound is what this is for: every phase descends what it builds by
+                         recursion, and a source at the bound needs about a megabyte. The default
+                         is a platform's rather than this compiler's — a megabyte on Linux x64, two
+                         on aarch64 — so a source that compiles here would depend on where it was
+                         compiled if this were left unsaid. -->
+                    <flags>-Xss4m</flags>
                 </configuration>
                 <executions>
                     <execution>

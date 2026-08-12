@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * A lambda may be passed straight to a helper's function-typed parameter — {@code anyOf(xs, x -> x >
  * 0)} — not only a named function. The lambda is β-reduced at each application of the parameter
- * inside the helper body, exactly as a {@code let}-bound lambda is (spec 12.5). This is what lets the
+ * inside the helper body, exactly as a {@code let}-bound lambda is (spec §blocks). This is what lets the
  * prelude combinators, once they take a {@code p: ('a) -> Bool} parameter, still be called with an
  * inline block the way the built-ins were.
  */

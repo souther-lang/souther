@@ -5,7 +5,9 @@ import souther.lsp.analysis.Analyzer;
 import souther.lsp.analysis.DocumentStore;
 import souther.lsp.analysis.ModuleGraph;
 import souther.lsp.analysis.Workspace;
+import souther.compiler.query.Adequacy;
 import souther.lsp.protocol.CodeAction;
+import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
@@ -55,53 +57,103 @@ public final class LspServer {
             JsonNode m;
             try {
                 m = JSON.readTree(message);
-            } catch (RuntimeException e) {
+            } catch (RuntimeException _) {
                 continue;   // a malformed frame is dropped, not fatal
             }
             JsonNode methodNode = m.get("method");
             if (methodNode == null || methodNode.isNull()) {
                 continue;   // a response to a server-initiated request; nothing to do
             }
-            if (dispatch(methodNode.asString(), m.get("id"), m.get("params"))) {
+            boolean stop;
+            try {
+                stop = dispatch(methodNode.asString(), m.get("id"), m.get("params"));
+            } catch (RuntimeException | StackOverflowError e) {
+                // One request the server cannot answer must cost that request, not the session. The
+                // analysis layer catches what it can so it can publish a marker instead, but that is
+                // a promise made inside it; this is the one that holds whatever it does. A request
+                // gets an error reply so the client stops waiting; a notification has no reply to
+                // send, so it is simply dropped and the loop reads on.
+                failed(m.get("id"), e);
+                continue;
+            }
+            if (stop) {
                 return;     // exit
             }
         }
     }
 
-    /** Returns true when the server should stop (on {@code exit}). */
+    /** Replies to a request the server could not answer. A notification (no id) has no reply. */
+    private void failed(JsonNode id, Throwable cause) {
+        if (id == null || id.isNull()) {
+            return;
+        }
+        respondError(id, -32603,   // JSON-RPC InternalError
+                "the request could not be completed (" + cause.getClass().getSimpleName() + ")");
+    }
+
+    /**
+     * Returns true when the server should stop (on {@code exit}).
+     *
+     * <p>Naming the method is where a client learns the server does not answer it: nothing below
+     * this point takes a spelling, so there is no second place a method could be refused, and none
+     * where one could be answered without being declared.
+     */
     private boolean dispatch(String method, JsonNode id, JsonNode params) {
-        switch (method) {
-            case "initialize" -> { captureRoots(params); respond(id, initializeResult()); }
-            case "initialized" -> registerFileWatchers();
-            case "$/setTrace", "workspace/didChangeConfiguration" -> { /* no-op */ }
-            case "textDocument/didOpen" -> InboundDecoders.decode(InboundDecoders.DID_OPEN, params)
-                    .ifPresent(p -> { documents.open(p.uri(), p.text()); publishAll(); });
-            case "textDocument/didChange" -> InboundDecoders.decode(InboundDecoders.DID_CHANGE, params)
-                    .ifPresent(p -> { documents.change(p.uri(), p.text()); publishAll(); });
-            case "textDocument/didClose" -> InboundDecoders.decode(InboundDecoders.DOC_REF, params)
-                    .ifPresent(p -> { documents.close(p.uri()); clearDiagnostics(p.uri()); });
-            case "workspace/didChangeWatchedFiles" -> {
+        LspMethod named = LspMethod.of(method).orElse(null);
+        if (named == null) {
+            if (id != null && !id.isNull()) {
+                respondError(id, -32601, "method not found: " + method);
+            }
+            return false;   // a notification has no reply, so an unknown one is simply dropped
+        }
+        return answer(named, id, params);
+    }
+
+    /**
+     * Carries out one method.
+     *
+     * <p>A switch expression with no {@code default}: a method added to {@link LspMethod} and left
+     * unhandled here does not compile. That is what makes the set of methods the server answers the
+     * set written there, and so the set the handshake is built from.
+     */
+    private boolean answer(LspMethod method, JsonNode id, JsonNode params) {
+        return switch (method) {
+            case INITIALIZE -> { captureRoots(params); respond(id, initializeResult()); yield false; }
+            case INITIALIZED -> { registerDynamically(); yield false; }
+            case SET_TRACE, DID_CHANGE_CONFIGURATION -> false;   // no-op
+            case DID_OPEN -> {
+                InboundDecoders.decode(InboundDecoders.DID_OPEN, params)
+                        .ifPresent(p -> { documents.open(p.uri(), p.text()); publishAll(); });
+                yield false;
+            }
+            case DID_CHANGE -> {
+                InboundDecoders.decode(InboundDecoders.DID_CHANGE, params)
+                        .ifPresent(p -> { documents.change(p.uri(), p.text()); publishAll(); });
+                yield false;
+            }
+            case DID_CLOSE -> {
+                InboundDecoders.decode(InboundDecoders.DOC_REF, params)
+                        .ifPresent(p -> { documents.close(p.uri()); clearDiagnostics(p.uri()); });
+                yield false;
+            }
+            case DID_CHANGE_WATCHED_FILES -> {
                 workspace.markChanged();   // a file changed on disk; drop the cached scan and re-read
                 publishAll();
+                yield false;
             }
-            case "textDocument/documentSymbol" -> respond(id, documentSymbols(params));
-            case "textDocument/semanticTokens/full" -> respond(id, semanticTokens(params));
-            case "textDocument/hover" -> respond(id, hover(params));
-            case "textDocument/definition" -> respond(id, definition(params));
-            case "textDocument/references" -> respond(id, references(params));
-            case "textDocument/completion" -> respond(id, completion(params));
-            case "textDocument/codeAction" -> respond(id, codeActions(params));
-            case "textDocument/rename" -> respond(id, rename(params));
-            case "textDocument/formatting" -> respond(id, formatting(params));
-            case "shutdown" -> respond(id, null);
-            case "exit" -> { return true; }
-            default -> {
-                if (id != null && !id.isNull()) {
-                    respondError(id, -32601, "method not found: " + method);
-                }
-            }
-        }
-        return false;
+            case DOCUMENT_SYMBOL -> { respond(id, documentSymbols(params)); yield false; }
+            case SEMANTIC_TOKENS_FULL -> { respond(id, semanticTokens(params)); yield false; }
+            case HOVER -> { respond(id, hover(params)); yield false; }
+            case DEFINITION -> { respond(id, definition(params)); yield false; }
+            case REFERENCES -> { respond(id, references(params)); yield false; }
+            case COMPLETION -> { respond(id, completion(params)); yield false; }
+            case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
+            case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
+            case RENAME -> { respond(id, rename(params)); yield false; }
+            case FORMATTING -> { respond(id, formatting(params)); yield false; }
+            case SHUTDOWN -> { respond(id, null); yield false; }
+            case EXIT -> true;
+        };
     }
 
     // --- capabilities ---
@@ -127,26 +179,36 @@ public final class LspServer {
             roots.add(rootUri.asString());
         }
         workspace.setRoots(roots);
+        analyzer.measure(adequacyAsked(params));
     }
 
+    /**
+     * How much of what the rows cover this client asked to be told, from
+     * {@code initializationOptions.souther.adequacy}: {@code off}, {@code witness} or {@code all}.
+     *
+     * <p>Off unless asked, and one setting rather than one per measure. What separates them is what
+     * they cost: {@code witness} reads what the compile already ran, and {@code all} generates a
+     * second set of classes and runs every row again — on every save, in an editor. Nothing that
+     * costs that should arrive by default.
+     */
+    private static Adequacy.Asked adequacyAsked(JsonNode params) {
+        JsonNode options = params.get("initializationOptions");
+        JsonNode souther = options == null ? null : options.get("souther");
+        JsonNode asked = souther == null ? null : souther.get("adequacy");
+        if (asked == null || asked.isNull()) {
+            return Adequacy.Asked.NOTHING;
+        }
+        return switch (asked.asString()) {
+            case "witness" -> Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS);
+            case "all" -> Adequacy.Asked.reportOnly(Adequacy.Level.ALL);
+            default -> Adequacy.Asked.NOTHING;
+        };
+    }
+
+    /** What the client is told it may call, drawn from the methods that are answered. */
     private Map<String, Object> initializeResult() {
-        Map<String, Object> capabilities = new LinkedHashMap<>();
-        capabilities.put("textDocumentSync", 1);   // 1 = full document sync
-        capabilities.put("documentSymbolProvider", true);
-        capabilities.put("hoverProvider", true);
-        capabilities.put("definitionProvider", true);
-        capabilities.put("referencesProvider", true);
-        capabilities.put("renameProvider", true);
-        capabilities.put("completionProvider", Map.of());   // invoked completion; no trigger characters
-        capabilities.put("codeActionProvider", true);
-        capabilities.put("documentFormattingProvider", true);
-        Map<String, Object> semanticTokens = new LinkedHashMap<>();
-        semanticTokens.put("legend", Map.of("tokenTypes", Analyzer.TOKEN_TYPES,
-                "tokenModifiers", List.of()));
-        semanticTokens.put("full", true);
-        capabilities.put("semanticTokensProvider", semanticTokens);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("capabilities", capabilities);
+        result.put("capabilities", LspMethod.serverCapabilities());
         result.put("serverInfo", Map.of("name", "souther-lsp", "version", "0.1.0"));
         return result;
     }
@@ -192,7 +254,8 @@ public final class LspServer {
         if (text == null) {
             return null;
         }
-        Hover h = analyzer.hover(text, p.position()).orElse(null);
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        Hover h = analyzer.hover(p.uri(), text, p.position(), graph).orElse(null);
         if (h == null) {
             return null;
         }
@@ -257,20 +320,48 @@ public final class LspServer {
         return items;
     }
 
+    // --- code lenses ---
+
+    /**
+     * The line above each behavior saying what its rows cover of it.
+     *
+     * <p>Answered from the workspace snapshot rather than from this document alone: a behavior's rows
+     * are written across its module's source and any attached files, and one file cannot say what the
+     * others cover. Empty unless the client asked to be measured, which it does through
+     * {@code souther.adequacy} at initialization.
+     */
+    private Object codeLenses(JsonNode params) {
+        String uri = InboundDecoders.decode(InboundDecoders.DOC_REF, params)
+                .map(Params.DocRef::uri).orElse(null);
+        if (uri == null || documents.get(uri) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (CodeLens lens : analyzer.codeLenses(uri, graph)) {
+            out.add(Map.of("range", rangeJson(lens.range()),
+                    "command", Map.of("title", lens.title(), "command", "")));
+        }
+        return out;
+    }
+
     // --- code actions ---
 
     private Object codeActions(JsonNode params) {
         Params.CodeActionParams p = InboundDecoders.decode(InboundDecoders.CODE_ACTION, params)
                 .orElse(null);
         String text = p == null ? null : documents.get(p.uri());
-        // Only the range's diagnostics can be fixed, so with none in context there is nothing to offer.
-        // Short-circuiting here avoids a recompile — the analyzer's fix lookup compiles the file — on
-        // every lightbulb over clean code, which is the overwhelmingly common case.
-        if (text == null || !hasContextDiagnostics(params)) {
+        // Only the range's diagnostics can be fixed, so with none in context there is usually nothing
+        // to offer. Short-circuiting here avoids a recompile — the analyzer's fix lookup compiles the
+        // file — on every lightbulb over clean code, which is the overwhelmingly common case. Where
+        // adequacy is being measured there is one offer that is not about a diagnostic — the rows a
+        // behavior does not cover — so the short cut is skipped, and only for a client that asked.
+        if (text == null || (!hasContextDiagnostics(params) && !analyzer.measuring())) {
             return List.of();
         }
         List<Object> out = new ArrayList<>();
-        for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range())) {
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range(), graph)) {
             Map<String, Object> action = new LinkedHashMap<>();
             action.put("title", a.title());
             action.put("kind", "quickfix");
@@ -295,7 +386,7 @@ public final class LspServer {
 
     // --- rename ---
 
-    /** A {@code WorkspaceEdit} renaming the top-level symbol under the cursor everywhere it is used,
+    /** A {@code WorkspaceEdit} renaming the name under the cursor everywhere it is used,
      * or {@code null} when the new name is not a legal identifier or the cursor is not on a
      * renameable symbol — the client then reports the rename as unavailable. */
     private Object rename(JsonNode params) {
@@ -304,15 +395,18 @@ public final class LspServer {
             return null;
         }
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
-        Map<String, List<Range>> edits = analyzer.renameEdits(p.uri(), p.position(), graph);
+        Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits(p.uri(), p.position(), graph, p.newName());
         if (edits.isEmpty()) {
             return null;
         }
         Map<String, Object> changes = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Range>> e : edits.entrySet()) {
+        for (Map.Entry<String, List<souther.lsp.protocol.TextEdit>> e : edits.entrySet()) {
             List<Object> textEdits = new ArrayList<>();
-            for (Range r : e.getValue()) {
-                textEdits.add(textEdit(r, p.newName()));
+            for (souther.lsp.protocol.TextEdit edit : e.getValue()) {
+                // what to write comes with the place: a binding written as a field's own name is
+                // renamed by naming the field it reads, not by writing over it
+                textEdits.add(textEdit(edit.range(), edit.newText()));
             }
             changes.put(e.getKey(), textEdits);
         }
@@ -373,7 +467,7 @@ public final class LspServer {
      * to one module can change what its importers report, so every open file is refreshed together. */
     private void publishAll() {
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
-        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph);
+        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph, workspace.modulePath());
         for (String uri : documents.uris()) {
             publish(uri, byUri.getOrDefault(uri, List.of()));
         }
@@ -390,6 +484,18 @@ public final class LspServer {
             }
             item.put("source", "souther");
             item.put("message", d.message());
+            if (!d.tags().isEmpty()) {
+                item.put("tags", d.tags());
+            }
+            if (!d.related().isEmpty()) {
+                List<Object> related = new ArrayList<>();
+                for (LspDiagnostic.Related r : d.related()) {
+                    related.add(Map.of("location",
+                            Map.of("uri", r.uri(), "range", rangeJson(r.range())),
+                            "message", r.message()));
+                }
+                item.put("relatedInformation", related);
+            }
             items.add(item);
         }
         notify("textDocument/publishDiagnostics", Map.of("uri", uri, "diagnostics", items));
@@ -433,18 +539,19 @@ public final class LspServer {
         conn.write(JSON.writeValueAsString(message));
     }
 
-    /** Asks the client to watch the workspace's {@code .sou} files and report on-disk changes via
-     * {@code workspace/didChangeWatchedFiles}, so the cached disk scan is invalidated when a file is
-     * created, edited, or deleted outside the editor rather than relying on the client watching by
-     * default. The registration response is a no-op here (dropped by {@link #run}); a client without
-     * dynamic registration simply ignores the request. */
-    private void registerFileWatchers() {
-        Map<String, Object> registration = new LinkedHashMap<>();
-        registration.put("id", "souther-sou-watcher");
-        registration.put("method", "workspace/didChangeWatchedFiles");
-        registration.put("registerOptions",
-                Map.of("watchers", List.of(Map.of("globPattern", "**/*.sou"))));
-        sendRequest("client/registerCapability", Map.of("registrations", List.of(registration)));
+    /** Announces the methods no capability carries — asking the client to watch the workspace's
+     * {@code .sou} files and report on-disk changes via {@code workspace/didChangeWatchedFiles}, so
+     * the cached disk scan is dropped when a file is created, edited, or deleted outside the editor
+     * rather than relying on the client watching by default. What is registered comes from the same
+     * methods the capabilities do, so this and the handshake describe one server between them. The
+     * registration response is a no-op here (dropped by {@link #run}); a client without dynamic
+     * registration simply ignores the request. */
+    private void registerDynamically() {
+        List<Map<String, Object>> registrations = LspMethod.dynamicRegistrations();
+        if (registrations.isEmpty()) {
+            return;
+        }
+        sendRequest("client/registerCapability", Map.of("registrations", registrations));
     }
 
     private void sendRequest(String method, Object params) {

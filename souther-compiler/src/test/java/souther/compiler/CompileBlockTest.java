@@ -11,12 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Blocks and the list combinators that take them (spec 12.5, 18.4).
+ * Blocks and the list combinators that take them (spec §blocks, §stdlib-list).
  *
- * <p>A block's requirements float out to the behavior that passes it, so nothing about them is
- * written down (spec 29), and the backend inlines the block instead of building a closure. A block
- * may also be bound to a {@code let} and applied — see {@link CompileLambdaLetTest}; only a block
- * that escapes (is used as a value, not just applied) is rejected, for want of a runtime closure.
+ * <p>A block's requirements float out to the behavior that passes it, so nothing about them is written down
+ * (spec §requirement-propagation), and the backend inlines the block instead of building a closure. A block
+ * may also be bound to a {@code let} and applied — see {@link CompileLambdaLetTest}; only a block that
+ * escapes (is used as a value, not just applied) is rejected, for want of a runtime closure.
  */
 class CompileBlockTest {
 
@@ -107,7 +107,7 @@ class CompileBlockTest {
                 data Id = { v: String }
                 data Nm = { v: String }
                 behavior 名前を引く : (id: Id) -> Nm
-                behavior 全部引く : (xs: List<Id>) -> List<Nm> requires 名前を引く
+                behavior 全部引く : (xs: List<Id>) -> List<Nm> depends on 名前を引く
                 let 全部引く (xs, 名前を引く) = map(x -> 名前を引く(x), xs)
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
@@ -139,7 +139,7 @@ class CompileBlockTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(e.getMessage().contains("filter"), e.getMessage());
-        assertTrue(e.getMessage().contains("BOOL"), e.getMessage());
+        assertTrue(e.getMessage().contains("must return Bool, but returns Int"), e.getMessage());
         assertTrue(e.getMessage().startsWith("3:"), "points at the user's call, not the prelude: " + e.getMessage());
     }
 

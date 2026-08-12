@@ -1,0 +1,273 @@
+package souther.compiler.check;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.core.Core;
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Typing a binary operator, including the rules that let a single-value newtype compare with and
+ * add to a bare literal of its base without losing its own identity (ADR-0047).
+ */
+public final class BinaryElaborator {
+
+    private BinaryElaborator() {}
+
+    /**
+     * Reads one operand, and gives up on the definition where its type is one the compiler could not
+     * work out.
+     *
+     * <p>An operator wants a particular shape of type — Int or Decimal to add, two lists or two
+     * strings to append — and an operand the compiler could not work out has no shape. Absorbing is
+     * for a comparison, which can answer "no disagreement"; there is no answer to give here, so the
+     * definition is abandoned and the name that denoted nothing stands as what was wrong. Left alone,
+     * the operand's type reaches the message as `?`, which names nothing the author could go looking
+     * for.
+     *
+     * <p>{@code &&} and {@code ||} are the operators that ask something of an operand on its own,
+     * and that is asked here, before the operand beside it is read: an operand is finished where it
+     * stands. The rest ask about the pair and cannot answer until both have been read.
+     *
+     * <p>What this answers with is what the operator's rule then reads. Asking the question of a
+     * reading of its own cost the expression twice its own subtree, and an operand of an operand
+     * twice again, so a chain of operators nested one inside the last cost two to the power of its
+     * length: twenty-six links took ten seconds and a hundred did not finish.
+     */
+    private static Core operand(Ast.Expr e, Ast.Binary bin, Scope env, CheckContext ctx) {
+        Core read = Elaborator.elaborate(e, env, ctx);
+        if (read.type() instanceof Type.Erroneous) {
+            throw new Unanswerable(bin.pos());
+        }
+        if (bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR) {
+            Elaborator.requireType(e, read.type(), Type.BOOL, ctx.symbols(),
+                    "operand of logical operator");
+        }
+        return read;
+    }
+
+    static Core elaborateBinary(Ast.Binary bin, Scope env, CheckContext ctx) {
+        // Left to right, and the first operand that failed is the one reported: an operand that says
+        // what is wrong with it has said it, and what stands beside it is not read at all where this
+        // one left nothing to check against.
+        Core left = operand(bin.left(), bin, env, ctx);
+        Core right = operand(bin.right(), bin, env, ctx);
+        return switch (bin.op()) {
+            // both operands were asked for a Bool where they were read
+            case AND, OR -> new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
+            case LT, LE, GT, GE -> {
+                // The ordered primitives: Int numerically, String lexicographically, Decimal by
+                // value, Date/DateTime in time. Unlike Elm (which orders only Int/Float/Char/String
+                // because it rides JavaScript), Souther sits on the JVM where BigDecimal/LocalDate/
+                // LocalDateTime are Comparable, so it orders them too. A single-value newtype over an
+                // ordered type is ordered by that value; the operands stay the same newtype (nominal),
+                // except that a bare literal takes the other side's newtype from context.
+                Type lt = left.type();
+                Type rt = right.type();
+                if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
+                }
+                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
+            }
+            case ADD, SUB, MUL, DIV -> {
+                // `+ - * /` work on two Int or two Decimal operands (spec
+                // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow and `/` aborts on a
+                // zero divisor; Decimal `/` rounds by the default scale/mode. Case handling for a zero
+                // divisor is the `divide`/`remainder` functions.
+                Type lt = left.type();
+                Type rt = right.type();
+                // The rules live in ArithmeticCheck, which answers with the type the operator gives
+                // back or with the rule that refused the operands. Nothing is decided a second time
+                // here: a refusal already knows what it is, and this only points it at the source.
+                ArithmeticCheck answer = ArithmeticCheck.of(bin.op(), lt, rt,
+                        isLiteralExpr(bin.left()), isLiteralExpr(bin.right()), ctx.symbols());
+                yield switch (answer) {
+                    case ArithmeticCheck.Allowed allowed ->
+                            new Core.Binary(bin.op(), left, right, bin.origin(), allowed.resultType(), bin.pos());
+                    case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
+                        // One type against another: the found-versus-expected block says it better
+                        // than a sentence would, and requireType raises or absorbs it.
+                        Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");
+                        yield new Core.Binary(bin.op(), left, right, bin.origin(), lt, bin.pos());
+                    }
+                    case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
+                };
+            }
+            case CONCAT -> {
+                // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to a list
+                // (spec §an-operator-takes-the-types-it-is-defined-for). Strings are checked first, before
+                // the empty-list absorption below.
+                Type lraw = left.type();
+                Type rraw = right.type();
+                if (lraw == Type.STRING && rraw == Type.STRING) {
+                    yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.STRING, bin.pos());
+                }
+                // A bottom operand ({@code Nothing}) is a list read from an accumulator an empty
+                // collection seed grows — the value at a key of a `Map.empty`-seeded fold, whose element
+                // type is not fixed yet. At run time it is a list, so read it as the empty list and let
+                // the other operand fix the element type, as `[] ++ xs` does.
+                Type lt = BottomInfer.bottomAsEmptyList(lraw);
+                Type rt = BottomInfer.bottomAsEmptyList(rraw);
+                if (!(lt instanceof Type.ListOf lo) || !(rt instanceof Type.ListOf ro)) {
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos(), 2)
+                                    .secondary(bin.left().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
+                                    .secondary(bin.right().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)))
+                                    
+                                    .say(new TypeMessage.JoinsTwoListsOrTwoStrings(Type.show(lt, rt), Type.show(rt, lt))).build());
+                }
+                Type element = BottomInfer.unifyElem(lo.element(), ro.element());
+                if (element == null) {
+                    // Both sides are written operands, one level in from what is compared: the
+                    // element types have no source of their own, but the lists holding them do, so
+                    // each is labelled where it is written and the message names neither.
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos(), 2)
+                                    .secondary(bin.left().reportedAt(), new TypeMessage.ThisListHoldsElementsOf(Type.show(lo.element(), ro.element())))
+                                    .secondary(bin.right().reportedAt(), new TypeMessage.ThisListHoldsElementsOf(Type.show(ro.element(), lo.element())))
+                                    .hint(new TypeMessage.MakeEveryElementTheSameType())
+                                    .say(new TypeMessage.TheTwoListsHoldDifferentElements()).build());
+                }
+                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.list(element), bin.pos());
+            }
+            case EQ, NE -> {
+                Type lt = left.type();
+                Type rt = right.type();
+                // two values of the same data compare by their fields (spec §equality); across different
+                // types there is nothing to compare. An operand may be the scalar empty-collection
+                // bottom (`Nothing`) when it reads an accumulator a `[]` seed grows — the `e` in
+                // `if any(e -> e == x, acc) …` over a `fold(…, [], xs)` is bound to the not-yet-fixed
+                // element type (ADR-0028). At run time it holds the other operand's type, so absorb the
+                // bottom rather than reject the comparison. (A whole empty list `[]` stays a type error
+                // against a non-list, so this does not loosen `[] == 5`.)
+                // A sum may also be compared with one of its cases (`役職 == 一般社員`): a case value
+                // is a value of its sum (case->sum is transparent everywhere else, spec §sum-data), so
+                // this is a sum-vs-sum comparison by case (spec §equality). Check the relation on the
+                // top-level case sets directly, not through `assignable` — `assignable` recurses into
+                // collections (covariance), which would wrongly let `List<一般社員> == List<役職>` compare;
+                // the exemption is only the direct sum<->case scalar relationship. Unrelated types
+                // (`金額 == 数量`) have disjoint case sets and still fail.
+                // `==` is value equality, and a function value has none: comparing two would fall
+                // back to whether they are the same object, which is not a question the language asks
+                if (!TypeOps.supportsEquality(lt, ctx.symbols())
+                        || !TypeOps.supportsEquality(rt, ctx.symbols())) {
+                    Type carrier = TypeOps.supportsEquality(lt, ctx.symbols()) ? rt : lt;
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos(), 2).say(new TypeMessage.AFunctionHasNoValueToCompare(Type.show(carrier))).build());
+                }
+                Set<TypeName> lCases = TypeOps.leafCases(lt, ctx.symbols());
+                Set<TypeName> rCases = TypeOps.leafCases(rt, ctx.symbols());
+                boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
+                        && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
+                if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())
+                        && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos(), 2)
+                                    .secondary(bin.left().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
+                                    .secondary(bin.right().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)))
+                                    
+                                    .say(new TypeMessage.TheseTwoCannotBeCompared(Type.show(lt, rt), Type.show(rt, lt))).build());
+                }
+                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
+            }
+        };
+    }
+
+    /** A source literal (Int/Decimal/String/Bool, or a negated literal) — the only thing allowed to
+     * take a newtype from the other operand. A variable of the underlying type is not (write the
+     * newtype construction, e.g. {@code 金額(x)}). */
+    static boolean isLiteralExpr(Ast.Expr e) {
+        return e instanceof Ast.IntLit || e instanceof Ast.DecimalLit
+                || e instanceof Ast.StringLit || e instanceof Ast.BoolLit
+                || (e instanceof Ast.Neg n && isLiteralExpr(n.operand()));
+    }
+
+    /** Whether {@code <}/{@code <=}/{@code >}/{@code >=} may compare the operands: both must reduce to
+     * the same ordered base, and be either the same nominal type or a newtype paired with a bare
+     * literal of its base (so {@code 金額 <= 金額} and {@code 金額 <= 100} pass, {@code 金額 <= 数量}
+     * and {@code 金額 <= (Int variable)} do not). */
+    static boolean orderedComparable(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
+                                             Symbols symbols) {
+        Type lb = TypeOps.base(lt, symbols);
+        if (!TypeOps.isOrdered(lb) || !lb.equals(TypeOps.base(rt, symbols))) {
+            // An enumeration is ordered by its declaration, and a case value is a value of its sum
+            // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
+            return TypeOps.comparisonEnumeration(lt, rt, symbols) != null;
+        }
+        if (lt.equals(rt)) {
+            return true;
+        }
+        return literalPairsNewtype(lt, rt, le, re, symbols);
+    }
+
+    /** Whether {@code ==}/{@code /=} may pair a newtype with a bare literal of its base type (the
+     * same-type and bottom cases are handled by the caller). */
+    static boolean eqCoercible(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
+                                       Symbols symbols) {
+        return TypeOps.base(lt, symbols).equals(TypeOps.base(rt, symbols))
+                && literalPairsNewtype(lt, rt, le, re, symbols);
+    }
+
+    /** The refusal, pointed at the source: at the operand it is about, or — where the rule is about
+     * the pair — at the operator with each operand named beside it, as a comparison of two
+     * unrelated types is. */
+    private static CompileException refused(Ast.Binary bin, ArithmeticCheck.Refusal refusal,
+                                            Type lt, Type rt) {
+        Diagnostic.Builder d = refusal.saying();
+        if (refusal.side() == ArithmeticCheck.Side.BOTH) {
+            d = d.at(bin.pos())
+                    .secondary(bin.left().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
+                    .secondary(bin.right().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)));
+        } else {
+            Ast.Expr faulted = refusal.side() == ArithmeticCheck.Side.LEFT ? bin.left() : bin.right();
+            d = d.at(faulted.reportedAt());
+        }
+        return CompileException.of(d.build());
+    }
+
+    /**
+     * What {@code op} asks of one operand, given that the operand beside it is {@code other}.
+     * {@code onTheRight} says which side the asked-about operand stands on, because the rule is not
+     * symmetric.
+     *
+     * <p>The question a reader of an operand asks — what does standing here make me? — is the same
+     * question {@link #elaborateBinary} asks, so it is put to the same rules rather than answered
+     * again beside them: each type an operand could be is offered to {@link ArithmeticCheck}, and
+     * the one the operator accepts is the answer. Where it accepts neither, nothing follows and the
+     * answer is null.
+     */
+    static Type operandBeside(Ast.BinOp op, Type other, boolean onTheRight, Symbols symbols) {
+        if (op == Ast.BinOp.AND || op == Ast.BinOp.OR) {
+            return Type.BOOL;
+        }
+        if (other == null) {
+            return null;
+        }
+        Type base = TypeOps.directNumericNewtypeBase(other, symbols);
+        if (base == null || !(op == Ast.BinOp.MUL || op == Ast.BinOp.DIV)) {
+            return other;
+        }
+        for (Type candidate : List.of(other, base)) {
+            Type lt = onTheRight ? other : candidate;
+            Type rt = onTheRight ? candidate : other;
+            if (ArithmeticCheck.of(op, lt, rt, false, false, symbols) instanceof ArithmeticCheck.Allowed) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /** One side is a single-value newtype and the other is a bare literal (not itself a newtype). */
+    static boolean literalPairsNewtype(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
+                                               Symbols symbols) {
+        return (TypeOps.isSingleValueNewtype(lt, symbols) && !TypeOps.isSingleValueNewtype(rt, symbols) && isLiteralExpr(re))
+                || (TypeOps.isSingleValueNewtype(rt, symbols) && !TypeOps.isSingleValueNewtype(lt, symbols) && isLiteralExpr(le));
+    }
+}

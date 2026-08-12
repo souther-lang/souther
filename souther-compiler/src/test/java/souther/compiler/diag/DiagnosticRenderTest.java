@@ -1,6 +1,8 @@
 package souther.compiler.diag;
 
 import souther.compiler.Compiler;
+
+import souther.compiler.diag.msg.DeclarationMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
@@ -16,9 +18,49 @@ class DiagnosticRenderTest {
     private static final SourceContext SRC =
             new SourceContext("demo.sou", "module demo\nlet f (n) = null\n");
 
+    /**
+     * The JSON form carries the values the message is about, under the names its entry writes them
+     * under.
+     *
+     * <p>This is the half of the interface a tool reads. The rendered sentence is for a person and
+     * changes with the language it is asked in; a tool that wanted the field it names would have had
+     * to find it inside that sentence. Each value is written as the text it renders as, so which
+     * Java type a component happens to have stays a fact about the compiler.
+     */
+    @Test
+    void jsonCarriesTheValuesTheMessageIsAbout() {
+        Diagnostic d = Diagnostic.at(new SourcePos(2, 13))
+                .say(new souther.compiler.diag.msg.DataMessage.SpreadFieldCollision(
+                        "issuedAt", "Sold", "...Issued"))
+                .build();
+        String out = new JsonRenderer().render(d, SRC, Locale.ENGLISH);
+        assertTrue(out.contains("\"values\":{\"field\":\"issuedAt\",\"from\":\"Sold\","
+                + "\"heldBy\":\"...Issued\"}"), out);
+    }
+
+    /** A wrapped text carries no values object rather than an empty one: it is not a message. */
+    @Test
+    void jsonCarriesNoValuesWhereThereIsNoMessage() {
+        Diagnostic d = Diagnostic.literal(new SourcePos(2, 13), "the compiler was handed this");
+        assertFalse(new JsonRenderer().render(d, SRC, Locale.ENGLISH).contains("\"values\""));
+    }
+
+    /** The names are the message's, so they are the same in every language the sentence is asked in. */
+    @Test
+    void theValuesAreNamedTheSameInEveryLanguage() {
+        Diagnostic d = Diagnostic.at(new SourcePos(2, 13))
+                .say(new souther.compiler.diag.msg.DataMessage.SpreadFieldCollision(
+                        "issuedAt", "Sold", "...Issued"))
+                .build();
+        String english = new JsonRenderer().render(d, SRC, Locale.ENGLISH);
+        String japanese = new JsonRenderer().render(d, SRC, Locale.JAPANESE);
+        assertTrue(japanese.contains("\"values\":{\"field\":\"issuedAt\""), japanese);
+        assertFalse(english.equals(japanese), "the sentence differs; the names do not");
+    }
+
     @Test
     void humanRendererQuotesTheLineAndUnderlinesTheToken() {
-        Diagnostic d = Diagnostic.of("E1301", "e1301.msg")
+        Diagnostic d = Diagnostic.say(new DeclarationMessage.NullIsNotPartOfTheLanguage())
                 .at(new SourcePos(2, 13), 4)
                 .build();
         String out = new HumanRenderer(false).render(d, SRC, Locale.ENGLISH);
@@ -29,7 +71,8 @@ class DiagnosticRenderTest {
 
     @Test
     void titleFollowsTheLocale() {
-        Diagnostic d = Diagnostic.literal(new SourcePos(2, 13), "E1301", "boom");
+        Diagnostic d = Diagnostic.say(new DeclarationMessage.NullIsNotPartOfTheLanguage())
+                .at(new SourcePos(2, 13)).build();
         String en = new HumanRenderer(false).render(d, SRC, Locale.ENGLISH);
         String ja = new HumanRenderer(false).render(d, SRC, Locale.JAPANESE);
         assertTrue(en.contains("USE OF NULL"), en);
@@ -51,7 +94,7 @@ class DiagnosticRenderTest {
 
     @Test
     void jsonRendererCarriesCodeAndRegion() {
-        Diagnostic d = Diagnostic.of("E1301", "e1301.msg")
+        Diagnostic d = Diagnostic.say(new DeclarationMessage.NullIsNotPartOfTheLanguage())
                 .at(new SourcePos(2, 13), 4)
                 .build();
         String json = new JsonRenderer().render(d, SRC, Locale.JAPANESE);

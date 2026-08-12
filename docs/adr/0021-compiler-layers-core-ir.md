@@ -4,24 +4,30 @@ Status: Accepted; implemented (supersedes the MVP "no separate IR" stance record
 
 Implemented: the **Lower** stage (`check/Lower.java`) inlines each behavior body once —
 both the type checker's body check and the backend consume it, so the backend no longer
-inlines — and desugars list comprehensions. A structural **Core IR** (`core/Core.java`)
-carries the lowered behavior-body language; the backend emits every expression from Core
-(`genExpr`), and the AST `expr` is a thin `Core.of`
-adapter kept for the codec paths, which are still AST-level.
+inlines — and desugars list comprehensions. A **Core IR** (`core/Core.java`) carries the
+lowered behavior-body language, and the backend emits every expression from Core.
 
-Core is **structural, not typed**: the backend infers types as it emits. One consequence
-is that the closure path (a runtime-selected function) asks the type checker — which works
-on the AST — whether a `let` value is such a function and for its parameter types, reaching
-it through `Core.toAst()`. This is a genuine dependency of the untyped design, not an
-unfinished migration: current generics are monomorphized by inline expansion (no typed IR
-needed), and the JVM erases generics and boxes collection elements regardless, so a typed
-Core buys little for them. A typed Core IR is deferred until a real need appears — recursive
-generics lowered to shared methods, or an optimization that needs types on nodes.
+Core is **typed**: every node carries the type the checker decided for it. The type checker
+produces Core as it types a body (`TypeChecker.elaborate`), and it is the only producer —
+the backend translates nothing itself. This reverses the original stance, which deferred a
+typed Core until "a real need appears — recursive generics lowered to shared methods, or an
+optimization that needs types on nodes". The need that arrived was a third one: with an
+untyped Core the emitter inferred types again as it emitted, so every improvement to
+inference had to be made in both places, and a miss in the second copy surfaced as a codegen
+crash rather than a type error. Issues #70, #71, #74 and #80 each paid that cost before #81
+removed the second copy.
 
-The normative specification (`[#compiler-pipeline]`, `[#ast-tracking]`) still holds: Core
-is a structural lowering of behavior bodies with no type reification, so "no separate IR" in
-the sense of a typed/reified representation remains accurate; the pipeline text is revised
-when a typed Core lands, not ahead of it.
+What the emitter no longer does: resolve a recursive helper call's type variables
+(`pinResultTypeVars`, `unify`, `resolveStepBinding`, `substitute`), ask whether a `let` value
+is a runtime-selected function and what its parameter types are, re-derive a case binding's
+type, a lambda body's result type, or a combinator argument's element type. Each is read off
+the node. `Core.toAst()` is gone with the closure path that needed it, and so is `Core.of`:
+the codec emitters, which are still AST-level, elaborate their expressions through the
+checker at the environment their slots hold, rather than translating them untyped.
+
+The normative specification (`[#compiler-pipeline]`, `[#ast-tracking]`) is revised with this
+change: Core is a typed lowering of behavior bodies, so "no separate IR" no longer describes
+the pipeline.
 
 ## Context
 
@@ -49,8 +55,8 @@ The "no IR" stance has three costs that now bite:
 ## Decision
 
 The compiler is defined as an explicit layered pipeline with a **Core IR** for
-behavior bodies. (As implemented the Core IR is structural, not typed; a typed Core IR
-is deferred — see the implementation note above.)
+behavior bodies. (As implemented the Core IR is typed and the type checker produces it —
+see the implementation note above.)
 
 1. **Parse** — source to surface AST. Only concrete-syntax desugars that need no types.
 2. **Resolve** — import/`exposing` name resolution (today `Exposing`).
@@ -60,7 +66,7 @@ is deferred — see the implementation note above.)
    happens, once: helper inlining, the remaining desugars,
    `match` lowering, closure conversion, intrinsic lowering, and — when it lands —
    monomorphization of generic helpers. It precedes the body check because a behavior's
-   permission and `requires` are defined on the inlined body (`[#blocks]`), so the check is
+   permission and `depends on` are defined on the inlined body (`[#blocks]`), so the check is
    defined on the lowered form.
 5. **TypeCheck** — type, requirement, and construction-permission checking. It consumes
    the lowered bodies for the body check and does not rewrite. Surface checks (data,

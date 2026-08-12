@@ -26,8 +26,8 @@ Option's payload binding to the positional F#/Elm form.
   same `{ }`, `,`, and `=` as a record literal, and the same `{ field }` shorthand (bind the field to
   a same-name variable). Only the fields named are bound (partial is fine). Destructuring applies to a
   single named case only — an or-pattern binds the sum type and has no case fields.
-- **`as` binds the whole matched value**, everywhere: `| 会員 as m` binds the case, `| A | B as x`
-  binds the sum type, and `| 会員 { id } as 全体` binds both the field and the whole. There is no
+- **`as` binds the whole matched value**, everywhere: `| Member as m` binds the case, `| A | B as x`
+  binds the sum type, and `| Member { id } as whole` binds both the field and the whole. There is no
   longer an Option-specific meaning for `as`.
 - **Option binds positionally**: `| Some v` binds the wrapped value (F#'s `Some x`, Elm's `Just x`);
   `| None` is nullary. `| Some as v` is rejected with a message pointing at `| Some v`. `Some` is the
@@ -37,7 +37,7 @@ Option's payload binding to the positional F#/Elm form.
   construction, so the name always means the Option case.
 - **Fields bind identifiers only.** A field pattern names a variable (or shorthand); it does not match
   a literal (`{ email = "x" }` is not a pattern). `match` dispatches on the case; value conditions go
-  in the body or a `require`, since Souther has no `_` wildcard or `when` guard to fall through on
+  in the body or a `guard`, since Souther has no `_` wildcard or `when` guard to fall through on
   (Elm's stance). Nested destructuring is one level — to go deeper, bind the field and `match` it
   again, matching the nested-sum rule (each sum level is matched independently, spec `[#match]`).
 

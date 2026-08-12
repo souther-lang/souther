@@ -6,12 +6,12 @@
 
     <groupId>org.souther-lang</groupId>
     <artifactId>souther-parent</artifactId>
-    <version>0.1.0-rc3</version>
+    <version>0.1.0-rc4</version>
     <packaging>pom</packaging>
 
     <name>Souther</name>
     <description>Souther: a JVM language that turns SMDD spec models into implementation models.</description>
-    <url>https://github.com/kawasima/souther</url>
+    <url>https://github.com/souther-lang/souther</url>
 
     <licenses>
         <license>
@@ -36,20 +36,29 @@
         <module>souther-fmt</module>
         <module>souther-lsp</module>
         <module>souther-cli</module>
+        <module>souther-bench</module>
     </modules>
 
     <scm>
-        <connection>scm:git:https://github.com/kawasima/souther.git</connection>
-        <developerConnection>scm:git:git@github.com:kawasima/souther.git</developerConnection>
-        <url>https://github.com/kawasima/souther</url>
+        <connection>scm:git:https://github.com/souther-lang/souther.git</connection>
+        <developerConnection>scm:git:git@github.com:souther-lang/souther.git</developerConnection>
+        <url>https://github.com/souther-lang/souther</url>
         <tag>HEAD</tag>
     </scm>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>25</maven.compiler.release>
-        <raoh.version>0.6.0</raoh.version>
+        <raoh.version>0.7.2</raoh.version>
+        <jspecify.version>1.0.0</jspecify.version>
         <junit.version>6.1.2</junit.version>
+        <!-- A JVM per two cores. Named here so -DforkCount=N reaches it: a literal in the plugin's
+             configuration outranks the property surefire declares, so the override the comment
+             below offers was not one, and a fork count could not be measured until it was.
+             Measured on sixteen cores, whole build, three runs each: 59s at one per core, 53s at
+             this. A fork brings its own compiler and collector threads, and one per core leaves
+             nothing for them but the cores the tests are on. -->
+        <forkCount>0.5C</forkCount>
     </properties>
 
     <dependencyManagement>
@@ -68,6 +77,11 @@
                 <groupId>net.unit8.raoh</groupId>
                 <artifactId>raoh-jooq</artifactId>
                 <version>${raoh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jspecify</groupId>
+                <artifactId>jspecify</artifactId>
+                <version>${jspecify.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.souther-lang</groupId>
@@ -106,9 +120,56 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.6</version>
+                    <configuration>
+                        <!-- Whole test classes run to completion in a fork. Forks
+                             rather than threads: four classes capture `System.out` to read what the
+                             CLI printed, and a stream is one per JVM however many threads share it.
+                             A fork also settles the rest of it — a class loaded per fork, a static
+                             initialiser run per fork — so nothing here depends on what another test
+                             did first. Override with -DforkCount=N; 1 is one JVM for everything. -->
+                        <forkCount>${forkCount}</forkCount>
+                        <reuseForks>true</reuseForks>
+                        <!-- Classes go to the forks by what they took last time, which is recorded
+                             in a `.surefire-*` file beside the module. Handed out in file order
+                             instead, one fork draws the longest class and a share of the rest, and
+                             the build waits on that fork: the compiler's suite is 156s of tests
+                             over sixteen forks, and it came to 28s rather than the 14s its longest
+                             class alone would cost. A checkout with no record behaves as before. -->
+                        <runOrder>balanced</runOrder>
+                        <!-- C1 only, and a collector that runs no threads of its own. A test class
+                             is a few seconds of work, over well before C2 has finished compiling
+                             what it profiled, and with a JVM per core the compiler and collector
+                             threads of every fork are competing for the cores the tests are on.
+                             Measured on the compiler's suite, whole build, eight forks: 49s without
+                             these, 27s with them. -->
+                        <!-- -Xss4m is the stack this compiler is supported on, and the tests are
+                             held to the same one: a source at the structural bound needs about a
+                             megabyte, and what is checked here has to be checked on the stack the
+                             bound was set for. A test that wants a smaller one makes its own
+                             thread. -->
+                        <argLine>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss4m</argLine>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <!-- Implementation-Version in every jar's manifest. A compiled Souther module records
+                 the compiler that produced it, and this is where that string comes from: Maven
+                 fills it from the project version, so the root pom stays the one place the version
+                 is written. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
     </build>
 
     <profiles>

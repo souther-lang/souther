@@ -11,16 +11,15 @@ import souther.runtime.ConstraintViolation;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code Int.modBy(divisor, n)} — Elm-style floored modulo (spec 18.2). It is declared in
+ * {@code Int.floorMod(n, divisor)} — Elm-style floored modulo (spec §stdlib-int). It is declared in
  * {@code souther.int} and backed by the {@code IntMath.modBy} kernel: the divisor comes first, the
- * result takes the sign of the divisor (floored, unlike the truncating {@code Int.remainder}), and a
+ * result takes the sign of the divisor (floored, unlike the truncating {@code Int.truncatingRemainder}), and a
  * zero divisor aborts with {@link ConstraintViolation} — so the result is a plain {@code Int} that
  * reads cleanly in an invariant. This also covers the Int/Decimal function forms migrated to the
  * {@code .sou} declaration seam ({@code add}/{@code compare}).
@@ -42,15 +41,15 @@ class CompileIntModByTest {
 
     @Test
     void modByComputesFlooredModulo() throws Exception {
-        assertEquals(0L, calc("Int.modBy(12, n.value)", 24L));
-        assertEquals(1L, calc("Int.modBy(12, n.value)", 25L));
+        assertEquals(0L, calc("Int.floorMod(n.value, 12)", 24L));
+        assertEquals(1L, calc("Int.floorMod(n.value, 12)", 25L));
         // Floored: modBy(12, -1) == 11 (sign of the divisor), where a truncating remainder gives -1.
-        assertEquals(11L, calc("Int.modBy(12, n.value)", -1L));
+        assertEquals(11L, calc("Int.floorMod(n.value, 12)", -1L));
     }
 
     @Test
     void modByAbortsOnZeroDivisor() {
-        assertThrows(ConstraintViolation.class, () -> calc("Int.modBy(0, n.value)", 5L));
+        assertThrows(ConstraintViolation.class, () -> calc("Int.floorMod(n.value, 0)", 5L));
     }
 
     @Test
@@ -103,7 +102,7 @@ class CompileIntModByTest {
     // --- the invariant use case (Issue #50): a plain-Int result reads cleanly in an invariant ---
     private static final String BOX = """
             module demo
-            data 箱 = Int invariant Int.modBy(12, value) == 0
+            data 箱 = Int invariant Int.floorMod(value, 12) == 0
             """;
 
     private Decoder<Object, ?> boxDecoder() throws Exception {
@@ -128,7 +127,7 @@ class CompileIntModByTest {
     // error, not a runtime abort.
     private static final String CONST_BOX = """
             module demo
-            data 箱 = Int invariant Int.modBy(12, value) == 0
+            data 箱 = Int invariant Int.floorMod(value, 12) == 0
             behavior mk : (x: Int) -> 箱 constructs 箱
             let mk (x) = 箱(%d)
             """;

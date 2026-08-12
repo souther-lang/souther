@@ -1,8 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,9 +34,10 @@ import java.util.Set;
  * lexicographic recursion. A {@code partial} helper opts out (it is not checked and may not terminate);
  * if any member of a mutually-recursive group is {@code partial} the whole group is skipped — a cycle
  * through an unchecked member cannot be certified, so its other members are not independently certified
- * either. The stdlib's {@code List.foldFrom} (index recursion) is trusted total and exempt — only
- * bare-named module-own helpers are checked. Numeric ({@code n - 1}) and index ({@code i + 1})
- * recursion are not structural (Souther has no inductive {@code Nat}) and must be {@code partial}.
+ * either. The stdlib's {@code List.foldFrom} (index recursion) is trusted total and exempt — only the
+ * helpers this module declared are checked, whatever else it emits beside them. Numeric
+ * ({@code n - 1}) and index ({@code i + 1}) recursion are not structural (Souther has no inductive
+ * {@code Nat}) and must be {@code partial}.
  */
 final class TotalityChecker {
 
@@ -47,14 +52,17 @@ final class TotalityChecker {
     /** Checks every non-{@code partial}, module-own recursive helper (or group) for size-change
      * termination. */
     static void check(HelperInliner inliner) {
-        Map<String, Ast.FnDef> own = inliner.helpers();
+        Map<String, Ast.FnDef> own = inliner.held();
         Map<String, Set<String>> ownEdges = ownCallGraph(own);
         Set<String> handled = new HashSet<>();
         for (String name : inliner.recursiveHelpers()) {
             Ast.FnDef h = own.get(name);
-            // A qualified name (`List.foldFrom`) is a prelude recursive helper injected into the module
-            // (trusted total); only bare-named user helpers are checked.
-            if (h == null || name.indexOf('.') >= 0) {
+            // Only what this module declared is checked. A recursive helper it took on to emit — a
+            // prelude `List.foldFrom`, one another module published — carries its declaring module's
+            // guarantee (ADR-0098), and its own module proved it. Asked of the declaration: the name
+            // it is reached by here says nothing about who wrote it, and `List.foldFrom` does not
+            // even hold the module it came from.
+            if (h == null || !h.declaredBy(inliner.moduleName())) {
                 continue;
             }
             Set<String> group = cycleMembers(name, ownEdges);   // the strongly-connected group (>= 1)
@@ -82,7 +90,7 @@ final class TotalityChecker {
      * structural-recursion message, reported at a representative self-call; a larger group reports the
      * mutual failure at its lexicographically-first member (a stable anchor). */
     private static CompileException notTerminating(Set<String> group, Map<String, Ast.FnDef> own,
-                                                   Map<String, Ast.Call> firstCall) {
+                                                   Map<String, Ast.Apply> firstCall) {
         if (group.size() == 1) {
             String name = group.iterator().next();
             Ast.FnDef h = own.get(name);
@@ -90,18 +98,14 @@ final class TotalityChecker {
                     + "(...)` passes no argument that is a strictly smaller part of a parameter."
                     + " Recurse on a part obtained by `match` (a field or a case), count with"
                     + " `fold`, or mark the helper `partial`";
-            Ast.Call at = firstCall.get(name);
+            Ast.Apply at = firstCall.get(name);
             return at == null
-                    ? error(h, name, "check.totality.notstructural", message)
-                    : error(at, name, "check.totality.notstructural", message);
+                    ? error(h, new BehaviorMessage.NotStructurallyRecursive(name))
+                    : error(at, new BehaviorMessage.NotStructurallyRecursive(name));
         }
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, anchor.name().length(), members, "check.totality.sizechange",
-                "recursive helpers " + members + " are mutually recursive but not size-change"
-                        + " terminating: no argument strictly decreases around every recursive cycle."
-                        + " Recurse on a strictly smaller part obtained by `match`, or mark one of them"
-                        + " `partial` to opt out");
+        return error(anchor, new BehaviorMessage.NotSizeChangeTerminating(members));
     }
 
     /** The rejection for a group whose size-change closure exceeds {@link #MAX_CLOSURE}: it may or may
@@ -109,9 +113,7 @@ final class TotalityChecker {
     private static CompileException tooComplex(Set<String> group, Map<String, Ast.FnDef> own) {
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, anchor.name().length(), members, "check.totality.toocomplex",
-                "recursion " + members + " is too complex to prove total by size-change analysis;"
-                        + " mark one of them `partial` to opt out");
+        return error(anchor, new BehaviorMessage.TooComplexToProveTotal(members));
     }
 
     // --- size-change graphs -------------------------------------------------
@@ -151,23 +153,25 @@ final class TotalityChecker {
 
     /** The size-change graphs of a group, plus a representative self/mutual call per member (its
      * source position for a rejection message — recorded here so the reject path need not re-walk). */
-    private record Built(List<Scg> scgs, Map<String, Ast.Call> firstCall) {}
+    private record Built(List<Scg> scgs, Map<String, Ast.Apply> firstCall) {}
 
     /** Builds the per-call-edge size-change graphs for every member of {@code group}. */
     private static Built buildScgs(Set<String> group, Map<String, Ast.FnDef> own) {
         List<Scg> scgs = new ArrayList<>();
-        Map<String, Ast.Call> firstCall = new HashMap<>();
+        Map<String, Ast.Apply> firstCall = new HashMap<>();
         for (String f : group) {
             Ast.FnDef def = own.get(f);
             List<Ast.FnParam> params = def.params();
-            Set<String> paramNames = new HashSet<>();
-            Map<String, Integer> idxOf = new HashMap<>();
+            // which bindings the parameters are, not what they are spelled: a `let` inside the
+             // body may write a parameter's name, and it is another value
+            Set<BindingId> paramNames = new HashSet<>();
+            Map<BindingId, Integer> idxOf = new HashMap<>();
             for (int i = 0; i < params.size(); i++) {
-                paramNames.add(params.get(i).name());
-                idxOf.put(params.get(i).name(), i);
+                paramNames.add(params.get(i).binder().id());
+                idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
-            walk(def.body(), group, paramNames, Map.of(), Map.of(), calls);
+            walk(def.writtenBody(), group, paramNames, Map.of(), Map.of(), calls);
             for (RecCall rc : calls) {
                 firstCall.putIfAbsent(f, rc.call());
                 int toArity = own.get(rc.callee()).params().size();
@@ -175,12 +179,12 @@ final class TotalityChecker {
                 int cols = Math.min(toArity, rc.call().args().size());
                 for (int j = 0; j < cols; j++) {
                     Ast.Expr arg = rc.call().args().get(j);
-                    Set<String> strict = strictSmaller(arg, rc.lt(), rc.eq(), paramNames);
-                    Set<String> root = rootParams(arg, rc.lt(), rc.eq(), paramNames);
-                    for (String p : strict) {
+                    Set<BindingId> strict = strictSmaller(arg, rc.lt(), rc.eq(), paramNames);
+                    Set<BindingId> root = rootParams(arg, rc.lt(), rc.eq(), paramNames);
+                    for (BindingId p : strict) {
                         m[idxOf.get(p)][j] = Rel.LT;
                     }
-                    for (String p : root) {
+                    for (BindingId p : root) {
                         if (!strict.contains(p) && m[idxOf.get(p)][j] == null) {
                             m[idxOf.get(p)][j] = Rel.EQ;
                         }
@@ -276,39 +280,9 @@ final class TotalityChecker {
 
     /** A recorded recursive call to a group member, with the callee and the smaller-than / equal-to
      * relations ({@code lt} / {@code eq}) in scope where it appears. */
-    private record RecCall(String callee, Ast.Call call,
-                           Map<String, Set<String>> lt, Map<String, Set<String>> eq) {}
-
-    /**
-     * A standard-library combinator that hands the contents of its container argument to a closure:
-     * the closure is argument {@code closureArg}, the value it receives is closure parameter
-     * {@code elementParam}, and the container is argument {@code containerArg}. Recursing on that value
-     * inside the closure is structural when the container is (part of) a parameter — the common way to
-     * walk a {@code List<T>} of children, and equally the {@code Some} payload of an {@code Option<T>}
-     * (spec §stdlib-list): a list element is a sub-term of the list, and the unwrapped payload is a
-     * sub-term of the option, so either is a strictly smaller part of a parameter the container is
-     * rooted at. {@code Option.map(f, opt)} has the same shape as {@code List.map(f, xs)} — its closure
-     * receives the unwrapped value, {@code opt} last — so it is registered the same way. An unlisted
-     * combinator is conservatively treated as non-content-producing (the recursion is rejected, never
-     * wrongly accepted); a freshly-constructed container (`Some(p)`) roots at no parameter, so its
-     * payload is not credited as smaller.
-     */
-    private record Combinator(int closureArg, int elementParam, int containerArg) {}
-
-    private static final Map<String, Combinator> COMBINATORS = Map.of(
-            "List.fold", new Combinator(0, 1, 2),
-            "List.foldFrom", new Combinator(0, 1, 2),
-            "List.map", new Combinator(0, 0, 1),
-            "List.filter", new Combinator(0, 0, 1),
-            "List.all", new Combinator(0, 0, 1),
-            "List.any", new Combinator(0, 0, 1),
-            "List.find", new Combinator(0, 0, 1),
-            "List.partition", new Combinator(0, 0, 1),
-            // Option is a container of at most one element; its `Some` payload is a sub-term of the
-            // option, so `Option.map`'s closure receives a strictly smaller part when the option is
-            // (part of) a parameter — a manager chain `s.上司 |> Option.map(b -> depth(b) + 1)` walks
-            // structurally, exactly as the list combinators above do (`Option.andThen` does not exist).
-            "Option.map", new Combinator(0, 0, 1));
+    private record RecCall(String callee, Ast.Apply call,
+                           Map<BindingId, Set<BindingId>> lt,
+                           Map<BindingId, Set<BindingId>> eq) {}
 
     /**
      * Walks {@code e}, threading {@code lt} (each local -&gt; the parameters it is a strictly smaller
@@ -317,52 +291,56 @@ final class TotalityChecker {
      * strictly smaller part of the parameters the scrutinee is rooted at; a {@code let} carries the
      * strict or equal relation of its value forward.
      */
-    private static void walk(Ast.Expr e, Set<String> group, Set<String> paramNames,
-                             Map<String, Set<String>> lt, Map<String, Set<String>> eq,
+    private static void walk(Ast.Expr e, Set<String> group, Set<BindingId> paramNames,
+                             Map<BindingId, Set<BindingId>> lt, Map<BindingId, Set<BindingId>> eq,
                              List<RecCall> calls) {
         switch (e) {
             case Ast.Match m -> {
                 walk(m.scrutinee(), group, paramNames, lt, eq, calls);
-                Set<String> rooted = rootParams(m.scrutinee(), lt, eq, paramNames);
+                Set<BindingId> rooted = rootParams(m.scrutinee(), lt, eq, paramNames);
                 for (Ast.Case c : m.cases()) {
-                    Map<String, Set<String>> inner = lt;
+                    Map<BindingId, Set<BindingId>> inner = lt;
                     if (c.binding() != null && !rooted.isEmpty()) {
-                        inner = with(lt, c.binding(), rooted);   // the bound value is smaller than each root
+                        inner = with(lt, c.binding().id(), rooted);   // the bound value is smaller than each root
                     }
                     walk(c.body(), group, paramNames, inner, eq, calls);
                 }
             }
             case Ast.LetIn li -> {
                 walk(li.value(), group, paramNames, lt, eq, calls);
-                Set<String> smaller = strictSmaller(li.value(), lt, eq, paramNames);
-                Set<String> equal = eqRoots(li.value(), eq, paramNames);
-                Map<String, Set<String>> ltInner = smaller.isEmpty() ? lt : with(lt, li.name(), smaller);
-                Map<String, Set<String>> eqInner = equal.isEmpty() ? eq : with(eq, li.name(), equal);
+                Set<BindingId> smaller = strictSmaller(li.value(), lt, eq, paramNames);
+                Set<BindingId> equal = eqRoots(li.value(), eq, paramNames);
+                Map<BindingId, Set<BindingId>> ltInner =
+                        smaller.isEmpty() ? lt : with(lt, li.binder().id(), smaller);
+                Map<BindingId, Set<BindingId>> eqInner =
+                        equal.isEmpty() ? eq : with(eq, li.binder().id(), equal);
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
-            case Ast.Call call -> {
-                if (group.contains(call.fn())) {
-                    calls.add(new RecCall(call.fn(), call, lt, eq));
+            case Ast.Apply call -> {
+                if (group.contains(call.reaches())) {
+                    calls.add(new RecCall(call.written(), call, lt, eq));
                 }
-                Combinator combo = COMBINATORS.get(call.fn());
-                for (int ai = 0; ai < call.args().size(); ai++) {
-                    Ast.Expr arg = call.args().get(ai);
-                    if (combo != null && ai == combo.closureArg() && arg instanceof Ast.Block step
-                            && combo.elementParam() < step.params().size()
-                            && combo.containerArg() < call.args().size()) {
-                        // `step` consumes the container argument; each value it is handed (a list
-                        // element, or an option's unwrapped payload) is a sub-term of that container, so
-                        // if the container is (part of) a parameter, the value is a strictly smaller
-                        // part of it. Bind the element parameter accordingly for the step body.
-                        Set<String> elemRoots =
-                                rootParams(call.args().get(combo.containerArg()), lt, eq, paramNames);
-                        Map<String, Set<String>> inner = elemRoots.isEmpty()
-                                ? lt
-                                : with(lt, step.params().get(combo.elementParam()), elemRoots);
-                        walk(step.body(), group, paramNames, inner, eq, calls);
-                    } else {
+                Combinators.Written handed = Combinators.handedTo(call);
+                for (Ast.Expr arg : call.args()) {
+                    // The closure is asked by identity: a call may write one expression twice, and
+                    // only the argument the operation applies is the one an element arrives in.
+                    if (handed == null || arg != handed.step()) {
                         walk(arg, group, paramNames, lt, eq, calls);
+                        continue;
                     }
+                    // The step consumes the container argument; each value it is handed (a list
+                    // element, a map's value, or an option's unwrapped payload) is a sub-term of that
+                    // container, so if the container is (part of) a parameter, the value is a strictly
+                    // smaller part of it. Bind the element parameter accordingly for the step body. An
+                    // operation the library states no such thing of is treated as handing its closure
+                    // nothing, which rejects a recursion rather than wrongly accepting one; a
+                    // freshly-constructed container (`Some(p)`) roots at no parameter, so its payload
+                    // is not credited as smaller either.
+                    Set<BindingId> elemRoots = rootParams(handed.container(), lt, eq, paramNames);
+                    Map<BindingId, Set<BindingId>> inner = elemRoots.isEmpty()
+                            ? lt
+                            : with(lt, handed.element().id(), elemRoots);
+                    walk(handed.step().body(), group, paramNames, inner, eq, calls);
                 }
             }
             default -> forEachChild(e, child -> walk(child, group, paramNames, lt, eq, calls));
@@ -373,16 +351,16 @@ final class TotalityChecker {
      * alias of one (through {@code eq}), a field chain rooted at one, or a local already known to be
      * smaller than one. Used for a {@code match} scrutinee: unwrapping a case of such a value yields a
      * strictly smaller part. */
-    private static Set<String> rootParams(Ast.Expr e, Map<String, Set<String>> lt,
-                                          Map<String, Set<String>> eq, Set<String> paramNames) {
+    private static Set<BindingId> rootParams(Ast.Expr e, Map<BindingId, Set<BindingId>> lt,
+                                          Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
         return switch (e) {
-            case Ast.Var v -> {
-                Set<String> s = new HashSet<>();
-                if (paramNames.contains(v.name())) {
-                    s.add(v.name());
+            case Ast.Var v when v.denotes() instanceof ValueName.Local local -> {
+                Set<BindingId> s = new HashSet<>();
+                if (paramNames.contains(local.id())) {
+                    s.add(local.id());
                 }
-                s.addAll(lt.getOrDefault(v.name(), Set.of()));
-                s.addAll(eq.getOrDefault(v.name(), Set.of()));
+                s.addAll(lt.getOrDefault(local.id(), Set.of()));
+                s.addAll(eq.getOrDefault(local.id(), Set.of()));
                 yield s;
             }
             case Ast.FieldAccess fa -> rootParams(fa.target(), lt, eq, paramNames);
@@ -393,10 +371,11 @@ final class TotalityChecker {
     /** The parameters {@code e} is a <em>strictly</em> smaller part of — a field access (a field is
      * strictly smaller than its target), or a local already known to be smaller. A bare parameter, or
      * an exact alias of one, is not strictly smaller than itself. */
-    private static Set<String> strictSmaller(Ast.Expr e, Map<String, Set<String>> lt,
-                                             Map<String, Set<String>> eq, Set<String> paramNames) {
+    private static Set<BindingId> strictSmaller(Ast.Expr e, Map<BindingId, Set<BindingId>> lt,
+                                             Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
         return switch (e) {
-            case Ast.Var v -> lt.getOrDefault(v.name(), Set.of());
+            case Ast.Var v when v.denotes() instanceof ValueName.Local local ->
+                    lt.getOrDefault(local.id(), Set.of());
             case Ast.FieldAccess fa -> rootParams(fa.target(), lt, eq, paramNames);
             default -> Set.of();
         };
@@ -404,21 +383,23 @@ final class TotalityChecker {
 
     /** The parameters {@code e} is <em>exactly equal</em> to — a bare parameter or an alias of one. A
      * field access is strictly smaller, not equal, so it is not here (it is in {@link #strictSmaller}). */
-    private static Set<String> eqRoots(Ast.Expr e, Map<String, Set<String>> eq, Set<String> paramNames) {
-        if (e instanceof Ast.Var v) {
-            Set<String> s = new HashSet<>();
-            if (paramNames.contains(v.name())) {
-                s.add(v.name());
+    private static Set<BindingId> eqRoots(Ast.Expr e, Map<BindingId, Set<BindingId>> eq,
+                                          Set<BindingId> paramNames) {
+        if (e instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local) {
+            Set<BindingId> s = new HashSet<>();
+            if (paramNames.contains(local.id())) {
+                s.add(local.id());
             }
-            s.addAll(eq.getOrDefault(v.name(), Set.of()));
+            s.addAll(eq.getOrDefault(local.id(), Set.of()));
             return s;
         }
         return Set.of();
     }
 
-    private static Map<String, Set<String>> with(Map<String, Set<String>> env, String name, Set<String> params) {
-        Map<String, Set<String>> copy = new HashMap<>(env);
-        copy.put(name, params);
+    private static Map<BindingId, Set<BindingId>> with(Map<BindingId, Set<BindingId>> env,
+                                                       BindingId binding, Set<BindingId> params) {
+        Map<BindingId, Set<BindingId>> copy = new HashMap<>(env);
+        copy.put(binding, params);
         return copy;
     }
 
@@ -441,15 +422,15 @@ final class TotalityChecker {
         Map<String, Set<String>> edges = new HashMap<>();
         for (Ast.FnDef h : own.values()) {
             Set<String> called = new HashSet<>();
-            collectOwnCalls(h.body(), own.keySet(), called);
+            collectOwnCalls(h.writtenBody(), own.keySet(), called);
             edges.put(h.name(), called);
         }
         return edges;
     }
 
     private static void collectOwnCalls(Ast.Expr e, Set<String> own, Set<String> out) {
-        if (e instanceof Ast.Call call && own.contains(call.fn())) {
-            out.add(call.fn());
+        if (e instanceof Ast.Apply call && own.contains(call.reaches())) {
+            out.add(call.written());
         }
         forEachChild(e, c -> collectOwnCalls(c, own, out));
     }
@@ -479,61 +460,23 @@ final class TotalityChecker {
         return seen;
     }
 
-    private static CompileException error(Ast.FnDef h, String name, String key, String message) {
-        return CompileException.of(
-                Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(h.pos(), name.length()).args(name).build(),
-                message);
+    /** Said at the helper's own name: `let` comes first, and a report anchored at the definition
+     *  underlines the keyword rather than what it is about. */
+    private static <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
+            CompileException error(Ast.FnDef h, M said) {
+        return CompileException.of(Diagnostic.at(h.written().reportedAt()).say(said).build());
     }
 
-    private static CompileException error(Ast.FnDef h, int underlineLen, String arg, String key, String message) {
-        return CompileException.of(
-                Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(h.pos(), underlineLen).args(arg).build(),
-                message);
-    }
-
-    private static CompileException error(Ast.Call call, String name, String key, String message) {
-        return CompileException.of(
-                Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(call.pos(), call.fn().length()).args(name).build(),
-                message);
+    private static <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
+            CompileException error(Ast.Apply call, M said) {
+        return CompileException.of(Diagnostic.at(call.appliedAt()).say(said).build());
     }
 
     // --- a direct-child visitor mirroring the one in HelperInliner/TypeChecker ---
 
+    /** Applies {@code f} to every direct subexpression of {@code e}; the one exhaustive walk
+     * lives on the AST, so a node kind added later cannot be skipped here unnoticed. */
     private static void forEachChild(Ast.Expr e, java.util.function.Consumer<Ast.Expr> f) {
-        switch (e) {
-            case Ast.NewData nd -> nd.inits().forEach(i -> f.accept(i.value()));
-            case Ast.FieldAccess fa -> f.accept(fa.target());
-            case Ast.Call call -> call.args().forEach(f);
-            case Ast.Binary bin -> {
-                f.accept(bin.left());
-                f.accept(bin.right());
-            }
-            case Ast.Neg neg -> f.accept(neg.operand());
-            case Ast.Match m -> {
-                f.accept(m.scrutinee());
-                m.cases().forEach(c -> f.accept(c.body()));
-            }
-            case Ast.If iff -> {
-                f.accept(iff.cond());
-                f.accept(iff.then());
-                f.accept(iff.els());
-            }
-            case Ast.ListLit lit -> lit.elements().forEach(f);
-            case Ast.Tuple tup -> tup.elements().forEach(f);
-            case Ast.TupleGet tg -> f.accept(tg.tuple());
-            case Ast.ListComp comp -> {
-                f.accept(comp.element());
-                comp.guards().forEach(f);
-            }
-            case Ast.LetIn li -> {
-                f.accept(li.value());
-                f.accept(li.body());
-            }
-            case Ast.Block block -> f.accept(block.body());
-            case Ast.IntLit _, Ast.DecimalLit _, Ast.StringLit _, Ast.BoolLit _, Ast.Var _ -> { }
-        }
+        Ast.forEachChild(e, f);
     }
 }

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnalyzerTest {
@@ -34,6 +35,33 @@ class AnalyzerTest {
         LspDiagnostic d = diags.get(0);
         assertEquals(LspDiagnostic.ERROR, d.severity());
         assertEquals(1, d.range().start().line(), "the error is on the second line (0-based line 1)");
+    }
+
+    /** A warning is all the invariant checker has to say about a construction it cannot prove, so an
+     *  editor that shows none leaves the author with nothing to read. */
+    @Test
+    void anUnprovenConstructionIsReportedAsAWarningWhereItIsWritten() {
+        String src = """
+                module demo
+
+                data Eaches = Int
+                    invariant value >= 0
+
+                behavior wrap : (n: Int) -> Eaches
+                    constructs Eaches
+                let wrap (n) = {
+                    let m = n
+                    Eaches(m)
+                }
+                """;
+        List<LspDiagnostic> diags = analyzer.diagnostics(src);
+
+        assertEquals(1, diags.size(), diags.toString());
+        LspDiagnostic d = diags.get(0);
+        assertEquals(LspDiagnostic.WARNING, d.severity());
+        assertEquals("E2011", d.code());
+        assertEquals(9, d.range().start().line(), "the construction is on the tenth line");
+        assertEquals(4, d.range().start().character());
     }
 
     @Test
@@ -91,6 +119,73 @@ class AnalyzerTest {
         assertEquals(1, typeAt(tokens, 1, 5), "`X` is a type");
         assertEquals(5, typeAt(tokens, 1, 11), "`a` is a property");
         assertEquals(1, typeAt(tokens, 1, 14), "`Int` is a type");
+    }
+
+    @Test
+    void aLambdaParameterIsStillAParameterNowThatItIsAPattern() {
+        // the parameter of `x -> e` moved under a pattern node; classification reads the node an
+        // identifier sits in, so without looking past the pattern every lambda parameter in every
+        // file would highlight as an ordinary local
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata X = { a: Int }\nlet f (xs: List<Int>) = List.map(n -> n, xs)\n");
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(3, typeAt(tokens, 2, 33), "the lambda's `n` is a parameter (index 3)");
+    }
+
+    @Test
+    void aNameATuplePatternBindsIsALocal() {
+        // the same pattern node in a `let` binds locals, not parameters
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata X = { a: Int }\nlet f (p: (Int, Int)) = {\nlet (q, r) = p\nq\n}\n");
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(4, typeAt(tokens, 3, 5), "`q` is a variable (index 4)");
+        assertEquals(4, typeAt(tokens, 3, 8), "`r` is a variable (index 4)");
+    }
+
+    @Test
+    void aRecordPatternsFieldNameIsAProperty() {
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata X = { a: Int }\nlet f (x: X) = {\nlet { a = n } = x\nn\n}\n");
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(5, typeAt(tokens, 3, 6), "`a` names the field, so it is a property (index 5)");
+        assertEquals(4, typeAt(tokens, 3, 10), "`n` is the name it binds, a variable (index 4)");
+    }
+
+    /**
+     * What an application applies is the function, and a qualified callee is a read whose last name
+     * is the one. Every application is now an argument list written after an expression (issue
+     * #274), so a call is no longer a node of its own to classify by — the callee position is
+     * carried down instead, to the field a read takes and not to what it is taken off.
+     */
+    @Test
+    void whatAnApplicationAppliesIsTheFunctionAndTheQualifierInFrontOfItIsNot() {
+        //                     0         1         2         3         4
+        //                     0123456789012345678901234567890123456789012345
+        String body = "let g (d: D, xs: List<Int>) = List.map(f, xs)\n";
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata D = { n: Int }\nlet f (x: Int) = x\n" + body);
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(6, typeAt(tokens, 3, 35), "`map` is what is applied, so it is a function (index 6)");
+        assertEquals(4, typeAt(tokens, 3, 30), "`List` is the qualifier, not the function");
+        assertEquals(4, typeAt(tokens, 3, 39), "`f` is an argument, not what is applied");
+    }
+
+    @Test
+    void aBareCalleeIsAFunctionAndAFieldReadThatIsNotAppliedIsAProperty() {
+        //                     0         1         2         3
+        //                     012345678901234567890123456789012345
+        String body = "let g (d: D) = f(d.n)\n";
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata D = { n: Int }\nlet f (x: Int) = x\n" + body);
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(6, typeAt(tokens, 3, 15), "`f` is what is applied (index 6)");
+        assertEquals(4, typeAt(tokens, 3, 17), "`d` is what the read is taken off, a variable here");
+        assertEquals(5, typeAt(tokens, 3, 19), "`n` is a field read, not a function (index 5)");
     }
 
     /** Reverses the LSP delta encoding into absolute {@code {line, char, length, type}} tokens. */
@@ -151,10 +246,73 @@ class AnalyzerTest {
         assertTrue(hover.get().contents().contains("id: String"), hover.get().contents());
     }
 
+    /** `data`, `invariant` on the next line, one clause per line so a position picks one out. */
+    private static final String CLAUSES_SRC = """
+            module demo
+            data Money = Int
+                invariant value >= 0
+            data Code = String
+                invariant String.matches("[A-Z]{2}", value)
+            data Sum = Int
+                invariant Int.sum([value]) >= 0
+            """;
+
+    private Optional<Hover> clauseHover(int line, int character) {
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///demo.sou", CLAUSES_SRC));
+        return analyzer.hover("file:///demo.sou", CLAUSES_SRC, new Position(line, character), graph);
+    }
+
+    @Test
+    void hoverOnANumericClauseSaysItIsDerivable() {
+        // `value >= 0` — a relation the domain reasons over, so any guard implying it discharges
+        Optional<Hover> hover = clauseHover(2, 18);
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("derivable"), hover.get().contents());
+    }
+
+    @Test
+    void hoverOnAPatternClauseSaysItTakesAnExactMatch() {
+        // `String.matches(...)` — nameable but not a relation, so only the same guard discharges it
+        Optional<Hover> hover = clauseHover(4, 20);
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("exact match"), hover.get().contents());
+    }
+
+    /**
+     * A clause hover asks the compiler what it can discharge, keyed by the type the clause is on —
+     * so the name the syntax reads has to be the name the compiler filed it under.
+     *
+     * <p>A decomposed declaration is filed under its composed name, and reading the token's
+     * characters straight into the key missed it. What an author saw was a hover that showed the
+     * signature instead of the discharge, which reads as "this clause has nothing to say".
+     */
+    @Test
+    void hoverOnAClauseOfADecomposedlyNamedDataStillSaysHowItDischarges() {
+        String kana = new String(new int[] {0x304b, 0x3099}, 0, 2);
+        String source = "module demo exposing ( " + kana + " )\n\ndata " + kana + " = Int\n"
+                + "    invariant value >= 0\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///demo.sou", source));
+
+        Optional<Hover> hover = analyzer.hover("file:///demo.sou", source,
+                new Position(3, "    invariant ".length()), graph);
+
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("derivable"), hover.get().contents());
+    }
+
+    @Test
+    void hoverOutsideAnInvariantStillShowsTheSignature() {
+        Optional<Hover> hover = clauseHover(1, 5);   // over `Money`
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("data Money"), hover.get().contents());
+    }
+
     @Test
     void diagnosticsAcrossModulesLandOnTheOwningFile() {
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
-        String b = "module b\nimport a ( N )\ndata M = { n: Int }\n"
+        // `Held` writes the imported name, which is what makes b depend on a; an import nothing
+        // writes would be reported as unused, and that is not what this test is about.
+        String b = "module b\nimport a ( N )\ndata Held = { it: N }\ndata M = { n: Int }\n"
                 + "behavior f : (x: M) -> M\nlet f (x) = x\n"
                 + "example f\n  | (M { n = 1 }) -> M { n = 2 }\n";   // identity f, so the example fails
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
@@ -171,7 +329,7 @@ class AnalyzerTest {
         // the single-file path returns nothing on an import; the workspace path resolves it and finds
         // the importing module clean
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
-        String b = "module b\nimport a ( N )\ndata M = { n: Int }\n"
+        String b = "module b\nimport a ( N )\ndata Held = { it: N }\ndata M = { n: Int }\n"
                 + "behavior f : (x: M) -> M\nlet f (x) = x\n";
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
 
@@ -319,8 +477,8 @@ class AnalyzerTest {
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
 
         // cursor on the `data N` declaration in a (line 1, char 5)
-        java.util.Map<String, List<Range>> edits =
-                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
 
         assertEquals(java.util.Set.of("file:///a.sou", "file:///b.sou"), edits.keySet(), edits.toString());
         // a: the `exposing ( N )` entry (line 0) and the `data N` declaration (line 1)
@@ -330,23 +488,114 @@ class AnalyzerTest {
     }
 
     @Test
+    void renameEditsIncludeATypeWrittenOnALocalBinding() {
+        // a local binding may carry a type annotation (issue #71); renaming the type must reach it,
+        // or the rename leaves a dangling name in the body.
+        String a = "module a\n"
+                + "data N = { v: Int }\n"
+                + "behavior f : (n: N) -> N\n"
+                + "let f (n) = {\n"
+                + "let kept: N = n\n"
+                + "kept\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        // cursor on the `data N` declaration (line 1, char 5)
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
+
+        java.util.Set<Integer> lines = new java.util.HashSet<>();
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            lines.add(e.range().start().line());
+        }
+        assertTrue(lines.contains(4), "the annotation on line 4 is renamed: " + lines);
+    }
+
+    @Test
+    void renameEditsReachInsideACollectionNewtypeBase() {
+        // a newtype's base is a written type, so it may be a collection whose element names a data;
+        // renaming that data must reach the element inside `List<...>`
+        String a = "module a\n"
+                + "data Tag = { v: Int }\n"
+                + "data Tags = List<Tag>\n"
+                + "behavior f : (t: Tags) -> Tags\n"
+                + "let f (t) = t\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        // cursor on the `data Tag` declaration (line 1, char 5)
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
+
+        java.util.Set<Integer> lines = new java.util.HashSet<>();
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            lines.add(e.range().start().line());
+        }
+        assertTrue(lines.contains(2), "the element inside `List<Tag>` on line 2 is renamed: " + lines);
+    }
+
+    @Test
+    void renameEditsReachTheTypeNamedByABindingPattern() {
+        // `let Tags(xs) = t` names a type; renaming the data must reach it, or the rename leaves a
+        // pattern that opens a name no longer declared
+        String a = "module a\n"
+                + "data Tags = List<String>\n"
+                + "behavior f : (t: Tags) -> Tags\n"
+                + "let f (t) = {\n"
+                + "let Tags(xs) = t\n"
+                + "t\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
+
+        java.util.Set<Integer> lines = new java.util.HashSet<>();
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            lines.add(e.range().start().line());
+        }
+        assertTrue(lines.contains(4), "the pattern on line 4 is renamed: " + lines);
+    }
+
+    @Test
+    void everyNameATuplePatternBindsShadowsAnOuterOne() {
+        // `let (a, b) = p` binds both names; only the first used to be seen as a binder, so a use of
+        // the second was reported as a reference to the outer symbol it shadows
+        String a = "module a\n"
+                + "let b (n: Int) = n\n"
+                + "behavior f : (i: Int) -> Int\n"
+                + "let f (i) = {\n"
+                + "let (a, b) = (1, 2)\n"
+                + "b\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        // cursor on the top-level `let b` declaration (line 1, char 4)
+        List<Location> refs = analyzer.references("file:///a.sou", new Position(1, 4), graph, false);
+
+        for (Location l : refs) {
+            assertTrue(l.range().start().line() != 5,
+                    "line 5 uses the `b` the tuple pattern bound, not the helper: " + refs);
+        }
+    }
+
+    @Test
     void renameEditsIncludeExposingAndImportBindingSites() {
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
         String b = "module b\nimport a ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
 
-        java.util.Map<String, List<Range>> edits =
-                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
 
         java.util.Set<Integer> aLines = new java.util.HashSet<>();
-        for (Range r : edits.get("file:///a.sou")) {
-            aLines.add(r.start().line());
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            aLines.add(e.range().start().line());
         }
         assertTrue(aLines.contains(0), "the exposing clause on line 0 is renamed: " + aLines);
 
         java.util.Set<Integer> bLines = new java.util.HashSet<>();
-        for (Range r : edits.get("file:///b.sou")) {
-            bLines.add(r.start().line());
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///b.sou")) {
+            bLines.add(e.range().start().line());
         }
         assertTrue(bLines.contains(1), "the import list on line 1 is renamed: " + bLines);
     }
@@ -426,5 +675,22 @@ class AnalyzerTest {
         List<LspDiagnostic> diags = analyzer.diagnostics(src);
         assertEquals(1, diags.size(), diags.toString());
         assertEquals("E1905", diags.get(0).code());
+    }
+
+    @Test
+    void everyFailingInlineExampleRowIsSquiggled() {
+        // the single-file path used to keep only the first failure the compile threw, so a second
+        // failing row was left unmarked in the editor (issue #98)
+        String src = "module demo\n"
+                + "data M = { n: Int }\n"
+                + "behavior f : (x: M) -> M\n"
+                + "let f (x) = x\n"
+                + "example f\n"
+                + "  | (M { n = 1 }) -> M { n = 2 }\n"
+                + "  | (M { n = 3 }) -> M { n = 4 }\n";
+        List<LspDiagnostic> diags = analyzer.diagnostics(src);
+        assertEquals(2, diags.size(), diags.toString());
+        assertNotEquals(diags.get(0).range().start().line(), diags.get(1).range().start().line(),
+                "each marks its own row: " + diags);
     }
 }

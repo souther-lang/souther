@@ -10,7 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** End-to-end test for {@code >->} composition and required-behavior injection : (spec 14, 13, 19.5). */
+/** End-to-end test for {@code >->} composition and required-behavior injection : (spec §composition, §fn,
+ *  §jvm-behavior). */
 class CompilePipeTest {
 
     private static final String MODULE = """
@@ -80,7 +81,7 @@ class CompilePipeTest {
     }
 
     /**
-     * Only stages after the first take one input (spec 14.1): {@code >->} hands one value along.
+     * Only stages after the first take one input (spec §sequential-composition): {@code >->} hands one value along.
      */
     @Test
     void aMultiInputBehaviorCannotFollowAnArrow() {
@@ -96,7 +97,7 @@ class CompilePipeTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(e.getMessage().contains("takes 2 inputs"), e.getMessage());
-        assertTrue(e.getMessage().contains("14.1"), "the diagnostic should name the rule: " + e.getMessage());
+        assertTrue(e.getMessage().contains("Every stage after the first takes one input"), "the diagnostic should name the rule: " + e.getMessage());
     }
 
     /**
@@ -119,7 +120,7 @@ class CompilePipeTest {
                     constructs Rejected, NoRight
 
                 let reject (p, by) = {
-                    require by == p.boss else NoRight
+                    guard by == p.boss else NoRight
                     Rejected { v = 1 }
                 }
                 behavior sendBack : (r: Rejected) -> Draft constructs Draft
@@ -155,6 +156,6 @@ class CompilePipeTest {
                 behavior bad = a >-> nosuch
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(e.getMessage().contains("unknown behavior"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot find a behavior named"), e.getMessage());
     }
 }

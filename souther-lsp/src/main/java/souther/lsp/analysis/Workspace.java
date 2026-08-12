@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import souther.compiler.meta.ModulePath;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,7 +41,7 @@ public final class Workspace {
                 if ("file".equals(parsed.getScheme())) {
                     roots.add(Path.of(parsed));
                 }
-            } catch (IllegalArgumentException e) {
+            } catch (IllegalArgumentException _) {
                 // a malformed root URI is skipped rather than failing the session
             }
         }
@@ -66,6 +67,42 @@ public final class Workspace {
         diskScan = null;
     }
 
+    /**
+     * Where a module the workspace imports but does not contain is looked for: the class output of
+     * every project under the roots. A project that has been built once is then importable in the
+     * editor, so an import the build resolves is not underlined here as unknown.
+     *
+     * <p>This finds what has been built beside the source being edited. A dependency that exists only
+     * as a jar in the local repository is not found — knowing about that means reading the build,
+     * which the language server does not do.
+     */
+    public ModulePath modulePath() {
+        List<Path> outputs = new ArrayList<>();
+        for (Path root : roots) {
+            if (!Files.isDirectory(root)) {
+                continue;
+            }
+            try (Stream<Path> walk = Files.walk(root, CLASS_OUTPUT_DEPTH)) {
+                walk.filter(Files::isDirectory).filter(Workspace::isClassOutput).forEach(outputs::add);
+            } catch (IOException _) {
+                // a root that cannot be walked contributes nothing; the workspace still works
+            }
+        }
+        return outputs.isEmpty() ? ModulePath.EMPTY : ModulePath.ofClassPath(outputs);
+    }
+
+    /** How far under a root a project's class output is looked for: `<root>/<project>/target/classes`
+     * is three, and a root that is itself the project is one. */
+    private static final int CLASS_OUTPUT_DEPTH = 4;
+
+    private static boolean isClassOutput(Path dir) {
+        Path parent = dir.getParent();
+        return parent != null
+                && (dir.getFileName().toString().equals("classes")
+                        && parent.getFileName().toString().equals("target")
+                || dir.endsWith(Path.of("build", "classes", "java", "main")));
+    }
+
     private Map<String, String> scanDisk() {
         Map<String, String> sources = new LinkedHashMap<>();
         for (Path root : roots) {
@@ -86,7 +123,7 @@ public final class Workspace {
     private static String readOrEmpty(Path p) {
         try {
             return Files.readString(p);
-        } catch (IOException e) {
+        } catch (IOException _) {
             return "";   // a file that cannot be read contributes nothing, but never crashes the scan
         }
     }

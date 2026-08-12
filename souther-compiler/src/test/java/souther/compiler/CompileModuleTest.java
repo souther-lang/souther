@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Multi-module compilation with explicit imports and cyclic-import detection (spec 4, 22.11). */
+/** Multi-module compilation with explicit imports and cyclic-import detection (spec §modules, §e1501). */
 class CompileModuleTest {
 
     private static final String EMPLOYEE = """
@@ -74,5 +74,29 @@ class CompileModuleTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(a, b)));
         assertEquals("E1501", e.code());
+    }
+
+    /** One module on its own has nothing to import from, so the import line is what is wrong. Left
+     * to fall through, the name would go missing and the report would land on its first use. */
+    @Test
+    void anImportInASingleSourceNamesAModuleThatIsNotThere() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module app.order
+                import shared.money ( Amount )
+                data Order = { total: Amount }
+                """));
+        assertTrue(e.getMessage().contains("shared.money"), e.getMessage());
+        assertTrue(e.getMessage().contains("Unknown module"), e.getMessage());
+    }
+
+    /** A standard-library import is not a module import: it is stripped before that check. */
+    @Test
+    void aStandardLibraryImportInASingleSourceStillCompiles() {
+        Compiler.compile("""
+                module app.order
+                import String ( length )
+                data Code = String
+                    invariant length(value) > 0
+                """);
     }
 }

@@ -1,0 +1,588 @@
+package souther.compiler.doc;
+
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.regex.Pattern;
+
+/**
+ * {@code souther mcp}: the doc/api/japi answers, served over the Model Context Protocol's stdio
+ * transport — newline-delimited JSON-RPC 2.0. A tool call runs the same code the subcommand runs
+ * and hands its text back as the tool result; a failed lookup is the tool's error
+ * ({@code isError}), not a protocol error, which is reserved for requests the server cannot read
+ * at all.
+ *
+ * <p>What the tools publish is what the commands can do, not the shapes their argument vectors
+ * happen to take. A client here has no shell to fall back to and no listing of the commands it is
+ * reaching, so a capability with no spelling in this table is one it can only arrive at by
+ * guessing. Where the two do differ — {@code stdlib_api_search} takes no count because the stdlib
+ * surface is answered whole — the tool's own description says so.
+ *
+ * <p>For the same reason a description names these tools and never a command line. A client reading
+ * one has no way to tell a command it cannot run from an answer it failed to find, so the whole of
+ * what a capability is reached by has to be written in the table it is published from.
+ *
+ * <p>Stdout carries protocol lines only; everything a command would say lands inside a response.
+ */
+public final class McpServer {
+
+    /**
+     * The reader for requests and the writer for responses.
+     *
+     * <p>Numbers with a point or an exponent are kept as decimals rather than taken to {@code
+     * double}, because a request's number is a value and {@code double} is a box that not every
+     * value fits. {@code 1.0000000000000000001} rounds to {@code 1} on the way in, and a count no
+     * schema admits would then be honoured as one that it does; {@code 1e-324} falls to zero, which
+     * is this server's spelling for every hit there is. What is checked further down has to be the
+     * number that was sent.
+     */
+    private static final JsonMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .build();
+
+    /**
+     * One character that is not a space — written so that a client's regular expressions and this
+     * server's read it as the same set.
+     *
+     * <p>It is spelled in code points rather than with {@code \s}, because that shorthand does not
+     * mean the same thing on both sides: a schema's patterns are ECMA-262, where {@code \s} takes
+     * in the no-break space and the byte order mark, and Java's takes in neither. The set below is
+     * ECMA-262's, and the same literal is what gets published and what gets matched, so there is
+     * no second definition to fall out of step with the first.
+     */
+    private static final String NON_BLANK = "[^\\u0009-\\u000d\\u0020\\u00a0\\u1680"
+            + "\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]";
+
+    private static final Pattern SAYS_SOMETHING = Pattern.compile(NON_BLANK);
+
+    /**
+     * The protocol revisions this server answers under, newest first.
+     *
+     * <p>These are the revisions whose opening exchange is {@code initialize} and whose requests
+     * carry their arguments where this server looks for them. What it serves is the same under both,
+     * so a client on either is answered on its own.
+     *
+     * <p>The 2026 revisions are deliberately absent. They settle the connection's era in the opening
+     * exchange and carry each request's identity in an envelope this server neither reads nor
+     * writes; answering {@code initialize} with one of them would claim an era it does not speak.
+     * A client that can only talk that way should fail to connect rather than be told it succeeded.
+     */
+    private static final List<String> PROTOCOL_VERSIONS = List.of("2025-11-25", "2025-06-18");
+
+    /** The tools this server publishes, in the order {@code tools/list} answers with. */
+    private static final List<Tool> TOOLS = List.of(
+            new Tool("doc_search",
+                    "Search the Souther language specification and every bundled library doc for a term."
+                            + " A term that is a name answers with that one document: the anchor a"
+                            + " diagnostic cites resolves whether it is written with its hyphens"
+                            + " (`an-optional-does-not-stand-in-a-boundary`) or as its words (`an optional"
+                            + " does not stand in a boundary`), and so does a diagnostic code. Otherwise"
+                            + " the documents saying the term are listed, and failing that the ones saying"
+                            + " its words, most of them first. Answers the 20 best hits unless `limit`"
+                            + " says otherwise.",
+                    List.of(new Param("term", Kind.STRING, true, "the word or phrase to look for"),
+                            new Param("limit", Kind.COUNT, false,
+                                    "how many hits to answer with; 0 for all of them (default 20)"))),
+            new Tool("doc_read",
+                    "Read the Souther specification and the docs bundled libraries ship. With no `name`"
+                            + " it lists every section anchor and every shipped topic as `name<TAB>title`,"
+                            + " one per line — start there. With a `name` it reads that one specification"
+                            + " section by its anchor (e.g. `newtype`) or that one library topic by its"
+                            + " set-qualified name (e.g. `raoh/tutorial`), or the part of one that its"
+                            + " set has named (e.g. `cli/commands/japi`). A diagnostic code is a name"
+                            + " too, in either case (e.g. `E2011`): every code the compiler prints is"
+                            + " the anchor of the section explaining it, so a banner read no further"
+                            + " than its code is still enough to look up.",
+                    List.of(new Param("name", Kind.STRING, false,
+                            "a section anchor, a diagnostic code, or a set/topic name;"
+                                    + " omit to list every one of them"))),
+            new Tool("stdlib_api",
+                    "The Souther standard library's published surface with resolved signatures. No name"
+                            + " lists everything; a module qualifier (`List`) or a qualified name"
+                            + " (`List.map`) narrows the answer.",
+                    List.of(new Param("name", Kind.STRING, false,
+                            "a stdlib module or Module.name, omit for all"))),
+            new Tool("stdlib_api_search",
+                    "Find published stdlib names containing a term. Answers every match — the surface is"
+                            + " small enough that nothing is ever held back.",
+                    List.of(new Param("term", Kind.STRING, true,
+                            "a piece of the name to look for, matched without regard to case"))),
+            new Tool("stdlib_api_source",
+                    "A stdlib module's own source, whose comments say what each declaration means —"
+                            + " which end a span counts, whether a division aborts or answers a case."
+                            + " A signature says how to call something; this says what it does.",
+                    List.of(new Param("name", Kind.STRING, true, "a stdlib module, e.g. `String`"))),
+            new Tool("jar_api",
+                    "A dependency jar's public API read from its class files, with javadoc from the"
+                            + " -sources.jar beside it. Give a fully qualified class or package name."
+                            + " To read one member of a class rather than all of them, write"
+                            + " `Class#member` — for example `net.unit8.raoh.Result#map2`.",
+                    List.of(new Param("name", Kind.STRING, true,
+                                    "a fully qualified class or package name, optionally followed by"
+                                            + " `#member` to select one member of the class"),
+                            new Param("classpath", Kind.STRING, false,
+                                    "jars or class directories to search, path-separated;"
+                                            + " omit to search the CLI's own class path"))));
+
+    /**
+     * What a declared argument may hold.
+     *
+     * <p>Each kind both publishes its domain and decides whether a value is in it, because the two
+     * being written apart is how a server comes to refuse what its own schema invites. A client
+     * that reads the schema and is then told no has learnt nothing it can act on.
+     */
+    private enum Kind {
+
+        STRING {
+            @Override
+            void publish(ObjectNode schema) {
+                schema.put("type", "string");
+                // Somewhere in it, a character that is not a space: the empty term is the one a
+                // search cannot walk, and saying so here is cheaper than a call spent finding out.
+                schema.put("pattern", NON_BLANK);
+            }
+
+            @Override
+            String malformed(String name, JsonNode value) {
+                if (!value.isString()) {
+                    return "`" + name + "` must be a string";
+                }
+                return SAYS_SOMETHING.matcher(value.asString()).find()
+                        ? null : "`" + name + "` must not be empty";
+            }
+        },
+
+        /**
+         * A place in an answer this server issued, and nothing a client composes.
+         *
+         * <p>Its spelling is published so that a value that was never one of ours is refused
+         * against the schema rather than spent as a call. What it means is not published: a client
+         * carries it back as it arrived, and where it points is checked against the answer it is
+         * carried back to.
+         */
+        CURSOR {
+            @Override
+            void publish(ObjectNode schema) {
+                schema.put("type", "string");
+                schema.put("pattern", Continuation.SPELLED);
+            }
+
+            @Override
+            String malformed(String name, JsonNode value) {
+                if (!value.isString()) {
+                    return "`" + name + "` must be a string";
+                }
+                return value.asString().matches(Continuation.SPELLED)
+                        ? null : "`" + name + "` is not a cursor this server issued";
+            }
+        },
+
+        COUNT {
+            @Override
+            void publish(ObjectNode schema) {
+                schema.put("type", "integer");
+                schema.put("minimum", 0);
+                schema.put("maximum", Integer.MAX_VALUE);
+            }
+
+            @Override
+            String malformed(String name, JsonNode value) {
+                // A schema's `integer` is a value that is whole, not a way of writing one down:
+                // 1, 1.0 and 1e0 are the same number and all three are integers. Asking Jackson
+                // whether the node is integral would answer about the notation instead, and refuse
+                // two spellings of a count this server is published as taking.
+                if (!value.isNumber() || !value.canConvertToExactIntegral()) {
+                    return "`" + name + "` must be a whole number";
+                }
+                if (!value.canConvertToInt()) {
+                    return "`" + name + "` must be no larger than " + Integer.MAX_VALUE;
+                }
+                return value.intValue() < 0
+                        ? "`" + name + "` must not be negative; 0 is all of them" : null;
+            }
+        };
+
+        /** Writes this kind's domain into the property schema a client reads. */
+        abstract void publish(ObjectNode schema);
+
+        /** Why this value is outside that domain, or null when it is in it. */
+        abstract String malformed(String name, JsonNode value);
+    }
+
+    private record Param(String name, Kind kind, boolean required, String description) {}
+
+    /**
+     * What every tool takes and every tool says, because how much arrives at once is a question
+     * about this wire rather than about any one answer on it.
+     *
+     * <p>Declaring it per tool would leave the ones nobody expected to be long undeclared, and what
+     * is long is a property of the documents and the jars on the class path rather than of the
+     * table here. A tool whose answers all fit simply never issues one.
+     */
+    private static final Param CARRIES_ON = new Param("cursor", Kind.CURSOR, false,
+            "to read on from where a part left off: the `cursor` that part came back with,"
+                    + " sent back with the same arguments");
+
+    private static final String IN_PARTS =
+            " A long answer arrives in parts, each saying how to ask for what follows it.";
+
+    private record Tool(String name, String said, List<Param> declared) {
+
+        String description() {
+            return said + IN_PARTS;
+        }
+
+        /** What the tool declares, and after it the one argument they all take. */
+        List<Param> params() {
+            List<Param> all = new java.util.ArrayList<>(declared);
+            all.add(CARRIES_ON);
+            return List.copyOf(all);
+        }
+
+        Param param(String name) {
+            return params().stream().filter(p -> p.name().equals(name)).findFirst().orElse(null);
+        }
+    }
+
+    /**
+     * One run of this server, and the documents it answers from.
+     *
+     * <p>The set belongs to the session rather than to a request. The specification and the shipped
+     * doc sets do not move while a process is up, so a server that reads them for each question it
+     * is asked reads the same 486KB of AsciiDoc again for each question.
+     *
+     * <p>It is read on the first question that wants it rather than when the session opens. A
+     * session asked only what this server can do never reads a document, and a doc set that refuses
+     * to be read — two documents answering for one name — fails the call that wanted it rather than
+     * the server: a tool that blows up is that call's failure, which is what the tool dispatch
+     * below is written to hold and what building this up front would have taken away from it.
+     */
+    private static final class Session {
+
+        private final ClassLoader loader;
+        private Documents documents;
+
+        private Session(ClassLoader loader) {
+            this.loader = loader;
+        }
+
+        private Documents documents() {
+            if (documents == null) {
+                documents = Documents.on(Caller.MCP, loader);
+            }
+            return documents;
+        }
+    }
+
+    private McpServer() {}
+
+    public static int serve(InputStream in, OutputStream out) {
+        return serve(in, out, McpServer.class.getClassLoader());
+    }
+
+    /** The same, over the doc sets {@code loader} carries. */
+    static int serve(InputStream in, OutputStream out, ClassLoader loader) {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        PrintWriter writer = new PrintWriter(out, true, StandardCharsets.UTF_8);
+        Session session = new Session(loader);
+        try {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                JsonNode request;
+                try {
+                    request = JSON.readTree(line);
+                } catch (RuntimeException e) {
+                    writer.println(JSON.writeValueAsString(error(null, -32700, "parse error")));
+                    continue;
+                }
+                JsonNode id = request.get("id");
+                if (id == null) {
+                    continue; // A notification expects silence, whatever its method.
+                }
+                writer.println(JSON.writeValueAsString(respond(request, id, session)));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return 0;
+    }
+
+    private static ObjectNode respond(JsonNode request, JsonNode id, Session session) {
+        String method = request.get("method") == null ? "" : request.get("method").asString();
+        return switch (method) {
+            case "initialize" -> result(id, initializeResult(request.get("params")));
+            case "ping" -> result(id, JSON.createObjectNode());
+            case "tools/list" -> result(id, toolsResult());
+            // A tool that blows up is this call's failure, not the session's: the server is long
+            // lived and a client that mistypes an argument must not lose the ones after it.
+            case "tools/call" -> {
+                String invalid = invalidArguments(request.get("params"));
+                if (invalid != null) {
+                    yield error(id, -32602, invalid);
+                }
+                try {
+                    yield result(id, call(request.get("params"), session));
+                } catch (RuntimeException e) {
+                    yield result(id, failed(e.getClass().getSimpleName()
+                            + (e.getMessage() == null ? "" : ": " + e.getMessage())));
+                }
+            }
+            default -> error(id, -32601, "method not found: " + method);
+        };
+    }
+
+    private static ObjectNode initializeResult(JsonNode params) {
+        JsonNode asked = params == null ? null : params.get("protocolVersion");
+        String version = asked != null && asked.isString() && PROTOCOL_VERSIONS.contains(asked.asString())
+                ? asked.asString()
+                : PROTOCOL_VERSIONS.getFirst();
+        ObjectNode result = JSON.createObjectNode();
+        result.put("protocolVersion", version);
+        result.putObject("capabilities").putObject("tools");
+        ObjectNode server = result.putObject("serverInfo");
+        server.put("name", "souther");
+        String built = McpServer.class.getPackage().getImplementationVersion();
+        server.put("version", built == null ? "dev" : built);
+        return result;
+    }
+
+    private static ObjectNode toolsResult() {
+        ObjectNode result = JSON.createObjectNode();
+        var tools = result.putArray("tools");
+        for (Tool tool : TOOLS) {
+            ObjectNode t = tools.addObject();
+            t.put("name", tool.name());
+            t.put("description", tool.description());
+            ObjectNode schema = t.putObject("inputSchema");
+            schema.put("type", "object");
+            ObjectNode properties = schema.putObject("properties");
+            for (Param param : tool.params()) {
+                ObjectNode p = properties.putObject(param.name());
+                param.kind().publish(p);
+                p.put("description", param.description());
+            }
+            var required = schema.putArray("required");
+            tool.params().stream().filter(Param::required).map(Param::name).forEach(required::add);
+            // An argument this server would drop is one a client can spend a call learning about,
+            // so the schema says up front that there are no others to guess at.
+            schema.put("additionalProperties", false);
+        }
+        return result;
+    }
+
+    /**
+     * What is wrong with a call's arguments, or null when nothing is.
+     *
+     * <p>The arguments arrive from a client and are checked against the tool's own schema before
+     * anything runs. An argument that is absent, of another type, or a string of no characters is
+     * not a value to be worked with — the search term this matters most for matches everything and
+     * at every position, and the walk over its occurrences would not advance. Reporting it as an
+     * invalid parameter says the tool was never entered, which a tool error would not.
+     *
+     * <p>An argument the schema does not declare is refused for the same reason rather than
+     * dropped. A client that guesses a name — and one that has only these tools to work with will
+     * guess — would otherwise be handed an answer computed without it, with nothing in the answer
+     * saying the argument had no effect.
+     */
+    private static String invalidArguments(JsonNode params) {
+        String name = params == null || params.get("name") == null ? "" : params.get("name").asString();
+        Tool tool = TOOLS.stream().filter(t -> t.name().equals(name)).findFirst().orElse(null);
+        if (tool == null) {
+            return "no tool `" + name + "`";
+        }
+        JsonNode arguments = params.get("arguments");
+        // The schema says arguments are an object, and the protocol says the field is either an
+        // object or not there. A null is neither, and reading it as "not there" would have a tool
+        // whose arguments are all optional answer a request nobody wrote.
+        if (arguments != null && !arguments.isObject()) {
+            return "`arguments` must be an object, or left out entirely";
+        }
+        if (arguments != null) {
+            for (String given : arguments.propertyNames()) {
+                if (tool.param(given) == null) {
+                    return "`" + name + "` has no argument `" + given + "`; it takes "
+                            + String.join(", ", tool.params().stream()
+                                    .map(p -> "`" + p.name() + "`").toList());
+                }
+            }
+        }
+        for (Param param : tool.params()) {
+            JsonNode value = arguments == null ? null : arguments.get(param.name());
+            if (value == null) {
+                if (param.required()) {
+                    return "`" + name + "` needs `" + param.name() + "`";
+                }
+                continue;
+            }
+            // A null written for an argument is not the argument left out — the schema gives it a
+            // type and null is not of it. Reading it as absent is the same slip one level down.
+            String wrong = param.kind().malformed(param.name(), value);
+            if (wrong != null) {
+                return wrong;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Runs the call and answers with what the command said.
+     *
+     * <p>Each tool names a capability, and the arguments it was given decide which of the
+     * underlying command's forms carries it out. A tool is not a fixed way of spelling one
+     * invocation: {@code doc_read} with no name is the listing that command prints for no
+     * arguments, and it is reachable here for the same reason it is reachable at a prompt.
+     *
+     * <p>The command is told it is answering an MCP client, so that what it offers next is a tool
+     * call rather than a shell command the caller has no way to run.
+     */
+    private static ObjectNode call(JsonNode params, Session session) {
+        String tool = params == null || params.get("name") == null ? "" : params.get("name").asString();
+        JsonNode arguments = params == null ? null : params.get("arguments");
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream stream = new PrintStream(captured, true, StandardCharsets.UTF_8);
+        int code = switch (tool) {
+            case "doc_search" -> {
+                JsonNode limit = arguments == null ? null : arguments.get("limit");
+                String[] args = limit == null
+                        ? new String[]{"--search", argument(arguments, "term")}
+                        : new String[]{"--search", argument(arguments, "term"),
+                                "--limit", String.valueOf(limit.asInt())};
+                yield DocCommand.run(args, stream, stream, session.documents());
+            }
+            case "doc_read" -> {
+                String name = argument(arguments, "name");
+                yield DocCommand.run(name.isEmpty() ? new String[]{} : new String[]{name},
+                        stream, stream, session.documents());
+            }
+            case "stdlib_api" -> {
+                String name = argument(arguments, "name");
+                yield ApiCommand.run(name.isEmpty() ? new String[]{} : new String[]{name},
+                        stream, stream, Caller.MCP);
+            }
+            case "stdlib_api_search" -> ApiCommand.run(
+                    new String[]{"--search", argument(arguments, "term")}, stream, stream, Caller.MCP);
+            case "stdlib_api_source" -> ApiCommand.run(
+                    new String[]{"--source", argument(arguments, "name")}, stream, stream, Caller.MCP);
+            case "jar_api" -> {
+                String classpath = argument(arguments, "classpath");
+                String[] args = classpath.isEmpty()
+                        ? new String[]{argument(arguments, "name")}
+                        : new String[]{argument(arguments, "name"), "-cp", classpath};
+                yield JapiCommand.run(args, stream, stream);
+            }
+            default -> {
+                stream.println("no tool `" + tool + "`");
+                yield 2;
+            }
+        };
+        String said = captured.toString(StandardCharsets.UTF_8);
+        Tool answering = TOOLS.stream().filter(t -> t.name().equals(tool)).findFirst().orElse(null);
+        if (code == 0 && answering != null) {
+            try {
+                said = part(answering, arguments, said);
+            } catch (IllegalArgumentException e) {
+                // A cursor that does not belong to this answer is this call's failure. Resuming at
+                // it anyway would answer from the middle of a document nobody asked about.
+                return failed(e.getMessage());
+            }
+        }
+        ObjectNode result = JSON.createObjectNode();
+        ObjectNode content = result.putArray("content").addObject();
+        content.put("type", "text");
+        content.put("text", said);
+        result.put("isError", code != 0);
+        return result;
+    }
+
+    /**
+     * As much of {@code said} as one answer carries, and how to ask for what follows it.
+     *
+     * <p>What follows is named as the call that reaches it rather than as a place in the text,
+     * because a place is only a place to whoever holds the whole of it, which this caller by
+     * definition does not.
+     */
+    private static String part(Tool tool, JsonNode arguments, String said) {
+        JsonNode cursor = arguments == null ? null : arguments.get("cursor");
+        // The line that carries an answer on is part of that answer, so the room for it comes out
+        // of the count before the text is cut and not after. What it will say is not known until
+        // the cut is made, so what is set aside is the longest it could be: a cursor of the length
+        // this server issues, and a count of every character there could be.
+        int reserve = carriesOn(tool, "x".repeat(64), Integer.MAX_VALUE).length();
+        Continuation.Part part = Continuation.of(said, cursor == null ? null : cursor.asString(),
+                Continuation.MOST - reserve);
+        if (part.cursor() == null) {
+            return part.text();
+        }
+        return part.text() + carriesOn(tool, part.cursor(), part.remaining());
+    }
+
+    /**
+     * What a part that is not the last one ends with.
+     *
+     * <p>It names the operation and the cursor, and says the rest of the call is the one the caller
+     * just made. Writing that call back out instead would put the caller's own arguments inside an
+     * answer whose size this server is promising to bound, and a caller can send arguments longer
+     * than the bound: an answer would then be cut to nothing and the line saying so would run past
+     * the count on its own. What is echoed here is this server's, and its length is this server's
+     * to know.
+     */
+    private static String carriesOn(Tool tool, String cursor, int remaining) {
+        return "\n… " + remaining + " more characters; ask `" + tool.name() + "` again with the same"
+                + " arguments and `cursor: \"" + cursor + "\"` for what follows\n";
+    }
+
+    private static ObjectNode failed(String said) {
+        ObjectNode result = JSON.createObjectNode();
+        ObjectNode content = result.putArray("content").addObject();
+        content.put("type", "text");
+        content.put("text", said);
+        result.put("isError", true);
+        return result;
+    }
+
+    private static String argument(JsonNode arguments, String name) {
+        return arguments == null || arguments.get(name) == null || !arguments.get(name).isString()
+                ? "" : arguments.get(name).asString();
+    }
+
+    private static ObjectNode result(JsonNode id, ObjectNode result) {
+        ObjectNode response = envelope(id);
+        response.set("result", result);
+        return response;
+    }
+
+    private static ObjectNode error(JsonNode id, int code, String message) {
+        ObjectNode response = envelope(id);
+        ObjectNode error = response.putObject("error");
+        error.put("code", code);
+        error.put("message", message);
+        return response;
+    }
+
+    private static ObjectNode envelope(JsonNode id) {
+        ObjectNode response = JSON.createObjectNode();
+        response.put("jsonrpc", "2.0");
+        if (id == null) {
+            response.putNull("id");
+        } else {
+            response.set("id", id);
+        }
+        return response;
+    }
+}

@@ -27,7 +27,7 @@ class CompileInlineRequiredTest {
 
             behavior findMember : (id: Id) -> Member
 
-            behavior handle : (id: Id) -> Resp constructs Resp requires findMember
+            behavior handle : (id: Id) -> Resp constructs Resp depends on findMember
 
             let handle (id, findMember) = {
                 Resp { m = findMember(id) }

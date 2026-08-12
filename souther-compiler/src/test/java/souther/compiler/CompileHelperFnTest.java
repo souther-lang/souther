@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A helper {@code fn} — one with no matching behavior — writes its own parameter types (spec 13.1)
- * and is expanded inline at each call site (spec 12.5: a named fn is the same as an inline block).
+ * A helper {@code fn} — one with no matching behavior — writes its own parameter types (spec §fn-declaration)
+ * and is expanded inline at each call site (spec §blocks: a named fn is the same as an inline block).
  * This first caseName is a pure computation: it constructs no data and calls no injected behavior.
  */
 class CompileHelperFnTest {
@@ -51,7 +51,7 @@ class CompileHelperFnTest {
 
     /**
      * A helper does not declare {@code constructs}; the data it builds is inlined into the caller,
-     * so the caller must hold the permission (spec 12.5). A behavior whose helper constructs a data
+     * so the caller must hold the permission (spec §blocks). A behavior whose helper constructs a data
      * it does not declare is E1002 — the inline expansion makes the construction the caller's.
      */
     @Test
@@ -75,7 +75,7 @@ class CompileHelperFnTest {
         assertEquals("E1002", e.code(), "the caller must declare `constructs Tag` for the helper's build");
     }
 
-    /** Declaring the helper's construction lets the behavior compile (spec 12.5). */
+    /** Declaring the helper's construction lets the behavior compile (spec §blocks). */
     @Test
     void declaringTheHelpersConstructionCompiles() {
         Compiler.compile("""
@@ -93,7 +93,7 @@ class CompileHelperFnTest {
                 """);
     }
 
-    /** A helper is expanded inline, so it must bottom out; mutual recursion is rejected (spec 13.1). */
+    /** A helper is expanded inline, so it must bottom out; mutual recursion is rejected (spec §fn-declaration). */
     @Test
     void mutuallyRecursiveHelpersAreRejected() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
@@ -108,10 +108,40 @@ class CompileHelperFnTest {
                 let ping (x: Int) = pong(x)
                 let pong (x: Int) = ping(x)
                 """));
-        assertEquals(null, e.code());
+        assertEquals("E1813", e.code());
     }
 
-    /** A helper may call another helper; the expansion nests, α-renaming each level (spec 12.5). */
+    /**
+     * Every member of a mutual cycle is missing its return type, and the one reported is the one
+     * declared first. Which member a compile names is not the run's to choose: an immutable copy of
+     * a set answers its members in an order the JVM salts, so a set built in declaration order and
+     * copied that way names a different helper on a different run of the same source.
+     */
+    @Test
+    void theHelperNamedIsTheOneDeclaredFirst() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data Out = Int
+
+                behavior run : (n: Int) -> Out
+                    constructs Out
+
+                let alpha (n: Int) = bravo(n)
+                let bravo (n: Int) = charlie(n)
+                let charlie (n: Int) = delta(n)
+                let delta (n: Int) = echo(n)
+                let echo (n: Int) = foxtrot(n)
+                let foxtrot (n: Int) = alpha(n)
+
+                let run (n) = Out(alpha(n))
+                """));
+        assertEquals("E1813", e.code());
+        assertEquals("alpha", e.diagnostic().values().get("helper"),
+                "the first-declared member of the cycle is the one reported");
+    }
+
+    /** A helper may call another helper; the expansion nests, α-renaming each level (spec §blocks). */
     @Test
     void helpersNestOneCallingAnother() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""

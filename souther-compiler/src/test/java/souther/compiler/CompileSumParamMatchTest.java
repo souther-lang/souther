@@ -27,9 +27,9 @@ class CompileSumParamMatchTest {
                 data B = { y: Int }
                 data S = A | B
                 let use (s: S) : Int = match s with
-                    | A a -> a.x
-                    | B b -> b.y
-                let caller () : Int = use(A { x = 1 })
+                    | A as a -> a.x
+                    | B as b -> b.y
+                let caller : Int = use(A { x = 1 })
                 """));
     }
 
@@ -40,9 +40,9 @@ class CompileSumParamMatchTest {
                 data A = { x: Int }
                 data B = { y: Int }
                 let use (s: A | B) : Int = match s with
-                    | A a -> a.x
-                    | B b -> b.y
-                let caller () : Int = use(A { x = 1 })
+                    | A as a -> a.x
+                    | B as b -> b.y
+                let caller : Int = use(A { x = 1 })
                 """));
     }
 
@@ -56,9 +56,9 @@ class CompileSumParamMatchTest {
                 data C = { z: Int }
                 data S = A | B
                 let use (s: S) : Int = match s with
-                    | A a -> a.x
-                    | B b -> b.y
-                let caller () : Int = use(C { z = 1 })
+                    | A as a -> a.x
+                    | B as b -> b.y
+                let caller : Int = use(C { z = 1 })
                 """));
     }
 
@@ -86,10 +86,10 @@ class CompileSumParamMatchTest {
                 else NotFound { missing = line.sku }
 
             let step (acc: Acc, r: PriceResult) : Acc = match acc with
-                | NotFound n -> n
-                | PricedCart c -> match r with
-                    | Priced p -> PricedCart { lines = c.lines ++ [p] }
-                    | NotFound n -> n
+                | NotFound as n -> n
+                | PricedCart as c -> match r with
+                    | Priced as p -> PricedCart { lines = c.lines ++ [p] }
+                    | NotFound as n -> n
             """;
 
     @Test

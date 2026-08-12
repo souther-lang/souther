@@ -10,8 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * {@code souther.list}'s {@code foldFrom} is the self-hosted fold: an ordinary recursive helper that
  * takes its step as a first-class function value (a closure) applied per element, walks the list, and
- * has its tail self-call turned into a loop by the backend. These tests drive {@code List.foldFrom}
- * directly with closure steps, including the empty-list base case.
+ * has its tail self-call turned into a loop by the backend. It is {@code private}, so these tests
+ * reach it the only way anything does — through {@code List.fold}, the sugar that supplies the
+ * starting index — and drive it with closure steps, including the empty-list base case.
  */
 class CompileFoldSelfHostTest {
 
@@ -21,7 +22,7 @@ class CompileFoldSelfHostTest {
                 data Bag = { xs: List<Int> }
                 data Out = Int
                 behavior run : (b: Bag) -> Out constructs Out
-                let run (b) = Out(List.foldFrom((acc, x) -> acc + x, 0, b.xs, 0))
+                let run (b) = Out(List.fold((acc, x) -> acc + x, 0, b.xs))
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", xs));

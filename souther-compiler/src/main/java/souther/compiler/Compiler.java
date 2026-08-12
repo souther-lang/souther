@@ -1,34 +1,33 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
-import souther.compiler.ast.Ast;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourcePos;
-import souther.compiler.check.Exposing;
-import souther.compiler.check.HelperInliner;
-import souther.compiler.check.Lower;
-import souther.compiler.check.NewtypeDesugar;
-import souther.compiler.check.TypeChecker;
-import souther.compiler.codegen.Backend;
-import souther.compiler.frontend.CstFrontend;
-import souther.compiler.derive.Deriver;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Located;
+import souther.compiler.examples.Deadline;
+import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.examples.ExampleVerifier;
+import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Db;
+import souther.compiler.query.Report;
+import souther.compiler.query.Output;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * The compiler pipeline facade: source → parse → derive → type check → ClassFile bytecode
- * (spec section 20). {@link #compile} handles a single self-contained module;
- * {@link #compileModules} links several modules through explicit imports (spec section 4).
+ * (spec §compiler-pipeline). {@link #compile} handles a single self-contained module;
+ * {@link #compileModules} links several modules through explicit imports (spec §modules).
  */
 public final class Compiler {
 
@@ -36,13 +35,25 @@ public final class Compiler {
 
     /** Compiles a single self-contained module (no imports) into binary class name → bytecode.
      * A source that omits the {@code module} header is named {@code Main} (the string API has no
-     * file name to derive from; {@link Runner} passes the file-name stem instead). */
+     * file name to derive from; {@code souther run} passes the file-name stem instead). */
     public static Map<String, byte[]> compile(String source) {
         return compile(source, "Main");
     }
 
-    /** A compiled module with any non-fatal diagnostics (invariant-discharge warnings, etc.). */
-    public record Compiled(Map<String, byte[]> classes, List<Diagnostic> warnings) {}
+    /**
+     * A compiled module with any non-fatal diagnostics (invariant-discharge warnings, etc.), each
+     * carrying the source it belongs to so a caller can quote the line it is about.
+     *
+     * @param classes the generated classes, by binary name
+     * @param locatedWarnings the warnings, each with the source that holds it
+     */
+    public record Compiled(Map<String, byte[]> classes, List<Located> locatedWarnings) {
+
+        /** The warnings on their own, for a caller that only reads what they say. */
+        public List<Diagnostic> warnings() {
+            return locatedWarnings.stream().map(Located::diagnostic).toList();
+        }
+    }
 
     /** Compiles and returns the classes together with any invariant-discharge warnings. */
     public static Compiled compileWithWarnings(String source) {
@@ -52,7 +63,7 @@ public final class Compiler {
     /** As {@link #compileWithWarnings(String)}, but a header-less source is named
      * {@code defaultModuleName} (so the CLI's filename-stem naming can surface warnings too). */
     public static Compiled compileWithWarnings(String source, String defaultModuleName) {
-        List<Diagnostic> warnings = new ArrayList<>();
+        List<Located> warnings = new ArrayList<>();
         Map<String, byte[]> classes = compile(source, defaultModuleName, warnings);
         return new Compiled(classes, warnings);
     }
@@ -63,198 +74,404 @@ public final class Compiler {
     }
 
     private static Map<String, byte[]> compile(String source, String defaultModuleName,
-                                               List<Diagnostic> warningsOut) {
-        Ast.Module raw = CstFrontend.parse(source, defaultModuleName);
-        if (raw.exampleFileTarget() != null) {
-            throw CompileException.of(
-                    Diagnostic.of("E1907", "check.example.notarget").title("check.example.title")
-                            .at(raw.pos()).args(raw.exampleFileTarget()).build(),
-                    "an `examples for " + raw.exampleFileTarget() + "` file has no target module to attach to");
-        }
-        rejectReservedNamespace(raw);
-        Ast.Module module = Deriver.derive(Exposing.rewrite(raw));
-        module = HelperInliner.forModule(module).withInlinedInvariants(module);
-        module = NewtypeDesugar.rewrite(module, TypeChecker.symbols(module));
-        module = Compiler.injectRecursivePrelude(module);
-        Ast.Module lowered = Lower.run(module);
-        warningsOut.addAll(TypeChecker.checkOrThrow(module, TypeChecker.symbols(module), Map.of(), lowered));
-        Map<String, byte[]> out = Backend.generate(lowered);
-        verifyConstConstructions(module, TypeChecker.symbols(module), out);
-        Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
-        ExampleVerifier.verify(module, symbols, TypeChecker.signatures(module, symbols), Map.of(), out);
-        return out;
+                                               List<Located> warningsOut) {
+        return compiling(source, defaultModuleName, warningsOut);
     }
 
     /**
-     * Adds the prelude recursive helpers a module reaches (e.g. {@code souther.list}'s {@code
-     * foldFrom}) to the module as its own fns, under their qualified names. A recursive prelude helper
-     * cannot be inlined — it would expand forever — so it is emitted as one of the module's methods,
-     * the same as a module-own recursive helper. Only the reached ones are injected; a module that
-     * never folds gets none.
+     * Drives one compilation with the recovery every entry point here answers by.
+     *
+     * <p>Around the three places a compilation is driven, rather than around the entry points that
+     * reach them. It was written on the entry points that answer with classes, and the ones that
+     * answer with a {@link Compilation} — which is what the command line and the editor ask for —
+     * had nothing, so the same source was a diagnostic through one door and a stack trace through
+     * another. What decides the answer is the compiler, not which signature a caller reached for.
+     *
+     * <p>Around what an entry point does with the compilation as well as around the driving of it.
+     * Taking the classes off a driven compilation reads a key the driver already asked, so it walks
+     * nothing today — but that is a fact about the order two lines happen to be in, and a region
+     * that holds only while they stay in it is not a boundary. Nesting is why it can be said twice:
+     * the inner one answers first, and the outer one covers what is left.
      */
-    private static Ast.Module injectRecursivePrelude(Ast.Module module) {
-        Map<String, Ast.FnDef> injected = HelperInliner.forModule(module).injectedRecursiveHelpers();
-        if (injected.isEmpty()) {
-            return module;
+    static <T> T driven(java.util.function.Supplier<T> compilation) {
+        try {
+            return compilation.get();
+        } catch (StackOverflowError _) {
+            throw tooDeep();
         }
-        List<Ast.FnDef> fns = new ArrayList<>(module.fns());
-        fns.addAll(injected.values());
-        return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                module.imports(), module.defs(), module.behaviors(), fns, module.examples(),
-                module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
     /**
-     * Runs each constant newtype construction ({@code 金額(500)}) through its generated
-     * {@code $Ctfe.check} (compile-time function evaluation): the same invariant bytecode that
-     * {@code __construct} runs, so a violation becomes a compile error instead of a run-time abort
-     * (ADR-0032). A check that cannot be loaded or run here — e.g. a lambda-bearing invariant whose
-     * runtime class is absent from this classpath — is left to the run-time check.
+     * The compiler ran out of room. Every phase descends what it builds by recursion, so a walk
+     * that is handed something deep enough exhausts the stack — which is not a
+     * {@code CompileException}, so left alone it passes through the recovery boundary and reaches
+     * the author as a stack trace. It is reported like any other thing the compiler cannot accept.
+     *
+     * <p>Not a report about nesting. What a source may nest is bounded as it is read, and what a
+     * definition may say is bounded over what it says, so on the stack this compiler is supported
+     * on a source that got past both should not arrive here. Arriving here says the stack was
+     * smaller than that, or that something builds depth no bound is holding — neither of which the
+     * author can be told to flatten.
+     *
+     * <p>No position is claimed: where the stack ended is not a fact about the source.
      */
-    private static void verifyConstConstructions(Ast.Module module, Map<String, Ast.Def> symbols,
-                                                 Map<String, byte[]> classes) {
-        List<TypeChecker.ConstCheck> checks = TypeChecker.constNewtypeChecks(module, symbols);
-        if (checks.isEmpty()) {
-            return;
-        }
-        MemoryClassLoader loader = new MemoryClassLoader(classes, Compiler.class.getClassLoader());
-        for (TypeChecker.ConstCheck c : checks) {
-            boolean holds;
-            try {
-                Class<?> ctfe = Class.forName(module.name() + "." + c.typeName() + "$Ctfe", true, loader);
-                holds = (boolean) ctfe.getMethod("check", paramClass(c.value())).invoke(null, c.value());
-            } catch (ReflectiveOperationException | LinkageError ex) {
-                continue;   // cannot evaluate at compile time; the run-time check still applies
-            }
-            if (!holds) {
-                String shown = c.typeName() + "("
-                        + (c.value() instanceof String s ? "\"" + s + "\"" : c.value()) + ")";
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.const.invariant").title("check.construct.title")
-                                .at(c.pos()).args(shown).build(),
-                        "`" + shown + "` violates its invariant.");
-            }
-        }
+    private static CompileException tooDeep() {
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
     }
 
-    private static Class<?> paramClass(Object v) {
-        if (v instanceof Long) {
-            return long.class;
-        }
-        if (v instanceof Boolean) {
-            return boolean.class;
-        }
-        return v.getClass();   // String, BigDecimal
+    /**
+     * Compiles one self-contained source by asking one compilation for its classes.
+     *
+     * <p>This differs from {@link #linking} in what it lets a source be, not in what it does with
+     * it: a source with no {@code module} header takes a name, and a failing example is reported
+     * with its own position rather than tagged with the file it came from, because there is only
+     * the one.
+     */
+    private static Map<String, byte[]> compiling(String source, String defaultModuleName,
+                                                 List<Located> warningsOut) {
+        return driven(() -> classesOf(compiled(source, defaultModuleName, warningsOut)));
     }
 
-    /** The namespace the compiler ships (souther.string/list/map/bool); a user module may not
-     * take a reserved name, or it could grant itself the core's privileges (ADR-0028). */
-    private static final String RESERVED_NAMESPACE = "souther";
+    /**
+     * The compilation of one self-contained source, driven to completion, with the first error
+     * raised. A caller that wants more than the classes — what a module declares, what a behavior's
+     * signature is — asks the compilation rather than parsing the source a second time.
+     */
+    public static Compilation compiled(String source, String defaultModuleName) {
+        return compiled(source, defaultModuleName, new ArrayList<>());
+    }
 
-    private static void rejectReservedNamespace(Ast.Module m) {
-        String n = m.name();
-        if (n.equals(RESERVED_NAMESPACE) || n.startsWith(RESERVED_NAMESPACE + ".")) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.module.reserved").title("check.module.title")
-                            .at(m.pos()).args(n).build(),
-                    "module `" + n + "` is in the reserved `" + RESERVED_NAMESPACE + "` namespace: the"
-                            + " compiler ships souther.string / souther.list / souther.map / souther.bool,"
-                            + " and a user module cannot take a reserved name.");
+    /** As {@link #compiled(String, String)}, collecting the compile's warnings into
+     *  {@code warningsOut}. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut) {
+        return compiled(source, defaultModuleName, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about.
+     *  Public for the same reason {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}
+     *  is: a caller outside this package compiles one source and measures it. */
+    public static Compilation compiled(String source, String defaultModuleName,
+                                       List<Located> warningsOut, Adequacy.Asked measure) {
+        return compiled(source, defaultModuleName, warningsOut, measure, null, null);
+    }
+
+    /**
+     * As above, on a budget of its own for each row evaluated and each statement read.
+     *
+     * <p>{@code null} takes the default, which is what every caller outside this compiler's own tests
+     * wants: it is set so that no terminating row is cut short, and a build has no other requirement
+     * of it. What a shorter one is for is a model written so that a row does not come back — see
+     * {@link Compilation#withExampleBudget}.
+     */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure,
+                                java.time.Duration exampleBudget) {
+        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, null);
+    }
+
+    /** As above, on a policy of its own — the steps and the depth a row is decided by. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure,
+                                EvaluationPolicy policy) {
+        return compiled(source, defaultModuleName, warningsOut, measure, null, null, policy);
+    }
+
+    /** As above, with what a row or a reading is given to finish within said outright — for a test
+     *  stating which work does not come back rather than timing it. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure,
+                                java.time.Duration exampleBudget, Deadline deadline) {
+        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, deadline, null);
+    }
+
+    /**
+     * The compilation of one source, resolving an import that names no module in it against
+     * {@code path} — what {@code run} asks for, holding one file and a class path.
+     */
+    public static Compilation compiled(String source, String defaultModuleName,
+                                       List<Located> warningsOut, ModulePath path) {
+        return driven(() -> compilingSource(source, defaultModuleName, warningsOut,
+                Adequacy.Asked.NOTHING, null, null, null, path));
+    }
+
+    private static Compilation compiled(String source, String defaultModuleName,
+                                        List<Located> warningsOut, Adequacy.Asked measure,
+                                        java.time.Duration exampleBudget, Deadline deadline,
+                                        EvaluationPolicy policy) {
+        return driven(() -> compilingSource(source, defaultModuleName, warningsOut, measure,
+                exampleBudget, deadline, policy, ModulePath.EMPTY));
+    }
+
+    private static Compilation compilingSource(String source, String defaultModuleName,
+                                               List<Located> warningsOut, Adequacy.Asked measure,
+                                               java.time.Duration exampleBudget, Deadline deadline,
+                                               EvaluationPolicy policy, ModulePath path) {
+        Compilation compilation = Compilation.ofSource(source, defaultModuleName, path);
+        if (exampleBudget != null) {
+            compilation.withExampleBudget(exampleBudget);
         }
-        // The short qualifiers are how the standard library is reached (`List.map`, `import String`);
-        // a user module by one of these names would shadow the library and could not be imported.
-        if (Prelude.isQualifier(n)) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.module.qualifier").title("check.module.title")
-                            .at(m.pos()).args(n).build(),
-                    "module `" + n + "` uses a name reserved for the standard-library qualifier `" + n
-                            + "` (as in `" + n + ".…` / `import " + n + " { … }`); pick another module name.");
+        if (deadline != null) {
+            compilation.withDeadline(deadline);
         }
+        if (policy != null) {
+            compilation.withEvaluationPolicy(policy);
+        }
+        compilation.measure(measure);
+        Db db = compilation.db();
+
+        CompileException structural = compilation.failure(compilation.structuralReports());
+        if (structural != null) {
+            throw structural;
+        }
+
+        db.ask(new Output.All());
+        CompileException failed = compilation.failure(db.allReports());
+        if (failed != null) {
+            throw failed;
+        }
+        for (String module : compilation.modules()) {
+            if (!db.ask(new Output.ConstConstructions(module)).present()) {
+                CompileException bad = compilation.failure(db.allReports());
+                if (bad != null) {
+                    throw bad;
+                }
+            }
+            List<Diagnostic> failures = new ArrayList<>();
+            for (String id : compilation.exampleSourcesOf(module)) {
+                // Only the errors: this key also carries what a clean run wants to say about how well
+                // the rows cover the model, and a warning is not a reason to fail the build.
+                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
+                    failures.add(failure.diagnostic());
+                }
+            }
+            // Asked whether or not the rows ran: what two written statements say about each other
+            // is readable when nothing is.
+            db.ask(new Output.SaidDisagreements(module));
+            if (failures.size() == 1) {
+                throw CompileException.of(failures.get(0));
+            }
+            if (!failures.isEmpty()) {
+                throw CompileException.ofAll(failures, ExampleVerifier.legacySummary(failures));
+            }
+        }
+        for (String module : compilation.modules()) {
+            compilation.answerWarnings(module);
+        }
+        warningsOut.addAll(compilation.warnings(db.allReports()));
+        return compilation;
+    }
+
+    /**
+     * The compilation of one source, driven as far as it goes, with nothing raised.
+     *
+     * <p>Beside {@link #compiled} rather than in place of it. A caller about to write classes out has
+     * to stop at the first error, there being nothing to write; a caller about to say what the rows
+     * cover has an answer either way. The specification puts the two apart — an example report
+     * "changes what compiles" not at all — and this is the half of that the entry points did not
+     * have. What refused the compilation is refused still: it is in the reports, and the caller reads
+     * it there rather than catching it.
+     */
+    public static Compilation analyzed(String source, String defaultModuleName,
+                                       List<Located> warningsOut, Adequacy.Asked measure) {
+        return answered(Compilation.ofSource(source, defaultModuleName), warningsOut, measure);
+    }
+
+    /** As {@link #analyzed}, for a module set resolved against {@code path} — what
+     *  {@link #compiledModules} is to {@link #compiled}. */
+    public static Compilation analyzedModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure) {
+        return answered(Compilation.ofSources(sources, path), warningsOut, measure);
+    }
+
+    /**
+     * Asks the whole compilation and collects its warnings.
+     *
+     * <p>The warnings are collected whatever the compilation came to, which is where this parts from
+     * the raising entry points: they reach the collection only by getting past every error, so a
+     * compilation with one reports no warnings at all. Nothing about a warning depends on the errors
+     * beside it.
+     *
+     * <p>Running out of stack is the one thing this raises. An error is an answer — it is in the
+     * reports, and the compilation around it stands — but a walk that ran out returned nothing to
+     * put there, and the questions below it have no answers either. There is no partial reading to
+     * hand back, so this says what it is instead of handing back a compilation that looks clean.
+     */
+    private static Compilation answered(Compilation compilation, List<Located> warningsOut,
+                                        Adequacy.Asked measure) {
+        return driven(() -> {
+            compilation.measure(measure);
+            compilation.answerEverything();
+            warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
+            return compilation;
+        });
+    }
+
+    private static Map<String, byte[]> classesOf(Compilation compilation) {
+        return new LinkedHashMap<>(compilation.classes());
     }
 
     /** Compiles a set of modules together, resolving explicit imports and rejecting cycles. */
     public static Map<String, byte[]> compileModules(List<String> sources) {
-        return compileModules(sources, new ArrayList<>());
+        return compileModules(sources, ModulePath.EMPTY);
+    }
+
+    /**
+     * As {@link #compileModules(List)}, but an import naming no module among {@code sources} is
+     * resolved against {@code path} — the compiled modules of the projects this one depends on. A
+     * module found there is read for its declarations and nothing else: its classes are already
+     * built, and this compile neither re-emits them nor re-runs its examples.
+     */
+    public static Map<String, byte[]> compileModules(List<String> sources, ModulePath path) {
+        return compileModules(sources, path, new ArrayList<>());
     }
 
     /** Links a module set like {@link #compileModules(List)} and returns the classes with any
      * invariant-discharge warnings from every module. */
     public static Compiled compileModulesWithWarnings(List<String> sources) {
-        List<Diagnostic> warnings = new ArrayList<>();
-        return new Compiled(compileModules(sources, warnings), warnings);
+        return compileModulesWithWarnings(sources, ModulePath.EMPTY);
     }
 
-    private static Map<String, byte[]> compileModules(List<String> sources, List<Diagnostic> warningsOut) {
-        List<Ast.Module> allParsed = new ArrayList<>();
-        for (String s : sources) {
-            // A module linked by imports must be named; `null` forbids omitting the header here.
-            Ast.Module raw = CstFrontend.parse(s, null);
-            rejectReservedNamespace(raw);
-            allParsed.add(Exposing.rewrite(raw));
-        }
-        // An `examples for <module>` file contributes only examples: merge each into its target
-        // module. It is never a module of its own, so it never enters `byName`.
-        List<Ast.Module> parsed = new ArrayList<>();
-        Map<String, List<Ast.Example>> attached = new LinkedHashMap<>();
-        Map<String, List<Ast.Fake>> attachedFakes = new LinkedHashMap<>();
-        for (Ast.Module m : allParsed) {
-            if (m.exampleFileTarget() != null) {
-                attached.computeIfAbsent(m.exampleFileTarget(), k -> new ArrayList<>()).addAll(m.examples());
-                attachedFakes.computeIfAbsent(m.exampleFileTarget(), k -> new ArrayList<>()).addAll(m.fakes());
-            } else {
-                parsed.add(m);
-            }
-        }
-        parsed = mergeAttachedExamples(parsed, attached, attachedFakes);
-
-        Map<String, Ast.Module> byName = new LinkedHashMap<>();
-        for (Ast.Module m : parsed) {
-            if (byName.put(m.name(), m) != null) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.module.duplicate").title("check.module.title")
-                                .at(m.pos()).args(m.name()).build(),
-                        "duplicate module `" + m.name() + "`");
-            }
-        }
-        detectCycles(parsed, byName);
-
-        // pass 1: derive each module's codecs, resolving imported types against the original defs
-        Map<String, Ast.Module> derived = new LinkedHashMap<>();
-        for (Ast.Module m : parsed) {
-            Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
-            derived.put(m.name(), HelperInliner.forModule(d).withInlinedInvariants(d));
-        }
-        // pass 1.5: lower `金額(x)` newtype constructors to NewData (needs every module's defs, so
-        // an imported newtype name resolves) before check and codegen see them
-        for (Ast.Module original : parsed) {
-            Ast.Module m = derived.get(original.name());
-            derived.put(original.name(), NewtypeDesugar.rewrite(m, visibleDefs(m, derived)));
-        }
-        // pass 2: type-check and generate against the derived (codec-bearing) defs
-        Map<String, byte[]> out = new LinkedHashMap<>();
-        for (Ast.Module original : parsed) {
-            Ast.Module m = derived.get(original.name());
-            Map<String, Ast.Def> symbols = visibleDefs(m, derived);
-            Map<String, TypeChecker.Sig> importedSigs = importedBehaviorSigs(m, derived);
-            Set<String> importedInjected = importedInjectedBehaviors(m, derived);
-            m = injectRecursivePrelude(m);
-            Ast.Module lowered = Lower.run(m);
-            warningsOut.addAll(TypeChecker.checkOrThrow(m, symbols, importedSigs, lowered));
-            out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs, importedInjected));
-        }
-        // every module's classes are now present, so CTFE and example evaluation can resolve
-        // cross-module references
-        for (Ast.Module original : parsed) {
-            Ast.Module m = derived.get(original.name());
-            Map<String, Ast.Def> symbols = visibleDefs(m, derived);
-            verifyConstConstructions(m, symbols, out);
-            Map<String, TypeChecker.Sig> sigs =
-                    TypeChecker.signatures(m, symbols, importedBehaviorSigs(m, derived));
-            ExampleVerifier.verify(m, symbols, sigs, importedPackages(m), out);
-        }
-        return out;
+    /** As {@link #compileModulesWithWarnings(List)}, resolving against {@code path} as
+     * {@link #compileModules(List, ModulePath)} does. */
+    public static Compiled compileModulesWithWarnings(List<String> sources, ModulePath path) {
+        List<Located> warnings = new ArrayList<>();
+        return new Compiled(compileModules(sources, path, warnings), warnings);
     }
 
+    private static Map<String, byte[]> compileModules(List<String> sources, ModulePath path,
+                                                      List<Located> warningsOut) {
+        return linking(sources, path, warningsOut);
+    }
+
+    /**
+     * Links a set of sources by asking one compilation for its classes.
+     *
+     * <p>What is left here is only what a batch compile decides and an editor decides differently:
+     * that a structural problem stops everything, that the first error is raised rather than
+     * collected, and that every module's examples are evaluated before any failing one is reported
+     * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
+     */
+    /**
+     * The compilation of a module set, driven to completion, with the first error raised — what
+     * {@link #linking} returns the classes of, for a caller that wants more than the classes.
+     *
+     * <p>For a caller that has to have a compilation there is nothing to go on with. A caller that
+     * can say something either way takes {@link #analyzedModules} instead.
+     */
+    public static Compilation compiledModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut) {
+        return linked(sources, path, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
+    public static Compilation compiledModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure) {
+        return linked(sources, path, warningsOut, measure);
+    }
+
+    private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
+                                               List<Located> warningsOut) {
+        return driven(() -> new LinkedHashMap<>(
+                linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes()));
+    }
+
+    /** As {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}, on a budget of its own
+     *  for each row evaluated — {@code null} takes the default. See
+     *  {@link #compiled(String, String, List, Adequacy.Asked, java.time.Duration)}. */
+    static Compilation compiledModules(List<String> sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       java.time.Duration exampleBudget) {
+        return linked(sources, path, warningsOut, measure, exampleBudget, null, null);
+    }
+
+    /** As above, on a policy of its own — the steps and the depth a row is decided by. */
+    static Compilation compiledModules(List<String> sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       EvaluationPolicy policy) {
+        return linked(sources, path, warningsOut, measure, null, null, policy);
+    }
+
+    /** As above, with what a row or a reading is given to finish within said outright. */
+    static Compilation compiledModules(List<String> sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       java.time.Duration exampleBudget, Deadline deadline) {
+        return linked(sources, path, warningsOut, measure, exampleBudget, deadline, null);
+    }
+
+    private static Compilation linked(List<String> sources, ModulePath path,
+                                      List<Located> warningsOut, Adequacy.Asked measure) {
+        return linked(sources, path, warningsOut, measure, null, null, null);
+    }
+
+    private static Compilation linked(List<String> sources, ModulePath path,
+                                      List<Located> warningsOut, Adequacy.Asked measure,
+                                      java.time.Duration exampleBudget, Deadline deadline,
+                                      EvaluationPolicy policy) {
+        return driven(() -> linkingSources(sources, path, warningsOut, measure, exampleBudget,
+                deadline, policy));
+    }
+
+    private static Compilation linkingSources(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure,
+                                              java.time.Duration exampleBudget, Deadline deadline,
+                                              EvaluationPolicy policy) {
+        Compilation compilation = Compilation.ofSources(sources, path);
+        if (exampleBudget != null) {
+            compilation.withExampleBudget(exampleBudget);
+        }
+        if (deadline != null) {
+            compilation.withDeadline(deadline);
+        }
+        if (policy != null) {
+            compilation.withEvaluationPolicy(policy);
+        }
+        compilation.measure(measure);
+        Db db = compilation.db();
+
+        CompileException structural = compilation.failure(compilation.structuralReports());
+        if (structural != null) {
+            throw structural;
+        }
+
+        db.ask(new Output.All());
+        CompileException failed = compilation.failure(db.allReports());
+        if (failed != null) {
+            throw failed;
+        }
+
+        // Every module's classes are now present, so a constant construction and an example can
+        // resolve a cross-module reference — including into a dependency, whose classes come off the
+        // same path its declarations were read from.
+        List<Diagnostic> exampleFailures = new ArrayList<>();
+        List<String> exampleSources = new ArrayList<>();
+        for (String module : compilation.modules()) {
+            if (!db.ask(new Output.ConstConstructions(module)).present()) {
+                CompileException bad = compilation.failure(db.allReports());
+                if (bad != null) {
+                    throw bad;
+                }
+                continue;
+            }
+            for (String id : compilation.exampleSourcesOf(module)) {
+                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
+                    exampleFailures.add(failure.diagnostic());
+                    // a row from an `examples for` file is positioned in that file, not this one
+                    exampleSources.add(id);
+                }
+            }
+            db.ask(new Output.SaidDisagreements(module));
+        }
+        for (String module : compilation.modules()) {
+            compilation.answerWarnings(module);
+        }
+        warningsOut.addAll(compilation.warnings(db.allReports()));
+        if (!exampleFailures.isEmpty()) {
+            throw CompileException.ofAllInSources(exampleFailures, exampleSources,
+                    ExampleVerifier.legacySummary(exampleFailures));
+        }
+        return compilation;
+    }
     /**
      * Links a module set like {@link #compileModules}, but collects diagnostics per source — keyed by
      * the caller's id (the LSP passes a document URI) — instead of throwing on the first error. This is
@@ -266,7 +483,7 @@ public final class Compiler {
      * examples land on that module's id, and an {@code examples for X} file's examples land on that
      * file's id — never on the target module. A source with no problem maps to an empty list.
      */
-    public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById) {
+    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
         return diagnoseModules(sourcesById, Set.of());
     }
 
@@ -276,420 +493,39 @@ public final class Compiler {
      * errors). Their importers are skipped rather than told the module is unknown — the error belongs
      * to the broken file, which reports it separately, not to the importer.
      */
-    public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
-                                                                Set<String> brokenModuleNames) {
-        Map<String, List<Diagnostic>> result = new LinkedHashMap<>();
-        for (String id : sourcesById.keySet()) {
-            result.put(id, new ArrayList<>());
-        }
-
-        // Parse each source, splitting real modules from `examples for` files. A parse-stage error
-        // (a type variable in a user module, say) is recorded against that source's id.
-        Map<String, Ast.Module> moduleById = new LinkedHashMap<>();
-        Map<String, Ast.Module> exampleFileById = new LinkedHashMap<>();
-        Set<String> failed = new HashSet<>(brokenModuleNames);   // module names whose source is broken
-        for (Map.Entry<String, String> e : sourcesById.entrySet()) {
-            try {
-                Ast.Module raw = CstFrontend.parse(e.getValue(), null);
-                if (raw.exampleFileTarget() != null) {
-                    exampleFileById.put(e.getKey(), raw);
-                } else {
-                    rejectReservedNamespace(raw);
-                    moduleById.put(e.getKey(), Exposing.rewrite(raw));
-                }
-            } catch (CompileException ex) {
-                result.get(e.getKey()).add(ex.diagnostic());
-                String name = moduleNameFromHeader(e.getValue());
-                if (name != null) {
-                    failed.add(name);   // a source that will not parse cannot satisfy an importer
-                }
-            }
-        }
-
-        // Index modules by name, tracking the source id each name came from; a duplicate name is an
-        // error on the offending source.
-        Map<String, Ast.Module> byName = new LinkedHashMap<>();
-        Map<String, String> idByName = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.Module> e : moduleById.entrySet()) {
-            Ast.Module m = e.getValue();
-            if (byName.containsKey(m.name())) {
-                result.get(e.getKey()).add(Diagnostic.of(null, "check.module.duplicate")
-                        .title("check.module.title").at(m.pos()).args(m.name()).build());
-                continue;
-            }
-            byName.put(m.name(), m);
-            idByName.put(m.name(), e.getKey());
-        }
-
-        List<Ast.Module> order = dependencyOrder(byName, idByName, result);
-
-        // Compile each module (no example evaluation yet). Retain the derived module and its resolution
-        // context so examples can be evaluated afterwards, once every module's bytecode is present.
-        Map<String, Ast.Module> derived = new LinkedHashMap<>();
-        Map<String, byte[]> out = new LinkedHashMap<>();
-        Map<String, VerifyContext> ready = new LinkedHashMap<>();
-        for (Ast.Module original : order) {
-            if (importsAnyFailed(original, failed)) {
-                failed.add(original.name());
-                continue;   // an importer of a broken module is skipped, not cascaded
-            }
-            try {
-                Ast.Module d = Deriver.derive(original, visibleDefs(original, byName));
-                d = HelperInliner.forModule(d).withInlinedInvariants(d);
-                derived.put(original.name(), d);   // visible to its own newtype constructors during desugar
-                Ast.Module m = NewtypeDesugar.rewrite(d, visibleDefs(d, derived));
-                derived.put(original.name(), m);
-                Map<String, Ast.Def> symbols = visibleDefs(m, derived);
-                Map<String, TypeChecker.Sig> importedSigs = importedBehaviorSigs(m, derived);
-                Set<String> importedInjected = importedInjectedBehaviors(m, derived);
-                m = injectRecursivePrelude(m);
-                Ast.Module lowered = Lower.run(m);
-                List<Diagnostic> typeErrors = TypeChecker.check(m, symbols, importedSigs, lowered);
-                if (!typeErrors.isEmpty()) {
-                    // a type-invalid module must not reach codegen; report every error and skip it,
-                    // so its importers are skipped too rather than compiled against a broken module.
-                    result.get(idByName.get(original.name())).addAll(typeErrors);
-                    failed.add(original.name());
-                    continue;
-                }
-                out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs, importedInjected));
-                verifyConstConstructions(m, symbols, out);
-                Map<String, TypeChecker.Sig> sigs =
-                        TypeChecker.signatures(m, symbols, importedBehaviorSigs(m, derived));
-                ready.put(original.name(), new VerifyContext(m, symbols, sigs, importedPackages(m)));
-            } catch (CompileException e) {
-                result.get(idByName.get(original.name())).add(e.diagnostic());
-                failed.add(original.name());
-            }
-        }
-
-        // Fakes from `examples for` files are shared with the target module (its own examples may use
-        // them), so gather them per target before evaluating any examples.
-        Map<String, List<Ast.Fake>> attachedFakes = new LinkedHashMap<>();
-        for (Ast.Module f : exampleFileById.values()) {
-            attachedFakes.computeIfAbsent(f.exampleFileTarget(), k -> new ArrayList<>()).addAll(f.fakes());
-        }
-
-        // A module's own inline examples, attributed to the module's source.
-        for (Map.Entry<String, VerifyContext> e : ready.entrySet()) {
-            VerifyContext ctx = e.getValue();
-            List<Ast.Fake> fakes = mergedFakes(ctx.module().fakes(), attachedFakes.get(e.getKey()));
-            result.get(idByName.get(e.getKey())).addAll(evaluate(ctx, ctx.module().examples(), fakes, out));
-        }
-
-        // Each `examples for` file's examples, attributed to that file — a target that is absent (not
-        // merely broken) is E1907.
-        for (Map.Entry<String, Ast.Module> e : exampleFileById.entrySet()) {
-            Ast.Module f = e.getValue();
-            VerifyContext ctx = ready.get(f.exampleFileTarget());
-            if (ctx == null) {
-                if (!byName.containsKey(f.exampleFileTarget())) {
-                    result.get(e.getKey()).add(Diagnostic.of("E1907", "check.example.notarget")
-                            .title("check.example.title").at(f.pos()).args(f.exampleFileTarget()).build());
-                }
-                continue;
-            }
-            List<Ast.Fake> fakes = mergedFakes(ctx.module().fakes(), attachedFakes.get(f.exampleFileTarget()));
-            result.get(e.getKey()).addAll(evaluate(ctx, f.examples(), fakes, out));
-        }
-
-        Map<String, List<Diagnostic>> frozen = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Diagnostic>> e : result.entrySet()) {
-            frozen.put(e.getKey(), List.copyOf(e.getValue()));
-        }
-        return frozen;
+    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                             Set<String> brokenModuleNames) {
+        return diagnoseModules(sourcesById, brokenModuleNames, ModulePath.EMPTY);
     }
 
-    /** The resolution context a module's examples evaluate against, retained from its compile pass. */
-    private record VerifyContext(Ast.Module module, Map<String, Ast.Def> symbols,
-                                 Map<String, TypeChecker.Sig> sigs, Map<String, String> importedPackages) {}
-
-    /** Evaluates {@code examples} against {@code ctx}'s module (its defs and bytecode), using
-     * {@code fakes} for any {@code requires} dependencies; returns one diagnostic per failing row. */
-    private static List<Diagnostic> evaluate(VerifyContext ctx, List<Ast.Example> examples,
-                                             List<Ast.Fake> fakes, Map<String, byte[]> classes) {
-        Ast.Module m = ctx.module();
-        Ast.Module toCheck = new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                m.defs(), m.behaviors(), m.fns(), examples, fakes, m.exampleFileTarget(), m.pos());
-        return ExampleVerifier.check(toCheck, ctx.symbols(), ctx.sigs(), ctx.importedPackages(), classes);
+    /**
+     * As {@link #diagnoseModules(Map, Set)}, resolving an import that names no module among
+     * {@code sourcesById} against {@code path}, the way a build does. Without this an editor reports
+     * an unknown module for an import the build resolves, which is the wrong answer twice over.
+     *
+     * <p>A path that is itself wrong — a module missing behind a module — is not reported here. The
+     * editor's job is the source in front of the author, and a broken path is the build's to say.
+     */
+    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                             Set<String> brokenModuleNames,
+                                                             ModulePath path) {
+        return Compilation.ofDocuments(sourcesById, brokenModuleNames, path).diagnostics();
     }
-
-    private static List<Ast.Fake> mergedFakes(List<Ast.Fake> own, List<Ast.Fake> attached) {
-        if (attached == null || attached.isEmpty()) {
-            return own;
-        }
-        List<Ast.Fake> all = new ArrayList<>(own);
-        all.addAll(attached);
-        return all;
-    }
-
-    private static boolean importsAnyFailed(Ast.Module m, Set<String> failed) {
-        for (Ast.Import imp : m.imports()) {
-            if (failed.contains(imp.module())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** The module name from a source's {@code module <name>} header, for identifying a source that will
-     * not parse (so its importers can be skipped, and the LSP can map a broken file to its module).
-     * {@code null} if no header token is found. */
+    /**
+     * The module name from a source's {@code module <name>} header, for identifying a source that
+     * will not parse (so its importers can be skipped, and the LSP can map a broken file to its
+     * module). {@code null} if no header token is found.
+     *
+     * <p>Only for a source a compilation does not have. Which module a source is part of is
+     * {@link souther.compiler.query.Front.ModuleOf}'s to answer, and this cannot answer it: an
+     * {@code examples for} file writes no header and is part of a module all the same, so what
+     * comes back here is nothing rather than the module its rows are for.
+     */
     public static String moduleNameFromHeader(String source) {
         java.util.regex.Matcher mt = java.util.regex.Pattern
                 .compile("(?m)^\\s*module\\s+([\\p{L}\\p{N}_.]+)").matcher(source);
         return mt.find() ? mt.group(1) : null;
     }
-
-    /** Modules in dependency order (each module after the modules it imports). A cycle is E1501,
-     * recorded on the source of the module where the back edge is found; cyclic modules are left out
-     * of the order. */
-    private static List<Ast.Module> dependencyOrder(Map<String, Ast.Module> byName,
-                                                    Map<String, String> idByName,
-                                                    Map<String, List<Diagnostic>> result) {
-        List<Ast.Module> order = new ArrayList<>();
-        Set<String> done = new HashSet<>();
-        Set<String> onStack = new LinkedHashSet<>();
-        for (Ast.Module m : byName.values()) {
-            orderVisit(m.name(), byName, idByName, done, onStack, order, result);
-        }
-        return order;
-    }
-
-    private static void orderVisit(String name, Map<String, Ast.Module> byName, Map<String, String> idByName,
-                                   Set<String> done, Set<String> onStack, List<Ast.Module> order,
-                                   Map<String, List<Diagnostic>> result) {
-        if (done.contains(name)) {
-            return;
-        }
-        Ast.Module m = byName.get(name);
-        if (m == null) {
-            return;
-        }
-        onStack.add(name);
-        for (Ast.Import imp : m.imports()) {
-            if (onStack.contains(imp.module())) {
-                result.get(idByName.get(name)).add(
-                        new CompileException(imp.pos(), "E1501", "Cyclic module dependency detected.")
-                                .diagnostic());
-                onStack.remove(name);
-                done.add(name);
-                return;   // leave the cyclic module out of the order
-            }
-            if (byName.containsKey(imp.module())) {
-                orderVisit(imp.module(), byName, idByName, done, onStack, order, result);
-            }
-        }
-        onStack.remove(name);
-        done.add(name);
-        order.add(m);
-    }
-
-    /** Rebuilds each module with the examples and fakes from its attached {@code examples for} files
-     * appended; an attached file whose target module is absent is E1907. */
-    private static List<Ast.Module> mergeAttachedExamples(
-            List<Ast.Module> modules, Map<String, List<Ast.Example>> attached,
-            Map<String, List<Ast.Fake>> attachedFakes) {
-        if (attached.isEmpty() && attachedFakes.isEmpty()) {
-            return modules;
-        }
-        List<Ast.Module> out = new ArrayList<>();
-        for (Ast.Module m : modules) {
-            List<Ast.Example> extra = attached.remove(m.name());
-            List<Ast.Fake> extraFakes = attachedFakes.remove(m.name());
-            if ((extra == null || extra.isEmpty()) && (extraFakes == null || extraFakes.isEmpty())) {
-                out.add(m);
-                continue;
-            }
-            List<Ast.Example> mergedEx = new ArrayList<>(m.examples());
-            if (extra != null) {
-                mergedEx.addAll(extra);
-            }
-            List<Ast.Fake> mergedFk = new ArrayList<>(m.fakes());
-            if (extraFakes != null) {
-                mergedFk.addAll(extraFakes);
-            }
-            out.add(new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                    m.defs(), m.behaviors(), m.fns(), mergedEx, mergedFk, m.exampleFileTarget(), m.pos()));
-        }
-        String orphan = !attached.isEmpty() ? attached.keySet().iterator().next()
-                : (!attachedFakes.isEmpty() ? attachedFakes.keySet().iterator().next() : null);
-        if (orphan != null) {
-            throw CompileException.of(
-                    Diagnostic.of("E1907", "check.example.notarget").title("check.example.title")
-                            .at((SourcePos) null).args(orphan).build(),
-                    "an `examples for " + orphan + "` file names a module that is not being compiled");
-        }
-        return out;
-    }
-
-    /** Signatures of the behaviors {@code m} imports from other modules (spec 4, 14), so a
-     * composition here can name one as a stage. The declaring module's own signatures are computed
-     * against its visible defs; a behavior it in turn imports is out of scope for now. */
-    private static Map<String, TypeChecker.Sig> importedBehaviorSigs(
-            Ast.Module m, Map<String, Ast.Module> registry) {
-        Map<String, TypeChecker.Sig> result = new HashMap<>();
-        for (Ast.Import imp : m.imports()) {
-            Ast.Module src = registry.get(imp.module());
-            if (src == null) {
-                continue; // an unknown module is reported by visibleDefs
-            }
-            Set<String> behaviors = behaviorNames(src);
-            Map<String, TypeChecker.Sig> srcSigs = null;
-            for (String name : imp.names()) {
-                if (!behaviors.contains(name)) {
-                    continue;
-                }
-                if (srcSigs == null) {
-                    // The declaring module may itself import the behaviors its definitions compose
-                    // (an import chain deeper than one hop), so seed its own imported signatures
-                    // when computing its signatures — recursively, up the import graph. Cycles are
-                    // already rejected by detectCycles, so this terminates.
-                    srcSigs = TypeChecker.signatures(src, visibleDefs(src, registry),
-                            importedBehaviorSigs(src, registry));
-                }
-                result.put(name, srcSigs.get(name));
-            }
-        }
-        return result;
-    }
-
-    private static Set<String> behaviorNames(Ast.Module m) {
-        Set<String> names = new HashSet<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
-            names.add(b.name());
-        }
-        return names;
-    }
-
-    /** The behaviors {@code m} imports that are injection targets in their declaring module (a
-     * SpecBehavior with no fn — spec 13.2). A composition here that names one as a stage inherits
-     * it as an inferred requirement, so the consuming module injects and binds it (spec 14.3). */
-    private static Set<String> importedInjectedBehaviors(Ast.Module m, Map<String, Ast.Module> registry) {
-        Set<String> result = new HashSet<>();
-        for (Ast.Import imp : m.imports()) {
-            Ast.Module src = registry.get(imp.module());
-            if (src == null) {
-                continue;
-            }
-            Set<String> injected = injectedNames(src);
-            for (String name : imp.names()) {
-                if (injected.contains(name)) {
-                    result.add(name);
-                }
-            }
-        }
-        return result;
-    }
-
-    /** The injection-target behaviors of a module: a SpecBehavior with no matching fn (spec 13.2). */
-    private static Set<String> injectedNames(Ast.Module m) {
-        Set<String> fnNames = new HashSet<>();
-        for (Ast.FnDef f : m.fns()) {
-            fnNames.add(f.name());
-        }
-        Set<String> injected = new HashSet<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
-            if (b instanceof Ast.SpecBehavior && !fnNames.contains(b.name())) {
-                injected.add(b.name());
-            }
-        }
-        return injected;
-    }
-
-    /** Own definitions plus imported ones, validated against the source module's {@code exposing}. */
-    private static Map<String, Ast.Def> visibleDefs(Ast.Module m, Map<String, Ast.Module> registry) {
-        Map<String, Ast.Def> defs = new HashMap<>(TypeChecker.symbols(m));
-        for (Ast.Import imp : m.imports()) {
-            Ast.Module src = registry.get(imp.module());
-            if (src == null) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.import.unknownmodule").title("check.module.title")
-                                .at(imp.pos()).args(imp.module()).build(),
-                        "unknown module `" + imp.module() + "`");
-            }
-            Map<String, Ast.Def> srcDefs = TypeChecker.symbols(src);
-            Set<String> exposed = exposedBaseNames(src);
-            for (String name : imp.names()) {
-                if (!exposed.contains(name)) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.notexposed").title("check.module.title")
-                                    .at(imp.pos()).args(name, imp.module()).build(),
-                            "`" + name + "` is not exposed by `" + imp.module() + "`");
-                }
-                Ast.Def d = srcDefs.get(name);
-                if (d == null) {
-                    // a behavior import is resolved separately (importedBehaviorSigs); it is not a
-                    // data Def, so it does not go into the symbols map.
-                    if (behaviorNames(src).contains(name)) {
-                        continue;
-                    }
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.notdefined").title("check.module.title")
-                                    .at(imp.pos()).args(name, imp.module()).build(),
-                            "`" + name + "` is not defined in `" + imp.module() + "`");
-                }
-                if (defs.put(name, d) != null) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.conflict").title("check.module.title")
-                                    .at(imp.pos()).args(name).build(),
-                            "imported `" + name + "` conflicts with a local definition");
-                }
-            }
-        }
-        return defs;
-    }
-
-    /** Maps each imported type name to its declaring module, for cross-package class references. */
-    private static Map<String, String> importedPackages(Ast.Module m) {
-        Map<String, String> pkg = new HashMap<>();
-        for (Ast.Import imp : m.imports()) {
-            for (String name : imp.names()) {
-                pkg.put(name, imp.module());
-            }
-        }
-        return pkg;
-    }
-
-    /** The base type names a module exposes (dropping any {@code .decoder}/{@code .encoder} member). */
-    private static Set<String> exposedBaseNames(Ast.Module m) {
-        Set<String> names = new HashSet<>();
-        for (String e : m.exposing()) {
-            int dot = e.indexOf('.');
-            names.add(dot < 0 ? e : e.substring(0, dot));
-        }
-        return names;
-    }
-
-    private static void detectCycles(List<Ast.Module> modules, Map<String, Ast.Module> byName) {
-        Set<String> done = new HashSet<>();
-        Set<String> stack = new HashSet<>();
-        for (Ast.Module m : modules) {
-            visit(m.name(), byName, done, stack);
-        }
-    }
-
-    private static void visit(String name, Map<String, Ast.Module> byName,
-                              Set<String> done, Set<String> stack) {
-        if (done.contains(name)) {
-            return;
-        }
-        stack.add(name);
-        Ast.Module m = byName.get(name);
-        if (m != null) {
-            for (Ast.Import imp : m.imports()) {
-                if (stack.contains(imp.module())) {
-                    throw new CompileException(imp.pos(), "E1501", "Cyclic module dependency detected.");
-                }
-                if (byName.containsKey(imp.module())) {
-                    visit(imp.module(), byName, done, stack);
-                }
-            }
-        }
-        stack.remove(name);
-        done.add(name);
-    }
-
     /** Compiles source and writes each generated class under {@code outDir}. */
     public static void compileToDir(String source, Path outDir) throws IOException {
         for (Map.Entry<String, byte[]> entry : compile(source).entrySet()) {

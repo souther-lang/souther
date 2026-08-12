@@ -1,22 +1,52 @@
 // The Int stdlib. Like every other core module its functions are declared here — the declaration,
 // not a hardcoded compiler table, carries the signature (§intrinsics). Each maps to a JVM kernel in
-// souther-runtime's IntMath: add/subtract/multiply abort on overflow, modBy aborts on a zero divisor.
+// souther-runtime's IntMath: add/subtract/multiply abort on overflow, floorMod aborts on a zero
+// divisor.
 //
 // The `+ - * /` operators (and `< <= > >=`) stay compiler-integrated: they are syntax and carry the
-// closed-newtype arithmetic rules, which a plain function cannot. `divide`/`remainder` also stay
-// compiler-integrated for now — they return `Int | DivisionByZero`, a primitive-headed union a core
-// declaration cannot yet express. See the stdlib implementation-location policy.
+// closed-newtype arithmetic rules, which a plain function cannot. `divide`/`truncatingRemainder` also
+// stay compiler-integrated for now — they return `Int | DivisionByZero`, a primitive-headed union a
+// core declaration cannot yet express. See the stdlib implementation-location policy.
 module souther.int
 
-let add (a: Int, b: Int) : Int = intrinsic "int.add"
-let subtract (a: Int, b: Int) : Int = intrinsic "int.subtract"
-let multiply (a: Int, b: Int) : Int = intrinsic "int.multiply"
+let divide (dividend: Int, divisor: Int): Int | DivisionByZero = intrinsic "int.divide"
+
+// `truncatingRemainder` is the remainder of a division whose quotient is truncated toward zero, so
+// its result takes the sign of the dividend: `truncatingRemainder(-7, 3)` is `-1`. The name carries
+// that, because a bare `remainder` (or `mod`) means the truncated one in some languages and the
+// floored one in others, and the two disagree on exactly the values a domain is least likely to test.
+let truncatingRemainder (dividend: Int, divisor: Int): Int | DivisionByZero =
+    intrinsic "int.truncatingRemainder"
+let add (a: Int, b: Int): Int = intrinsic "int.add"
+let subtract (a: Int, b: Int): Int = intrinsic "int.subtract"
+let multiply (a: Int, b: Int): Int = intrinsic "int.multiply"
 
 // compare returns -1, 0, or 1 (the function form of the comparison operators).
-let compare (a: Int, b: Int) : Int = intrinsic "int.compare"
+let compare (a: Int, b: Int): Int = intrinsic "int.compare"
 
-// modBy is Elm-style floored modulo: the divisor comes first (pipe convention, subject last), the
-// result takes the sign of the divisor, and a zero divisor *aborts* like `/` — so the result is a
-// plain Int and reads cleanly in an invariant (`invariant Int.modBy(12, value) == 0`). Use
-// `remainder` when a zero divisor must be a business case instead of an abort.
-let modBy (divisor: Int, n: Int) : Int = intrinsic "int.modBy"
+// `floorMod` is the remainder of a division whose quotient is floored, so its result takes the sign
+// of the divisor: `floorMod(-7, 3)` is `2`, where `truncatingRemainder(-7, 3)` is `-1`. Both take the
+// dividend first and the divisor second, as `divide` does: a binary arithmetic operation keeps its
+// operands in the order the mathematics writes them, and the pipe's subject-last rule is for the
+// unary ones.
+//
+// A zero divisor aborts, so the result is a plain Int and reads in an invariant
+// (`invariant Int.floorMod(value, 12) == 0`). That makes it the one standard-library function whose
+// failure is not in its type; `truncatingRemainder` beside it shows the rule it is the exception to.
+// Use that one where a zero divisor must be a business case.
+let floorMod (dividend: Int, divisor: Int): Int = intrinsic "int.floorMod"
+
+// Elm's `Basics` arithmetic, written as ordinary helpers because `<` and `-` already say it all.
+// `abs` negates with the `-` operator, so the one value with no positive counterpart (the smallest
+// Int) aborts on overflow rather than silently staying negative — the same treatment the rest of
+// this module gives an overflow. It is what turns a signed difference into a distance:
+// `Int.abs(Date.daysBetween(a, b))` says "how far apart" without the caller choosing an argument
+// order to dodge the sign.
+//
+// `min` / `max` are the two-value form the comparison operators imply; `List.min` / `List.max` are
+// the list form and answer an optional, since a list may be empty. `clamp(lo, hi, n)` holds a value
+// inside a range (Elm's `clamp low high number`), the subject last as the pipe convention wants.
+let abs (n: Int): Int = if n < 0 then 0 - n else n
+let min (a: Int, b: Int): Int = if a < b then a else b
+let max (a: Int, b: Int): Int = if a > b then a else b
+let clamp (lo: Int, hi: Int, n: Int): Int = if n < lo then lo else if n > hi then hi else n

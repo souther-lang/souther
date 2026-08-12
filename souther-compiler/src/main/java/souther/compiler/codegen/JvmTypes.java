@@ -1,17 +1,18 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.Type;
-
+import souther.compiler.types.Type;
+import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
-import java.lang.classfile.Label;
+import java.lang.classfile.TypeAnnotation;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static souther.compiler.codegen.Descriptors.*;
 
@@ -36,15 +37,25 @@ final class JvmTypes {
         }
     }
 
-    /** The boxed JVM class for a primitive type, or {@code null} for a non-primitive. */
+    /** The boxed JVM class for a boxable primitive, or {@code null} where the type has none —
+     * a non-primitive, or {@code Raw}, which no stage produces. */
     static ClassDesc boxedPrim(Type t) {
-        if (t == Type.INT) return CD_Long;
-        if (t == Type.BOOL) return CD_Boolean;
-        if (t == Type.DECIMAL) return CD_BigDecimal;
-        if (t == Type.STRING) return CD_String;
-        if (t == Type.DATE) return CD_LocalDate;
-        if (t == Type.DATETIME) return CD_LocalDateTime;
-        return null;
+        return switch (t) {
+            case Type.Prim p -> switch (p) {
+                case INT -> CD_Long;
+                case BOOL -> CD_Boolean;
+                case DECIMAL -> CD_BigDecimal;
+                case STRING -> CD_String;
+                case DATE -> CD_LocalDate;
+                case TIME -> CD_LocalTime;
+                case DATETIME -> CD_LocalDateTime;
+                case INSTANT -> CD_Instant;
+                case RAW -> null;
+            };
+            case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
+                 Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
+                 Type.TupleOf _, Type.Erroneous _ -> null;
+        };
     }
 
     /** True when {@code t} is carried as a reference on the JVM (everything but Int and Bool). */
@@ -91,9 +102,14 @@ final class JvmTypes {
 
     /** Emits a package-private default constructor that chains to {@code Object.<init>}. */
     static void emitDefaultCtor(ClassBuilder cb) {
+        emitDefaultCtor(cb, CD_Object);
+    }
+
+    /** Emits a package-private default constructor that chains to {@code superCd}'s. */
+    static void emitDefaultCtor(ClassBuilder cb, ClassDesc superCd) {
         cb.withMethodBody("<init>", MTD_void, 0, code -> {
             code.aload(0);
-            code.invokespecial(CD_Object, "<init>", MTD_void);
+            code.invokespecial(superCd, "<init>", MTD_void);
             code.return_();
         });
     }
@@ -107,25 +123,70 @@ final class JvmTypes {
         });
     }
 
+    /** The field a class with no state holds its one instance in; {@link #loadSharedInstance} reads it. */
+    private static final String SHARED_INSTANCE = "INSTANCE";
+
     /**
-     * Emits value equality for two {@code Decimal}s on the stack, leaving a boolean.
+     * Gives a class with no state one instance of itself, so every use site loads it instead of
+     * allocating: a unit data, a lambda that captures nothing, a decoder/encoder implementation.
+     *
+     * <p>{@code extraInit} folds any other static setup into the single {@code <clinit>} a class may
+     * carry — a second one is a duplicate method and a {@code ClassFormatError} at load time. This is
+     * the only place in the backend that writes a {@code <clinit>}, which is what keeps that true.
+     */
+    static void emitSharedInstance(ClassBuilder cb, ClassDesc cd, int fieldFlags,
+                                   Consumer<CodeBuilder> extraInit) {
+        cb.withField(SHARED_INSTANCE, cd, fieldFlags | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
+        cb.withMethodBody(ConstantDescs.CLASS_INIT_NAME, MTD_void, ClassFile.ACC_STATIC, code -> {
+            if (extraInit != null) {
+                extraInit.accept(code);
+            }
+            code.new_(cd);
+            code.dup();
+            code.invokespecial(cd, "<init>", MTD_void);
+            code.putstatic(cd, SHARED_INSTANCE, cd);
+            code.return_();
+        });
+    }
+
+    /** {@link #emitSharedInstance} with a {@code public} field and no other static setup. */
+    static void emitSharedInstance(ClassBuilder cb, ClassDesc cd) {
+        emitSharedInstance(cb, cd, ClassFile.ACC_PUBLIC, null);
+    }
+
+    /** Loads the one instance {@link #emitSharedInstance} gave {@code cd}. */
+    static void loadSharedInstance(CodeBuilder code, ClassDesc cd) {
+        code.getstatic(cd, SHARED_INSTANCE, cd);
+    }
+
+    /**
+     * Emits value equality for two values on the stack, leaving a boolean.
+     *
+     * <p>What sameness means is the runtime's to say, so this calls {@code Values.equal} rather than
+     * emitting the rule a second time. {@code decimal} picks the overload the static type allows: a
+     * pair of Decimals goes to the one that takes them, which skips the tests the general form makes
+     * to find out what it was handed.
      *
      * <p>{@code BigDecimal.equals} also compares the scale, so it calls 1.0 and 1.00 different.
-     * Scale is how a number was written, not what it is (spec 7.1): the same amount arrives with
+     * Scale is how a number was written, not what it is (spec §primitives): the same amount arrives with
      * a different scale depending on whether it was read from JSON or a DB column, and a money
-     * type whose equality turns on that is a trap. Compare by value instead — as Clojure, Scala
-     * and Ceylon all chose for the same reason.
+     * type whose equality turns on that is a trap. Clojure, Scala and Ceylon all chose the same way.
      */
-    static void emitDecimalEquals(CodeBuilder code) {
-        code.invokevirtual(CD_BigDecimal, "compareTo", MTD_BD_compareTo);
-        Label eq = code.newLabel();
-        Label done = code.newLabel();
-        code.ifeq(eq);
-        code.iconst_0();
-        code.goto_(done);
-        code.labelBinding(eq);
-        code.iconst_1();
-        code.labelBinding(done);
+    static void emitValueEquals(CodeBuilder code, boolean decimal) {
+        if (decimal) {
+            code.invokestatic(CD_Values, "equal", MTD_Values_equalDecimal);
+        } else {
+            code.invokestatic(CD_Values, "equal", MTD_Values_equal);
+        }
+    }
+
+    /** Emits the hash that agrees with {@link #emitValueEquals}, for a value on the stack. */
+    static void emitValueHash(CodeBuilder code, boolean decimal) {
+        if (decimal) {
+            code.invokestatic(CD_Values, "hash", MTD_Values_hashDecimal);
+        } else {
+            code.invokestatic(CD_Values, "hash", MTD_Values_hash);
+        }
     }
 
     // --- reference-resolving members: these reach the module's package map through the context ---
@@ -133,22 +194,40 @@ final class JvmTypes {
     /** The JVM class carrying a value of {@code type}: primitives unboxed, containers as their raw
      * interface, a data reference through {@link CodegenContext#caseClass}. */
     static ClassDesc jvmType(Type type, CodegenContext ctx) {
-        if (type == Type.INT) return ConstantDescs.CD_long;
-        if (type == Type.STRING) return CD_String;
-        if (type == Type.BOOL) return ConstantDescs.CD_boolean;
-        if (type == Type.DECIMAL) return CD_BigDecimal;
-        if (type == Type.DATE) return CD_LocalDate;
-        if (type == Type.DATETIME) return CD_LocalDateTime;
-        if (type instanceof Type.OptionOf) return CD_Option;
-        if (type instanceof Type.ListOf) return CD_List;
-        if (type instanceof Type.MapOf) return CD_Map;
-        if (type instanceof Type.SetOf) return CD_Set;
-        if (type instanceof Type.Union) return CD_Object;
-        if (type instanceof Type.Var) return CD_Object;   // a type variable is erased to Object
-        if (type instanceof Type.Nothing) return CD_Object;   // an empty collection's element bottom
-        if (type instanceof Type.FnOf) return CD_Fn;
-        if (type instanceof Type.TupleOf) return CD_Object.arrayType();   // a tuple is an Object[]
-        return ctx.caseClass(((Type.Ref) type).name());
+        return switch (type) {
+            case Type.Prim p -> switch (p) {
+                case INT -> ConstantDescs.CD_long;
+                case STRING -> CD_String;
+                case BOOL -> ConstantDescs.CD_boolean;
+                case DECIMAL -> CD_BigDecimal;
+                case DATE -> CD_LocalDate;
+                case TIME -> CD_LocalTime;
+                case DATETIME -> CD_LocalDateTime;
+                case INSTANT -> CD_Instant;
+                // reserved: no stage produces one, so none reaches codegen
+                case RAW -> throw new IllegalStateException("no JVM carrier for Raw");
+            };
+            case Type.OptionOf _ -> CD_Option;
+            case Type.ListOf _ -> CD_List;
+            case Type.MapOf _ -> CD_Map;
+            case Type.SetOf _ -> CD_Set;
+            case Type.Union _ -> CD_Object;
+            case Type.Var _ -> CD_Object;   // a type variable is erased to Object
+            // A variable an application left open has no erasure, because it is not a type: it is a
+            // question the elaborator answers and settles before anything is emitted. One reaching
+            // here is that having been skipped.
+            case Type.MetaVar m -> throw new IllegalStateException(
+                    "a type an application had not decided reached code generation: " + m);
+            case Type.Nothing _ -> CD_Object;   // an empty collection's element bottom
+            case Type.FnOf _ -> CD_Fn;
+            // a pair is typed as the pair, so its elements are read as fields rather than through
+            // the Tuple interface: every fold-carried tuple is one, and that read is per element
+            case Type.TupleOf tu -> tu.elements().size() == 2 ? CD_TuplePair : CD_Tuple;
+            case Type.Ref r -> ctx.caseClass(r.name());
+            // the checker refuses both before emitting a module, so meeting one is a compiler fault
+            case Type.Never _ -> throw new IllegalStateException("no JVM carrier for Never");
+            case Type.Erroneous _ -> throw new IllegalStateException("no JVM carrier for ?");
+        };
     }
 
     static ClassDesc[] fieldDescs(Map<String, Type> fields, CodegenContext ctx) {
@@ -157,6 +236,50 @@ final class JvmTypes {
             descs.add(jvmType(t, ctx));
         }
         return descs.toArray(new ClassDesc[0]);
+    }
+
+    /**
+     * {@code @NonNull} for every reference position of {@code type} at {@code target}: the type itself
+     * and, for a container, each type argument down to the innermost element ({@code List<Map<K,V>>}
+     * annotates four positions). A type argument is always a reference — an {@code Int} element is a
+     * {@code Long} — so only a primitive at the root has no position at all, and that root returns an
+     * empty list.
+     *
+     * <p>{@code @NullMarked} on the class says the same thing once, and a Kotlin reader acts on it for
+     * every member except a record component's accessor, which it types from the component and so
+     * reaches without applying the marking. Those accessors carry this instead (spec §jvm-nullness).
+     */
+    static List<TypeAnnotation> nonNullPositions(Type type, TypeAnnotation.TargetInfo target) {
+        List<TypeAnnotation> out = new ArrayList<>();
+        if (type != Type.INT && type != Type.BOOL) {
+            collectNonNull(type, List.of(), target, out);
+        }
+        return out;
+    }
+
+    private static void collectNonNull(Type type, List<TypeAnnotation.TypePathComponent> path,
+                                       TypeAnnotation.TargetInfo target, List<TypeAnnotation> out) {
+        out.add(TypeAnnotation.of(target, path, Annotation.of(CD_NonNull)));
+        switch (type) {
+            case Type.ListOf l -> collectNonNull(l.element(), typeArgument(path, 0), target, out);
+            case Type.SetOf s -> collectNonNull(s.element(), typeArgument(path, 0), target, out);
+            case Type.OptionOf o -> collectNonNull(o.element(), typeArgument(path, 0), target, out);
+            case Type.MapOf m -> {
+                collectNonNull(m.key(), typeArgument(path, 0), target, out);
+                collectNonNull(m.value(), typeArgument(path, 1), target, out);
+            }
+            default -> {
+            }
+        }
+    }
+
+    /** {@code path} extended to reach the {@code index}-th type argument of the type it names. */
+    private static List<TypeAnnotation.TypePathComponent> typeArgument(
+            List<TypeAnnotation.TypePathComponent> path, int index) {
+        List<TypeAnnotation.TypePathComponent> deeper = new ArrayList<>(path);
+        deeper.add(TypeAnnotation.TypePathComponent.of(
+                TypeAnnotation.TypePathComponent.Kind.TYPE_ARGUMENT, index));
+        return List.copyOf(deeper);
     }
 
     /**

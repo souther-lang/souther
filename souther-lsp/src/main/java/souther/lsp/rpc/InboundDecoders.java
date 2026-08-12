@@ -7,11 +7,11 @@ import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
 import tools.jackson.databind.JsonNode;
 
-import java.util.List;
 import java.util.Optional;
 
 import static net.unit8.raoh.json.JsonDecoders.combine;
 import static net.unit8.raoh.json.JsonDecoders.field;
+import static net.unit8.raoh.json.JsonDecoders.flat;
 import static net.unit8.raoh.json.JsonDecoders.int_;
 import static net.unit8.raoh.json.JsonDecoders.list;
 import static net.unit8.raoh.json.JsonDecoders.string;
@@ -20,6 +20,12 @@ import static net.unit8.raoh.json.JsonDecoders.string;
  * Raoh decoders for the inbound LSP payloads. This is where the language server dogfoods Raoh: each
  * client message is validated and shaped by a declarative decoder over the Jackson JSON tree, rather
  * than by ad-hoc {@code node.get(...)} navigation.
+ *
+ * <p>{@code field(...)} answers a {@code CombinePart} rather than a {@code Decoder}: what field a
+ * component consumes is part of a schema, and a plain decoder wrapper would erase it. So a part used
+ * as a decoder in its own right — read on its own, or nested inside another field — says
+ * {@code asDecoder()}, and a decoder that reads the whole input as one component of a combine says
+ * {@code flat(...)}.
  */
 public final class InboundDecoders {
 
@@ -29,18 +35,19 @@ public final class InboundDecoders {
     /** {@code { textDocument: { uri, text } }} */
     public static final Decoder<JsonNode, Params.DidOpen> DID_OPEN =
             field("textDocument",
-                    combine(field("uri", string()), field("text", string())).map(Params.DidOpen::new));
+                    combine(field("uri", string()), field("text", string())).map(Params.DidOpen::new))
+                    .asDecoder();
 
     /** {@code { textDocument: { uri }, contentChanges: [ { text }, ... ] }} — full sync, so the last
      * change carries the whole document. */
     public static final Decoder<JsonNode, Params.DidChange> DID_CHANGE =
-            combine(field("textDocument", field("uri", string())),
-                    field("contentChanges", list(field("text", string()))))
+            combine(field("textDocument", field("uri", string()).asDecoder()),
+                    field("contentChanges", list(field("text", string()).asDecoder())))
                     .map((uri, texts) -> new Params.DidChange(uri, texts.get(texts.size() - 1)));
 
     /** {@code { textDocument: { uri } }} */
     public static final Decoder<JsonNode, Params.DocRef> DOC_REF =
-            field("textDocument", field("uri", string())).map(Params.DocRef::new);
+            field("textDocument", field("uri", string()).asDecoder()).asDecoder().map(Params.DocRef::new);
 
     /** A {@code { line, character }} position object. */
     private static final Decoder<JsonNode, Position> POSITION =
@@ -48,18 +55,18 @@ public final class InboundDecoders {
 
     /** {@code { textDocument: { uri }, position: { line, character } }} */
     public static final Decoder<JsonNode, Params.PositionParams> POSITION_PARAMS =
-            combine(field("textDocument", field("uri", string())), field("position", POSITION))
+            combine(field("textDocument", field("uri", string()).asDecoder()), field("position", POSITION))
                     .map(Params.PositionParams::new);
 
     /** {@code { textDocument: { uri }, position: { line, character }, newName }} */
     public static final Decoder<JsonNode, Params.RenameParams> RENAME =
-            combine(POSITION_PARAMS, field("newName", string()))
+            combine(flat(POSITION_PARAMS), field("newName", string()))
                     .map((pos, newName) ->
                             new Params.RenameParams(pos.uri(), pos.position(), newName));
 
     /** {@code { textDocument: { uri }, range: { start, end } }} — the codeAction context is ignored. */
     public static final Decoder<JsonNode, Params.CodeActionParams> CODE_ACTION =
-            combine(field("textDocument", field("uri", string())),
+            combine(field("textDocument", field("uri", string()).asDecoder()),
                     field("range", combine(field("start", POSITION), field("end", POSITION)).map(Range::new)))
                     .map(Params.CodeActionParams::new);
 

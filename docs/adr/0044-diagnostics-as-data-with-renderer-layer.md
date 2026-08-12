@@ -1,6 +1,104 @@
 # ADR-0044: Diagnostics are data rendered by a locale-aware layer
 
-Status: Accepted
+Status: Accepted. Revised 2026-08-07 — see *Revision*.
+
+## Revision (2026-08-07)
+
+The original Decision resolved the locale as `--lang` > `SOUTHER_LANG` > the JVM default > Japanese.
+The last two steps are withdrawn: the chain is now `--lang` > `SOUTHER_LANG` > English, and the JVM
+default locale is not read at all. `Messages.defaultLocale()` answers English and is the one place
+the default is written.
+
+Everything the toolchain ships to be read is in English — `specification.adoc`, every bundled
+library topic, the CLI's own topics — so a reader on a Japanese desktop who passed no flag was
+answered out of `messages_ja.properties` while every document that would explain the answer was in
+the other language. The JVM default is what made this depend on where the compiler ran: it says
+which language the machine's interface is in, which for a toolchain documented in one language
+cannot be evidence about the reader, because most values of it select an answer with nothing behind
+it to read.
+
+The rule this leaves is about the default and only the default: when nothing names a language, a
+diagnostic is answered in the language the shipped documentation is written in. Naming one is a
+different act, and there are three sources of a language, not one.
+
+- Nothing names one — English, because that is the language the shipped core documentation is
+  written in.
+- Something names one: `--lang`, `SOUTHER_LANG`, or an adapter's own option — that language,
+  whether or not documentation exists in it.
+- The machine's locale — never, at any entry point.
+
+`SOUTHER_LANG` belongs to the second and not the third. It is Souther's own variable, not `LANG`:
+nothing has a value for it until somebody writes one, so a session answered in French is a session
+that was configured for French. What the JVM default supplied was a language nobody chose, which is
+the whole of what was withdrawn.
+
+So `messages_ja.properties` stays and `--lang ja` still answers out of it. What ships in Japanese is
+diagnostic rendering; the language of the documentation is the reason English is the default, and
+not a ceiling on which languages may be rendered. The two need not move together because the code
+holds them apart: `E2011` is the same string in every language, and `souther doc e2011` answers out
+of the specification in English, so a reader answered in a language the documents are not written in
+still has the way back. Requiring the catalogs to offer only languages the documentation is written
+in would be a policy about what may be translated first, and nothing here argues for one. Readers
+who were being served Japanese by default keep it with `SOUTHER_LANG=ja` in a shell profile.
+
+What does bind is each catalog on its own: every catalog that ships defines the base's complete key
+set, and is valid on its own terms — no duplicate key, every message a well-formed `MessageFormat`
+pattern, every standard-library name it quotes one the library publishes. A key also names the same
+arguments everywhere it is written: the site passes one argument list without knowing which language
+will render it, so which arguments a key takes belongs to the key and not to a translation, while
+the order they appear in belongs to the translation. The build discovers the
+catalogs from the tree rather than naming them, so a catalog added tomorrow is under all of it, and
+one language has one catalog: two files naming it are two answers to one lookup, settled by class
+path order.
+
+Every message is a pattern, and is rendered as one whether or not the site passed anything to put
+in it. `Messages.get` used to return a message that took no arguments as written, which left the
+catalog's own text meaning two things: a message that quoted a brace so it would survive formatting
+was shown to the reader with the quotes still in it, and a message that did not quote one was a
+pattern nobody could format — the second of which throws the moment somebody gives that diagnostic
+an argument. Neither is visible in the message. So a literal brace is written `'{'` and a literal
+apostrophe `''`, in every message, and the build refuses a catalog the formatter cannot read. The
+formatter refusing at run time is answered with the text as written, for the same reason a missing
+key renders as itself: a compiler reporting an error is the worst place to raise another one.
+
+That narrows what the fallback is for. It was the migration mechanism — a message became Japanese as
+it was migrated and read English until then, and a catalog was allowed to ship half-written. It is
+now a fail-safe: `ResourceBundle` still answers from the base for a key a locale is missing, and a
+key missing everywhere still renders as itself rather than stopping a compile, but no catalog that
+ships may depend on either. An incomplete catalog does not fail where anyone can see it; it answers
+one diagnostic half in each language, the title and the hint from the base and the message from the
+catalog, which is what a third catalog of three keys was found doing.
+
+Amending in place rather than superseding: what changed is a default, the reason for it, and what a
+catalog has to be to ship — not the shape of the decision. Diagnostics are still data rendered by a
+locale-aware layer, and the code
+and type strings are still locale-independent, which is what makes a code a lookup that survives
+being answered in a language the reader does not read.
+
+Three surfaces answer a reader, and each writes its own policy where the surface is. The CLI
+resolves from `--lang`, the annotation processor from `souther.lang`, and a language server names
+English outright, because an editor tells it which files the workspace holds and nothing about which
+language its user reads. Not one table in the diagnostics layer: an adapter's language comes from
+the adapter's own option, and a layer holding the list would know every adapter in order to answer a
+question each of them can answer for itself. What the layer does hold is that each surface answers
+once — a surface picking a language twice has no policy, only two sites that happened to agree.
+
+The one-line body a `CompileException` builds its `getMessage()` from is not one of them and takes no
+language at all. No adapter prints it while the exception carries a diagnostic, and the sites that
+build it always supply one, so it is read by callers holding the exception rather than by anyone it
+is written for. What it has to do is not change when the language a reader is answered in is decided
+again, which is what `Messages.defaultLocale()` was the wrong way to say: the fallback is the answer
+to *which language when nobody named one*, so a text that reads it moves whenever that is settled
+again, and the text of a failing example was Japanese for that reason and no other. `legacyBody` now
+builds it and takes no locale, and `defaultLocale()` is private — the resolution's own last step,
+reachable only from the resolution.
+
+Which means no locale has to stop meaning the default one. A message lookup used to read a null
+locale as the default, which is the same reach spelled so that nothing looking for a locale being
+chosen would see it: a site with no reader to resolve for passes nothing and is answered out of the
+language chosen for readers who named none. So `Messages.get`, `Messages.has` and
+`DiagnosticRenderer.body` refuse a null locale. A caller has either resolved a language for a reader
+or is building a text that has no reader, and there is a way to say each.
 
 ## Context
 
@@ -33,9 +131,11 @@ code, a primary `Region`, optional secondary `Region`s each with a label, a mess
 plus arguments, or a compatibility literal), an optional found-vs-expected type pair, hints, and a
 suggestion. A `DiagnosticRenderer` turns it into text — `HumanRenderer` (Elm-style, with color when
 stderr is a TTY) or `JsonRenderer`. Prose comes from a `ResourceBundle` catalog: `messages_ja`
-(default) over an English base (`messages.properties`); a key missing from Japanese falls back to
+(the original default; revised above) over an English base (`messages.properties`); a key missing from Japanese falls back to
 English, a key missing from both renders as itself, so the compiler never crashes on an unmigrated
-site. Locale is resolved once: `--lang` > `SOUTHER_LANG` > the JVM default > Japanese. The code and
+site — the standing of that fallback is narrowed by the *Revision* above, which keeps it as a
+fail-safe and forbids a shipped catalog from depending on it. Locale is resolved once: `--lang` > `SOUTHER_LANG` > the JVM default > Japanese — the last two steps
+withdrawn by the *Revision* above. The code and
 the type strings are locale-independent — the stable identity; titles, messages, hints, and labels
 follow the locale.
 
@@ -72,7 +172,31 @@ Two decisions bound the scope.
   without breaking anything that keys on the code.
 - Full Japanese coverage of all ~180 messages is a follow-through, not a single change: the mechanism
   and the high-value messages ship bilingual, and each remaining message becomes Japanese as it is
-  migrated, falling back to English until then.
+  migrated, falling back to English until then. That was how the coverage was reached; the *Revision*
+  above makes the end state of it a requirement on every catalog that ships, so the next language
+  arrives complete rather than filling in over releases.
 - A multi-file build has no per-diagnostic file identity (SourcePos carries no file), so a snippet is
   quoted only for a single-file compile; a linked build renders the frame and message without the
   source line until a file handle is added to the position.
+
+## Amendment: the file handle is on the position (issue #309)
+
+The last consequence deferred a file handle on the position, and a compile worked out which file a
+report belonged to from the question that found it instead. That holds while each question is about
+one file and stops holding where it is not: a module's `example` rows, fake tables and values are
+written in the module's own source and in any number of attached `examples for` files, and once they
+are gathered under one name a question asked about the module can only answer with the module's own
+file. What the author was then shown was the right line number quoted out of the wrong file — an
+unrelated declaration with a caret in the middle of it.
+
+So `SourcePos` now carries the source it was read from. It is given once, where a position is made
+from a text (`LineIndex`), so no later pass has to reconstruct it, and it reaches every position a
+parse makes without an AST walker. A position read from no source of this compile — a synthesized
+node, the standard library, a module read back off the module path — names none, and a reader falls
+back as it did before.
+
+The source is part of what makes two positions the same position. Line 25 of two files is one
+coordinate and is not one place, and a value whose identity denied one of its components would leave
+"the same position" meaning something different in every container that held one — which is the
+original mistake, re-expressible. Where coordinates alone are wanted, they are compared as
+coordinates.

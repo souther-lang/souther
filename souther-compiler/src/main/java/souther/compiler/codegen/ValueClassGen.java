@@ -1,17 +1,31 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+import souther.compiler.check.TypeOps;
+import souther.compiler.check.MatchElaborator;
 
+import java.lang.classfile.Attribute;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassSignature;
+import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.Signature;
+import java.lang.classfile.TypeAnnotation;
 import java.lang.classfile.attribute.PermittedSubclassesAttribute;
+import java.lang.classfile.attribute.RecordAttribute;
+import java.lang.classfile.attribute.RecordComponentInfo;
+import java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
+import java.lang.constant.DirectMethodHandleDesc;
+import java.lang.constant.DynamicCallSiteDesc;
+import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
@@ -23,15 +37,15 @@ import static souther.compiler.codegen.JvmTypes.*;
 
 /**
  * Generates a data/sum/unit value class: its fields, package-private constructor, accessors, value
- * equality/hashCode, and the invariant-checking {@code __construct} (spec 7, 19). Each type's codecs
- * are emitted by the {@link CodecGen} it holds; body expressions through a {@link BodyGen} built per
- * method.
+ * equality/hashCode, and the invariant-checking {@code __construct} (spec §builtin-types, §jvm-output). Each
+ * type's codecs are emitted by the {@link CodecGen} it holds; body expressions through a {@link BodyGen}
+ * built per method.
  */
 final class ValueClassGen {
 
     private final CodegenContext ctx;
     private final String pkg;
-    private final Map<String, Ast.Def> symbols;
+    private final Symbols symbols;
     private final CodecGen codec;
 
     ValueClassGen(CodegenContext ctx, CodecGen codec) {
@@ -42,6 +56,7 @@ final class ValueClassGen {
     }
 
     private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
+    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
     private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
     private int pub(String name) { return ctx.pub(name); }
@@ -54,27 +69,34 @@ final class ValueClassGen {
 
         out.put(pkg + "." + data.name(), build(cdName, cb -> {
             cb.withFlags(pub(data.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
-            ClassDesc[] ifaces = caseInterfaces(data.name());
-            if (ifaces.length > 0) {
+            cb.withSuperclass(CD_Record);
+            cb.with(recordComponents(fields));
+            List<ClassDesc> ifaces = new ArrayList<>(List.of(caseInterfaces(data.name())));
+            boolean ordered = isOrderedNewtype(data, fields);
+            if (ordered) {
+                ifaces.add(CD_Comparable);
+            }
+            if (!ifaces.isEmpty()) {
                 cb.withInterfaceSymbols(ifaces);
+            }
+            if (ordered) {
+                cb.with(SignatureAttribute.of(ClassSignature.parseFrom(classSignature(cdName, ifaces))));
             }
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 emitField(cb, f.getKey(), f.getValue());
             }
             emitCtor(cb, cdName, fields);
             emitValueEquality(cb, cdName, fields);
-            emitConstructMethod(cb, cdName, data, fields);
-            // An exposed data gets public read accessors so its fields are readable across the
-            // module (package) boundary and from Java (spec 8.5, 19.2). The ctor stays non-public.
-            // A String-backed newtype always exposes its bare `value()`: the encoder reads it to
-            // render a newtype-keyed map's keys bare, even when the newtype itself is unexposed.
-            if (pub(data.name()) != 0 || isStringBackedNewtype(data, fields)) {
-                emitAccessors(cb, cdName, fields);
+            emitToString(cb, cdName, data.name(), fields);
+            if (ordered) {
+                emitCompareTo(cb, cdName, fields.entrySet().iterator().next());
             }
+            emitConstructMethod(cb, cdName, data, fields);
+            emitAccessors(cb, cdName, fields);
             data.decoder().ifPresent(d -> {
                 boolean mapInput = codec.isMapInput(data.name());
                 codec.emitFactory(cb, "decoder", CD_RDecoder, data, "$Dec");
-                if (codec.jsonCompatible(data.name())) codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JSON, mapInput);
+                codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JSON, mapInput);
                 if (codec.recordCompatible(data.name())) codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JOOQ, mapInput);
             });
             data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, "$Enc"));
@@ -83,10 +105,8 @@ final class ValueClassGen {
         data.decoder().ifPresent(dec -> {
             out.put(pkg + "." + data.name() + "$Dec",
                     codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
-            if (codec.jsonCompatible(data.name())) {
-                out.put(pkg + "." + data.name() + "$DecJson",
-                        codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
-            }
+            out.put(pkg + "." + data.name() + "$DecJson",
+                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
             if (codec.recordCompatible(data.name())) {
                 out.put(pkg + "." + data.name() + "$DecRecord",
                         codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
@@ -95,70 +115,219 @@ final class ValueClassGen {
         data.encoder().ifPresent(enc ->
                 out.put(pkg + "." + data.name() + "$Enc", codec.generateEncoderClass(cdName, data, enc)));
 
-        // A CTFE helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that
-        // runs the same invariant bytecode as __construct (via gen.expr), so a constant construction
-        // can be verified at compile time — 金額(-5) is a compile error, not a runtime abort (ADR-0032).
-        if (data.newtype() && !TypeChecker.effectiveInvariants(data, symbols).isEmpty()) {
+        // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
+        // same invariant bytecode as __construct (via gen.expr). Two callers: a constant construction
+        // is verified at compile time through it — 金額(-5) is a compile error, not a runtime abort
+        // (ADR-0032) — and the derived decoder passes it to Raoh's `refine` for an invariant no
+        // constraint states exactly (issue #83).
+        if (data.newtype() && !TypeOps.effectiveInvariants(data, symbols).isEmpty()) {
             emitCtfeCheck(data, fields, out);
         }
     }
 
+    /**
+     * The Raoh-free checks of an invariant-bearing newtype: {@code check} for the whole invariant, and
+     * {@code check$i} for the clause declared {@code i}th. Both run the same bytecode
+     * {@code __construct} does (via {@code gen.expr}).
+     *
+     * <p>Two callers want the whole invariant — a constant construction verified at compile time
+     * (ADR-0032) — and one wants a clause on its own: the derived decoder hands each clause its own
+     * predicate, so a rule no Raoh constraint states exactly is still reported as the rule it is
+     * rather than as the whole invariant (issue #83, spec §decoder-error).
+     */
     private void emitCtfeCheck(Ast.Data data, Map<String, Type> fields, Map<String, byte[]> out) {
         ClassDesc cdName = cd(data.name());
         ClassDesc cdCtfe = cd(data.name() + "$Ctfe");
+        List<Ast.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
         out.put(pkg + "." + data.name() + "$Ctfe", build(cdCtfe, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
-            cb.withMethodBody("check", MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
-                    ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
-                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
-                        int slot = 0;
-                        for (Map.Entry<String, Type> f : fields.entrySet()) {
-                            gen.bind(f.getKey(), slot, f.getValue());
-                            slot += width(f.getValue());
-                        }
-                        for (Ast.Expr inv : TypeChecker.effectiveInvariants(data, symbols)) {
-                            gen.expr(inv);                 // the same boolean __construct checks
-                            Label ok = code.newLabel();
-                            code.ifne(ok);
-                            code.iconst_0();
-                            code.ireturn();                // an invariant is false
-                            code.labelBinding(ok);
-                        }
-                        code.iconst_1();
-                        code.ireturn();                    // all held
-                    });
+            emitClauseCheck(cb, "check", cdName, data, fields, clauses);
+            for (int i = 0; i < clauses.size(); i++) {
+                emitClauseCheck(cb, ctfeClauseCheck(i), cdName, data, fields,
+                        List.of(clauses.get(i)));
+            }
         }));
+    }
+
+    /** The name of the {@code $Ctfe} method checking the clause declared {@code i}th. */
+    static String ctfeClauseCheck(int index) {
+        return "check$" + index;
+    }
+
+    private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Ast.Data data,
+                                 Map<String, Type> fields, List<Ast.InvariantClause> clauses) {
+        cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
+                ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
+                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                    int slot = 0;
+                    Map<String, BindingId> bound =
+                            TypeOps.fieldBindings(symbols.own(data.name()), data, symbols);
+                    for (Map.Entry<String, Type> f : fields.entrySet()) {
+                        gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
+                        slot += width(f.getValue());
+                    }
+                    for (Ast.InvariantClause clause : clauses) {
+                        gen.expr(clause.expr());       // the same boolean __construct checks
+                        Label ok = code.newLabel();
+                        code.ifne(ok);
+                        code.iconst_0();
+                        code.ireturn();                // a clause is false
+                        code.labelBinding(ok);
+                    }
+                    code.iconst_1();
+                    code.ireturn();                    // all held
+                });
     }
 
     void generateSum(Ast.SumData sum, Map<String, byte[]> out) {
         ClassDesc cdX = cd(sum.name());
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (String caseName : sum.cases()) {
-            caseCds.add(cd(caseName));
+        for (Ast.Name caseName : sum.cases()) {
+            caseCds.add(cd(caseName.denotes()));
         }
+        boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
+        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
         out.put(pkg + "." + sum.name(), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
+            // A sum may itself be a case of another sum (spec §sum-data), and then it carries that sum's
+            // interface as a product or unit case does. Only the direct link is recorded, which is
+            // all that is needed: interface inheritance carries it the rest of the way, so a leaf of
+            // this sum is a value of the outer one without being named there.
+            ClassDesc[] ifaces = caseInterfaces(sum.name());
+            if (ifaces.length > 0) {
+                cb.withInterfaceSymbols(ifaces);
+            }
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
+            // A field every case spreads is readable on the sum (issue #160): declared here, and
+            // implemented by each case record's accessor of the same name and descriptor.
+            for (Map.Entry<String, Type> e : TypeOps.commonSpreadFields(sum, symbols).entrySet()) {
+                cb.withMethod(e.getKey(), MethodTypeDesc.of(jvmType(e.getValue())),
+                        ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
+            }
+            // An enumeration travels as its case's name (issue #161): one place says which name that
+            // is, and the codecs on both sides read it from here.
+            if (enumeration) {
+                emitTagMethod(cb, cases);
+                emitOrderMethods(cb, cdX, cases);
+            }
             sum.decoder().ifPresent(disc -> {
-                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"), CodecGen.decoderSig(cdX, true));
-                if (codec.jsonCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, true);
+                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"),
+                        CodecGen.decoderSig(cdX, !enumeration));
+                codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, !enumeration);
                 if (codec.recordCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JOOQ, true);
             });
             sum.encoder().ifPresent(enc ->
                     codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(sum.name() + "$Enc"),
-                            CodecGen.encoderSig(cdX, CD_Map)));
+                            CodecGen.encoderSig(cdX, enumeration ? CD_String : CD_Map)));
         }));
         sum.decoder().ifPresent(disc -> {
-            out.put(pkg + "." + sum.name() + "$Dec", codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
-            if (codec.jsonCompatible(sum.name())) {
-                out.put(pkg + "." + sum.name() + "$DecJson", codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
-            }
+            out.put(pkg + "." + sum.name() + "$Dec", enumeration
+                    ? codec.generateEnumSumDecoder(sum, CodecGen.Src.NEUTRAL)
+                    : codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
+            out.put(pkg + "." + sum.name() + "$DecJson", enumeration
+                    ? codec.generateEnumSumDecoder(sum, CodecGen.Src.JSON)
+                    : codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
             if (codec.recordCompatible(sum.name())) {
                 out.put(pkg + "." + sum.name() + "$DecRecord", codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
             }
         });
-        sum.encoder().ifPresent(enc ->
-                out.put(pkg + "." + sum.name() + "$Enc", codec.generateSumEncoder(sum, enc)));
+        sum.encoder().ifPresent(enc -> out.put(pkg + "." + sum.name() + "$Enc", enumeration
+                ? codec.generateEnumSumEncoder(sum)
+                : codec.generateSumEncoder(sum, enc)));
+    }
+
+    /**
+     * Emits {@code static int __order(Object)} — where a value's case stands in the declaration —
+     * and {@code static Comparator __ordering()} over it. The order sits on the sum rather than on
+     * the case records because one unit data may be a case of two sums, which place it differently;
+     * a {@code Comparable} on the record would have to answer for both (issue #161).
+     */
+    private void emitOrderMethods(ClassBuilder cb, ClassDesc cdX, List<TypeName> cases) {
+        cb.withMethod(ORDER_METHOD, MTD_order, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
+                | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
+            int i = 0;
+            for (TypeName c : cases) {
+                code.aload(0);
+                code.instanceOf(cd(c));
+                Label next = code.newLabel();
+                code.ifeq(next);
+                code.loadConstant(i);
+                code.ireturn();
+                code.labelBinding(next);
+                i++;
+            }
+            code.new_(CD_IllegalStateException);
+            code.dup();
+            code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+            code.athrow();
+        }));
+        cb.withMethod(ORDERING_METHOD, MTD_ordering, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
+                | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
+            code.invokedynamic(DynamicCallSiteDesc.of(
+                    BSM_METAFACTORY, "applyAsInt",
+                    MethodTypeDesc.of(CD_ToIntFunction),
+                    MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object),
+                    MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
+                            cdX, ORDER_METHOD, MTD_order),
+                    MTD_order));
+            code.invokestatic(CD_Comparator, "comparingInt",
+                    MethodTypeDesc.of(CD_Comparator, CD_ToIntFunction), true);
+            code.areturn();
+        }));
+    }
+
+    /** Emits {@code static String __tag(Object)}: which case a value of this enumeration is. */
+    private void emitTagMethod(ClassBuilder cb, List<TypeName> cases) {
+        cb.withMethod(TAG_METHOD, MTD_tag, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
+                | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
+            for (TypeName c : cases) {
+                code.aload(0);
+                code.instanceOf(cd(c));
+                Label next = code.newLabel();
+                code.ifeq(next);
+                code.loadConstant(c.name());
+                code.areturn();
+                code.labelBinding(next);
+            }
+            code.new_(CD_IllegalStateException);
+            code.dup();
+            code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+            code.athrow();
+        }));
+    }
+
+    /**
+     * The bridge case a non-local union member reaches its result unions through: a record of one
+     * component, {@code value}, holding the member as it is, implementing every result union of this
+     * module the member belongs to (spec §jvm-anonymous-union). A member this module declared carries those
+     * interfaces on itself; a primitive is the JDK's class and an imported type is a class another
+     * module already emitted, so neither can be given one from here.
+     *
+     * <p>It has no codec. Belonging to a union does not change a member's external representation, so
+     * a consumer that has switched to this case takes the value out and uses the member's own codec.
+     */
+    byte[] generateBridgeCase(TypeName member, List<String> unions, Map<String, byte[]> out) {
+        ClassDesc cdB = ctx.bridgeCaseClass(member);
+        Map<String, Type> held = Map.of("value", MatchElaborator.caseBindType(member));
+        List<ClassDesc> ifaces = new ArrayList<>();
+        for (String union : unions) {
+            ifaces.add(cd(union));
+        }
+        return build(cdB, cb -> {
+            cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withSuperclass(CD_Record);
+            cb.with(recordComponents(held));
+            cb.withInterfaceSymbols(ifaces);
+            emitField(cb, "value", held.get("value"));
+            // Public, unlike a case class's: a bridge case carries no invariant of its own and the
+            // value it holds was already built through that type's own checking path, so there is
+            // nothing here for a non-public constructor to guard. A Java implementation of an
+            // injected behavior has to be able to answer with this member.
+            emitCtor(cb, cdB, held, ClassFile.ACC_PUBLIC);
+            emitValueEquality(cb, cdB, held);
+            emitToString(cb, cdB, CodegenContext.bridgeCaseName(member), held);
+            emitAccessors(cb, cdB, held);
+        });
     }
 
     void generateUnit(Ast.UnitData unit, Map<String, byte[]> out) {
@@ -167,12 +336,23 @@ final class ValueClassGen {
         ClassDesc cdEnc = cd(unit.name() + "$Enc");
         out.put(pkg + "." + unit.name(), build(cdU, cb -> {
             cb.withFlags(pub(unit.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            // a unit is a field-less data, so it is a record with no components: `case 承認済み()`
+            // deconstructs it in a Java switch as its sibling product cases do (spec §jvm-product)
+            cb.withSuperclass(CD_Record);
+            cb.with(recordComponents(Map.of()));
             ClassDesc[] ifaces = caseInterfaces(unit.name());
             if (ifaces.length > 0) {
                 cb.withInterfaceSymbols(ifaces);
             }
-            emitDefaultCtor(cb);
+            emitDefaultCtor(cb, CD_Record);
             emitValueEquality(cb, cdU, Map.of());   // all units of a type are the same value
+            emitToString(cb, cdU, unit.name(), Map.of());
+            // A unit has no fields, no invariant and so no `__construct` (spec §unit-data), so the
+            // type has exactly one value. The field is public because another module's generated
+            // code loads it, and on an exposed unit that puts the value within reach of hand-written
+            // Java too — which costs nothing a unit was protecting: it carries no invariant, and
+            // construction is governed by `constructs` rather than by visibility (ADR-0059).
+            emitSharedInstance(cb, cdU);
             // a unit is a field-less data: its codec reads/writes nothing but the tag the sum adds
             // A unit ignores its input, so it decodes from every source. Generate all three so
             // unit cases of a JSON/record sum have a matching decoder to dispatch to.
@@ -193,7 +373,7 @@ final class ValueClassGen {
      * Emits {@code equals} / {@code hashCode} comparing every field.
      *
      * <p>A data is an immutable value, so two of them are the same when their fields are — which
-     * is what {@code ==} means on a data (spec 16.2) and what Java callers expect of a value
+     * is what {@code ==} means on a data (spec §equality) and what Java callers expect of a value
      * class. A unit data has no fields, so all of its values are equal.
      */
     private void emitValueEquality(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
@@ -222,11 +402,11 @@ final class ValueClassGen {
                                 code.ifne(differs);
                             } else if (t == Type.BOOL) {
                                 code.if_icmpne(differs);
-                            } else if (t == Type.DECIMAL) {
-                                emitDecimalEquals(code);   // by value, not by scale (spec 7.1)
-                                code.ifeq(differs);
                             } else {
-                                code.invokestatic(CD_Objects, "equals", MTD_Objects_equals);
+                                // What a field's sameness means is the runtime's to say (spec §equality):
+                                // an amount ignores its scale wherever it sits, including inside a
+                                // collection this field holds.
+                                emitValueEquals(code, t == Type.DECIMAL);
                                 code.ifeq(differs);
                             }
                         }
@@ -252,14 +432,12 @@ final class ValueClassGen {
                             code.invokestatic(CD_Long, "hashCode", MTD_Long_hashCode);
                         } else if (t == Type.BOOL) {
                             // already an int 0/1
-                        } else if (t == Type.DECIMAL) {
-                            // equality ignores scale, so the hash must too, or 1.0 and 1.00 land
-                            // in different buckets and a Map keyed by this data stops working.
-                            // Groovy changed `==` and left hashCode alone; that bug is still open.
-                            code.invokevirtual(CD_BigDecimal, "stripTrailingZeros", MTD_BD_strip);
-                            code.invokestatic(CD_Objects, "hashCode", MTD_Objects_hashCode);
                         } else {
-                            code.invokestatic(CD_Objects, "hashCode", MTD_Objects_hashCode);
+                            // The hash the equality above agrees with, from the same place. A field
+                            // whose equality ignores a scale and whose hash did not would land 1.0
+                            // and 1.00 in different buckets, and a Map keyed by this data would stop
+                            // working. Groovy changed `==` and left hashCode alone; that bug is open.
+                            emitValueHash(code, t == Type.DECIMAL);
                         }
                         code.iadd();
                     }
@@ -267,25 +445,126 @@ final class ValueClassGen {
                 });
     }
 
-    /**
-     * Emits a public record-style read accessor {@code <field>()} for each field (spec 8.5, 19.2).
-     * Only called for exposed data; the constructor stays non-public, so a read never enables
-     * construction (spec 2.7).
-     */
-    /** A newtype over a single {@code String} field ({@code data X = String}) — the shape a Map key
-     * may take, whose bare {@code value()} the boundary encoder renders. */
-    private static boolean isStringBackedNewtype(Ast.Data data, Map<String, Type> fields) {
-        return data.newtype() && fields.size() == 1 && fields.values().iterator().next() == Type.STRING;
+    /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
+     * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
+     * by natural order, and a Java reader can put it in a {@code TreeSet}. */
+    private boolean isOrderedNewtype(Ast.Data data, Map<String, Type> fields) {
+        return data.newtype() && fields.size() == 1
+                && TypeOps.supportsOrdering(fields.values().iterator().next(), symbols);
     }
 
+    /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a
+     * Java reader sees {@code Comparable<金額>} rather than the raw form. */
+    private static String classSignature(ClassDesc cdName, List<ClassDesc> ifaces) {
+        StringBuilder sig = new StringBuilder(CD_Record.descriptorString());
+        for (ClassDesc iface : ifaces) {
+            if (iface.equals(CD_Comparable)) {
+                String raw = CD_Comparable.descriptorString();
+                sig.append(raw, 0, raw.length() - 1)      // drop the ';' to insert the type argument
+                        .append('<').append(cdName.descriptorString()).append(">;");
+            } else {
+                sig.append(iface.descriptorString());
+            }
+        }
+        return sig.toString();
+    }
+
+    /**
+     * Emits {@code toString} in the form a record prints — {@code 金額[value=500]}, the type name and
+     * each component. {@code java.lang.Record} declares it abstract, so a data without one resolves to
+     * that declaration and throws {@code AbstractMethodError} when anything prints the value.
+     */
+    private void emitToString(ClassBuilder cb, ClassDesc cdName, String typeName,
+                              Map<String, Type> fields) {
+        cb.withMethodBody("toString", MTD_toString, ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
+            code.new_(CD_StringBuilder);
+            code.dup();
+            code.invokespecial(CD_StringBuilder, "<init>", MTD_void);
+            append(code, typeName + "[");
+            boolean first = true;
+            for (Map.Entry<String, Type> f : fields.entrySet()) {
+                append(code, (first ? "" : ", ") + f.getKey() + "=");
+                first = false;
+                Type t = f.getValue();
+                code.aload(0);
+                code.getfield(cdName, f.getKey(), jvmType(t));
+                if (t == Type.INT) {
+                    code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendLong);
+                } else if (t == Type.BOOL) {
+                    code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendBoolean);
+                } else {
+                    code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendObject);
+                }
+            }
+            append(code, "]");
+            code.invokevirtual(CD_StringBuilder, "toString", MTD_toString);
+            code.areturn();
+        });
+    }
+
+    /** Appends a literal to the {@code StringBuilder} on the stack, leaving it there. */
+    private static void append(CodeBuilder code, String literal) {
+        code.loadConstant(literal);
+        code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendString);
+    }
+
+    /**
+     * Emits {@code compareTo}: an {@code Int} newtype compares its {@code long} carrier, any other
+     * ordered value is itself {@link Comparable} — a {@code String} / {@code BigDecimal} /
+     * {@code LocalDate} / {@code LocalDateTime}, or a newtype over one, which carries its own
+     * {@code compareTo}. The erased {@code compareTo(Object)} bridge is what the runtime's
+     * natural-order compare calls.
+     */
+    private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value) {
+        ClassDesc fd = jvmType(value.getValue());
+        cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName),
+                ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
+                    code.aload(0);
+                    code.getfield(cdName, value.getKey(), fd);
+                    code.aload(1);
+                    code.getfield(cdName, value.getKey(), fd);
+                    if (value.getValue() == Type.INT) {
+                        code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
+                    } else {
+                        code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    }
+                    code.ireturn();
+                });
+        cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object),
+                ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL
+                        | ClassFile.ACC_BRIDGE | ClassFile.ACC_SYNTHETIC, code -> {
+                    code.aload(0);
+                    code.aload(1);
+                    code.checkcast(cdName);
+                    code.invokevirtual(cdName, "compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName));
+                    code.ireturn();
+                });
+    }
+
+    /**
+     * Emits the public record-style read accessor {@code <field>()} for each component (spec §field-visibility,
+     * 19.2). Every data has them, not only an exposed one: a component of the {@code Record} attribute
+     * is read through its accessor, the generated code of this module reads a field the same way, and
+     * a class the module keeps to itself is out of a Java caller's reach anyway. Reading never enables
+     * construction — the constructor stays non-public (spec §asymmetric-interop).
+     *
+     * <p>The return type carries {@code @NonNull} because Kotlin types a component from the record and
+     * does not apply the class's {@code @NullMarked} there; without it every read is a platform type
+     * again (spec §jvm-nullness).
+     */
     private void emitAccessors(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             Type ft = f.getValue();
             ClassDesc fd = jvmType(ft);
             String sig = JvmTypes.genericSig(ft, ctx);
+            List<TypeAnnotation> nonNull =
+                    JvmTypes.nonNullPositions(ft, TypeAnnotation.TargetInfo.ofMethodReturn());
             cb.withMethod(f.getKey(), MethodTypeDesc.of(fd),
                     ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, mb -> {
                         if (sig != null) mb.with(SignatureAttribute.of(MethodSignature.parseFrom("()" + sig)));
+                        if (!nonNull.isEmpty()) {
+                            mb.with(RuntimeVisibleTypeAnnotationsAttribute.of(nonNull));
+                        }
                         mb.withCode(code -> {
                             code.aload(0);
                             code.getfield(cdName, f.getKey(), fd);
@@ -302,28 +581,56 @@ final class ValueClassGen {
     }
 
     /**
-     * Emits a {@code final} backing field. A container field ({@code List}/{@code Set}/{@code Map}/
-     * {@code Option}) also gets a generic {@code Signature} so its element type survives to a Java
-     * reader; a field whose raw descriptor already names it fully gets none.
+     * The {@code Record} attribute naming each field as a component, in constructor order, so the
+     * class is a record to everything that reads class files: javac deconstructs it in a record
+     * pattern, Kotlin reads each component as a property, and {@code Class.getRecordComponents}
+     * answers (spec §jvm-product). Each component repeats what its accessor states — a container's generic
+     * {@code Signature}, and {@code @NonNull} — because reflection reads the component, not the
+     * accessor.
+     */
+    private RecordAttribute recordComponents(Map<String, Type> fields) {
+        List<RecordComponentInfo> components = new ArrayList<>();
+        for (Map.Entry<String, Type> f : fields.entrySet()) {
+            Type type = f.getValue();
+            String sig = JvmTypes.genericSig(type, ctx);
+            List<Attribute<?>> attrs = new ArrayList<>();
+            if (sig != null) attrs.add(SignatureAttribute.of(Signature.parseFrom(sig)));
+            List<TypeAnnotation> nonNull =
+                    JvmTypes.nonNullPositions(type, TypeAnnotation.TargetInfo.ofField());
+            if (!nonNull.isEmpty()) attrs.add(RuntimeVisibleTypeAnnotationsAttribute.of(nonNull));
+            components.add(RecordComponentInfo.of(f.getKey(), jvmType(type), attrs));
+        }
+        return RecordAttribute.of(components);
+    }
+
+    /**
+     * Emits a {@code private final} backing field, as a record's is: every read goes through the
+     * accessor, including the generated code of this module. A container field
+     * ({@code List}/{@code Set}/{@code Map}/{@code Option}) also gets a generic {@code Signature} so
+     * its element type survives to a Java reader; a field whose raw descriptor already names it fully
+     * gets none.
      */
     private void emitField(ClassBuilder cb, String name, Type type) {
         String sig = JvmTypes.genericSig(type, ctx);
         cb.withField(name, jvmType(type), fb -> {
-            fb.withFlags(ClassFile.ACC_FINAL);
+            fb.withFlags(ClassFile.ACC_PRIVATE | ClassFile.ACC_FINAL);
             if (sig != null) fb.with(SignatureAttribute.of(Signature.parseFrom(sig)));
         });
     }
 
     /**
-     * Reads a field onto the stack. A local data's field is private but same-package, so a direct
-     * {@code getfield} works; an imported data's field is private across the module = package
-     * boundary, so the read goes through the public accessor the exposed data generates (spec 8.5,
-     * 19.2).
+     * Emits the canonical constructor: the components in declaration order, package-private, so a
+     * value is built inside the module or through the invariant-checking {@code __construct} and not
+     * by a Java caller writing {@code new} (spec §field-visibility).
      */
     private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
-        cb.withMethodBody("<init>", MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)), 0, code -> {
+        emitCtor(cb, cdName, fields, 0);
+    }
+
+    private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields, int flags) {
+        cb.withMethodBody("<init>", MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)), flags, code -> {
             code.aload(0);
-            code.invokespecial(CD_Object, "<init>", MTD_void);
+            code.invokespecial(CD_Record, "<init>", MTD_void);
             int slot = 1;
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 code.aload(0);
@@ -337,36 +644,75 @@ final class ValueClassGen {
 
     private void emitConstructMethod(ClassBuilder cb, ClassDesc cdName, Ast.Data data,
                                      Map<String, Type> fields) {
-        cb.withMethodBody("__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)),
-                ClassFile.ACC_STATIC, code -> {
-                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
-                    int slot = 0;
-                    for (Map.Entry<String, Type> f : fields.entrySet()) {
-                        gen.bind(f.getKey(), slot, f.getValue());
-                        slot += width(f.getValue());
-                    }
+        // Public for an exposed type: a behavior of another module may declare `constructs T`
+        // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
+        // that runs the invariant. A type this module keeps to itself keeps its entry package-private.
+        cb.withMethod("__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)),
+                ClassFile.ACC_STATIC | ctx.pub(data.name()), mb -> {
+                    mb.with(SignatureAttribute.of(
+                            MethodSignature.parseFrom(constructSignature(fields, cdName))));
+                    mb.withCode(code -> {
+                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                        int slot = 0;
+                        Map<String, BindingId> bound =
+                                TypeOps.fieldBindings(symbols.own(data.name()), data, symbols);
+                        for (Map.Entry<String, Type> f : fields.entrySet()) {
+                            gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
+                            slot += width(f.getValue());
+                        }
 
-                    for (Ast.Expr inv : TypeChecker.effectiveInvariants(data, symbols)) {
-                        gen.expr(inv);
-                        Label ok = code.newLabel();
-                        code.ifne(ok);
-                        code.loadConstant("invariant violated on " + data.name());
-                        code.invokestatic(CD_Result, "err", MTD_Result_err, true);
+                        // Clause by clause, in the order they are declared, stopping at the first that
+                        // does not hold: what the failure carries is that clause, so a reordering of
+                        // the declaration changes which one a caller is told about.
+                        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                            gen.expr(clause.expr());
+                            Label ok = code.newLabel();
+                            code.ifne(ok);
+                            code.loadConstant(ctx.module());
+                            code.loadConstant(data.name());
+                            if (clause.name().isPresent()) {
+                                code.loadConstant(clause.name().get());
+                                code.invokestatic(CD_InvariantFailure, "of", MTD_failureOf, false);
+                            } else {
+                                code.invokestatic(CD_InvariantFailure, "unnamed",
+                                        MTD_failureUnnamed, false);
+                            }
+                            code.invokestatic(CD_Result, "err", MTD_Result_err, true);
+                            code.areturn();
+                            code.labelBinding(ok);
+                        }
+
+                        code.new_(cdName);
+                        code.dup();
+                        int s = 0;
+                        for (Map.Entry<String, Type> f : fields.entrySet()) {
+                            load(code, s, f.getValue());
+                            s += width(f.getValue());
+                        }
+                        code.invokespecial(cdName, "<init>",
+                                MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)));
+                        code.invokestatic(CD_Result, "ok", MTD_Result_Object, true);
                         code.areturn();
-                        code.labelBinding(ok);
-                    }
-
-                    code.new_(cdName);
-                    code.dup();
-                    int s = 0;
-                    for (Map.Entry<String, Type> f : fields.entrySet()) {
-                        load(code, s, f.getValue());
-                        s += width(f.getValue());
-                    }
-                    code.invokespecial(cdName, "<init>",
-                            MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)));
-                    code.invokestatic(CD_Result, "ok", MTD_Result_Object, true);
-                    code.areturn();
+                    });
                 });
+    }
+
+    /**
+     * The generic {@code Signature} of {@code __construct}: {@code Result<T, InvariantFailure>}, whose
+     * failure side names the clause that did not hold. Unlike a factory's, it is written whether or not
+     * a field is a container — the raw {@code Result} the descriptor names carries no type at all, and
+     * a Kotlin caller reads a raw type as a platform type, which is the one thing the rest of the class
+     * is marked to avoid (issue #150).
+     */
+    private String constructSignature(Map<String, Type> fields, ClassDesc cdName) {
+        StringBuilder sb = new StringBuilder("(");
+        for (Type t : fields.values()) {
+            String g = JvmTypes.genericSig(t, ctx);
+            sb.append(g != null ? g : jvmType(t).descriptorString());
+        }
+        return sb.append(")Lsouther/runtime/Result<")
+                .append(cdName.descriptorString())
+                .append(CD_InvariantFailure.descriptorString())
+                .append(">;").toString();
     }
 }

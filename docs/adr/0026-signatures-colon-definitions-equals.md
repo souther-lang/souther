@@ -1,12 +1,14 @@
 # ADR-0026: Signatures use `:`, definitions use `=`; a function is defined with `let`
 
 Status: Accepted (decided 2026-07-18; implemented). Revised 2026-07-18 — see *Revision*.
+Amended by ADR-0072: the paragraph declining `let f = (x) -> e` is replaced by a pointer to where
+that spelling is settled. The `:`/`=` split this ADR draws is unchanged.
 
 ## Revision (2026-07-18)
 
 The original Decision said `:` applies "on record fields" without splitting the two places
-a field name appears: a `data` **declaration** (`{ id : 会員ID }`), where the field is given
-a *type*, and a record **literal** (`会員 { id : x.id }`), where the field is bound to a
+a field name appears: a `data` **declaration** (`{ id : MemberId }`), where the field is given
+a *type*, and a record **literal** (`Member { id : x.id }`), where the field is bound to a
 *value*. It left the literal on `:`, and — separately — left a declaration's fields
 whitespace-separated while a literal's were `,`-separated. Both were too loose: by this
 ADR's own principle a value binding is `=`, not `:`, and the declaration/literal split in
@@ -25,9 +27,9 @@ behavior, and `fn` gives a behavior its implementation or defines a private help
 three use `=` today:
 
 ```text
-data     金額     = Int
-behavior 提出する  = (申請: 申請準備中, 提出日時: String) -> 提出済み | 却下
-fn       提出する  (申請, 提出日時) = { ... }
+data     Amount     = Int
+behavior submit  = (request: Drafting, submittedAt: String) -> Submitted | Rejected
+fn       submit  (request, submittedAt) = { ... }
 ```
 
 `=` is a single universal binder; the leading keyword decides whether its right-hand side
@@ -45,10 +47,10 @@ definition uses `=`. `fn` becomes `let`, and a function keeps its parameters on 
 `=`.
 
 ```text
-data     金額     = Int                                       // type definition
-behavior 提出する : (申請: 申請準備中, 提出日時: String) -> 提出済み | 却下   // value signature
-let      提出する (申請, 提出日時) = { ... }                     // value definition
-behavior 会員照会 = findMember >-> 整形する                      // a composition is a definition
+data     Amount     = Int                                       // type definition
+behavior submit : (request: Drafting, submittedAt: String) -> Submitted | Rejected   // value signature
+let      submit (request, submittedAt) = { ... }                     // value definition
+behavior lookUpMember = findMember >-> format                      // a composition is a definition
 ```
 
 `:` now means "has this type" uniformly — on a `data` declaration's fields, on parameters,
@@ -59,8 +61,8 @@ a `let`'s body, and a behavior defined as a composition. A behavior appears in t
 `behavior g = a >-> b` defines `g` as a composition.
 
 ```text
-data 会員 = { id : 会員ID, メール : メールアドレス }   // declaration fields: `:` (a type)
-let f (x) = 会員 { id = x.id, メール = x.メール }       // literal fields: `=` (a value)
+data Member = { id : MemberId, mail : EmailAddress }   // declaration fields: `:` (a type)
+let f (x) = Member { id = x.id, Mail = x.Mail }       // literal fields: `=` (a value)
 ```
 
 A `data` declaration's fields and a record literal's fields are both `,`-separated, so the
@@ -69,13 +71,12 @@ a type, a literal binds a value. (`include` is a type-composition clause, not a 
 `invariant` it stands alone and takes no comma, ADR-0012; only the fields it leads are
 comma-separated.) Elm draws the same line — `{ x : Int }` is a record type,
 `{ x = 1 }` a record value (and `{ r | x = 2 }` an update, which Souther writes as a
-type-named spread `会員 { ..r, x = 2 }`, ADR-0018).
+type-named spread `Member { ..r, x = 2 }`, ADR-0018).
 
-Parameters stay on the left of `=` (`let f (x) = e`), not bound as a lambda
-(`let f = (x) -> e`). F#, OCaml, and Haskell all write the named form and treat the
-lambda-binding form as redundant; Souther already rejected `fn f = (x) -> ...` on the same
-ground (ADR-0019). Because parameters sit left of `=` in a definition and inside the type
-to the right of `:` in a signature, the two shapes never collide.
+Parameters sit left of `=` in a definition and inside the type to the right of `:` in a
+signature, so the two shapes never collide. Whether a lambda may be written on the right of
+`=` in a named definition is settled by ADR-0072: it is the parameter-list form written the
+other way round, and the parameter-list form is what is written back.
 
 The prior art is uniform: Elm writes `add : Int -> Int -> Int` then `add x y = ...`; F#
 writes `val add : int -> int` then `let add x y = ...`; OCaml and Haskell do the same with
@@ -102,3 +103,4 @@ meaning; only the implementation keyword and the signature's binder change.
   `[#injected-behavior]`
 - ADR-0005 (behavior and implementation are separate)
 - ADR-0019 (one arrow `->`; this ADR refines what `:` and `=` each bind)
+- ADR-0072 (a `let` with no parameter list defines a value; what a lambda on the right of `=` means)

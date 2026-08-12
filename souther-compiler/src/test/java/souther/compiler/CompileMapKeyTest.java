@@ -11,7 +11,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
-/** A Map keyed by a String-backed newtype ([#stdlib-map]): the key carries its domain type, and the
+/** A Map keyed by a newtype ([#stdlib-map]): the key carries its domain type, and the
  *  map is keyed by the newtype value (value equality). */
 class CompileMapKeyTest {
 

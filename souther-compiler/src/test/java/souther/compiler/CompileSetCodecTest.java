@@ -44,10 +44,14 @@ class CompileSetCodecTest {
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
-        // decode dedupes; encode writes an array in a deterministic hash order (not first-seen).
-        assertEquals(Set.of("a", "b", "c"), Set.copyOf((List<?>) m.get("tags")));
+        // Two contracts, asserted apart so a break names itself: the decode drops the duplicate, and
+        // the encode writes the members in ascending order of their own external representation
+        // ([#collections]).
+        assertEquals(Set.of("a", "b", "c"), Set.copyOf((List<?>) m.get("tags")), "the duplicate is dropped");
+        assertEquals(List.of("a", "b", "c"), m.get("tags"), "and the array is in representation order");
         assertEquals(3L, m.get("n"), "the deduped set has three members");
         assertEquals(false, m.get("hasX"));
         assertEquals(Set.of("a", "b", "c", "z"), Set.copyOf((List<?>) m.get("more")));
+        assertEquals(List.of("a", "b", "c", "z"), m.get("more"));
     }
 }

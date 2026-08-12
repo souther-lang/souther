@@ -1,0 +1,66 @@
+name: Release
+
+# Builds the release artifacts on a `v*` tag and attaches them to the matching GitHub Release.
+# The VS Code extension (souther-lang/souther-vscode) fetches souther-lsp.jar and
+# souther.tmLanguage.json from here, so it can be packaged without building the compiler.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build and test
+        run: mvn -B --no-transfer-progress verify
+
+      # The CLI's really-executable launcher and the shaded language server are build outputs of the
+      # reactor; the grammar is a committed resource that `verify` has just checked is not stale.
+      - name: Collect the artifacts
+        run: |
+          mkdir -p artifacts
+          cp souther-cli/target/souther artifacts/
+          cp souther-cli/target/souther.jar artifacts/
+          cp souther-lsp/target/souther-lsp.jar artifacts/
+          cp souther-compiler/src/main/resources/souther/compiler/highlight/souther.tmLanguage.json artifacts/
+
+      # Over whatever the step above collected, rather than a second list of the same four names, and
+      # under the names the release publishes, so `sha256sum -c SHA256SUMS` works in a directory the
+      # assets were downloaded into. The file is written outside artifacts/ and moved in, so it
+      # cannot turn up in its own listing.
+      - name: Checksum the artifacts
+        run: |
+          sha256sum artifacts/* | sed 's#artifacts/##' > SHA256SUMS
+          mv SHA256SUMS artifacts/
+
+      - name: Upload the artifacts to the workflow run
+        uses: actions/upload-artifact@v7
+        with:
+          name: souther-release
+          path: artifacts/*
+
+      - name: Attach the artifacts to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: artifacts/*
+          # A tag carrying a pre-release identifier is not what a reader arriving at the repository
+          # should be handed as the current release. Semantic versioning puts that identifier after a
+          # hyphen and a final version has none, so the tag answers this itself and nothing has to be
+          # remembered at release time.
+          prerelease: ${{ contains(github.ref_name, '-') }}

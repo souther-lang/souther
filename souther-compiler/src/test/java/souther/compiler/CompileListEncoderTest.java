@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A {@code List<T>} of a non-String/Int primitive (Decimal, Bool, Date, DateTime) must round-trip:
  * the encoder was only derived for String and Int elements, so such a field failed to compile even
- * though its decoder was fine (spec 7.2).
+ * though its decoder was fine (spec §collections).
  */
 class CompileListEncoderTest {
 
@@ -39,7 +39,8 @@ class CompileListEncoderTest {
         assertTrue(r instanceof Ok, "the decoder already handled these element types");
 
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Bag", ((Ok<?>) r).value());
-        assertEquals(List.of(new BigDecimal("1.50"), new BigDecimal("2.25")), out.get("prices"));
+        assertEquals(List.of(new BigDecimal("1.5"), new BigDecimal("2.25")), out.get("prices"),
+                "each element is written as its amount ([#primitives])");
         assertEquals(List.of(true, false), out.get("flags"));
         assertEquals(List.of("2026-07-17"), out.get("days"), "a Date element encodes to its ISO form");
     }

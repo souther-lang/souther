@@ -6,7 +6,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** End-to-end test for multi-parameter behaviors (spec 12.1, AND inputs). */
+/** End-to-end test for multi-parameter behaviors (spec §behavior-io, AND inputs). */
 class CompileMultiParamTest {
 
     private static final String MODULE = """

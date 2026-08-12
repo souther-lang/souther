@@ -1,9 +1,16 @@
 package souther.compiler.codegen;
 
-import souther.compiler.diag.CompileException;
+import souther.compiler.check.MatchElaborator;
+import souther.compiler.check.Symbols;
+import souther.compiler.check.HelperInvariants;
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.types.MapKeyRepresentation;
+import souther.compiler.types.CaseShape;
+import souther.compiler.types.LeafScalar;
+import souther.compiler.types.TemporalRule;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
 import java.lang.classfile.ClassBuilder;
@@ -13,30 +20,34 @@ import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
+import java.lang.constant.ConstantDescs;
 import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
 
 /**
- * Generates a data/sum/unit type's decoders and encoders at the Raoh boundary (spec 10.6, 15, 27.7):
- * the three input sources (neutral/JSON/jOOQ), object/leaf/newtype/sum decoding, the require and
- * construct checks, and the encoder raw expressions. Name resolution and the synthetic-class sink come
- * from {@link CodegenContext}; body expressions are emitted through a {@link BodyGen} built per method.
+ * Generates a data/sum/unit type's decoders and encoders at the Raoh boundary (spec §codec-generation,
+ * §case-propagation): the three input sources (neutral/JSON/jOOQ), object/leaf/newtype/sum decoding, a
+ * newtype's invariant as Raoh constraints, the construct check, and the encoder raw expressions. Name
+ * resolution and the synthetic-class sink come from {@link CodegenContext}; body expressions are emitted
+ * through a {@link BodyGen} built per method.
  */
 final class CodecGen {
 
     private final CodegenContext ctx;
-    private final Map<String, Ast.Def> symbols;
+    private final Symbols symbols;
     /** The $Dec class currently being generated — the owner of the {@code __rekey} helpers a
      * newtype-keyed map decoder references. Set per {@link #generateDecoderClass}. */
     private ClassDesc decoderClass;
@@ -46,10 +57,11 @@ final class CodecGen {
         this.symbols = ctx.symbols;
     }
 
-    /** The three boundary input sources a decoder can read from (spec 6, 10.6). */
+    /** The three boundary input sources a decoder can read from (spec §external-representation, §codec-generation). */
     enum Src { NEUTRAL, JSON, JOOQ }
 
     private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
+    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
     private void unbox(CodeBuilder code, Type type, int slot) { JvmTypes.unbox(code, type, slot, ctx); }
@@ -72,7 +84,7 @@ final class CodecGen {
 
     private static MethodTypeDesc srcFieldMtd(Src s) { return s == Src.JOOQ ? MTD_fieldJooq : MTD_field; }
 
-    private static MethodTypeDesc srcOptFieldMtd(Src s) { return s == Src.JOOQ ? MTD_optFieldJooq : MTD_optionalField; }
+    private static MethodTypeDesc srcNullableFieldMtd(Src s) { return s == Src.JOOQ ? MTD_nullableFieldJooq : MTD_nullableField; }
 
     /** Leaf value decoders: JSON reads a JsonNode, the map/jOOQ column value is an Object. */
     private static ClassDesc srcLeafOwner(Src s) { return s == Src.JSON ? CD_JsonDecoders : CD_ObjectDecoders; }
@@ -94,17 +106,80 @@ final class CodecGen {
                 MethodTypeDesc.of(CD_Set, CD_List));          // instantiatedMethodType: (List) -> Set
     }
 
+    /**
+     * Pushes the decoder a map key is read with. A key always arrives as a {@code String} — a JSON
+     * object's keys are strings, and the neutral map's are too — so the temporal key is the
+     * string-then-parse form for every source, not the direct temporal factory a field value uses.
+     */
+    /**
+     * The only way this backend builds a decoder for text: Raoh's string leaf, canonicalized.
+     *
+     * <p>Every string that reaches the domain from outside comes through here — a field, a newtype's
+     * base, a map's key, a list or set element, a sum's discriminator, an enumeration's name, a
+     * temporal before it is parsed. It is one method rather than a `.normalize()` remembered at each
+     * of them because "text that arrives is canonical" (ADR-0096) is a property of the boundary and
+     * not of any one shape, and the first attempt at it — normalizing where each caller happened to
+     * build a leaf — left four paths behind, each found separately and after the fact.
+     *
+     * <p>{@code ADecoderCanonicalizesEveryShapeTest} is the check that goes with it: it walks the
+     * decoder shapes rather than this file, so a path added later that does not come through here
+     * fails on what a caller would see rather than on how the code is written.
+     */
+    private void emitStringLeaf(CodeBuilder code, ClassDesc leafOwner) {
+        code.invokestatic(leafOwner, "string", MTD_leafString);
+        code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+    }
+
+
+    private void emitKeyDecoder(CodeBuilder code, MapKeyRepresentation key) {
+        switch (key) {
+            // a named key runs its own decoder: a newtype's applies its invariant, an enumeration's
+            // reads the case name
+            case MapKeyRepresentation.NamedKey n -> invokeCodec(code, n.name(), "decoder", MTD_Rdecoder);
+            // text is the string leaf itself, which canonicalizes and does nothing else; a temporal
+            // is that leaf parsed
+            case MapKeyRepresentation.Text _ -> emitStringLeaf(code, CD_ObjectDecoders);
+            // Through the same builder a field's leaf goes through. Spelled out here instead, a
+            // key parsed the text and skipped the refinements beside it, so what a `Time` holds
+            // depended on whether it stood at a field or under one.
+            case MapKeyRepresentation.Lexical l ->
+                    emitTemporalFromText(code, CD_ObjectDecoders, l.leaf().type());
+        }
+    }
+
+    /**
+     * Whether a map's keys are remapped after decoding. Every boundary map's are.
+     *
+     * <p>A plain {@code String} key used to be left alone — it is already what the decoded object
+     * carries — and that was true until text arriving from outside became canonical (ADR-0096). The
+     * keys of a decoded map do not pass the string leaf that canonicalizes, so leaving them alone
+     * left `Map<String, V>` the one place a boundary handed the domain text it had not canonicalized:
+     * `Map.get` with a literal would miss a key written the other way, while `Map<UserId, V>` beside
+     * it was canonical because a newtype key runs its own decoder here.
+     *
+     * <p>Kept as a question rather than deleted because the walk it turns on is also where a
+     * canonicalization collision is caught, and that is a property of every key type, not of the
+     * ones that need converting.
+     */
+    private static boolean needsRekey(MapKeyRepresentation key) {
+        return true;
+    }
+
     /** The name of the generated per-$Dec helper that remaps a decoded {@code Map<String, V>}'s keys
-     *  into the String-backed newtype {@code keyType}, invariant-checked. */
-    private static String rekeyMethod(String keyType) {
-        return "__rekey$" + keyType;
+     *  into the key type, invariant-checked. A primitive key is named with a second {@code $} so it
+     *  cannot collide with a data whose name is {@code Date}. */
+    private static String rekeyMethod(MapKeyRepresentation key) {
+        return switch (key) {
+            case MapKeyRepresentation.NamedKey n -> "__rekey$" + n.name().qualified().replace('.', '$');
+            case MapKeyRepresentation.Lexical l -> "__rekey$$" + l.leaf();
+        };
     }
 
     /** {@code invokedynamic} producing a {@code BiFunction<Map, Path, Result>} over the current $Dec
      *  class's {@code __rekey$<keyType>}, for {@code Decoder.flatMapWithPath} in a newtype-keyed map. */
-    private static DynamicCallSiteDesc rekeyCallSite(ClassDesc cdDec, String keyType) {
+    private static DynamicCallSiteDesc rekeyCallSite(ClassDesc cdDec, MapKeyRepresentation key) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, cdDec, rekeyMethod(keyType), MTD_rekey);
+                DirectMethodHandleDesc.Kind.STATIC, cdDec, rekeyMethod(key), MTD_rekey);
         return DynamicCallSiteDesc.of(
                 BSM_METAFACTORY, "apply",
                 MethodTypeDesc.of(CD_BiFunction),                        // no captures: () -> BiFunction
@@ -113,23 +188,41 @@ final class CodecGen {
                 MTD_rekey);                                              // instantiatedMethodType: (Map,Path) -> Result
     }
 
-    /** {@code invokedynamic} producing a {@code Function<K, String>} over the key newtype's bare
-     *  {@code value()} accessor, for {@code Maps.mapKeys} when encoding a newtype-keyed map. */
-    private DynamicCallSiteDesc keyValueCallSite(String keyType) {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.VIRTUAL, cd(keyType), "value", MTD_value);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
-                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
-                impl,                                                    // implMethod: K.value() -> String
-                MethodTypeDesc.of(CD_String, cd(keyType)));              // instantiatedMethodType: (K) -> String
+    /**
+     * Pushes a {@code Function<K, String>} rendering a key as the text it crosses as, for
+     * {@code Maps.mapKeys} before the String-keyed map encoder runs.
+     *
+     * <p>It is the key type's own encoder in both arms — a leaf factory for a primitive, the derived
+     * {@code encoder()} for a named key — so what a name wraps is never read here. That is what
+     * keeps this call site out of the admissible set: a newtype over a base admitted later writes
+     * itself through the same two instructions, with nothing to add.
+     *
+     * <p>The same two {@code Runner.encodeKey} takes, reflectively. Both go through an encoder rather
+     * than through an accessor, so neither can spell a key the other would not.
+     */
+    private void pushKeyRenderer(CodeBuilder code, MapKeyRepresentation key) {
+        switch (key) {
+            case MapKeyRepresentation.NamedKey n -> invokeCodec(code, n.name(), "encoder", MTD_Rencoder);
+            case MapKeyRepresentation.Lexical l ->
+                    code.invokestatic(CD_ObjectEncoders, leafEncoderName(l.leaf()), MTD_Rencode_leaf);
+        }
+        code.invokedynamic(encodeAsFunctionCallSite());     // Encoder<K, Object> -> Function<K, String>
+    }
+
+    /** Whether a map's keys are rendered before the String-keyed encoder sees them: a {@code String}
+     *  key is already what it wants. */
+    private static boolean needsKeyRender(MapKeyRepresentation key) {
+        return !(key instanceof MapKeyRepresentation.Text);
     }
 
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
      * method reference when the type is a sum (its factory lives on a sealed interface). */
-    private void invokeCodec(CodeBuilder code, String typeName, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(typeName), method, mtd, symbols.get(typeName) instanceof Ast.SumData);
+    private void invokeCodec(CodeBuilder code, Ast.Name typeName, String method, MethodTypeDesc mtd) {
+        invokeCodec(code, typeName.denotes(), method, mtd);
+    }
+
+    private void invokeCodec(CodeBuilder code, TypeName type, String method, MethodTypeDesc mtd) {
+        code.invokestatic(cd(type), method, mtd, symbols.get(type) instanceof Ast.SumData);
     }
 
     byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
@@ -138,24 +231,21 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
-            // Dispatch on the runtime case type, encode that case to a Map, then inject the
-            // discriminator key = case tag (spec 11.2).
+            emitSharedInstance(cb, cdEnc);
+            // Dispatch on the runtime case type, encode that case as it writes itself, then add what
+            // membership in this sum requires of it (spec §encoder-derivation).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 for (Ast.EncVariant v : enc.variants()) {
-                    ClassDesc caseCd = cd(v.caseType());
+                    TypeName caseName = v.caseType().denotes();
                     code.aload(1);
-                    code.instanceOf(caseCd);
+                    code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
                     code.ifeq(next);
-                    invokeCodec(code, v.caseType(), "encoder", MTD_Rencoder);
-                    code.aload(1);
-                    code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-                    code.checkcast(CD_Map);
-                    code.dup();
-                    code.loadConstant(enc.key());
-                    code.loadConstant(v.tag());
-                    code.invokeinterface(CD_Map, "put", MTD_Map_put);
-                    code.pop();
+                    emitTagged(code, TypeOps.caseShape(caseName, symbols), enc.key(), v.tag(), () -> {
+                        invokeCodec(code, v.caseType(), "encoder", MTD_Rencoder);
+                        code.aload(1);
+                        code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+                    });
                     code.areturn();
                     code.labelBinding(next);
                 }
@@ -173,14 +263,21 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdDec);
             // Build a Raoh discriminate decoder and delegate: the tag is read from the
             // discriminator key of the source, each case dispatches to that case's decoder for the
-            // same source (spec 10.3). discriminate/variant are the core (input-generic) combinators.
+            // same source (spec §sum-discrimination). discriminate/variant are the core (input-generic) combinators.
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+                // this=0, in=1, path=2, so 3 is the first free slot for the guard to hold the node in.
+                emitObjectGuard(code, src, 3);
                 code.loadConstant(disc.key());
                 code.loadConstant(disc.key());
-                code.invokestatic(srcLeafOwner(src), "string", MTD_leafString);
+                emitStringLeaf(code, srcLeafOwner(src));
                 code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
+                // `field` answers a CombinePart, and `discriminate` takes a Decoder — the conversion
+                // is written rather than implicit, which is what keeps a part's field declaration
+                // from being erased by a wrapper.
+                code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
                 pushInt(code, disc.variants().size());
                 code.anewarray(CD_RVariant);
                 int i = 0;
@@ -188,7 +285,18 @@ final class CodecGen {
                     code.dup();
                     pushInt(code, i);
                     code.loadConstant(v.tag());
-                    invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
+                    // The mirror of what the encoder wrote: a case that wears the envelope is handed
+                    // what is under `"value"` and reads it as the standalone value it is, while a
+                    // product and a unit read the discriminated object they are part of. So a wrapped
+                    // case is read from under a key, which is not always this source's own decoder.
+                    if (TypeOps.caseShape(v.caseType().denotes(), symbols) == CaseShape.WRAPPED) {
+                        code.loadConstant(CaseShape.ENVELOPE_KEY);
+                        emitUnderAKeyDecoder(code, v.caseType(), src);
+                        code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
+                        code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
+                    } else {
+                        invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
+                    }
                     code.invokestatic(CD_RDecoders, "variant", MTD_Rvariant);
                     code.aastore();
                     i++;
@@ -202,16 +310,95 @@ final class CodecGen {
         });
     }
 
+    /**
+     * Decodes a sum all of whose cases are unit data: the value is its case's name, so it reads a
+     * bare string and answers that case's singleton (issue #161). A name no case answers to fails at
+     * the value's path, the way a newtype's invariant does, rather than being read as some other case.
+     */
+    byte[] generateEnumSumDecoder(Ast.SumData sum, Src src) {
+        ClassDesc cdDec = cd(sum.name() + srcSuffix(src));
+        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+        return build(cdDec, cb -> {
+            cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withInterfaceSymbols(CD_RDecoder);
+            emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdDec);
+            cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+                emitStringLeaf(code, srcLeafOwner(src));
+                code.invokedynamic(fromNameCallSite(cdDec));
+                code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+                code.aload(1);
+                code.aload(2);
+                code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
+                code.areturn();
+            });
+            emitFromNameHelper(cb, sum.name(), cases);
+        });
+    }
+
+    /** {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
+     *  failure saying it denotes none of them. */
+    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<TypeName> cases) {
+        cb.withMethodBody("__fromName", MTD_fromName,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            for (TypeName c : cases) {
+                code.loadConstant(c.name());
+                code.aload(0);
+                code.invokevirtual(CD_String, "equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+                Label next = code.newLabel();
+                code.ifeq(next);
+                loadSharedInstance(code, cd(c));
+                code.invokestatic(CD_RResult, "ok", MTD_Rok, true);
+                code.areturn();
+                code.labelBinding(next);
+            }
+            code.aload(1);                                             // path
+            code.loadConstant("invalid_format");
+            code.loadConstant("not a case of " + sumName);
+            code.loadConstant("type");
+            code.loadConstant(sumName);
+            code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
+            code.areturn();
+        });
+    }
+
+    private static DynamicCallSiteDesc fromNameCallSite(ClassDesc cdDec) {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, cdDec, "__fromName", MTD_fromName);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_BiFunction),
+                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),
+                impl,
+                MTD_fromName);
+    }
+
+    /** Encodes an enumeration to its case's name — the same string its decoder reads. */
+    byte[] generateEnumSumEncoder(Ast.SumData sum) {
+        ClassDesc cdEnc = cd(sum.name() + "$Enc");
+        return build(cdEnc, cb -> {
+            cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withInterfaceSymbols(CD_REncoder);
+            emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
+            cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
+                code.aload(1);
+                code.invokestatic(cd(sum.name()), TAG_METHOD, MTD_tag, true);
+                code.areturn();
+            });
+        });
+    }
+
     /** Decodes a unit: ignore the input (a unit carries no data) and build the singleton value. */
     byte[] generateUnitDecoder(ClassDesc cdU, ClassDesc cdDec) {
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdDec);
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
-                code.new_(cdU);
-                code.dup();
-                code.invokespecial(cdU, "<init>", MTD_void);
+                loadSharedInstance(code, cdU);   // a unit type has exactly one value
                 code.invokestatic(CD_RResult, "ok", MTD_Rok, true);
                 code.areturn();
             });
@@ -224,6 +411,7 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 code.new_(CD_LinkedHashMap);
                 code.dup();
@@ -252,9 +440,7 @@ final class CodecGen {
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC, mb -> {
                     mb.with(SignatureAttribute.of(sig));
                     mb.withCode(code -> {
-                        code.new_(impl);
-                        code.dup();
-                        code.invokespecial(impl, "<init>", MTD_void);
+                        loadSharedInstance(code, impl);
                         code.areturn();
                     });
                 });
@@ -320,50 +506,26 @@ final class CodecGen {
                 decoderSigFor(src, cd(typeName), mapInput));
     }
 
-    /** JSON supports nested/list/map/optional but has no temporal leaf, so a type is JSON-decodable
-     * iff no Date/DateTime appears anywhere in its shape. */
-    boolean jsonCompatible(String typeName) {
-        return jsonOk(typeName, new HashSet<>());
-    }
-
-    private boolean jsonOk(String typeName, Set<String> seen) {
-        if (!seen.add(typeName)) {
-            return true;
-        }
-        Ast.Def def = symbols.get(typeName);
-        if (def instanceof Ast.SumData sum) {
-            for (String caseName : sum.cases()) {
-                if (!jsonOk(caseName, seen)) return false;
-            }
-            return true;
-        }
-        if (def instanceof Ast.Data data) {
-            for (Type t : fieldTypes(data).values()) {
-                if (!jsonOkType(t, seen)) return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean jsonOkType(Type t, Set<String> seen) {
-        if (t instanceof Type.OptionOf o) return jsonOkType(o.element(), seen);
-        if (t instanceof Type.ListOf l) return jsonOkType(l.element(), seen);
-        if (t instanceof Type.SetOf s) return jsonOkType(s.element(), seen);
-        if (t instanceof Type.MapOf m) return jsonOkType(m.value(), seen);
-        if (t instanceof Type.Ref r) return jsonOk(r.name(), seen);
-        return true;
-    }
-
     /** jOOQ rows are flat: a type is Record-decodable iff it is an object (or a sum of objects/units)
      * whose every field is a scalar column — a primitive, a newtype, or an optional of those; no
      * nested object, list, map, or sum. */
     boolean recordCompatible(String typeName) {
-        Ast.Def def = symbols.get(typeName);
+        Ast.Def def = symbols.declaration(typeName);
         if (def instanceof Ast.SumData sum) {
-            for (String caseName : sum.cases()) {
+            if (TypeOps.isUnitOnlySum(sum, symbols)) {
+                return false;   // an enumeration is a bare column, not a whole row (issue #161)
+            }
+            for (Ast.Name written : sum.cases()) {
+                TypeName caseName = written.denotes();
                 Ast.Def caseDef = symbols.get(caseName);
-                if (caseDef instanceof Ast.UnitData) continue;
-                if (!(caseDef instanceof Ast.Data d) || !isFlatObject(d)) return false;
+                if (caseDef instanceof Ast.UnitData) continue;   // the discriminator alone, no column
+                if (!(caseDef instanceof Ast.Data d)) return false;   // a nested sum is not a row
+                // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
+                // row when what it wraps is a column.
+                boolean ok = TypeOps.caseShape(caseName, symbols) == CaseShape.WRAPPED
+                        ? flatColumn(TypeOps.newtypeInner(caseName, symbols))
+                        : isFlatObject(d);
+                if (!ok) return false;
             }
             return true;
         }
@@ -395,6 +557,7 @@ final class CodecGen {
                                         Map<String, Type> fields, Src src) {
         ClassDesc cdDec = cd(data.name() + srcSuffix(src));
         decoderClass = cdDec;
+        Invariants invariants = invariantsOf(data, fields);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -403,23 +566,123 @@ final class CodecGen {
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 3);
                 switch (dec) {
-                    case Ast.PrimDecoder prim -> emitPrimDecode(code, gen, cdName, prim, fields, src);
+                    case Ast.PrimDecoder prim ->
+                            emitPrimDecode(code, gen, cdName, prim, fields, src, invariants);
                     case Ast.ObjectDecoder obj -> emitObjectDecode(code, gen, cdName, obj, fields, src);
-                    case Ast.NewtypeDecoder nt -> emitNewtypeDecode(code, gen, cdName, nt, fields, src);
+                    case Ast.NewtypeDecoder nt ->
+                            emitNewtypeDecode(code, gen, cdName, nt, fields, src, invariants);
                 }
             });
-            // One key-remap helper per String-backed newtype used as a map key anywhere in this
-            // decoder; the decode body's flatMapWithPath call sites reference them.
-            Set<String> keyTypes = new LinkedHashSet<>();
+            // One key-remap helper per key type used as a map key anywhere in this decoder; the
+            // decode body's flatMapWithPath call sites reference them.
+            Map<String, MapKeyRepresentation> keyTypes = new LinkedHashMap<>();
             collectKeyedMapTypes(dec, keyTypes);
-            for (String keyType : keyTypes) {
-                emitRekeyHelper(cb, keyType);
+            for (MapKeyRepresentation key : keyTypes.values()) {
+                emitRekeyHelper(cb, key);
+            }
+            emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb, invariants));
+            if (invariants.hasRefined()) {
+                emitInvariantFailureHelper(cb, data.name());
             }
         });
     }
 
-    /** Collects the String-backed newtypes used as map keys anywhere in a derived decoder. */
-    private void collectKeyedMapTypes(Ast.DecoderDef dec, Set<String> out) {
+    /**
+     * A newtype's invariant as seen by its decoder (issue #83): each declared clause, in the order it
+     * is declared, as what the decoder does about it.
+     */
+    private record Invariants(List<ClauseEmit> clauses) {
+
+        static final Invariants NONE = new Invariants(List.of());
+
+        boolean hasRefined() {
+            return clauses.stream().anyMatch(ClauseEmit::refined);
+        }
+
+        /** Every mapped constraint, for the static fields a pattern constraint needs. */
+        List<InvariantConstraints.Constraint> constraints() {
+            List<InvariantConstraints.Constraint> out = new ArrayList<>();
+            for (ClauseEmit c : clauses) {
+                out.addAll(c.constraints());
+            }
+            return out;
+        }
+    }
+
+    /**
+     * What the decoder does about one declared clause: the Raoh constraints its conjuncts map onto, and
+     * whether a conjunct is left for the clause's own check to report.
+     *
+     * <p>Both may hold at once. {@code invariant a && b} with only {@code a} mapped states {@code a} as
+     * the constraint it is — so what breaks {@code a} is reported in Raoh's terms — and refines the
+     * clause behind it for what breaks {@code b}. That is not an ordering question: the two conjuncts
+     * are one rule, and one rule is what an arm and an issue name.
+     */
+    private record ClauseEmit(int index, Optional<String> name,
+                              List<InvariantConstraints.Constraint> constraints, boolean refined) {}
+
+    /**
+     * How each clause reaches the decoder: its conjuncts become the Raoh constraints they map onto, and
+     * the clause is refined for whatever is left. From the first clause that needs a refine, every later
+     * clause is refined whole.
+     *
+     * <p>That cut is what keeps the reporting order the declaration order. Raoh chains a constraint with
+     * {@code flatMap} and a {@code refine} answers the plain {@code Decoder}, so a typed constraint
+     * cannot follow a refine in the chain: were the later mapped clauses hoisted in front of it, a value
+     * breaking an earlier unmapped clause and a later mapped one would be reported as the later one, and
+     * the boundary and an attempted construction would name different rules for the same value. A mapped
+     * clause declared after an unmapped one therefore trades Raoh's code for its place in the order.
+     */
+    private Invariants invariantsOf(Ast.Data data, Map<String, Type> fields) {
+        if (!data.newtype()) {
+            return Invariants.NONE;   // an object's invariant has no single value to constrain
+        }
+        List<Ast.InvariantClause> declared = dischargeForm(data);
+        if (declared.isEmpty()) {
+            return Invariants.NONE;
+        }
+        Type base = fields.get("value");
+        List<ClauseEmit> out = new ArrayList<>();
+        boolean refining = false;
+        for (int i = 0; i < declared.size(); i++) {
+            List<InvariantConstraints.Constraint> mapped = new ArrayList<>();
+            boolean refine = true;
+            if (!refining) {
+                refine = false;
+                for (Ast.Expr conjunct : HelperInvariants.conjunctsOf(declared.get(i).expr())) {
+                    Optional<InvariantConstraints.Constraint> c =
+                            InvariantConstraints.of(conjunct, base);
+                    if (c.isPresent()) {
+                        mapped.add(c.get());
+                    } else {
+                        refine = true;
+                    }
+                }
+            }
+            refining |= refine;
+            out.add(new ClauseEmit(i, declared.get(i).name(), List.copyOf(mapped), refine));
+        }
+        return new Invariants(out);
+    }
+
+    /**
+     * The clauses of {@code data} in the representation the constraint mapping reads: this module's own
+     * helpers expanded, the language's own operations left standing
+     * ({@link souther.compiler.check.InliningPolicy#DISCHARGE}).
+     *
+     * <p>The mapping is written against the operations an author wrote — {@code List.length},
+     * {@code List.allDistinctBy} — and by the time the backend emits, a prelude helper has become the
+     * fold it is derived from. Reading the settled form instead would leave every collection rule
+     * unrecognised. A type another module declares has no such form here; nothing asks, because a type's
+     * decoder is generated where the type is declared.
+     */
+    private List<Ast.InvariantClause> dischargeForm(Ast.Data data) {
+        return TypeOps.effectiveInvariants(new TypeName(ctx.module(), data.name()), data, symbols,
+                ctx.dischargeInvariants()::get);
+    }
+
+    /** Collects the named types used as map keys anywhere in a derived decoder. */
+    private void collectKeyedMapTypes(Ast.DecoderDef dec, Map<String, MapKeyRepresentation> out) {
         switch (dec) {
             case Ast.ObjectDecoder obj -> {
                 for (Ast.Bind bind : obj.binds()) {
@@ -431,11 +694,11 @@ final class CodecGen {
         }
     }
 
-    private void collectKeyedMapTypes(Ast.DecRef ref, Set<String> out) {
+    private void collectKeyedMapTypes(Ast.DecRef ref, Map<String, MapKeyRepresentation> out) {
         switch (ref) {
             case Ast.MapDecRef mp -> {
-                if (mp.keyType() != null) {
-                    out.add(mp.keyType());
+                if (needsRekey(mp.key())) {
+                    out.putIfAbsent(rekeyMethod(mp.key()), mp.key());
                 }
                 collectKeyedMapTypes(mp.value(), out);
             }
@@ -449,16 +712,16 @@ final class CodecGen {
 
     /**
      * Emits {@code static Result __rekey$K(Map src, Path path)}: it remaps a decoded
-     * {@code Map<String, V>}'s keys into the String-backed newtype {@code K}, running {@code K}'s own
-     * decoder (which applies K's invariant) on each key. Key issues accumulate across the whole map
-     * (spec 15) and a failure lands at the key's path; on success it returns a {@code Map<K, V>} in
-     * iteration order. Materialised as a {@code BiFunction} for {@code Decoder.flatMapWithPath}.
+     * {@code Map<String, V>}'s keys into the key type {@code K}, running {@code K}'s own decoder
+     * (which applies K's invariant, and that of anything K wraps) on each key. Key issues accumulate
+     * across the whole map (spec §case-propagation) and a failure lands at the key's path; on
+     * success it returns a {@code Map<K, V>} in iteration order. Materialised as a {@code BiFunction} for {@code Decoder.flatMapWithPath}.
      */
-    private void emitRekeyHelper(ClassBuilder cb, String keyType) {
-        cb.withMethodBody(rekeyMethod(keyType), MTD_rekey, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
+    private void emitRekeyHelper(ClassBuilder cb, MapKeyRepresentation key) {
+        cb.withMethodBody(rekeyMethod(key), MTD_rekey, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
                 code -> {
-            // locals: src=0, path=1, keyDec=2, out=3, issues=4, it=5, entry=6, key=7, kr=8
-            invokeCodec(code, keyType, "decoder", MTD_Rdecoder);
+            // locals: src=0, path=1, keyDec=2, out=3, issues=4, it=5, entry=6, key=7, kr=8, decoded=9
+            emitKeyDecoder(code, key);
             code.astore(2);                                              // keyDec = K.decoder()
             code.new_(CD_LinkedHashMap);
             code.dup();
@@ -504,17 +767,45 @@ final class CodecGen {
             code.invokevirtual(CD_RErr, "issues", MTD_Err_issues);
             code.invokevirtual(CD_RIssues, "merge", MTD_Issues_merge);
             code.astore(4);
+            ctx.countOneStep(code);
             code.goto_(loop);
             code.labelBinding(ok);
-            // out.put(((Ok) kr).value(), entry.getValue())
-            code.aload(3);
             code.aload(8);
             code.checkcast(CD_ROk);
             code.invokevirtual(CD_ROk, "value", MTD_Object);
+            code.astore(9);                                            // decoded = the remapped key
+            // Two source keys can be one decoded key: canonicalizing (ADR-0096) makes text written
+            // two ways into one text, and a newtype key's invariant can map two spellings together.
+            // A Set may collapse them — equivalent text is one element — but a map would lose the
+            // first key's value to the second with nothing said, so it is a failure at the key.
+            code.aload(3);
+            code.aload(9);
+            code.invokeinterface(CD_Map, "containsKey", MTD_Map_containsKey);
+            Label fresh = code.newLabel();
+            code.ifeq(fresh);
+            code.aload(4);
+            code.aload(1);
+            code.aload(7);
+            code.checkcast(CD_String);
+            code.invokevirtual(CD_RPath, "append", MTD_Path_append);
+            code.loadConstant("duplicate_key");
+            code.loadConstant("two keys are the same key once decoded");
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
+            code.checkcast(CD_RErr);
+            code.invokevirtual(CD_RErr, "issues", MTD_Err_issues);
+            code.invokevirtual(CD_RIssues, "merge", MTD_Issues_merge);
+            code.astore(4);
+            ctx.countOneStep(code);
+            code.goto_(loop);
+            code.labelBinding(fresh);
+            // out.put(decoded, entry.getValue())
+            code.aload(3);
+            code.aload(9);
             code.aload(6);
             code.invokeinterface(CD_MapEntry, "getValue", MTD_getKeyValue);
             code.invokeinterface(CD_Map, "put", MTD_Map_put);
             code.pop();
+            ctx.countOneStep(code);
             code.goto_(loop);
 
             code.labelBinding(done);
@@ -535,9 +826,17 @@ final class CodecGen {
     /** True when the type's decoder reads from a {@code Map} (object/sum), false for a bare
      * value (newtype/unit). Used to bridge nested field-value decoders with {@code nested()}. */
     boolean isMapInput(String typeName) {
-        Ast.Def def = symbols.get(typeName);
-        if (def instanceof Ast.SumData) {
-            return true;
+        return isMapInputOf(symbols.declaration(typeName));
+    }
+
+    boolean isMapInput(Ast.Name typeName) {
+        return isMapInputOf(symbols.get(typeName.denotes()));
+    }
+
+    private boolean isMapInputOf(Ast.Def def) {
+        if (def instanceof Ast.SumData sum) {
+            // an enumeration arrives as its case's name, a bare string (issue #161)
+            return !TypeOps.isUnitOnlySum(sum, symbols);
         }
         if (def instanceof Ast.Data data) {
             Ast.DecoderDef d = data.decoder().orElse(null);
@@ -554,42 +853,123 @@ final class CodecGen {
     }
 
     /** Pushes a Raoh leaf {@code Decoder} for a primitive value from the given source. */
-    private void emitLeafDecoder(CodeBuilder code, Ast.PrimKind kind, Src src) {
+    private void emitLeafDecoder(CodeBuilder code, LeafScalar kind, Src src) {
         ClassDesc owner = srcLeafOwner(src);
         switch (kind) {
-            case STRING -> code.invokestatic(owner, "string", MTD_leafString);
+            // A string that came from outside is canonicalized to NFC before anything reads it.
+            // Canonically equivalent forms are the same text by Unicode's own definition, and
+            // Souther compares strings by their code units, so without this the same name typed on
+            // two machines is two values: two Map keys, two Set members, and `==` false. It sits at
+            // the leaf so every constraint chained after it — a length bound, a pattern — sees the
+            // canonical form rather than whatever the sender's keyboard produced.
+            case STRING -> {
+                emitStringLeaf(code, owner);
+            }
             case INT -> code.invokestatic(owner, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(owner, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(owner, "decimal", MTD_leafDecimal);
-            case DATE -> emitTemporalLeaf(code, src, "date");
-            case DATETIME -> emitTemporalLeaf(code, src, "dateTime");
+            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
+            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
+            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
+            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
     }
 
-    /** Emits a temporal leaf decoder. {@code JsonDecoders} has no {@code date()}/{@code dateTime()}
-     * factory — a JSON temporal is a string that is then parsed (Raoh's {@code string().date()}),
-     * whereas the neutral/map source has a direct static factory. */
-    private void emitTemporalLeaf(CodeBuilder code, Src src, String method) {
-        if (src == Src.JSON) {
-            code.invokestatic(CD_JsonDecoders, "string", MTD_leafString);
-            code.invokevirtual(CD_StringDecoder, method, MTD_leafTemporal);
-        } else {
-            code.invokestatic(srcLeafOwner(src), method, MTD_leafTemporal);
+    /** {@code Temporals::notALeapSecond} as a {@code Predicate}, for the text refinement below. */
+    private static final DynamicCallSiteDesc NOT_A_LEAP_SECOND = DynamicCallSiteDesc.of(
+            BSM_METAFACTORY, "test",
+            MethodTypeDesc.of(CD_Predicate),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
+                    "notALeapSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+
+    /** {@code Temporals::toTheSecond} as a {@code Predicate}, for the leaf refinement below. */
+    private static final DynamicCallSiteDesc TO_THE_SECOND = DynamicCallSiteDesc.of(
+            BSM_METAFACTORY, "test",
+            MethodTypeDesc.of(CD_Predicate),                                   // no captures
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),            // samMethodType
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
+                    "toTheSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));           // instantiated
+
+    /**
+     * Emits a temporal leaf decoder from text: Raoh's string leaf, refined, parsed, refined again.
+     *
+     * <p>A {@code Time} and a {@code DateTime} are held to the second. They carry no fraction of one
+     * (spec §a-local-temporal-is-held-to-the-second), so text that has one says something the domain
+     * cannot hold, and the boundary reports that rather than dropping it: a value silently rounded
+     * reads to everything downstream as the value that was sent.
+     *
+     * <p>An {@code Instant}'s text is refused where it names a second that does not exist, and that
+     * has to happen <em>before</em> the parse. {@code Instant.parse} takes {@code 23:59:60} and
+     * answers {@code 23:59:59}, so afterwards the two are one value and the substitution is
+     * invisible. An offset is not refused here: it is the same moment spelled differently, and only the
+     * written form is held to UTC (spec §temporal-literal, §a-leap-second-is-no-moment).
+     */
+    private void emitTemporalFromText(CodeBuilder code, ClassDesc leafOwner, Type.Prim temporal) {
+        TemporalRule rule = TemporalRule.of(temporal);
+        emitStringLeaf(code, leafOwner);
+        if (rule.guardsText()) {
+            code.invokedynamic(NOT_A_LEAP_SECOND);
+            code.loadConstant(TemporalRule.REFUSED);
+            code.loadConstant(TemporalRule.LEAP_SECOND);
+            code.invokevirtual(CD_StringDecoder, "refine", MTD_refineString);
         }
+        code.invokevirtual(CD_StringDecoder, rule.factory(), MTD_leafTemporal);
+        emitToTheSecond(code, temporal);
+    }
+
+    /** Holds a {@code Time} and a {@code DateTime} to the second, after the parse that produced one. */
+    private void emitToTheSecond(CodeBuilder code, Type.Prim temporal) {
+        if (!TemporalRule.of(temporal).guardsValue()) {
+            return;
+        }
+        code.invokedynamic(TO_THE_SECOND);
+        code.loadConstant(TemporalRule.REFUSED);
+        code.loadConstant(TemporalRule.SUB_SECOND);
+        code.invokevirtual(CD_TemporalDecoder, "refine", MTD_refineTemporal);
+    }
+
+    /** Emits a temporal leaf decoder at a field. {@code JsonDecoders} has no {@code date()} factory —
+     * a JSON temporal is a string that is then parsed — whereas the neutral/jOOQ source has a direct
+     * static one, which takes the value as itself where the caller hands over a real temporal.
+     *
+     * <p>Both go through the same refinements, so a rule about what a {@code Time} holds cannot be
+     * one thing at a field and another at a map key. The one text this does not see is text handed to
+     * the bare-value factory by a Java caller, which Raoh parses inside itself — so the pre-parse
+     * rule cannot be enforced there, and a leap second reaching it still becomes the second before.
+     * That is a violation of what the specification states and not a boundary being trusted; issue
+     * #639 tracks the Raoh-side fix. */
+    private void emitTemporalLeaf(CodeBuilder code, Src src, Type.Prim temporal) {
+        if (src == Src.JSON) {
+            emitTemporalFromText(code, CD_JsonDecoders, temporal);
+            return;
+        }
+        code.invokestatic(srcLeafOwner(src), TemporalRule.of(temporal).factory(), MTD_leafTemporal);
+        emitToTheSecond(code, temporal);
     }
 
     private void emitPrimDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.PrimDecoder prim,
-                                Map<String, Type> fields, Src src) {
-        Type inputType = TypeChecker.primType(prim.from());
+                                Map<String, Type> fields, Src src, Invariants invariants) {
+        Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
         switch (prim.from()) {
-            case TEXT -> code.invokestatic(leaf, "string", MTD_leafString);
+            // Canonicalized before the constraints below read it, as a field's string is — a newtype
+            // over Text is the other place text enters, and the two must agree or the same value
+            // would be one length in a field and another on its own.
+            case TEXT -> {
+                emitStringLeaf(code, leaf);
+            }
             case INT -> code.invokestatic(leaf, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(leaf, "decimal", MTD_leafDecimal);
-            case DATE -> emitTemporalLeaf(code, src, "date");
-            case DATETIME -> emitTemporalLeaf(code, src, "dateTime");
+            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
+            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
+            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
+            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
+        emitInvariantConstraints(code, cdName, inputType, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);      // Result
@@ -607,7 +987,7 @@ final class CodecGen {
         code.invokevirtual(CD_ROk, "value", MTD_Object);
         int inputSlot = gen.slot(inputType);
         unbox(code, inputType, inputSlot);
-        gen.bind(prim.inputName(), inputSlot, inputType);
+        gen.bind(prim.input(), inputSlot, inputType);
 
         for (Ast.DecStmt stmt : prim.stmts()) {
             switch (stmt) {
@@ -615,9 +995,8 @@ final class CodecGen {
                     Type t = gen.expr(let.value());
                     int slot = gen.slot(t);
                     store(code, slot, t);
-                    gen.bind(let.name(), slot, t);
+                    gen.bind(let.binder(), slot, t);
                 }
-                case Ast.Require req -> emitRequire(code, gen, req);
             }
         }
         emitConstructCall(code, gen, cdName, prim.result(), fields);
@@ -625,12 +1004,31 @@ final class CodecGen {
 
     /**
      * A newtype over a non-primitive Y: decode the whole input with Y's decoder, then wrap the
-     * result in X (spec 8.7). Same Err short-circuit as {@link #emitPrimDecode}, but the leaf is
+     * result in X (spec §newtype). Same Err short-circuit as {@link #emitPrimDecode}, but the leaf is
      * Y's decoder rather than a primitive one.
      */
     private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.NewtypeDecoder dec,
-                                   Map<String, Type> fields, Src src) {
-        emitDecoderObject(code, dec.inner(), src);                    // Y's decoder (for this source)
+                                   Map<String, Type> fields, Src src, Invariants invariants) {
+        if (dec.inner() instanceof Ast.MapDecRef mp) {
+            // The map's own decoder, then its two halves of invariant either side of the key remap.
+            // A mapped constraint is one of Raoh's and needs the typed leaf, which is only before the
+            // remap; size is the same either way on the success path, since a remap that collided has
+            // already failed (see emitRekeyHelper). A refined clause is the model's own predicate and
+            // needs the map the model declared — the keys converted and canonical — so it goes after.
+            emitDecoderObject(code, mp.value(), src);
+            code.invokestatic(srcListOwner(src), "map", MTD_mapDec);
+            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+                    ConstraintPhase.MAPPED);
+            code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));
+            code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+                    ConstraintPhase.REFINED);
+        } else {
+            emitDecoderObject(code, dec.inner(), src);                // Y's decoder (for this source)
+            // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the
+            // invariant says is checked through refine (and again by __construct).
+            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+        }
         code.aload(1);                                               // in
         code.aload(2);                                               // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);   // Result
@@ -649,12 +1047,81 @@ final class CodecGen {
         Type innerType = bindType(dec.inner());
         int inSlot = gen.slot(innerType);
         unbox(code, innerType, inSlot);                             // cast Object -> Y, store
-        gen.bind(dec.inputName(), inSlot, innerType);
+        gen.bind(dec.input(), inSlot, innerType);
         emitConstructCall(code, gen, cdName, dec.result(), fields);
+    }
+
+    /**
+     * Emits the JSON decoder's shape check: the node this decoder was handed either holds an object
+     * or it does not, and that is one fact about one node, reported at that node.
+     *
+     * <p>Without it the fields answer it one at a time. {@code JsonDecoders.field} reads its name out
+     * of the node it is given and rejects a node that is not an object — at the field's own path, once
+     * per field — so a node of the wrong shape becomes one report per declared field, each naming a
+     * field the author wrote correctly, and a nested one lands on the record's first field instead of
+     * the record. A data whose fields are all optional went the other way and decoded, since an absent
+     * field is what {@code nullableField} makes of a node it cannot read.
+     *
+     * <p>A sum is read as an object too — its discriminator is a field — so it asks the same question
+     * in the same place. Left to the discriminator, the mismatch is blamed on the discriminator key,
+     * the one field of the object the author never writes.
+     *
+     * <p>Only the JSON source needs it. The neutral decoder is handed a {@code Map} by its own
+     * signature, and a nested one is bridged through {@code MapDecoders.nested}, which asks the same
+     * question at the same place; a jOOQ {@code Record} is a row and has no other shape to be.
+     *
+     * @param node a free local slot, which the guard holds the cast node in
+     */
+    private void emitObjectGuard(CodeBuilder code, Src src, int node) {
+        if (src != Src.JSON) {
+            return;
+        }
+        Label required = code.newLabel();
+        Label ok = code.newLabel();
+        code.aload(1);
+        code.ifnull(required);
+        code.aload(1);
+        code.checkcast(CD_JsonNode);
+        code.astore(node);
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "isNull", MTD_nodePredicate);
+        code.ifne(required);
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "isMissingNode", MTD_nodePredicate);
+        code.ifne(required);
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "isObject", MTD_nodePredicate);
+        code.ifne(ok);
+
+        code.aload(2);                                            // path
+        code.loadConstant("type_mismatch");
+        code.loadConstant("expected object");
+        code.loadConstant("expected");
+        code.loadConstant("object");
+        code.loadConstant("actual");
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "getNodeType", MTD_getNodeType);
+        code.invokevirtual(CD_JsonNodeType, "name", MTD_enumName);
+        code.getstatic(CD_Locale, "ROOT", CD_Locale);
+        code.invokevirtual(CD_String, "toLowerCase", MTD_toLowerCase);
+        code.invokestatic(CD_Map, "of",
+                MethodTypeDesc.of(CD_Map, CD_Object, CD_Object, CD_Object, CD_Object), true);
+        code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
+        code.areturn();
+
+        code.labelBinding(required);
+        code.aload(2);
+        code.loadConstant("required");
+        code.loadConstant("is required");
+        code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
+        code.areturn();
+
+        code.labelBinding(ok);
     }
 
     private void emitObjectDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.ObjectDecoder obj,
                                   Map<String, Type> fields, Src src) {
+        emitObjectGuard(code, src, gen.slot(Type.STRING));
         List<Ast.Bind> binds = obj.binds();
         int[] resultSlots = new int[binds.size()];
         for (int i = 0; i < binds.size(); i++) {
@@ -662,20 +1129,22 @@ final class CodecGen {
             code.loadConstant(bind.key());
             if (bind.ref() instanceof Ast.OptionDecRef opt) {
                 emitDecoderObject(code, opt.element(), src);
-                code.invokestatic(srcFieldOwner(src), "optionalField", srcOptFieldMtd(src));
+                code.invokestatic(srcFieldOwner(src), "nullableField", srcNullableFieldMtd(src));
             } else {
                 emitDecoderObject(code, bind.ref(), src);
                 code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
             }
             code.aload(1);   // in (Map)
             code.aload(2);   // path
-            code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
+            // A part decodes on its own and appends its own name to the path, so a field read here
+            // reports where it would inside a combine.
+            code.invokeinterface(CD_CombinePart, "decode", MTD_partDecode);
             int rSlot = gen.slot(Type.STRING);
             code.astore(rSlot);
             resultSlots[i] = rSlot;
         }
 
-        // Accumulate every field's issues (applicative), then fail once if any (spec 15).
+        // Accumulate every field's issues (applicative), then fail once if any (spec §case-propagation).
         int accSlot = gen.slot(Type.STRING);
         code.getstatic(CD_RIssues, "EMPTY", CD_RIssues);
         code.astore(accSlot);
@@ -708,15 +1177,14 @@ final class CodecGen {
             code.checkcast(CD_ROk);
             code.invokevirtual(CD_ROk, "value", MTD_Object);
             if (bind.ref() instanceof Ast.OptionDecRef) {
-                code.checkcast(CD_JavaOptional);
-                code.invokestatic(CD_Option, "ofOptional", MTD_ofOptional, true);
+                code.invokestatic(CD_Option, "ofNullable", MTD_ofNullable, true);
                 int vSlot = gen.slot(t);
                 code.astore(vSlot);
-                gen.bind(bind.name(), vSlot, t);
+                gen.bind(bind.binder(), vSlot, t);
             } else {
                 int vSlot = gen.slot(t);
                 unbox(code, t, vSlot);
-                gen.bind(bind.name(), vSlot, t);
+                gen.bind(bind.binder(), vSlot, t);
             }
         }
         emitConstructCall(code, gen, cdName, obj.result(), fields);
@@ -724,35 +1192,45 @@ final class CodecGen {
 
     private Type bindType(Ast.DecRef ref) {
         return switch (ref) {
-            case Ast.PrimDecRef p -> TypeChecker.primType(p.kind());
-            case Ast.DataDecRef d -> Type.ref(d.typeName());
+            case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
+            case Ast.DataDecRef d -> Type.ref(d.typeName().denotes());
             case Ast.ListDecRef l -> Type.list(bindType(l.element()));
             case Ast.SetDecRef s -> Type.set(bindType(s.element()));
             case Ast.OptionDecRef o -> Type.option(bindType(o.element()));
-            case Ast.MapDecRef mp -> Type.map(
-                    mp.keyType() == null ? Type.STRING : Type.ref(mp.keyType()), bindType(mp.value()));
+            case Ast.MapDecRef mp -> Type.map(mp.key().type(), bindType(mp.value()));
         };
+    }
+
+    /**
+     * The decoder for a named type read from under a key of {@code src} — a data's field, or the
+     * envelope key a sum's wrapped case sits under.
+     *
+     * <p>Taking a value out from under a key leaves the source behind, and by how much depends on the
+     * source. A jOOQ row is flat, so what is under a key is a column and not a row: only the type's
+     * own {@code Object} decoder can read it, and a type that is not a whole row has no
+     * {@code recordDecoder()} to reach for anyway. A neutral object's value is a bare {@code Object},
+     * so a type that reads a {@code Map} is bridged to one — which is also where a value of the wrong
+     * shape is told so at that key. A JSON object's value is a {@code JsonNode} like the object
+     * holding it, so that source alone carries through.
+     */
+    private void emitUnderAKeyDecoder(CodeBuilder code, Ast.Name typeName, Src src) {
+        switch (src) {
+            case NEUTRAL -> {
+                invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
+                if (isMapInput(typeName)) {
+                    code.invokestatic(CD_MapDecoders, "nested", MTD_nested);   // Decoder<Map> -> Decoder<Object>
+                }
+            }
+            case JSON -> invokeCodec(code, typeName, "jsonDecoder", MTD_Rdecoder);
+            case JOOQ -> invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
+        }
     }
 
     /** Pushes a {@code Decoder} for the given field-value reference, for the given source. */
     private void emitDecoderObject(CodeBuilder code, Ast.DecRef ref, Src src) {
         switch (ref) {
             case Ast.PrimDecRef p -> emitLeafDecoder(code, p.kind(), src);
-            case Ast.DataDecRef d -> {
-                switch (src) {
-                    case NEUTRAL -> {
-                        invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
-                        if (isMapInput(d.typeName())) {
-                            code.invokestatic(CD_MapDecoders, "nested", MTD_nested);   // Decoder<Map> -> Decoder<Object>
-                        }
-                    }
-                    // JSON field value is a JsonNode: the nested type's json decoder reads it directly.
-                    case JSON -> invokeCodec(code, d.typeName(), "jsonDecoder", MTD_Rdecoder);
-                    // jOOQ rows are flat: only a newtype (a bare column) is nestable; objects/sums are
-                    // gated out of record generation, so this only ever pushes a newtype's Object decoder.
-                    case JOOQ -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
-                }
-            }
+            case Ast.DataDecRef d -> emitUnderAKeyDecoder(code, d.typeName(), src);
             case Ast.ListDecRef l -> {
                 emitDecoderObject(code, l.element(), src);
                 code.invokestatic(srcListOwner(src), "list", MTD_listDec);
@@ -763,30 +1241,270 @@ final class CodecGen {
                 code.invokedynamic(setFromListCallSite());                   // Function: List -> Set
                 code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);  // Decoder<I, Set<T>> (dedup)
             }
-            case Ast.OptionDecRef o -> throw new CompileException(o.pos(),
-                    "optional is only supported as a direct object field");
+            // An optional standing where there is no key to be missing — a member, a map's value.
+            // There null is the whole of what absence is (spec [#absence-is-written-as-null]), so
+            // the element decoder is the present one made null-tolerant and lifted into an Option.
+            // A field's optional never reaches here: its key is read by `nullableField` instead.
+            case Ast.OptionDecRef o -> {
+                emitDecoderObject(code, o.element(), src);
+                code.invokestatic(srcListOwner(src), "nullable", MTD_nullableDec);
+                code.invokedynamic(optionOfNullableCallSite());              // Function: Object -> Option
+                code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);  // Decoder<I, Option<T>>
+            }
             case Ast.MapDecRef mp -> {
                 emitDecoderObject(code, mp.value(), src);
                 code.invokestatic(srcListOwner(src), "map", MTD_mapDec);   // Decoder<I, Map<String,V>>
-                if (mp.keyType() != null) {
-                    // Remap the String keys into the key newtype, invariant-checked.
-                    code.invokedynamic(rekeyCallSite(decoderClass, mp.keyType()));   // BiFunction<Map,Path,Result>
+                if (needsRekey(mp.key())) {
+                    // Remap the String keys into the key type: a newtype's own decoder runs its
+                    // invariant, a temporal's parses the ISO form.
+                    code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));   // BiFunction<Map,Path,Result>
                     code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
                 }
             }
         }
     }
 
-    private void emitRequire(CodeBuilder code, BodyGen gen, Ast.Require req) {
-        gen.expr(req.cond());
-        Label cont = code.newLabel();
-        code.ifne(cont);
-        code.getstatic(CD_RPath, "ROOT", CD_RPath);
-        code.loadConstant(req.errorCode());
-        code.loadConstant(req.errorCode());
-        code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
-        code.areturn();
-        code.labelBinding(cont);
+    /**
+     * Constrains the leaf decoder on the stack with the newtype's invariant, clause by clause in the
+     * order they are declared (issue #83). A clause the mapping recognises becomes the Raoh constraint
+     * that says the same thing, so the failure carries that constraint's code, metadata and default
+     * message at the value's path — {@code too_short} with {@code min}, not one
+     * {@code invariant_violation} for every rule in the model. A clause it does not recognise gets a
+     * {@code refine} over that clause's own check, under the shared code with the rejecting type and,
+     * where the clause has one, its name in the metadata. That failure is built here rather than through
+     * {@code refine}'s message overload, which mints a custom-message issue a resolver refuses to touch
+     * — an invariant's text must stay replaceable.
+     *
+     * <p>Raoh chains with {@code flatMap}, so the first failure stops the rest and the chain's order is
+     * the order a failure is reported in — the same order {@code __construct} decides in, so the
+     * boundary and an attempted construction name the same clause for the same value.
+     */
+    /**
+     * Which half of the invariant to emit. A map's keys are converted between the two: a mapped
+     * constraint is one of Raoh's own and has to reach the typed leaf, which is before the
+     * conversion, while a refined clause is the model's own predicate and has to read the map the
+     * model declared — {@code Map<UserId, V>} with canonical keys, not the {@code Map<String, V>} the
+     * object decoded to. Splitting them keeps declaration order, because a clause that needs refining
+     * makes every later clause refined too ({@link #invariantsOf}), so the mapped ones are a prefix.
+     */
+    private enum ConstraintPhase { MAPPED, REFINED, BOTH }
+
+    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
+                                          Invariants invariants) {
+        emitInvariantConstraints(code, cdName, base, invariants, ConstraintPhase.BOTH);
+    }
+
+    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
+                                          Invariants invariants, ConstraintPhase phase) {
+        for (ClauseEmit clause : invariants.clauses()) {
+            if (phase != ConstraintPhase.REFINED) {
+                clause.constraints().forEach(c -> emitConstraint(code, c));
+            }
+            if (clause.refined() && phase != ConstraintPhase.MAPPED) {
+                code.invokedynamic(invariantPredicateCallSite(cdName, base, clause.index()));
+                // The clause is captured off the stack, so a clause with no name captures null —
+                // a constant-pool entry could not have been one.
+                if (clause.name().isPresent()) {
+                    code.loadConstant(clause.name().get());
+                } else {
+                    code.aconst_null();
+                }
+                code.invokedynamic(invariantFailureCallSite());
+                code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine);
+            }
+        }
+    }
+
+    private void emitConstraint(CodeBuilder code, InvariantConstraints.Constraint c) {
+        switch (c) {
+            case InvariantConstraints.MinLength m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_StringDecoder, "minLength", MTD_strLengthBound);
+            }
+            case InvariantConstraints.MaxLength m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_StringDecoder, "maxLength", MTD_strLengthBound);
+            }
+            case InvariantConstraints.FixedLength f -> {
+                pushInt(code, f.n());
+                code.invokevirtual(CD_StringDecoder, "fixedLength", MTD_strLengthBound);
+            }
+            case InvariantConstraints.Pattern p -> {
+                // compiled once into a static field, not on every decode
+                code.getstatic(decoderClass, patternField(p.regex()), CD_Pattern);
+                code.invokevirtual(CD_StringDecoder, "pattern", MTD_strPattern);
+            }
+            case InvariantConstraints.Min m -> {
+                code.loadConstant(m.n());
+                code.invokevirtual(CD_LongDecoder, "min", MTD_longBound);
+            }
+            case InvariantConstraints.Max m -> {
+                code.loadConstant(m.n());
+                code.invokevirtual(CD_LongDecoder, "max", MTD_longBound);
+            }
+            case InvariantConstraints.Positive _ ->
+                    code.invokevirtual(CD_LongDecoder, "positive", MTD_longSign);
+            case InvariantConstraints.NonNegative _ ->
+                    code.invokevirtual(CD_LongDecoder, "nonNegative", MTD_longSign);
+            case InvariantConstraints.DecimalMin m -> {
+                emitBigDecimal(code, m.n());
+                code.invokevirtual(CD_DecimalDecoder, "min", MTD_decBound);
+            }
+            case InvariantConstraints.DecimalMax m -> {
+                emitBigDecimal(code, m.n());
+                code.invokevirtual(CD_DecimalDecoder, "max", MTD_decBound);
+            }
+            case InvariantConstraints.DecimalPositive _ ->
+                    code.invokevirtual(CD_DecimalDecoder, "positive", MTD_decSign);
+            case InvariantConstraints.DecimalNonNegative _ ->
+                    code.invokevirtual(CD_DecimalDecoder, "nonNegative", MTD_decSign);
+            case InvariantConstraints.NonEmpty _ ->
+                    code.invokevirtual(CD_ListDecoder, "nonempty", MTD_listSign);
+            case InvariantConstraints.MinSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_ListDecoder, "minSize", MTD_listSizeBound);
+            }
+            case InvariantConstraints.MaxSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_ListDecoder, "maxSize", MTD_listSizeBound);
+            }
+            case InvariantConstraints.FixedSize f -> {
+                pushInt(code, f.n());
+                code.invokevirtual(CD_ListDecoder, "fixedSize", MTD_listSizeBound);
+            }
+            case InvariantConstraints.Unique _ ->
+                    code.invokevirtual(CD_ListDecoder, "unique", MTD_listSign);
+            case InvariantConstraints.MapMinSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_RecordDecoder, "minSize", MTD_recordSizeBound);
+            }
+            case InvariantConstraints.MapMaxSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_RecordDecoder, "maxSize", MTD_recordSizeBound);
+            }
+        }
+    }
+
+    private void emitBigDecimal(CodeBuilder code, java.math.BigDecimal value) {
+        code.new_(CD_BigDecimal);
+        code.dup();
+        code.loadConstant(value.toString());
+        code.invokespecial(CD_BigDecimal, "<init>", MethodTypeDesc.of(ConstantDescs.CD_void, CD_String));
+    }
+
+    /** {@code invokedynamic} producing a {@code Predicate} over the type's {@code $Ctfe.check$i} — the
+     * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
+     * compile-time construction checking uses (ADR-0032). */
+    private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
+        ClassDesc cdCtfe = cd(typeName(cdName) + "$Ctfe");
+        MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
+        // A Predicate's argument is a reference, so the instantiated type takes the decoded value's
+        // boxed form and the metafactory unboxes it into `check`'s primitive parameter.
+        ClassDesc boxed = JvmTypes.boxedPrim(base) != null ? JvmTypes.boxedPrim(base)
+                : JvmTypes.jvmType(base, ctx);
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, cdCtfe,
+                ValueClassGen.ctfeClauseCheck(clause), check);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "test",
+                MethodTypeDesc.of(CD_Predicate),                                 // no captures
+                MTD_ctfeCheckObject,                                             // samMethodType
+                impl,
+                MethodTypeDesc.of(ConstantDescs.CD_boolean, boxed));             // instantiatedMethodType
+    }
+
+    /**
+     * {@code invokedynamic} producing the {@code BiFunction} that builds a refined clause's failure —
+     * the issue this decoder reports when the value breaks a rule no constraint states. The clause's
+     * name is captured, so one helper serves every refined clause; a clause declared without a name
+     * captures null, which is what says there is nothing to tell it apart by.
+     */
+    private DynamicCallSiteDesc invariantFailureCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__invariantFailure",
+                MTD_invariantFailureNamed);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_BiFunction, CD_String),                     // captures the clause
+                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),              // samMethodType
+                impl,
+                MTD_invariantFailure);
+    }
+
+    /**
+     * {@code static Result __invariantFailure(String clause, Object value, Path path)}: the issue a
+     * refined clause reports. It is a {@code Result.fail}, so the message is a default one a
+     * {@code MessageResolver} may replace; the rejecting type and the clause travel in the metadata,
+     * which is what a resolver switches on when the code is the shared one.
+     *
+     * <p>Both come from {@link souther.runtime.InvariantFailure}, the same value {@code __construct}
+     * hands its caller — so the boundary and an abort say the same thing about the same failure.
+     */
+    private void emitInvariantFailureHelper(ClassBuilder cb, String typeName) {
+        cb.withMethodBody("__invariantFailure", MTD_invariantFailureNamed,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            code.new_(CD_InvariantFailure);
+            code.dup();
+            code.loadConstant(ctx.module());
+            code.loadConstant(typeName);
+            code.aload(0);                                            // the clause, or null
+            code.invokespecial(CD_InvariantFailure, "<init>",
+                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String, CD_String));
+            int failure = 3;
+            code.astore(failure);
+            code.aload(2);                                            // path
+            code.loadConstant("invariant_violation");
+            code.aload(failure);
+            code.invokevirtual(CD_InvariantFailure, "toString", MethodTypeDesc.of(CD_String));
+            code.aload(failure);
+            code.invokevirtual(CD_InvariantFailure, "meta", MTD_failureMeta);
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
+            code.areturn();
+        });
+    }
+
+    /** The static field holding a pattern constraint's compiled regex. */
+    private static String patternField(String regex) {
+        return "__pattern$" + Integer.toHexString(regex.hashCode());
+    }
+
+    /**
+     * Compiles each pattern the invariant states once, into a {@code static final} field: the
+     * constraint chain is rebuilt per decode call, and compiling a regex there would repeat the
+     * expensive part of it on every value.
+     *
+     * <p>Emits the fields and returns how to initialize them ({@code null} when there are none),
+     * rather than writing a {@code <clinit>} of its own — a class carries at most one, and
+     * {@code emitSharedInstance} is what writes it.
+     */
+    private Consumer<CodeBuilder> emitPatternFields(ClassBuilder cb, Invariants invariants) {
+        List<String> regexes = new ArrayList<>();
+        for (InvariantConstraints.Constraint c : invariants.constraints()) {
+            if (c instanceof InvariantConstraints.Pattern p && !regexes.contains(p.regex())) {
+                regexes.add(p.regex());
+            }
+        }
+        if (regexes.isEmpty()) {
+            return null;
+        }
+        for (String regex : regexes) {
+            cb.withField(patternField(regex), CD_Pattern,
+                    ClassFile.ACC_PRIVATE | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
+        }
+        ClassDesc owner = decoderClass;
+        return code -> {
+            for (String regex : regexes) {
+                code.loadConstant(regex);
+                code.invokestatic(CD_Pattern, "compile", MTD_patternCompile);
+                code.putstatic(owner, patternField(regex), CD_Pattern);
+            }
+        };
+    }
+
+
+    /** The Souther type name behind a generated class descriptor. */
+    private static String typeName(ClassDesc cdName) {
+        return cdName.displayName();
     }
 
     /**
@@ -798,29 +1516,45 @@ final class CodecGen {
      */
     private void emitConstructCall(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.Construct construct,
                                    Map<String, Type> fields) {
-        // The decoder is still AST-level; translate its field inits to Core so the shared
-        // emitFieldValues consumes one representation (ADR-0021).
+        // The decoder is still AST-level; elaborate its field inits so the shared emitFieldValues
+        // consumes one representation, with the type the checker decides for each (ADR-0021, #81).
+        // The field's declared type is pushed in, as the checker does when it checks a construction.
         List<Core.FieldInit> inits = new ArrayList<>();
         for (Ast.FieldInit init : construct.inits()) {
-            inits.add(new Core.FieldInit(init.name(), Core.of(init.value()), init.pos()));
+            inits.add(new Core.FieldInit(init.name(),
+                    gen.elaborate(init.value(), fields.get(init.name())), init.pos()));
         }
-        gen.emitFieldValues(fields, inits, construct.spreads());
+        // a decoder's construction gives every field a value of its own; nothing builds one with a
+        // spread, so there is no binding to copy from here
+        gen.emitFieldValues(fields, inits, List.of());
         code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));
         // Souther construction Result -> Raoh boundary Result. An invariant failure becomes a
-        // Raoh failure (spec 9.4, 10.1); success wraps the constructed value.
+        // Raoh failure (spec §violation-destination, §decoder-role); success wraps the constructed value.
+        //
+        // The failure names the clause that did not hold, and it travels in the metadata beside the
+        // rejecting type: with the code the shared one, that metadata is all a resolver has to go on.
+        // The message is the default, so a resolver may still replace it.
         int srSlot = gen.slot(Type.STRING);
         code.astore(srSlot);
         code.aload(srSlot);
         code.instanceOf(CD_ResultErr);
         Label okL = code.newLabel();
         code.ifeq(okL);
-        code.aload(2);   // the path this value was decoded at (spec 9.4, 15) — not the document root
-        code.loadConstant("invariant_violation");
+        int failure = gen.slot(Type.STRING);
         code.aload(srSlot);
         code.checkcast(CD_ResultErr);
         code.invokevirtual(CD_ResultErr, "error", MTD_error);
-        code.checkcast(CD_String);
-        code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
+        code.checkcast(CD_InvariantFailure);
+        code.astore(failure);
+        // the path this value was decoded at (spec §violation-destination, §case-propagation) —
+        // not the document root
+        code.aload(2);
+        code.loadConstant("invariant_violation");
+        code.aload(failure);
+        code.invokevirtual(CD_InvariantFailure, "toString", MethodTypeDesc.of(CD_String));
+        code.aload(failure);
+        code.invokevirtual(CD_InvariantFailure, "meta", MTD_failureMeta);
+        code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
         code.areturn();
         code.labelBinding(okL);
         code.aload(srSlot);
@@ -836,13 +1570,14 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 2);
                 code.aload(1);
                 code.checkcast(cdName);
-                int selfSlot = gen.slot(Type.ref(data.name()));
+                int selfSlot = gen.slot(Type.ref(symbols.own(data.name())));
                 code.astore(selfSlot);
-                gen.bind(enc.selfName(), selfSlot, Type.ref(data.name()));
+                gen.bind(enc.self(), selfSlot, Type.ref(symbols.own(data.name())));
                 emitRawExpr(code, gen, enc.result());
                 code.areturn();
             });
@@ -860,7 +1595,10 @@ final class CodecGen {
                 gen.expr(b.arg());
                 box(code, Type.BOOL);                                // boolean -> Boolean
             }
-            case Ast.DecimalRaw d -> gen.expr(d.arg());              // BigDecimal is neutral
+            case Ast.DecimalRaw d -> {
+                gen.expr(d.arg());                                   // BigDecimal is neutral
+                code.invokestatic(CD_Representations, "canonicalNumber", MTD_canonicalNumber);
+            }
             case Ast.IsoTextRaw t -> {
                 gen.expr(t.arg());
                 code.invokevirtual(CD_Object, "toString", MethodTypeDesc.of(CD_String));
@@ -882,7 +1620,7 @@ final class CodecGen {
                 code.invokevirtual(CD_OptionSome, "value", MTD_Object);
                 int slot = gen.slot(elemType);
                 unbox(code, elemType, slot);
-                gen.bind(o.elemVar(), slot, elemType);
+                gen.bind(o.elem(), slot, elemType);
                 emitRawExpr(code, gen, o.inner());          // Some(v) -> encode v
                 code.goto_(end);
                 code.labelBinding(none);
@@ -902,17 +1640,19 @@ final class CodecGen {
                 gen.expr(se.source());                                          // the Set value
                 code.invokestatic(CD_Sets, "toList", MethodTypeDesc.of(CD_List, CD_Set));   // Set -> List
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);      // encode the array
+                code.invokestatic(CD_Representations, "sortedArray", MTD_Representations_sorted);
             }
             case Ast.MapEnc me -> {
                 pushElemEncoder(code, me.elem());
                 code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);   // Encoder<Map<String,V>,Object>
                 gen.expr(me.source());                                          // Map<K,V>
-                if (me.keyType() != null) {
-                    // Render the newtype keys bare before the String-keyed map encoder.
-                    code.invokedynamic(keyValueCallSite(me.keyType()));         // Function<K,String>
+                if (needsKeyRender(me.key())) {
+                    // Render the keys bare before the String-keyed map encoder.
+                    pushKeyRenderer(code, me.key());                            // Function<K,String>
                     code.invokestatic(CD_Maps, "mapKeys", MTD_mapKeys);         // Map<String,V>
                 }
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+                code.invokestatic(CD_Representations, "sortedObject", MTD_Representations_sorted);
             }
             case Ast.ObjectRaw o -> {
                 code.new_(CD_LinkedHashMap);
@@ -936,7 +1676,7 @@ final class CodecGen {
 
     /**
      * Puts an optional field into the object map only when it is {@code Some}: {@code None} omits
-     * the key entirely rather than writing {@code null} (spec 11.2). The map is on the stack on
+     * the key entirely rather than writing {@code null} (spec §encoder-derivation). The map is on the stack on
      * entry and left on the stack on exit, so both the Some and None branches converge on it.
      */
     private void emitOptionalEntry(CodeBuilder code, BodyGen gen, String key, Ast.OptionRaw o) {
@@ -951,7 +1691,7 @@ final class CodecGen {
         code.invokevirtual(CD_OptionSome, "value", MTD_Object);   // map, valueObj
         int slot = gen.slot(elemType);
         unbox(code, elemType, slot);                    // map (value bound to local)
-        gen.bind(o.elemVar(), slot, elemType);
+        gen.bind(o.elem(), slot, elemType);
         code.dup();                                     // map, map
         code.loadConstant(key);                         // map, map, key
         emitRawExpr(code, gen, o.inner());              // map, map, key, encoded
@@ -963,24 +1703,327 @@ final class CodecGen {
         code.labelBinding(end);
     }
 
-    /** Pushes a Raoh {@link net.unit8.raoh.encode.Encoder} for a list/map element. */
+    /** Pushes a Raoh {@link net.unit8.raoh.encode.Encoder} for a list/set/map element. A nested
+     * collection composes the same combinators the field encoders use, so a
+     * {@code Map<String, List<商品ID>>} encodes as {@code mapOf(list(商品ID.encoder()))}. Set and
+     * newtype-keyed Map are not Raoh shapes on their own — they are the list / String-keyed map
+     * encoder with the value converted first, which {@code contramap} does. */
     private void pushElemEncoder(CodeBuilder code, Ast.EncElem elem) {
         switch (elem) {
-            case Ast.PrimEnc p -> code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()),
-                    MTD_Rencode_leaf);
+            case Ast.PrimEnc p -> {
+                code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()), MTD_Rencode_leaf);
+                canonicalizeAmount(code, p.kind());
+            }
             case Ast.DataEnc d -> invokeCodec(code, d.typeName(), "encoder", MTD_Rencoder);
+            case Ast.ListElemEnc l -> {
+                pushElemEncoder(code, l.elem());
+                code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
+            }
+            case Ast.SetElemEnc s -> {
+                pushElemEncoder(code, s.elem());
+                code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
+                code.invokedynamic(setToListCallSite());                    // Function<Set, List>
+                code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
+                code.invokedynamic(orderingCallSite("sortedArray"));        // Encoder<Object, Object>
+                code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
+            }
+            // no key to omit here, so an absent member is written null
+            case Ast.OptionElemEnc o -> {
+                pushElemEncoder(code, o.elem());                            // Encoder<T, Object>
+                code.invokedynamic(encodeAsFunctionCallSite());             // Function<T, Object>
+                code.invokedynamic(optionElemEncoderCallSite());            // Encoder<Option<T>, Object>
+            }
+            case Ast.MapElemEnc m -> {
+                pushElemEncoder(code, m.value());
+                code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);
+                if (needsKeyRender(m.key())) {
+                    pushKeyRenderer(code, m.key());                         // Function<K, String>
+                    code.invokedynamic(mapKeysCallSite());                  // Function<Map<K,V>, Map<String,V>>
+                    code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
+                }
+                code.invokedynamic(orderingCallSite("sortedObject"));       // Encoder<Object, Object>
+                code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
+            }
         }
     }
 
+    /**
+     * A leaf encoder for a {@code Decimal}, followed by the amount's own form. Raoh's {@code decimal}
+     * hands the {@code BigDecimal} through as it is, scale and all, and the scale is how a number was
+     * written rather than how much it is.
+     */
+    private static void canonicalizeAmount(CodeBuilder code, LeafScalar kind) {
+        if (kind != LeafScalar.DECIMAL) {
+            return;
+        }
+        code.invokedynamic(canonicalNumberCallSite());
+        code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
+    }
+
+    /** {@code Representations::canonicalNumber} as an {@code Encoder}. */
+    private static DynamicCallSiteDesc canonicalNumberCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, "canonicalNumber",
+                MTD_canonicalNumber);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
+                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
+                impl,
+                MTD_canonicalNumber);                                    // (BigDecimal) -> BigDecimal
+    }
+
+    /**
+     * {@code Representations::sortedArray} / {@code ::sortedObject} as an {@code Encoder}, so a
+     * nested collection is put in order after its members have been encoded.
+     *
+     * <p>The field-level arms above call the same method directly, on the value the encode left on
+     * the stack. Both are here rather than in one place after the fact because this is the last
+     * point at which the type is still known: once encoded, a Set and a List are both a
+     * {@code java.util.List}, and only one of the two may be reordered.
+     */
+    private static DynamicCallSiteDesc orderingCallSite(String ordering) {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, ordering,
+                MTD_Representations_sorted);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
+                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
+                impl,
+                MTD_Representations_sorted);
+    }
+
+    /** {@code Option::ofNullable} as a {@code Function}, for {@code Decoder.map} to lift a
+     *  null-tolerant decoder's answer into an {@code Option}. */
+    private static DynamicCallSiteDesc optionOfNullableCallSite() {
+        // Option is a sealed interface, so its static factory is an interface method reference
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.INTERFACE_STATIC, CD_Option, "ofNullable", MTD_ofNullable);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MTD_ofNullable);                                         // (Object) -> Option
+    }
+
+    /** An {@code Encoder}'s own {@code encode} as a {@code Function}, capturing the encoder already
+     *  on the stack. The kernel does not know the boundary library's types, so what it is handed is
+     *  a function rather than an encoder ({@code Options.encodedOrNull}). */
+    private static DynamicCallSiteDesc encodeAsFunctionCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.INTERFACE_VIRTUAL, CD_REncoder, "encode", MTD_Rencode);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function, CD_REncoder),             // captures the encoder
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MTD_Rencode);                                            // (Object) -> Object
+    }
+
+    /** {@code opt -> Options.encodedOrNull(inner, opt)} as an {@code Encoder}, capturing the present
+     *  value's encoder as a function: an absent member is written null. */
+    private static DynamicCallSiteDesc optionElemEncoderCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Options, "encodedOrNull", MTD_encodedOrNull);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder, CD_Function),             // captures the function
+                MTD_Rencode,                                             // samMethodType: (Object) -> Object
+                impl,
+                MethodTypeDesc.of(CD_Object, CD_Option));                // (Option) -> Object
+    }
+
+    /** {@code Sets::toList} as a {@code Function}, so a nested Set reaches the list encoder. */
+    private static DynamicCallSiteDesc setToListCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Sets, "toList", MTD_Sets_toList);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MTD_Sets_toList);                                        // instantiatedMethodType: (Set) -> List
+    }
+
+    /** {@code m -> Maps.mapKeysWith(keyFn, m)} as a {@code Function}, capturing the key function
+     * already on the stack: a nested newtype-keyed Map renders its keys bare before the String-keyed
+     * map encoder sees it. */
+    private static DynamicCallSiteDesc mapKeysCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Maps, "mapKeysWith", MTD_mapKeysWith);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function, CD_Function),             // captures the key Function
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MethodTypeDesc.of(CD_Map, CD_Map));                      // instantiatedMethodType: (Map) -> Map
+    }
+
+    // --- a behavior output union's encoder (spec §jvm-anonymous-union) -------------------------------------------
+
+    /**
+     * The encoder of a behavior's anonymous output union: dispatch on the member, encode it as that
+     * member writes itself, and write the discriminator {@code "type"} — what a named sum over the
+     * same leaves does (spec §encoder-derivation). Without it the same value would travel two ways depending on
+     * where it sat, since a member's own encoder writes no discriminator.
+     *
+     * <p>A member this module declared is the case itself; any other arrives in its bridge case, and
+     * the value is read out of that before its own encoder sees it. The bridge case still carries no
+     * codec of its own — belonging to a union does not change a member's external representation,
+     * only what wraps it here.
+     */
+    byte[] generateResultUnionEncoder(String resultName, List<TypeName> members) {
+        ClassDesc cdEnc = cd(resultName + "$Enc");
+        boolean enumeration = isEnumeration(members);
+        return build(cdEnc, cb -> {
+            cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withInterfaceSymbols(CD_REncoder);
+            emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
+            cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
+                for (TypeName member : members) {
+                    Label next = code.newLabel();
+                    code.aload(1);
+                    code.instanceOf(ctx.resultMemberClass(member));
+                    code.ifeq(next);
+                    if (enumeration) {
+                        code.loadConstant(member.name());
+                    } else {
+                        emitMemberEncode(code, member);
+                    }
+                    code.areturn();
+                    code.labelBinding(next);
+                }
+                code.new_(CD_IllegalStateException);
+                code.dup();
+                code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+                code.athrow();
+            });
+        });
+    }
+
+    /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
+    private void emitMemberEncode(CodeBuilder code, TypeName member) {
+        emitTagged(code, TypeOps.caseShape(member, symbols), "type", member.name(), () -> {
+            pushMemberEncoder(code, member);
+            pushMemberValue(code, member);
+            code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+        });
+    }
+
+    /**
+     * Leaves a discriminated case on the stack: what the case writes on its own, plus what standing
+     * in this sum — or in a behavior's answer, which is the same rule — adds to it (spec §encoder-derivation). A
+     * product lays its fields beside the discriminator and a unit is the discriminator alone, so both
+     * carry it in the object they already are; a newtype and a primitive have no key of their own to
+     * put it on, so their representation goes under {@code "value"} beside it.
+     *
+     * @param encoded leaves the case's own encoded form on the stack
+     */
+    private void emitTagged(CodeBuilder code, CaseShape shape, String key, String tag,
+                            Runnable encoded) {
+        switch (shape) {
+            case PRODUCT, UNIT -> {
+                encoded.run();
+                code.checkcast(CD_Map);
+                code.dup();
+                code.loadConstant(key);
+                code.loadConstant(tag);
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+            }
+            case WRAPPED -> {
+                code.new_(CD_LinkedHashMap);
+                code.dup();
+                code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
+                code.dup();
+                code.loadConstant(key);
+                code.loadConstant(tag);
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+                code.dup();
+                code.loadConstant(CaseShape.ENVELOPE_KEY);
+                encoded.run();
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+            }
+        }
+    }
+
+    /** Pushes the encoder a member writes itself with: its own derived one, or the Raoh leaf encoder
+     * for a primitive, which declares none. */
+    private void pushMemberEncoder(CodeBuilder code, TypeName member) {
+        if (member.isPrimitive()) {
+            LeafScalar scalar = memberScalar(member);
+            code.invokestatic(CD_ObjectEncoders, leafEncoderName(scalar), MTD_Rencode_leaf);
+            canonicalizeAmount(code, scalar);
+            return;
+        }
+        // a member is one of the union's effective members, every named sum already expanded to its
+        // leaves (spec §jvm-product), so its encoder() is on a class and never on a sealed interface
+        code.invokestatic(cd(member), "encoder", MTD_Rencoder, false);
+    }
+
+    /** Pushes the Souther value the member holds: the union value itself for a member this module
+     * declared, and what the bridge case wraps for any other. */
+    private void pushMemberValue(CodeBuilder code, TypeName member) {
+        code.aload(1);
+        if (ctx.isLocalMember(member)) {
+            return;
+        }
+        ClassDesc bridge = ctx.bridgeCaseClass(member);
+        Type held = MatchElaborator.caseBindType(member);
+        code.checkcast(bridge);
+        code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
+        JvmTypes.box(code, held);
+    }
+
+    /** Whether every member is a unit, so the union carries nothing but which member it is and
+     * travels as that member's name — the form a named sum of units has (spec §encoder-derivation). */
+    private boolean isEnumeration(List<TypeName> members) {
+        for (TypeName member : members) {
+            if (!(symbols.get(member) instanceof Ast.UnitData)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The static {@code encoder()} factory on the union's sealed interface. */
+    void emitResultUnionEncoderFactory(ClassBuilder cb, String resultName, List<TypeName> members) {
+        emitCodecFactory(cb, "encoder", CD_REncoder, cd(resultName + "$Enc"),
+                encoderSig(cd(resultName), isEnumeration(members) ? CD_String : CD_Map));
+    }
+
+    /**
+     * The scalar a primitive member is. Recovered through {@link TypeName#primitiveKind()}, which is
+     * the inverse of the mint a primitive case name comes from, rather than through a table of
+     * spellings kept here — that table was a second place for the language's own spelling to be
+     * written, and it answered a member outside it by raising.
+     */
+    private static LeafScalar memberScalar(TypeName member) {
+        Type.Prim prim = member.primitiveKind();
+        LeafScalar scalar = prim == null ? null : LeafScalar.of(prim);
+        if (scalar == null) {
+            throw new IllegalStateException("`" + member + "` is a member of a behavior's answer and"
+                    + " names no scalar a leaf codec exists for");
+        }
+        return scalar;
+    }
+
     /** The Raoh {@code ObjectEncoders} leaf method for each primitive (matches the leaf decoders). */
-    private static String leafEncoderName(Ast.PrimKind kind) {
+    private static String leafEncoderName(LeafScalar kind) {
         return switch (kind) {
             case STRING -> "string";
             case INT -> "long_";
             case BOOL -> "bool";
             case DECIMAL -> "decimal";
             case DATE -> "date";
+            case TIME -> "time";
             case DATETIME -> "dateTime";
+            case INSTANT -> "iso8601";
         };
     }
 }

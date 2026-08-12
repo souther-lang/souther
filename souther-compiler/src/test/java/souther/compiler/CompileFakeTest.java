@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A {@code fake} supplies a test double for an injected {@code requires} dependency so an example can
+ * A {@code fake} supplies a test double for an injected {@code depends on} dependency so an example can
  * evaluate a behavior that depends on it: a {@code with dep = value} on the row (a value dependency)
  * or a {@code fake dep | table} declaration (a function dependency). A missing fake, a table miss,
  * and examples of an injected behavior itself are diagnosed.
@@ -31,7 +31,7 @@ class CompileFakeTest {
             behavior 現在時刻 : () -> String
 
             behavior 受け付ける : (a: 申請) -> 受理
-                requires 現在時刻
+                depends on 現在時刻
                 constructs 受理
 
             let 受け付ける (a, 現在時刻) = 受理 { 時刻 = 現在時刻() }
@@ -42,6 +42,18 @@ class CompileFakeTest {
         String ok = CLOCK + """
                 example 受け付ける
                   | (申請 { 額 = 1 }) with 現在時刻 = "2026-07-20T09:00" -> 受理 { 時刻 = "2026-07-20T09:00" }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(ok));
+    }
+
+    @Test
+    void aParenthesisedWithValueIsNotReadAsALambda() {
+        // a `with` value ends where the row's `->` begins, so a value written in parentheses sits
+        // immediately before an arrow — the one shape a lambda also has. The row wins: `with` takes
+        // a value, and a lambda parameter list is not one.
+        String ok = CLOCK + """
+                example 受け付ける
+                  | (申請 { 額 = 1 }) with 現在時刻 = ("2026-07-20T09:00") -> 受理 { 時刻 = "2026-07-20T09:00" }
                 """;
         assertDoesNotThrow(() -> Compiler.compile(ok));
     }
@@ -64,13 +76,23 @@ class CompileFakeTest {
         assertEquals("E1908", err(bad).diagnostic().code());
     }
 
+    /**
+     * A fake and an example of the same injected behavior say different things and both belong.
+     *
+     * <p>A fake stands in for 現在時刻 while some other behavior's row runs — it is that row's
+     * scaffolding. An example of 現在時刻 says what 現在時刻 itself will have to answer once it has a
+     * `let`. Neither reads the other.
+     */
     @Test
-    void examplingAnInjectedBehaviorIsE1902() {
-        String bad = CLOCK + """
+    void anInjectedBehaviorTakesBothAFakeAndAnExampleOfItsOwn() {
+        String ok = CLOCK + """
+                example 受け付ける
+                  | (申請 { 額 = 1 }) with 現在時刻 = "2026-07-20T09:00" -> 受理 { 時刻 = "2026-07-20T09:00" }
+
                 example 現在時刻
-                  | () -> 受理
+                  | () -> "2026-07-20T09:00"
                 """;
-        assertEquals("E1902", err(bad).diagnostic().code());
+        assertDoesNotThrow(() -> Compiler.compile(ok));
     }
 
     // --- function dependency via `fake` table -------------------------------------------------
@@ -87,7 +109,7 @@ class CompileFakeTest {
             behavior 上長を探す : (id: 従業員ID) -> 従業員ID
 
             behavior 承認者を決める : (申請者: 従業員ID) -> 決定
-                requires 上長を探す
+                depends on 上長を探す
                 constructs 決定
 
             let 承認者を決める (申請者, 上長を探す) = 決定 { 承認者 = 上長を探す(申請者) }
@@ -161,7 +183,7 @@ class CompileFakeTest {
             behavior reserve : (id: OrderId) -> Confirmed | OutOfStock
 
             behavior place : (id: OrderId) -> Confirmed | OutOfStock
-                requires reserve
+                depends on reserve
 
             let place (id, reserve) = reserve(id)
             """;

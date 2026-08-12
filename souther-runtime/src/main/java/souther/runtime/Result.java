@@ -4,7 +4,7 @@ import java.util.function.Function;
 
 /**
  * The Souther result type: either {@link Ok} (a success value of type {@code T}) or
- * {@link Err} (a failure value of type {@code E}). Corresponds to spec section 7.3.
+ * {@link Err} (a failure value of type {@code E}). Corresponds to spec §algebraic-types.
  *
  * <p>Unlike Raoh's {@code Result}, the failure side is a typed value {@code E}, not an
  * untyped issue bag. Raoh's issue types never leak into this public type.
@@ -38,15 +38,15 @@ public sealed interface Result<T, E> permits Result.Ok, Result.Err {
 
     default <U> Result<U, E> map(Function<? super T, ? extends U> f) {
         return switch (this) {
-            case Ok<T, E> ok -> Result.ok(f.apply(ok.value()));
-            case Err<T, E> err -> Result.err(err.error());
+            case Ok<T, E>(T value) -> Result.ok(f.apply(value));
+            case Err<T, E>(E error) -> Result.err(error);
         };
     }
 
     default <U> Result<U, E> flatMap(Function<? super T, ? extends Result<U, E>> f) {
         return switch (this) {
-            case Ok<T, E> ok -> f.apply(ok.value());
-            case Err<T, E> err -> Result.err(err.error());
+            case Ok<T, E>(T value) -> f.apply(value);
+            case Err<T, E>(E error) -> Result.err(error);
         };
     }
 }

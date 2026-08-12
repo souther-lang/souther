@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every name in an {@code exposing} clause must resolve to a data or behavior of the module, and
  * the clause is type-granular: a data's {@code decoder}/{@code encoder} are always public once the
- * data is exposed (spec 4, 19.4), so a {@code A.decoder} member is rejected. A typo used to be
+ * data is exposed (spec §modules, §jvm-codec), so a {@code A.decoder} member is rejected. A typo used to be
  * accepted silently — exposing nothing — which quietly left a type package-private.
  */
 class CompileExposingTest {
@@ -35,11 +35,23 @@ class CompileExposingTest {
         assertTrue(e.getMessage().contains("type-granular"), e.getMessage());
     }
 
+    /** A helper is one of a module's definitions, so `exposing` may name it — the `exposing (toRate)`
+     * an Elm habit writes is what it looks like. */
+    @Test
+    void exposingAHelperIsAccepted() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                exposing ( Real, rateOf )
+                data Real = { v: Int }
+                let rateOf (r: Real): Int = r.v * 2
+                """));
+    }
+
     @Test
     void realExposedNamesAreAccepted() {
         assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
-                exposing ( Real, greet )
+                exposing ( Real, Out, greet )
 
                 data Real = { v: Int }
                 data Out = { v: Int }

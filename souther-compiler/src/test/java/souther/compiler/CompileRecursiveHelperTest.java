@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.runtime.Behavior;
 
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -160,7 +162,7 @@ class CompileRecursiveHelperTest {
                 data Out = Int
 
                 behavior now : () -> N
-                behavior run : (n: N) -> Out requires now constructs Out
+                behavior run : (n: N) -> Out depends on now constructs Out
 
                 partial let loop (n: Int): Int = {
                     let c = now()
@@ -214,14 +216,14 @@ class CompileRecursiveHelperTest {
     @Test
     void aClosurePassedToARecursiveHelperMayCallAnInjectedBehavior() {
         // A recursive helper's own body is pure, but a closure passed to it is behavior code: it may
-        // call an injected behavior, and the requirement is the caller's — `run` declares `requires now`.
+        // call an injected behavior, and the requirement is the caller's — `run` declares `depends on now`.
         // The recursive helper `loopy` stays pure; it only applies the closure it is handed.
         String src = """
                 module demo
                 data N = Int
                 data Out = Int
                 behavior now : () -> N
-                behavior run : (n: N) -> Out requires now constructs Out
+                behavior run : (n: N) -> Out depends on now constructs Out
                 partial let loopy (f: (Int) -> Int, n: Int): Int = if n == 0 then 0 else f(n) + loopy(f, n - 1)
                 let run (n, now) = Out(loopy((x) -> {
                     let c = now()
@@ -232,9 +234,103 @@ class CompileRecursiveHelperTest {
     }
 
     @Test
+    void anInjectedBehaviorIsHandedToARecursiveHelperByName() throws Exception {
+        // A `depends on` parameter is an argument of the `let` like any other, so it may be handed to
+        // a helper by name — the same thing as wrapping it in `(x) -> twice(x)`. The helper is
+        // recursive and so is lowered to a method, which is the one shape where the argument stays a
+        // value instead of being rewritten into a call by inlining.
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior twice : (n: N) -> N
+                behavior run : (n: N) -> Out depends on twice constructs Out
+                partial let applyTimes (f: (N) -> N, x: N, k: Int): N =
+                    if k == 0 then x else applyTimes(f, f(x), k - 1)
+                let run (n, twice) = Out(applyTimes(twice, n, 3).value)
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Behavior<Object, Object> twice = n -> {
+            try {
+                long v = (long) Codecs.encode(loader, "demo.N", n);
+                return Codecs.decoded(loader, "demo.N", v * 2);
+            } catch (Exception e) {
+                throw new AssertionError(e);
+            }
+        };
+        Object run = loader.loadClass("demo.Run" + "$Impl").getConstructor(Behavior.class).newInstance(twice);
+
+        Object out = Codecs.apply(run, Codecs.decoded(loader, "demo.N", 1L));
+
+        assertEquals(8L, (long) Codecs.encode(loader, "demo.Out", out));
+    }
+
+    @Test
+    void aMultiArgumentDependencyIsHandedToARecursiveHelperByName() {
+        // The forwarding takes as many arguments as the parameter's declared function type does, so a
+        // two-input dependency is handed over whole rather than losing its second argument.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data R = { z: Int }
+                behavior send : (a: A, b: B) -> R constructs R
+                behavior use : (a: A, b: B) -> R depends on send
+                partial let retry (f: (A, B) -> R, a: A, b: B, k: Int): R =
+                    if k == 0 then f(a, b) else retry(f, a, b, k - 1)
+                let use (a, b, send) = retry(send, a, b, 1)
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void aBusinessParameterWhereAFunctionIsExpectedIsNotForwarded() {
+        // Only a `depends on` parameter is forwarded. A business input cannot be a function at all, so
+        // one written where a function goes stays the mismatch it is — it must not be turned into a
+        // block that calls it and reported as an uncallable name.
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior run : (n: N) -> Out constructs Out
+                partial let applyTimes (f: (N) -> N, x: N, k: Int): N =
+                    if k == 0 then x else applyTimes(f, f(x), k - 1)
+                let run (n) = Out(applyTimes(n, n, 3).value)
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertFalse(ex.getMessage().contains("unknown identifier"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("n") || ex.getMessage().contains("applyTimes"),
+                ex.getMessage());
+    }
+
+    @Test
+    void aLocalThatShadowsADependencyIsNotForwarded() {
+        // What is forwarded is the dependency parameter, not every name spelled like it. A binding in
+        // force wins over the declaration it shadows (spec §fn-rules), so this `twice` is the local —
+        // an `N` written where a function goes, which must stay that mismatch rather than become a
+        // block that calls a value.
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior twice : (n: N) -> N
+                behavior run : (n: N) -> Out depends on twice constructs Out
+                partial let applyTimes (f: (N) -> N, x: N, k: Int): N =
+                    if k == 0 then x else applyTimes(f, f(x), k - 1)
+                let run (n, twice) = {
+                    let twice = n
+                    Out(applyTimes(twice, n, 3).value)
+                }
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertFalse(ex.getMessage().contains("unknown function"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("expects a block"), ex.getMessage());
+    }
+
+    @Test
     void aClosureCallingAnInjectedBehaviorStillNeedsTheBehaviorToDeclareRequires() {
         // The effect a closure performs is attributed to the behavior that builds it: `run` reaches
-        // `now` through the closure but does not declare `requires now`, so it is E1602 — the same rule
+        // `now` through the closure but does not declare `depends on now`, so it is E1602 — the same rule
         // any injected call in a behavior obeys, not a recursive-helper-specific one.
         String src = """
                 module demo
@@ -249,7 +345,7 @@ class CompileRecursiveHelperTest {
                 }, n.value))
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(ex.getMessage().contains("now") && ex.getMessage().contains("requires"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("now") && ex.getMessage().contains("depends on"), ex.getMessage());
     }
 
     @Test
@@ -296,6 +392,195 @@ class CompileRecursiveHelperTest {
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(ex.getMessage().contains("Tag"), ex.getMessage());
+    }
+
+    // A tree walk that produces a list is written with `flatMap`, and the recursive call sits in the
+    // lambda `flatMap` is handed. `flatMap` is a prelude helper expanded into its caller, so the
+    // lambda is checked against the parameter type before that expansion runs — and the call in it is
+    // to a helper that is lowered to a method and so stays a call. It is typed against the recursive
+    // helper's signature, the same way the helper's own body is.
+    private static final String TREE = """
+            module demo
+            data Node = { n: Int, kids: List<Node> }
+            data Out = { xs: List<Int> }
+
+            let flatten (t: Node): List<Int> =
+                [t.n] ++ List.flatMap(k -> flatten(k), t.kids)
+
+            behavior go : (t: Node) -> Out constructs Out
+            let go (t) = Out { xs = flatten(t) }
+            """;
+
+    @Test
+    void aCombinatorLambdaInAHelperReachesARecursiveHelper() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(TREE), getClass().getClassLoader());
+        Object tree = Codecs.decoded(loader, "demo.Node", Map.of(
+                "n", 1L, "kids", java.util.List.of(
+                        Map.of("n", 2L, "kids", java.util.List.of(Map.of("n", 4L, "kids", java.util.List.of()))),
+                        Map.of("n", 3L, "kids", java.util.List.of()))));
+
+        Object behavior = loader.loadClass("demo.Go" + "$Impl").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, tree);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> encoded = (Map<String, Object>) Codecs.encode(loader, "demo.Out", out);
+        assertEquals(java.util.List.of(1L, 2L, 4L, 3L), encoded.get("xs"),
+                "the walk visits each node before its children");
+    }
+
+    @Test
+    void aCombinatorLambdaReachesARecursiveHelperThroughAnInlinedOne() {
+        // The lambda names `labelled`, which is not recursive and so is expanded into it — and what the
+        // expansion leaves behind is the call to `flatten`, which is. What the lambda reaches matters,
+        // not what it spells.
+        String src = TREE.replace("let go (t) = Out { xs = flatten(t) }", """
+                let labelled (t: Node): List<Int> = flatten(t)
+                let roster (t: Node): List<Int> = List.flatMap(k -> labelled(k), t.kids)
+                let go (t) = Out { xs = roster(t) }
+                """);
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void aCombinatorLambdaReachesAPartialRecursiveHelper() {
+        // What lowers a helper to a method is recursion, not `partial`: a `partial` helper that does
+        // not recurse is inlined like any other. `countDown` walks an Int down to zero, which is not
+        // structural, so `partial` is what lets the recursion be written at all — and the recursion
+        // is what leaves the call standing in the lambda.
+        String src = """
+                module demo
+                data Bag = { ns: List<Int> }
+                data Out = { xs: List<Int> }
+                partial let countDown (n: Int): List<Int> =
+                    if n == 0 then [] else [n] ++ countDown(n - 1)
+                partial let all (b: Bag): List<Int> = List.flatMap(n -> countDown(n), b.ns)
+                behavior go : (b: Bag) -> Out constructs Out
+                let go (b) = Out { xs = all(b) }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void aCombinatorLambdaReachesAnImportedRecursiveHelper() {
+        // A recursive helper another module publishes is emitted as a method of the reader, so a call
+        // to it in the reader's lambda is the same call, under the qualified name.
+        String lib = """
+                module lib exposing ( Node, flatten )
+                data Node = { n: Int, kids: List<Node> }
+                let flatten (t: Node): List<Int> = [t.n] ++ List.flatMap(k -> flatten(k), t.kids)
+                """;
+        String app = """
+                module app
+                import lib ( Node, flatten )
+                data Out = { xs: List<Int> }
+                let roster (t: Node): List<Int> = List.flatMap(k -> flatten(k), t.kids)
+                behavior go : (t: Node) -> Out constructs Out
+                let go (t) = Out { xs = roster(t) }
+                """;
+        assertDoesNotThrow(() -> Compiler.compileModules(java.util.List.of(lib, app)));
+    }
+
+    @Test
+    void aParameterSpelledLikeARecursiveHelperIsTheParameter() {
+        // A recursive helper's signature is in scope wherever its call may stand, but a binding in
+        // force wins over the declaration it shadows (spec §fn-rules). `depth` here is the Int
+        // parameter, so `depth + 1` is arithmetic — not a function where a number goes.
+        String src = ORG.replace("let measureDepth (e) = Depth(depth(e))", """
+                let bump (depth: Int): Int = depth + 1
+                let measureDepth (e) = Depth(bump(depth(e)))
+                """);
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void aBehaviorInputSpelledLikeARecursiveHelperIsTheInput() {
+        // The same rule on the behavior side: the input named `depth` is an Employee, so its field
+        // reads, rather than being read as the helper spelled that way.
+        String src = """
+                module demo
+                data Employee = { boss: Employee?, name: String }
+                data Out = { name: String }
+                let depth (e: Employee): Int =
+                    match e.boss with
+                        | Some b -> depth(b) + 1
+                        | None -> 1
+                behavior go : (depth: Employee) -> Out constructs Out
+                let go (depth) = Out { name = depth.name }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void aLetSpelledLikeTheParameterDoesNotMakeARecursiveCallDecrease() {
+        // The size a structural recursion decreases is the parameter's, and `t` here is not the
+        // parameter: it is a value built from it, which may be bigger. Read as the parameter, the
+        // arm binding counted as a strictly smaller part of it and `flatten(k)` was accepted as
+        // walking the tree down — a program that never bottoms out.
+        String src = """
+                module demo
+                data Node = { n: Int, kids: List<Node> }
+                data Out = { xs: List<Int> }
+
+                let grow (t: Node): Node = Node { n = t.n, kids = [t, t] }
+
+                let flatten (t: Node): List<Int> = {
+                    let t = grow(t)
+                    [t.n] ++ List.flatMap(k -> flatten(k), t.kids)
+                }
+
+                behavior go : (t: Node) -> Out constructs Out, Node
+                let go (t) = Out { xs = flatten(t) }
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(ex.getMessage().contains("flatten"), ex.getMessage());
+    }
+
+    @Test
+    void applyingAFunctionParameterSpelledLikeAHelperIsNotACallToThatHelper() {
+        // The function-argument check reads what a call applies, not how it is spelled: `apply` is
+        // the parameter here, so `apply(n)` applies the function it was given. The helper of that
+        // name takes a function of two parameters, and holding the argument against it would refuse
+        // a program the language allows.
+        String src = """
+                module demo
+                data In = { n: Int }
+                data Out = { d: Int }
+                let apply (f: (Int) -> Int, a: Int): Int = f(a)
+                let once (apply: (Int, Int) -> Int, n: Int): Int = apply(n, n)
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { d = once((x, y) -> x + y, i.n) }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void applyingAParameterThatShadowsARecursiveHelperIsRejected() {
+        // The other direction of the same rule, and the one that costs something: `count(2)` reaches
+        // the parameter, which is an Int, so it is not applied to anything. The helper spelled that
+        // way is out of reach here — a name is one thing at a time, and the binding is what it is.
+        String src = """
+                module demo
+                data In = { n: Int }
+                data Out = { d: Int }
+                partial let count (n: Int): Int = if n == 0 then 0 else count(n - 1) + 1
+                let use (count: Int): Int = count(2)
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { d = use(i.n) }
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(ex.getMessage().contains("count") && ex.getMessage().contains("not a function"),
+                ex.getMessage());
+    }
+
+    @Test
+    void anUnannotatedParameterTakesItsTypeFromANeighbouringRecursiveHelperCall() {
+        // The type a parameter is left to take from the body can come from a call that is left
+        // standing — `x + depth(e)` types `x` from what `depth` returns (spec §fn-declaration).
+        String src = ORG.replace("let measureDepth (e) = Depth(depth(e))", """
+                let bump (x, e: Employee) = x + depth(e)
+                let measureDepth (e) = Depth(bump(1, e))
+                """);
+        assertDoesNotThrow(() -> Compiler.compile(src));
     }
 
     @Test

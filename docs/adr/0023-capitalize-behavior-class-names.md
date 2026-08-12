@@ -12,7 +12,7 @@ Generated class names derive from the behavior name with the first letter capita
 
 ## Consequences
 
-The collision surfaces at compile time rather than producing two classes that clash on the JVM. In practice it is rare: verb behaviors and noun data are naturally different words (`会員を探す` versus `会員`), so the capitalized behavior class and the data class do not usually meet. When they do, renaming one — normally making the verb and the noun distinct — resolves it.
+The collision surfaces at compile time rather than producing two classes that clash on the JVM. In practice it is rare: verb behaviors and noun data are naturally different words (`findMember` versus `Member`), so the capitalized behavior class and the data class do not usually meet. When they do, renaming one — normally making the verb and the noun distinct — resolves it.
 
 ## References
 

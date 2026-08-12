@@ -15,10 +15,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The arithmetic operators {@code + - * /} over Int and Decimal (spec 18.1). A Decimal literal
- * carries the {@code m} suffix (F# form). {@code /} aborts on a zero divisor (like overflow), while
- * the {@code divide} functions still return {@code X | DivisionByZero} for case handling; Decimal
- * {@code /} rounds to F#/.NET System.Decimal precision, half away from zero.
+ * The arithmetic operators {@code + - * /} over Int and Decimal (spec
+ * §an-operator-takes-the-types-it-is-defined-for). A Decimal literal carries the {@code m} suffix (F# form).
+ * {@code /} aborts on a zero divisor (like overflow), while the {@code divide} functions still return {@code
+ * X | DivisionByZero} for case handling; Decimal {@code /} rounds to F#/.NET System.Decimal precision, half
+ * away from zero.
  */
 class CompileArithmeticOperatorTest {
 

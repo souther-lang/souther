@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A value of a case type is a value of its sum (spec 8.3): it can be assigned to a sum-typed
+ * A value of a case type is a value of its sum (spec §sum-data): it can be assigned to a sum-typed
  * field and passed to a sum-typed parameter, not only returned. The functional-language norm.
  */
 class CompileCaseWideningTest {
@@ -50,7 +50,7 @@ class CompileCaseWideningTest {
                 data AB = A | B
                 data Stored = { it: AB }
                 behavior store : (ab: AB) -> Stored
-                behavior use : (a: A) -> Stored requires store
+                behavior use : (a: A) -> Stored depends on store
                 let use (a, store) = store(a)
                 """;
         assertDoesNotThrow(() -> Compiler.compile(src));

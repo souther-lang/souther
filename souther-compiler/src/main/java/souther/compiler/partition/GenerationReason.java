@@ -1,0 +1,68 @@
+package souther.compiler.partition;
+
+/**
+ * Why a generation did not offer everything it might have.
+ *
+ * <p>Apart from {@code Incompleteness}, which says what a measurement could not read. These say what
+ * the generator did about that, and the two are not the same taxonomy: a value that could not be read
+ * is a fact about the rows, and a position left out of the offer is a decision taken because of it.
+ * Held as one vocabulary, the decision borrowed the name of the cause and a reader could not tell a
+ * generation that ended from one that went on without a position.
+ *
+ * <p>That difference is the whole of what a reader of a generated block needs and could not get. A
+ * block that says it stopped, above rows it is offering, is telling an author both that there is work
+ * here and that there is none.
+ */
+public sealed interface GenerationReason {
+
+    /**
+     * A position no work was offered at, because some row's value there could not be read.
+     *
+     * <p>The generation went on without it. A row written for a class at a position nothing is known
+     * about may be a row that is already there, and telling an author to write one is worse than
+     * saying nothing: it is a specific piece of work that is already done.
+     */
+    record PositionWithheld(AxisId axis) implements GenerationReason {}
+
+    /**
+     * Rows exist that nothing read, so nothing was offered at all.
+     *
+     * <p>What is left uncovered cannot be worked out from rows that were not read, and a generated
+     * row is a specific piece of work handed to a person — one that may already be sitting in the
+     * file that could not be evaluated.
+     *
+     * <p>Carries what the measurement could not read, because that is the evidence this decision
+     * rests on and a person holding only the generated block has nowhere else to find it. The
+     * decision and the evidence are different things and this keeps them so.
+     */
+    record RowsNotRead(String behavior, java.util.List<souther.compiler.observe.Incompleteness> because)
+            implements GenerationReason {
+
+        public RowsNotRead {
+            because = java.util.List.copyOf(because);
+        }
+    }
+
+    /** The search ended before it had covered everything, with this many combinations left. */
+    record SearchLimit(String behavior, int combinations) implements GenerationReason {}
+
+    /**
+     * The module's classes were not there to put a candidate through.
+     *
+     * <p>Which is not the classes refusing to link — that is {@link LinkageFailed}, and it is what
+     * happened where they were built and could not be reached. Neither leaves a row to offer, and
+     * that is the only thing they have in common; a sentence saying the classes were not there,
+     * printed where they were, states something that did not happen.
+     */
+    record NothingToBuildAgainst(String behavior) implements GenerationReason {}
+
+    /**
+     * The generated classes would not link, so the decoders could not be reached.
+     *
+     * <p>What the JVM raised is a {@code LinkageError}, and which of its causes it was is not
+     * something this can tell. What it does say is that there were classes: the difference from
+     * {@link NothingToBuildAgainst} is recorded where the attempt was made, and losing it here would
+     * be this compiler choosing which of two things it saw to report.
+     */
+    record LinkageFailed(String behavior) implements GenerationReason {}
+}

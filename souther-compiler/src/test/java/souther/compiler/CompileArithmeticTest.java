@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** End-to-end test for arithmetic operators with correct precedence (spec 18.2). */
+/** End-to-end test for arithmetic operators with correct precedence (spec §stdlib-int). */
 class CompileArithmeticTest {
 
     private static final String MODULE = """

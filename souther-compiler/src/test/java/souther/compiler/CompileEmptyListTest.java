@@ -8,7 +8,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The empty-list literal {@code []} (ADR-0028, relaxing spec §list). It has no element type of its
+ * The empty-list literal {@code []} (ADR-0028, relaxing spec §collections). It has no element type of its
  * own; the type is fixed by context — the other operand of {@code ++}, the sibling case of an
  * {@code if}, the accumulator a {@code fold} seed grows into, or the {@code List<T>} a field expects.
  * An empty list is polymorphic and element-agnostic at runtime, so this is always sound.
@@ -166,8 +166,12 @@ class CompileEmptyListTest {
      * An arithmetic fold over the empty-list literal is the seed. The element type of {@code []} is
      * a {@code Nothing} bottom, so the step's element operand ({@code x} in {@code acc + x}) has no
      * JVM form; but the source is statically empty, so the loop body is dead code — {@code fold f z
-     * []} is {@code z}. This is Elm's {@code List.sum [] == 0} / {@code List.product [] == 1}. The
-     * backend must emit no body rather than unbox the {@code Nothing} element and crash.
+     * []} is {@code z}. The backend must emit no body rather than unbox the {@code Nothing} element
+     * and crash.
+     *
+     * <p>{@code sum} / {@code product} answer the same way (Elm's {@code List.sum [] == 0} /
+     * {@code List.product [] == 1}), by a different route: they are primitives over a numeric
+     * element, and the field each fills says which of {@code Int} and {@code Decimal} that is.
      */
     @Test
     void arithmeticFoldOverTheEmptyLiteralIsTheSeed() throws Exception {

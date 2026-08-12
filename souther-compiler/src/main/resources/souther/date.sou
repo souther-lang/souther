@@ -8,7 +8,41 @@ module souther.date
 // Argument order follows F#/Elm ([#pipe]): the date operated on comes last, so
 // `d |> Date.addDays(3)` reads left to right. `daysBetween(from, to)` counts whole days from `from`
 // to `to`, negative when `to` precedes `from`.
-let addDays (days: Int, d: Date) : Date = intrinsic "date.addDays"
-let addMonths (months: Int, d: Date) : Date = intrinsic "date.addMonths"
-let addYears (years: Int, d: Date) : Date = intrinsic "date.addYears"
-let daysBetween (from: Date, to: Date) : Int = intrinsic "date.daysBetween"
+let addDays (days: Int, d: Date): Date = intrinsic "date.addDays"
+let addMonths (months: Int, d: Date): Date = intrinsic "date.addMonths"
+let addYears (years: Int, d: Date): Date = intrinsic "date.addYears"
+let daysBetween (from: Date, to: Date): Int = intrinsic "date.daysBetween"
+
+// The parts of a date. `year` and `day` are Ints in both Elm (`Time.toYear` / `toDay`) and .NET
+// (`DateTime.Year` / `Day`). `month` follows .NET rather than Elm, whose `Month` is a twelve-case
+// type: `elm/time` has no month arithmetic at all, so its Month exists to be displayed and matched,
+// while `addMonths` here counts in months and a named month would have to be converted back to add
+// one. There is no `dayOfWeek`: neither language answers that with a bare number, so it needs a
+// seven-case type in the core, and nothing yet asks for it.
+//
+// With `day`, the month boundary is two lines in a domain, which is where it belongs — neither Elm
+// nor .NET ships a month-end function either:
+//     let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
+//     let endOfMonth (d: Date): Date = Date.addDays(0 - 1, Date.addMonths(1, monthStart(d)))
+let year (d: Date): Int = intrinsic "date.year"
+let month (d: Date): Int = intrinsic "date.month"
+let day (d: Date): Int = intrinsic "date.day"
+
+// The other direction: three Ints read as a day, answering `NotADate` where they name none —
+// February the 30th, month 13, a year outside what a date can hold. The inverse of the three
+// readers above, so
+//
+//     Date.fromParts(Date.year(d), Date.month(d), Date.day(d)) == d
+//
+// holds for every date, which is what makes this a way back rather than a second way in that
+// answers something else.
+//
+// A written date is refused at compile time ([#temporal-literal]) because the text is there to be
+// read; parts are values, so a refusal here is a business result at the position that built them.
+// That is the same split `String.toInt` makes, and for the same reason.
+//
+// Nothing is normalised, and that is the point of having it. The arithmetic normalises — it must,
+// since shifting a day by a month has to land somewhere — so a model that reaches an impossible
+// date by adding to a written one gets a real date back and no sign that it asked for a day the
+// calendar does not have. Asked as three parts, the question has an answer, and it is `NotADate`.
+let fromParts (year: Int, month: Int, day: Int): Date | NotADate = intrinsic "date.fromParts"

@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -74,7 +73,7 @@ class CompileInvariantQuantifierTest {
         // member
         Compiler.compile("""
                 module demo
-                data カゴ = { skus: List<String> } invariant List.member("x", skus)
+                data カゴ = { skus: List<String> } invariant List.contains("x", skus)
                 """);
         // distinct — no duplicate SKUs
         Compiler.compile("""
@@ -114,12 +113,13 @@ class CompileInvariantQuantifierTest {
         Compiler.compile(src);
     }
 
+    /**
+     * A recursive helper is a static method, so it is reached by the name it is declared under. Bound
+     * to a local and applied, that is still what happens: the binding names the same function and the
+     * application expands to the call it has to be.
+     */
     @Test
-    void aTotalHelperReferencedAsABareValueInAnInvariantIsRejected() {
-        // Putting recursive-helper signatures in the invariant's type environment lets a call resolve,
-        // but a recursive helper is a static method, not a first-class value. Referencing one as a bare
-        // value (not in call position) is rejected, exactly as in a behavior body — it does not slip
-        // through to produce unemittable code.
+    void aTotalHelperBoundToALocalInAnInvariantIsApplied() {
         String src = """
                 module demo
                 data 木 = { 子: Option<木> }
@@ -129,6 +129,23 @@ class CompileInvariantQuantifierTest {
                 data X = { root: 木 } invariant {
                     let g = 深さ
                     g(root) >= 0
+                }
+                """;
+        Compiler.compile(src);
+    }
+
+    /** What it cannot do is escape: a static method is not a value to be carried off. */
+    @Test
+    void aTotalHelperThatEscapesInAnInvariantIsRejected() {
+        String src = """
+                module demo
+                data 木 = { 子: Option<木> }
+                let 深さ (t: 木): Int = match t.子 with
+                    | Some c -> 深さ(c) + 1
+                    | None -> 0
+                data X = { root: 木 } invariant {
+                    let g = 深さ
+                    List.length([g]) >= 0
                 }
                 """;
         assertThrows(CompileException.class, () -> Compiler.compile(src));

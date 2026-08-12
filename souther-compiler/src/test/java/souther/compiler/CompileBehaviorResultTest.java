@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Spec 19.8: a behavior whose output is an anonymous union (`-> A | B`) gets a generated
+ * Spec §jvm-anonymous-union: a behavior whose output is an anonymous union (`-> A | B`) gets a generated
  * sealed interface {@code <behavior名>Result} whose {@code permits} are the union cases, and every
  * case data implements it.
  */
@@ -59,7 +59,7 @@ class CompileBehaviorResultTest {
 
     private static final String INJECTED = """
             module demo
-            exposing ( Member )
+            exposing ( Id, Member )
 
             data Id = String
             data Member = { id: Id }
@@ -69,8 +69,9 @@ class CompileBehaviorResultTest {
                 constructs 会員なし
             """;
 
-    /** Spec 19.8/24: the abstract base a Java implementation extends declares the result interface
-     *  as its {@code Behavior} return type, so the author writes {@code findMemberResult apply(Id)}. */
+    /** Spec §jvm-anonymous-union, §java-base-class: the abstract base a Java implementation
+     *  extends declares the result interface as its {@code Behavior} return type, so the author
+     *  writes {@code findMemberResult apply(Id)}. */
     @Test
     void injectedBaseDeclaresTheResultInterfaceAsItsGenericReturnType() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(INJECTED), getClass().getClassLoader());

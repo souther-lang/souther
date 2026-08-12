@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * End-to-end test for {@code require ... else} and type-routed {@code >->} composition: a case
- * the next stage does not accept propagates through unchanged (spec 12.2, 14.2).
+ * End-to-end test for {@code guard ... else} and type-routed {@code >->} composition: a case
+ * the next stage does not accept propagates through unchanged (spec §unmarked-output, §type-routing).
  */
 class CompileRailwayTest {
 
@@ -20,12 +20,12 @@ class CompileRailwayTest {
             data TooLarge = { limit: Int }
             data Doubled = Int
 
-            // over 100 leaves the main line as a TooLarge case. `require ... else` mints the
-            // TooLarge, so the behavior declares it (spec 12.3).
-            behavior guard : (a: Amount) -> Amount | TooLarge constructs TooLarge
+            // over 100 leaves the main line as a TooLarge case. `guard ... else` mints the
+            // TooLarge, so the behavior declares it (spec §constructs).
+            behavior capAmount : (a: Amount) -> Amount | TooLarge constructs TooLarge
 
-            let guard (a) = {
-                require a.value <= 100 else TooLarge { limit = 100 }
+            let capAmount (a) = {
+                guard a.value <= 100 else TooLarge { limit = 100 }
                 a
             }
 
@@ -34,7 +34,7 @@ class CompileRailwayTest {
 
             let toDoubled (a) = Doubled { value = a.value }
 
-            behavior process = guard >-> toDoubled
+            behavior process = capAmount >-> toDoubled
             """;
 
     private BytesClassLoader loader() {
@@ -50,7 +50,7 @@ class CompileRailwayTest {
         BytesClassLoader loader = loader();
         Object process = loader.loadClass("demo.Process" + "$Impl").getConstructor().newInstance();
         Object r = Codecs.apply(process, amount(loader, 42));
-        // 42 <= 100, so guard yields Amount, which toDoubled consumes into a Doubled
+        // 42 <= 100, so capAmount yields Amount, which toDoubled consumes into a Doubled
         assertEquals("demo.Doubled", r.getClass().getName());
     }
 
@@ -59,7 +59,7 @@ class CompileRailwayTest {
         BytesClassLoader loader = loader();
         Object process = loader.loadClass("demo.Process" + "$Impl").getConstructor().newInstance();
         Object r = Codecs.apply(process, amount(loader, 500));
-        // 500 > 100, so guard yields TooLarge, which toDoubled does not accept: it propagates
+        // 500 > 100, so capAmount yields TooLarge, which toDoubled does not accept: it propagates
         assertEquals("demo.TooLarge", r.getClass().getName());
     }
 
@@ -67,7 +67,7 @@ class CompileRailwayTest {
      * Regression: a case that leaves the main line must stay off it. The router kept the passed
      * case in the running union and offered it to every later stage, so a stage that happened to
      * accept it pulled it back in — `A >-> B >-> C` returned C's output for a value B had already
-     * dropped. That is not Railway (spec 14.2), and it made the meaning of a pipeline depend on
+     * dropped. That is not Railway (spec §type-routing), and it made the meaning of a pipeline depend on
      * where it was split.
      */
     @Test
@@ -83,7 +83,7 @@ class CompileRailwayTest {
                 // over 100 leaves as Off
                 behavior 判定 : (i: In) -> Mid | Off constructs Mid, Off
                 let 判定 (i) = {
-                    require i.value <= 100 else Off { v = i.value }
+                    guard i.value <= 100 else Off { v = i.value }
                     Mid { v = i.value }
                 }
                 // takes Mid only — Off passes it by
@@ -116,7 +116,7 @@ class CompileRailwayTest {
                 behavior bad : (a: A, other: B) -> A
 
                 let bad (a, other) = {
-                    require a.value <= 1 else other
+                    guard a.value <= 1 else other
                     a
                 }
                 """;

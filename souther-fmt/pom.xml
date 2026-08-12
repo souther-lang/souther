@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc3</version>
+        <version>0.1.0-rc4</version>
     </parent>
 
     <artifactId>souther-fmt</artifactId>
@@ -24,5 +24,30 @@
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-syntax</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- The corpus these tests sweep, and the rewrites they are swept with, are fixtures
+                 rather than checks. A check that needs the frontend stays in souther-compiler and
+                 reads them from here, so they ship as a test jar. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>test-jar</id>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -9,7 +9,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** End-to-end test for {@code match} over a sum type, including exhaustiveness (spec 16.3, 22.7). */
+/** End-to-end test for {@code match} over a sum type, including exhaustiveness (spec §match, §e1201). */
 class CompileMatchTest {
 
     private static final String MODULE = """

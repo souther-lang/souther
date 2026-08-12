@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
 
 import souther.runtime.ConstraintViolation;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -125,6 +127,26 @@ class CompileNewtypeConstructTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(e.getMessage().contains("金額"), e.getMessage());
+    }
+
+    /** The compile-time check asks one clause at a time, so a constant the compiler rejects names the
+     * rule it broke rather than the whole invariant. */
+    @Test
+    void constantViolatingANamedClauseNamesThatClause() {
+        // Both clauses are outside the fragment the discharge procedure reasons over, so this is the
+        // constant check speaking and not the possible-violation one.
+        String src = """
+                module demo
+                data Code = String
+                    invariant lower = String.matches("[a-z]+", value)
+                    invariant noDigits = String.matches("[^0-9]+", value)
+                behavior make : (x: Int) -> Code constructs Code
+                let make (x) = Code("AB")
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertInstanceOf(DataMessage.TheWrittenValueViolatesTheClause.class, e.diagnostics().get(0).said());
+        assertEquals("lower", e.diagnostics().get(0).values().get("clause"),
+                "the first clause the constant breaks, in declaration order");
     }
 
     @Test
@@ -269,5 +291,26 @@ class CompileNewtypeConstructTest {
         assertEquals(5L, encoded.get("額"));
         Object addNeg = Codecs.decoded(loader, "demo.Cmd", Map.of("type", "Add", "n", -5L));
         assertThrows(ConstraintViolation.class, () -> apply(loader, "Run", addNeg));
+    }
+
+    /**
+     * A binding of the same spelling is what the name means where it is bound, so applying it is a
+     * call and not a construction. The desugar used to ask the type namespace on its own and rewrote
+     * this to `Amount { value = n }` — a silent change of meaning, since both forms compile.
+     */
+    @Test
+    void aParameterNamedLikeANewtypeIsAppliedRatherThanConstructed() throws Exception {
+        String src = """
+                module demo
+                data Amount = Int
+
+                let call (Amount: (Int) -> Int, n: Int): Int = Amount(n)
+
+                behavior g : (n: Int) -> Int
+                let g (n) = call(x -> x * 2, n)
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+
+        assertEquals(6L, apply(loader, "G", 3L));
     }
 }

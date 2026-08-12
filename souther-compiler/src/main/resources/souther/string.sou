@@ -9,37 +9,109 @@ module souther.string
 // `s |> String.trim |> String.contains("@")` reads top to bottom. `append` joins two strings in
 // their written order (Elm `String.append`); the `++` operator is the common form, `append a b == a
 // ++ b`. `concat` flattens a `List<String>` (Elm `String.concat`).
-let trim (s: String) : String = intrinsic "string.trim"
-let lowercase (s: String) : String = intrinsic "string.lowercase"
-let uppercase (s: String) : String = intrinsic "string.uppercase"
-let contains (sub: String, s: String) : Bool = intrinsic "string.contains"
-let startsWith (prefix: String, s: String) : Bool = intrinsic "string.startsWith"
-let endsWith (suffix: String, s: String) : Bool = intrinsic "string.endsWith"
+//
+// Every length, index and range in this module counts Unicode code points. It is not the UTF-16 code
+// unit the JVM stores a string in — that is the backend's representation and says nothing a domain
+// wants — and it is not the grapheme cluster a reader sees as one character, which depends on
+// Unicode segmentation. `髙` and `𠮷` are one each; a base letter followed by a combining accent is
+// two, and so is a flag emoji. What that buys is that the operations agree with one another:
+//
+//     String.length(s) == List.length(String.characters(s))
+//     String.slice(0, String.length(s), s) == s
+//
+// and that no operation here can answer with half a surrogate pair. An invariant written
+// `String.length(value) <= 20` therefore says twenty code points, not twenty columns on a form.
+let length (s: String): Int = intrinsic "string.length"
+let toInt (s: String): Int | NotANumber = intrinsic "string.toInt"
+let toDecimal (s: String): Decimal | NotANumber = intrinsic "string.toDecimal"
+
+let trim (s: String): String = intrinsic "string.trim"
+let lowercase (s: String): String = intrinsic "string.lowercase"
+let uppercase (s: String): String = intrinsic "string.uppercase"
+let contains (sub: String, s: String): Bool = intrinsic "string.contains"
+let startsWith (prefix: String, s: String): Bool = intrinsic "string.startsWith"
+let endsWith (suffix: String, s: String): Bool = intrinsic "string.endsWith"
+
+// `isEmpty` says "this text is blank" (Elm `String.isEmpty`), the sibling of `List.isEmpty` /
+// `Map.isEmpty` / `Set.isEmpty`. It reads `length`, so it is an ordinary helper rather than a
+// primitive. Use it in a predicate — `filter(piece -> not(String.isEmpty(piece)))` — rather than in a
+// newtype invariant: a derived decoder recognises `String.length(value) >= 1` and reports a violation
+// as `too_short` with its bound, while the helper's inlined form leaves it the generic
+// `invariant_violation` (§decoder-error).
+let isEmpty (s: String): Bool = String.length(s) == 0
 
 // Whole-string regex match (Java Pattern flavour, anchored), for format-constrained values in an
 // invariant — `invariant String.matches("[0-9]{3}-[0-9]{4}", value)`. The pattern must be a string
 // literal, so a malformed regex is a compile error and the whole thing reads as a plain Bool.
-let matches (pattern: String, s: String) : Bool = intrinsic "string.matches"
-let substring (from: Int, to: Int, s: String) : String = intrinsic "string.substring"
-let append (a: String, b: String) : String = intrinsic "string.append"
+let matches (pattern: String, s: String): Bool = intrinsic "string.matches"
+
+// `slice` takes the code points from `fromInclusive` up to but not including `toExclusive`. Half-open
+// is the rule for extracting a range, as `rangeInclusive`'s name is the rule for generating one, so
+// `slice(0, String.length(s), s)` is the whole string and two slices that meet at an index join back
+// into one. An index outside the string, or a `toExclusive` before `fromInclusive`, aborts.
+let slice (fromInclusive: Int, toExclusive: Int, s: String): String = intrinsic "string.slice"
+let append (a: String, b: String): String = intrinsic "string.append"
 
 // Split / join / replace and rendering an Int, ported from Elm's String module (the subset that
 // fits Souther's types — the Char/Maybe/Float-shaped functions do not). `split` keeps empty pieces;
 // `words` splits on whitespace runs and drops them.
-let split (sep: String, s: String) : List<String> = intrinsic "string.split"
-let join (sep: String, xs: List<String>) : String = intrinsic "string.join"
-let replace (target: String, replacement: String, s: String) : String = intrinsic "string.replace"
-let words (s: String) : List<String> = intrinsic "string.words"
-let fromInt (n: Int) : String = intrinsic "string.fromInt"
+let split (sep: String, s: String): List<String> = intrinsic "string.split"
+let join (sep: String, xs: List<String>): String = intrinsic "string.join"
+let replace (target: String, replacement: String, s: String): String = intrinsic "string.replace"
+let words (s: String): List<String> = intrinsic "string.words"
+let fromInt (n: Int): String = intrinsic "string.fromInt"
 
 // `concat` joins a `List<String>` with no separator (Elm `String.concat`); it is `join("", xs)`.
-let concat (xs: List<String>) : String = intrinsic "string.concat"
+let concat (xs: List<String>): String = intrinsic "string.concat"
 
-// Character access without a `Char` type: a character is a length-1 `String`. `toChars` is Elm's
-// `String.toList` (each element a one-character string), so `List.fold` can walk the characters;
-// `toCode` is Elm's `Char.toCode` on such a character (the first code point, `-1` if empty). A digit's
-// value is `toCode(ch) - toCode("0")`. This is what makes a checksum a plain fold in a behavior.
+// `reverse` / `repeat` / `lines`, the rest of Elm's String module that Souther's types allow.
+// `reverse` turns the code points around, so a character outside the basic plane survives it.
+// `repeat(n, s)` joins `n` copies (nothing for `n` of 0 or less; a count no string could hold aborts
+// rather than quietly giving fewer, as an Int overflow does). `lines` breaks on newlines and
+// accepts both `\n` and `\r\n` (Elm `String.lines`); empty pieces are kept, so a trailing newline
+// leaves an empty last line.
+let reverse (s: String): String = intrinsic "string.reverse"
+let repeat (n: Int, s: String): String = intrinsic "string.repeat"
+let lines (s: String): List<String> = intrinsic "string.lines"
+
+// `padLeft(width, pad, s)` / `padRight` widen `s` to `width` code points with copies of `pad`, and
+// leave a string already that wide alone. `pad` is repeated and cut to the code points still needed,
+// so it need not be one character and the width is exact:
+//
+//     String.length(String.padLeft(width, pad, s)) == Int.max(width, String.length(s))
+//
+// for any non-empty `pad`. An empty `pad` fills nothing and gives `s` back, which is the one input
+// the equation above does not hold for — nothing can be repeated into a width.
+//
+// This is what builds a fixed-width identifier: a bay number becomes `"03"` with
+// `padLeft(2, "0", fromInt(bay))`, so a code whose shape a newtype invariant states can be produced
+// in the domain and not only checked there.
+let padLeft (width: Int, pad: String, s: String): String = intrinsic "string.padLeft"
+let padRight (width: Int, pad: String, s: String): String = intrinsic "string.padRight"
+
+// `fromDecimal` renders a `Decimal` in plain notation, never in exponent form, keeping the scale the
+// value carries — `1000.00m` is `"1000.00"`, not `"1000"` or `"1.0E+3"`. Scale is incidental to the
+// number (spec §primitives) but not to how it is written, so a caller that wants a fixed number of
+// places sets it first with `Decimal.round(scale, mode, d)` and names the rounding there. Grouping
+// separators and a currency symbol are presentation and stay outside the domain. The parse in the
+// other direction, `toDecimal`, returns `Decimal | NotANumber` and is a compiler built-in for the
+// same reason `toInt` is.
+let fromDecimal (d: Decimal): String = intrinsic "string.fromDecimal"
+
+// Taking a string apart into the units it is made of, without a `Char` type: `characters` gives one
+// code point per element, each a one-code-point `String`, and `codePoints` gives the same split as
+// the integers. They sit beside `words` and `lines` — all four break a string into a list of
+// meaningful pieces — and both are total, so the empty string gives the empty list and there is no
+// sentinel and no abort to read around.
+//
+//     List.length(String.characters(s)) == List.length(String.codePoints(s)) == String.length(s)
+//
+// A digit's value is its code point less that of `"0"`, which is what makes a checksum a plain fold
+// over `codePoints`. There is no "the first code point" function: a caller who wants one writes
+// `List.get(0, String.codePoints(s))` and takes the absence from `List.get`, where every other
+// absence in the library comes from.
+//
 // (`toInt`, a case-returning parse `String -> Int | NotANumber`, is a compiler built-in — a core
 // declaration cannot yet name a primitive-headed union.)
-let toChars (s: String) : List<String> = intrinsic "string.toChars"
-let toCode (s: String) : Int = intrinsic "string.toCode"
+let characters (s: String): List<String> = intrinsic "string.characters"
+let codePoints (s: String): List<Int> = intrinsic "string.codePoints"

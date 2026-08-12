@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.ArrayDeque;
@@ -19,13 +21,28 @@ import java.util.Set;
  * a {@code groupBy} that grows a map O(n log n) instead of the O(n²) a whole-map copy would cost.
  *
  * <p>It implements {@link java.util.Map} so it flows through codegen and the boundary unchanged.
- * Extending {@link AbstractMap} supplies the immutable, mutator-throwing defaults and the
- * order-INSENSITIVE {@code Map.equals}/{@code hashCode} — the contract Souther value equality
- * ({@code ==} via {@code Objects.equals}, ADR-0009) relies on. Keys use their own {@code hashCode}/
- * {@code equals}; value-class keys already generate contract-correct ones.
+ * Extending {@link AbstractMap} supplies the immutable, mutator-throwing defaults.
  *
- * <p>Iteration order is a deterministic, implementation-defined hash order (not insertion order):
- * the same set of keys always yields the same order, so boundary encoding stays reproducible.
+ * <p>Which key a lookup finds is the language's question. Keys and values are compared and hashed
+ * through {@link Values}, so a Decimal key is found by the amount it is rather than by the scale it
+ * arrived with, and the trie is indexed by that hash — there is one index, not two, so {@code get}
+ * cannot also answer the JDK's question. {@code equals} and {@code hashCode} follow the same rule
+ * rather than being inherited, because a map whose {@code get} is the language's and whose hash was
+ * the JDK's would call two maps equal and hash them apart.
+ *
+ * <p>The cost is stated rather than hidden: against a foreign {@code java.util.Map} holding the same
+ * amount at another scale, {@code equals} is not symmetric. Only Java interop can construct that
+ * pair. A {@link PersistentVector} keeps the {@code List} contract instead, because a list compares
+ * positionally and has no index to be indexed by.
+ *
+ * <p>Iteration is a deterministic traversal of the trie, and the language specifies no order at all
+ * (spec §stdlib-map). It is not insertion order and must not be read as one. Note what the
+ * determinism is <em>for</em>: a particular trie, not the map value. Two maps that are equal are not
+ * guaranteed to iterate in the same order, because keys sharing a full hash sit in a
+ * {@code HashCollisionNode} that holds them in the order they were put — so the order can differ
+ * with the construction history. A caller must therefore depend on no particular order. The boundary
+ * encoding does not: it writes a map's members in ascending order of their rendered keys
+ * ({@link Representations}), which is exactly the order this traversal cannot promise.
  *
  * <p>Values are never null (a Souther collection models absence with {@code Option}), so
  * {@link #get} returning {@code null} unambiguously means "absent".
@@ -33,9 +50,9 @@ import java.util.Set;
  * <p>{@code remove} keeps the trie canonical: an emptied sub-node is dropped and a sub-node that
  * collapses to a single entry is inlined back into its parent (bubbling up a level when the parent
  * would otherwise become a lone-entry inner node). So a key set reached by deletions has the same
- * shape — and the same deterministic iteration order — as one built directly.
+ * trie shape as one built directly, rather than carrying hollow nodes a direct build never had.
  */
-public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
+public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements ValueSemantics {
 
     private static final int BITS = 5;
     private static final int MASK = (1 << BITS) - 1;   // 31
@@ -57,18 +74,18 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         return (PersistentHashMap<K, V>) EMPTY;
     }
 
-    /** Wraps {@code m} as a PersistentHashMap, sharing when it already is one, else rebuilding by
-     *  {@code put} (later entries win). */
+    /** Wraps {@code m} as a PersistentHashMap, sharing when it already is one, else building it in
+     *  one pass through {@link Builder} (later entries win). */
     @SuppressWarnings("unchecked")
     public static <K, V> PersistentHashMap<K, V> from(Map<? extends K, ? extends V> m) {
         if (m instanceof PersistentHashMap<?, ?> phm) {
             return (PersistentHashMap<K, V>) phm;
         }
-        PersistentHashMap<K, V> out = empty();
+        Builder<K, V> b = new Builder<>();
         for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
-            out = out.assoc(e.getKey(), e.getValue());
+            b.set(e.getKey(), e.getValue());
         }
-        return out;
+        return b.build();
     }
 
     /** Spreads the key's hash so that low-order bits (the first chunk consumed) carry entropy. */
@@ -76,8 +93,23 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         return h ^ (h >>> 16);
     }
 
-    private static int hashOf(Object key) {
-        return key == null ? 0 : spread(key.hashCode());
+    /**
+     * The trie index for {@code key}: {@link Values#hash}, spread.
+     *
+     * <p>The carriers that answer for themselves are taken here rather than inside {@code Values} so
+     * that their {@code hashCode} is called from this site. Routed through the shared function, that
+     * one call would see every key type in the program and go megamorphic; called here it sees the
+     * key type of the map being walked. Which carriers those are is still {@code Values}'s to say —
+     * only the call is moved, not the rule.
+     */
+    private static int hashOf(@Nullable Object key) {
+        if (key == null) {
+            return 0;
+        }
+        if (Values.answersForItself(key.getClass())) {
+            return spread(key.hashCode());
+        }
+        return spread(Values.hash(key));
     }
 
     @Override
@@ -85,16 +117,76 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         return size;
     }
 
+    /** {@code null} for an absent key, as {@link Map#get} says. The {@code "null"} suppression is for
+     *  {@link AbstractMap}, which carries no nullness annotations: against an unannotated {@code V}
+     *  a nullable return reads as narrowing the inherited one. */
     @Override
-    @SuppressWarnings("unchecked")
-    public V get(Object key) {
+    @SuppressWarnings({"unchecked", "null"})
+    public @Nullable V get(@Nullable Object key) {
         Object r = root.find(key, hashOf(key), 0);
         return r == NOT_FOUND ? null : (V) r;
     }
 
     @Override
-    public boolean containsKey(Object key) {
+    public boolean containsKey(@Nullable Object key) {
         return root.find(key, hashOf(key), 0) != NOT_FOUND;
+    }
+
+    @Override
+    public boolean equals(@Nullable Object o) {
+        return valueEquals(o);
+    }
+
+    @Override
+    public int hashCode() {
+        return valueHash();
+    }
+
+    /**
+     * Whether {@code o} is the same map the language means: the same keys, each mapped to the same
+     * value. Both questions are asked of {@link Values}, so an amount is the amount it is at either
+     * scale, on the key side and on the value side.
+     *
+     * <p>The other map is taken through {@link #from} first, because a foreign map is keyed by
+     * Java's equality, which is finer than the language's: a map holding 1.0 and 1.00 has two
+     * entries and the language sees one key. Counted as it stands, both would find the same entry
+     * here and nothing would notice the key this map has that it does not. Where such a map maps its
+     * duplicate keys to different values, {@code from} keeps the later one in iteration order, and
+     * that is the value the comparison sees — the language cannot hold both, and which of them a
+     * foreign map meant is not a question the boundary can answer.
+     */
+    @Override
+    public boolean valueEquals(@Nullable Object o) {
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof Map<?, ?> m)) {
+            return false;
+        }
+        PersistentHashMap<?, ?> other = PersistentHashMap.from(m);
+        if (other.size() != size) {
+            return false;
+        }
+        for (Map.Entry<?, ?> e : other.entrySet()) {
+            // asked as two questions rather than reading an absent key off a null answer: a map
+            // Souther built never stores one, but `from` will build a map from a foreign map that
+            // does, and "not here" and "here, holding nothing" are not the same answer
+            if (!containsKey(e.getKey()) || !Values.equal(get(e.getKey()), e.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Summed over the entries, so it does not depend on the order they are walked in — two maps
+     *  built by different routes hold the same entries in different places. */
+    @Override
+    public int valueHash() {
+        int h = 0;
+        for (Map.Entry<K, V> e : entrySet()) {
+            h += Values.hash(e.getKey()) ^ Values.hash(e.getValue());
+        }
+        return h;
     }
 
     /** This map with {@code key} mapped to {@code val} (added, or overwriting an equal-keyed entry).
@@ -102,7 +194,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      *  operation and returns the old value — this returns a new map. */
     public PersistentHashMap<K, V> assoc(K key, V val) {
         Box added = new Box();
-        Node newRoot = root.put(key, hashOf(key), val, 0, added);
+        Node newRoot = root.put(key, hashOf(key), val, 0, added, false);
         if (newRoot == root) {
             return this;   // key present with an equal value: unchanged
         }
@@ -145,10 +237,43 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         boolean value;
     }
 
-    private interface Node {
-        Object find(Object key, int keyHash, int shift);
+    /**
+     * Where a value is held, so that reading a key and then writing it descends the trie once rather
+     * than twice — what {@code Map.updateOrInsert} does on every element of a fold that counts. A
+     * {@link Builder} owns one and hands it to {@link Node#probe}, so the sharing costs no allocation.
+     *
+     * <p>It is only ever read straight after the descent that filled it, and only by the builder that
+     * owns the nodes it points into: a write that does anything other than overwrite that very slot
+     * gives up the probe first, so it can never name an array the trie has replaced.
+     */
+    private static final class Probe {
+        @Nullable Object key;
+        @Nullable Object @Nullable [] holder;
+        int index;
+    }
 
-        Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf);
+    private interface Node {
+        Object find(@Nullable Object key, int keyHash, int shift);
+
+        /** Reports into {@code probe} where {@code key}'s value is held inline under this node, and
+         *  answers whether it is held at all. A key in a collision bucket is not reported: the bucket
+         *  is the rare case and has nothing to gain. */
+        boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe);
+
+        /**
+         * This node with {@code key} mapped to {@code val}.
+         *
+         * <p>{@code owned} says the caller is a {@link Builder} and every node under it is one the
+         * builder created, so a slot may be written in place instead of the node being cloned; the
+         * node is then returned unchanged and the parent has nothing to rewrite either. What is left
+         * to allocate is only what changes an array's length or a bitmap: adding a key to a node, and
+         * splitting an inline pair into a sub-node when two keys collide at that level. Overwriting
+         * an existing key's value allocates nothing at all.
+         *
+         * <p>An ordinary persistent put passes {@code false} and clones every node on the path, as it
+         * must.
+         */
+        Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned);
 
         Node remove(Object key, int keyHash, int shift);
 
@@ -235,11 +360,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
-        public Object find(Object key, int keyHash, int shift) {
+        public Object find(@Nullable Object key, int keyHash, int shift) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                return Objects.equals(keyAt(i), key) ? valAt(i) : NOT_FOUND;
+                return Values.equal(keyAt(i), key) ? valAt(i) : NOT_FOUND;
             }
             if ((nodeMap & bitpos) != 0) {
                 return nodeAt(nodeIndex(bitpos)).find(key, keyHash, shift + BITS);
@@ -248,16 +373,34 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
-        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf) {
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+            int bitpos = 1 << ((keyHash >>> shift) & MASK);
+            if ((dataMap & bitpos) != 0) {
+                int i = dataIndex(bitpos);
+                if (!Values.equal(keyAt(i), key)) {
+                    return false;
+                }
+                probe.holder = contents;
+                probe.index = 2 * i + 1;
+                return true;
+            }
+            if ((nodeMap & bitpos) != 0) {
+                return nodeAt(nodeIndex(bitpos)).probe(key, keyHash, shift + BITS, probe);
+            }
+            return false;
+        }
+
+        @Override
+        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
                 Object currentKey = keyAt(i);
-                if (Objects.equals(currentKey, key)) {
-                    if (Objects.equals(valAt(i), val)) {
+                if (Values.equal(currentKey, key)) {
+                    if (Values.equal(valAt(i), val)) {
                         return this;
                     }
-                    return copyAndSetValue(bitpos, val);
+                    return copyAndSetValue(bitpos, val, owned);
                 }
                 Node sub = mergeTwoPairs(currentKey, hashOf(currentKey), valAt(i),
                         key, keyHash, val, shift + BITS);
@@ -267,8 +410,8 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             if ((nodeMap & bitpos) != 0) {
                 int i = nodeIndex(bitpos);
                 Node sub = nodeAt(i);
-                Node newSub = sub.put(key, keyHash, val, shift + BITS, addedLeaf);
-                return newSub == sub ? this : copyAndSetNode(bitpos, newSub);
+                Node newSub = sub.put(key, keyHash, val, shift + BITS, addedLeaf, owned);
+                return newSub == sub ? this : copyAndSetNode(bitpos, newSub, owned);
             }
             addedLeaf.value = true;
             return copyAndInsertValue(bitpos, key, val);
@@ -279,7 +422,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                if (Objects.equals(keyAt(i), key)) {
+                if (Values.equal(keyAt(i), key)) {
                     return copyAndRemoveValue(bitpos);
                 }
                 return this;
@@ -307,7 +450,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                         }
                         return copyAndMigrateNodeToInline(bitpos, newSub);
                     default:
-                        return copyAndSetNode(bitpos, newSub);
+                        return copyAndSetNode(bitpos, newSub, false);
                 }
             }
             return this;
@@ -325,18 +468,30 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             return 2;
         }
 
-        private BitmapIndexedNode copyAndSetValue(int bitpos, Object val) {
+        /** Neither bitmap moves, so an owned node writes the slot and is still itself — which is what
+         *  lets the whole path above an insert allocate nothing. */
+        private BitmapIndexedNode copyAndSetValue(int bitpos, Object val, boolean owned) {
+            if (owned) {
+                contents[2 * dataIndex(bitpos) + 1] = val;
+                return this;
+            }
             Object[] c = contents.clone();
             c[2 * dataIndex(bitpos) + 1] = val;
             return new BitmapIndexedNode(dataMap, nodeMap, c);
         }
 
-        private BitmapIndexedNode copyAndSetNode(int bitpos, Node node) {
+        private BitmapIndexedNode copyAndSetNode(int bitpos, Node node, boolean owned) {
+            if (owned) {
+                contents[2 * payloadArity() + nodeIndex(bitpos)] = node;
+                return this;
+            }
             Object[] c = contents.clone();
             c[2 * payloadArity() + nodeIndex(bitpos)] = node;
             return new BitmapIndexedNode(dataMap, nodeMap, c);
         }
 
+        /** The array grows and {@code dataMap} gains a bit, so this one allocates even when owned —
+         *  once per key the builder actually adds, and not at all when it overwrites one. */
         private BitmapIndexedNode copyAndInsertValue(int bitpos, Object key, Object val) {
             int idx = 2 * dataIndex(bitpos);
             Object[] c = new Object[contents.length + 2];
@@ -411,12 +566,12 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
-        public Object find(Object key, int keyHash, int shift) {
+        public Object find(@Nullable Object key, int keyHash, int shift) {
             if (keyHash != hash) {
                 return NOT_FOUND;
             }
             for (int i = 0; i < pairs.length; i += 2) {
-                if (Objects.equals(pairs[i], key)) {
+                if (Values.equal(pairs[i], key)) {
                     return pairs[i + 1];
                 }
             }
@@ -424,17 +579,22 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
-        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf) {
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+            return false;   // a bucket of colliding keys: rare, and the walk down it is the cost
+        }
+
+        @Override
+        public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned) {
             if (keyHash != hash) {
                 // A key that reaches this node with a different hash: wrap the bucket in a bitmap node
                 // at this level, then insert into that.
                 Node wrapper = new BitmapIndexedNode(0, 1 << ((hash >>> shift) & MASK),
                         new Object[]{this});
-                return wrapper.put(key, keyHash, val, shift, addedLeaf);
+                return wrapper.put(key, keyHash, val, shift, addedLeaf, owned);
             }
             for (int i = 0; i < pairs.length; i += 2) {
-                if (Objects.equals(pairs[i], key)) {
-                    if (Objects.equals(pairs[i + 1], val)) {
+                if (Values.equal(pairs[i], key)) {
+                    if (Values.equal(pairs[i + 1], val)) {
                         return this;
                     }
                     Object[] p = pairs.clone();
@@ -455,7 +615,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                 return this;
             }
             for (int i = 0; i < pairs.length; i += 2) {
-                if (Objects.equals(pairs[i], key)) {
+                if (Values.equal(pairs[i], key)) {
                     if (pairs.length == 4) {
                         int other = i == 0 ? 2 : 0;
                         // Fall back to a one-entry bitmap node at this level for the surviving key.
@@ -501,7 +661,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      *  Deterministic (bitmap order), O(1) amortized per entry. */
     private static final class EntryIterator implements Iterator<Map.Entry<Object, Object>> {
         private final Deque<Node> stack = new ArrayDeque<>();
-        private Node payloadNode;
+        private @Nullable Node payloadNode;
         private int payloadIndex;
 
         EntryIterator(Node root, int size) {
@@ -533,16 +693,143 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
 
         @Override
         public Map.Entry<Object, Object> next() {
-            if (payloadNode == null) {
+            Node node = payloadNode;
+            if (node == null) {
                 throw new NoSuchElementException();
             }
-            Object k = payloadNode.keyAt(payloadIndex);
-            Object v = payloadNode.valAt(payloadIndex);
+            Object k = node.keyAt(payloadIndex);
+            Object v = node.valAt(payloadIndex);
             payloadIndex++;
-            if (payloadIndex >= payloadNode.payloadArity()) {
+            if (payloadIndex >= node.payloadArity()) {
                 advance();
             }
             return new SimpleImmutableEntry<>(k, v);
+        }
+    }
+
+    /**
+     * A single-use, from-empty bulk builder for the runtime's own bulk operations — {@link #from},
+     * {@code Maps.fromList}/{@code mapKeys}, and the {@code PersistentHashSet} set algebra. Every
+     * node it reaches it created itself, and the trie under construction never leaves the method
+     * that is building it, so writing an element of a node's array in place cannot be observed by
+     * anything: no other version shares those nodes.
+     *
+     * <p>That is what {@code assoc} cannot do. An insert rewrites the bitmaps an older version reads
+     * to interpret the same array, so a persistent put has to clone every node on the path — there is
+     * no region of a CHAMP node that older versions do not look at, which is why the vector's claimed
+     * tail has no counterpart here (ADR-0060).
+     *
+     * <p>A fold may thread one through all the same, and {@code Maps.build} does: what the confinement
+     * asks for is that no version before the last is read, and the compiler establishes exactly that
+     * before it hands the walk a builder (the compiler's {@code GrowingFold}). It is a
+     * {@link java.util.Map} of what it has been given so far, so a step that reads the accumulator it
+     * is growing — which is what {@code Map.updateOrInsert} does — reads it as any map.
+     *
+     * <p>Ownership needs no mark on the node. Starting from the shared {@link
+     * BitmapIndexedNode#EMPTY} and only ever inserting, every node the builder can reach below the
+     * root is one it built: nothing here adopts a node from elsewhere. {@code EMPTY} itself is the
+     * one node it does not own, and it is never written — a write needs an entry or a child to
+     * replace, and {@code EMPTY} has neither, so the first insert allocates as it would anyway.
+     * Once {@link #build} hands the trie over, every later write comes through {@code assoc}, which
+     * passes {@code owned = false}.
+     *
+     * <p>Marking each node instead would cost a reference on every node in every map, which measured
+     * as a 6% regression on the persistent {@code assoc} path — the common one — to speed up this
+     * one. A flag threaded down the call is free.
+     */
+    static final class Builder<K, V> extends AbstractMap<K, V> {
+        private final Box added = new Box();
+        private final Probe probe = new Probe();
+        private Node root = BitmapIndexedNode.EMPTY;
+        private int size;
+        /** Whether {@link #build} has handed the trie over. A builder is single-use: the map it built
+         *  shares the nodes it filled, so a later write would reach into a value that is supposed to be
+         *  immutable. Refusing here is what keeps that from being possible rather than merely unlikely
+         *  — the compiler's own analysis is what stops a walk from keeping its builder, and a guarantee
+         *  about a value should not rest on an analysis somewhere else. */
+        private boolean built;
+
+        /**
+         * Sets {@code key} to {@code val}, saying nothing about what was there before — bulk
+         * construction has no use for the old value and would pay a second lookup for it.
+         *
+         * <p>A key just read is written where it was found: {@code Map.updateOrInsert} reads the key and then
+         * writes it, and the descent the read made is still good for the write. Anything else gives up
+         * the probe and descends, which is also what keeps the probe from ever naming a slot that has
+         * moved — only this method moves one.
+         */
+        void set(K key, V val) {
+            if (built) {
+                throw new IllegalStateException("this builder has already been built");
+            }
+            @Nullable Object @Nullable [] held = probe.holder;
+            if (held != null && Values.equal(probe.key, key)) {
+                held[probe.index] = val;
+                probe.holder = null;
+                probe.key = null;
+                return;
+            }
+            probe.holder = null;
+            probe.key = null;
+            added.value = false;
+            root = root.put(key, hashOf(key), val, 0, added, true);
+            if (added.value) {
+                size++;
+            }
+        }
+
+        @Override
+        @SuppressWarnings("null")
+        public @Nullable V put(K key, V val) {
+            @Nullable V old = get(key);
+            set(key, val);
+            return old;
+        }
+
+        @Override
+        public int size() {
+            return size;
+        }
+
+        /** The value at {@code key}, remembering where it was found so that writing the same key back
+         *  — which is what an {@code upsert} does next — need not descend again. */
+        @Override
+        @SuppressWarnings({"unchecked", "null"})
+        public @Nullable V get(@Nullable Object key) {
+            if (root.probe(key, hashOf(key), 0, probe)) {
+                probe.key = key;
+                return (V) Objects.requireNonNull(probe.holder)[probe.index];
+            }
+            probe.holder = null;
+            probe.key = null;
+            return null;
+        }
+
+        @Override
+        public boolean containsKey(@Nullable Object key) {
+            return root.find(key, hashOf(key), 0) != NOT_FOUND;
+        }
+
+        @Override
+        public Set<Map.Entry<K, V>> entrySet() {
+            return new AbstractSet<>() {
+                @Override
+                public int size() {
+                    return size;
+                }
+
+                @Override
+                @SuppressWarnings("unchecked")
+                public Iterator<Map.Entry<K, V>> iterator() {
+                    return (Iterator<Map.Entry<K, V>>) (Iterator<?>) new EntryIterator(root, size);
+                }
+            };
+        }
+
+        /** The map it has built. The trie is handed over here, so nothing may be set afterwards. */
+        PersistentHashMap<K, V> build() {
+            built = true;
+            return size == 0 ? empty() : new PersistentHashMap<>(root, size);
         }
     }
 }

@@ -7,7 +7,7 @@ Status: Accepted
 `Map` had accessors (`get`, `containsKey`, `keys`, `values`), building operations (`empty`,
 `singleton`, `insert`, `remove`, `isEmpty`, `size`), and the entry-list conversions (`toList`,
 `fromList`), but nothing that takes a step function. A domain that keeps state in a
-`Map<商品ID, 在庫>` could not aggregate over it (sum the stock), transform its values, or update one
+`Map<ProductId, Stock>` could not aggregate over it (sum the stock), transform its values, or update one
 key's value without leaving the language for a Java binding. Elm's `Dict` and F#'s `Map` both carry
 `fold`, `map`, and `update`, and the specification already named these three as the missing piece.
 
@@ -28,7 +28,7 @@ Add `fold`, `map`, and `update` to `souther.map`, all self-hosted — no new int
   key and value passed separately — F#'s `Map.fold` folder is `state key value`, Elm's `Dict.foldl`
   is `k v acc`. The entry tuple `toList` yields is destructured inside the fold and handed on.
 - **`map(f, m)` keeps the keys and rewrites the values**, `f` being `(key, value) -> value` (Elm's
-  `Dict.map`, F#'s `Map.map`). It grows a fresh map through `Map.fold`, inserting `f(key, value)`
+  `Dict.map`, F#'s `Map.mapValues`). It grows a fresh map through `Map.fold`, inserting `f(key, value)`
   under each key.
 - **`update(key, f, m)` rewrites one present key's value with `f: ('a) -> 'a`; an absent key is a
   no-op.** This is *not* Elm's `Dict.update : comparable -> (Maybe v -> Maybe v) -> Dict -> Dict`.
@@ -43,7 +43,7 @@ Add `fold`, `map`, and `update` to `souther.map`, all self-hosted — no new int
 ## Consequences
 
 The three per-key patterns a stateful map needs — aggregate, transform, modify — are now in the
-language, and the review's `Map<商品ID, 在庫>` (issue stock, tally, update one key) no longer falls
+language, and the review's `Map<ProductId, Stock>` (issue stock, tally, update one key) no longer falls
 through to a Java binding. `fold` being `List.fold` over `toList` means every property already true
 of list folding — the inlined step, the empty-map bottom, the deterministic order — holds for maps
 for free; `map` and `update` inherit it in turn.
@@ -51,7 +51,7 @@ for free; `map` and `update` inherit it in turn.
 `update`'s narrower shape is a visible consequence of ADR-0011, not an oversight. Modeling "insert or
 remove depending on what is there" through a single `Maybe -> Maybe` step is an Elm idiom that leans
 on `Maybe` being an ordinary constructible value. Souther deliberately keeps absence in the domain as
-a named sum (`-> 会員 | 会員なし`) rather than an `Option` users pass around, so the idiom has no home
+a named sum (`-> Member | NoSuchMember`) rather than an `Option` users pass around, so the idiom has no home
 here; `insert` / `remove` / `update` split the three cases that Elm's one function merges. If a later
 change ever makes `Option` surface-writable, `update` could widen to the Elm shape without breaking
 the value-step form (a value step is the `Just v -> Just (f v)` case of it).
@@ -62,6 +62,6 @@ the value-step form (a value step is the `Just v -> Just (f v)` case of it).
 - ADR-0051 (`fold` is a recursive helper, not a privileged loop)
 - ADR-0011 (`Option` is not a surface-writable type — why `update`'s step is `value -> value`)
 - ADR-0037 (tuple types in signatures — `toList`'s `List<(K, V)>`, which `fold` destructures)
-- ADR-0040 (typed map keys — the key a step receives is `String` or a String-backed newtype)
+- ADR-0040 (typed map keys — which types a boundary map's key may have)
 - Specification: `[#stdlib-map]`
-- Prior art: Elm `Dict.foldl` / `Dict.map` / `Dict.update`; F# `Map.fold` / `Map.map`
+- Prior art: Elm `Dict.foldl` / `Dict.map` / `Dict.update`; F# `Map.fold` / `Map.mapValues`

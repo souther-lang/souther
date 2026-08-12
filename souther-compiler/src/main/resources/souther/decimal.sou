@@ -7,9 +7,46 @@
 // implementation-location policy.
 module souther.decimal
 
-let add (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.add"
-let subtract (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.subtract"
-let multiply (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.multiply"
+// An ordinary data: a mode is evaluated at the call like any other argument. The implementation is
+// runtime-provided (souther.runtime.RoundingMode) rather than generated — see Prelude's
+// runtime-backed registration. It has no codec: a rounding policy is a computation's input, not a
+// value that crosses a serialization boundary.
+data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOOR
+
+// `toInt` and `round` each work on one Decimal, so the Decimal comes last and the rounding policy
+// leads: `d |> Decimal.round(2, HALF_UP)`. `divide` is a binary operation, so its two operands keep
+// the order the mathematics writes them in and the policy follows them. The `(scale, mode)` pair
+// therefore sits in front of the subject in one and behind the operands in the other, which is the
+// two rules meeting rather than an accident.
+let divide (dividend: Decimal, divisor: Decimal, scale: Int, mode: RoundingMode): Decimal
+    | DivisionByZero = intrinsic "decimal.divide"
+let toInt (mode: RoundingMode, d: Decimal): Int = intrinsic "decimal.toInt"
+let round (scale: Int, mode: RoundingMode, d: Decimal): Decimal = intrinsic "decimal.round"
+
+let add (a: Decimal, b: Decimal): Decimal = intrinsic "decimal.add"
+let subtract (a: Decimal, b: Decimal): Decimal = intrinsic "decimal.subtract"
+let multiply (a: Decimal, b: Decimal): Decimal = intrinsic "decimal.multiply"
 
 // compare returns -1, 0, or 1 by numeric value, ignoring scale.
-let compare (a: Decimal, b: Decimal) : Int = intrinsic "decimal.compare"
+let compare (a: Decimal, b: Decimal): Int = intrinsic "decimal.compare"
+
+// `fromInt` widens an Int to a Decimal. It is exact — every Int is a Decimal — so nothing has to be
+// stated and it is an ordinary function. The narrowing back, `Decimal.toInt(mode, d)`, drops a
+// fraction, and by which rule is a domain decision, so it takes the mode as an argument.
+//
+// There is no implicit widening. An arithmetic operator takes two operands of one type, so a rate
+// applied to an amount is written `Decimal.fromInt(税抜) * 税率` — the conversion is visible where the
+// value stops being an amount in yen. This is F#'s position for operators (`n * 0.1m` does not
+// compile; `decimal n * 0.1m` does).
+let fromInt (n: Int): Decimal = intrinsic "decimal.fromInt"
+
+// The same `Basics` arithmetic `Int` carries, on the same reasoning: `<` and `-` are defined for
+// Decimal, so these are ordinary helpers. `abs` compares against `0.0m`, so a value whose scale
+// differs still answers by numeric value, as `compare` does. `clamp(lo, hi, d)` keeps a rate or a
+// ratio inside a range without a `match`, and the bounds keep their own scale — clamping returns one
+// of the three values written, never a re-scaled copy.
+let abs (d: Decimal): Decimal = if d < 0.0m then 0.0m - d else d
+let min (a: Decimal, b: Decimal): Decimal = if a < b then a else b
+let max (a: Decimal, b: Decimal): Decimal = if a > b then a else b
+let clamp (lo: Decimal, hi: Decimal, d: Decimal): Decimal =
+    if d < lo then lo else if d > hi then hi else d

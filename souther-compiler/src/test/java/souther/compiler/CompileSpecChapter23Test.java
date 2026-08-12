@@ -1,7 +1,5 @@
 package souther.compiler;
 
-import souther.runtime.Behavior;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,6 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * a {@code List} of a sum could not derive an encoder, {@code ==} between two data was rejected,
  * and a sum with a sum as a case was refused — so the language's own worked example was not a
  * program. Kept verbatim from the spec so drift shows up here.
+ *
+ * <p>It is also where non-ASCII identifiers stay covered. A Souther name may be written in any
+ * script and the backend has to bring it to a JVM class name, so the fixtures elsewhere being
+ * English would otherwise leave that path untested. Keep this one as it is written.
  */
 class CompileSpecChapter23Test {
 
@@ -90,10 +92,10 @@ class CompileSpecChapter23Test {
                 承認者ID: 従業員ID
             ) -> 事前承認済み | 承認権限なし
                 constructs 事前承認済み, 承認権限なし
-                requires 現在時刻
+                depends on 現在時刻
 
             let 事前承認する (申請, 承認者ID, 現在時刻) = {
-                require 承認者ID == 申請.申請者.上長ID
+                guard 承認者ID == 申請.申請者.上長ID
                     else 承認権限なし
 
                 事前承認済み { ...申請, 事前承認日時 = 現在時刻(), 事前承認者 = 承認者ID }
@@ -112,7 +114,7 @@ class CompileSpecChapter23Test {
     @Test
     void theNestedCostSumDecodesALeaf() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
-        Object v = Codecs.decoded(loader, "example.businesstrip.費用負担区分", Map.of("type", "会社カード"));
+        Object v = Codecs.decoded(loader, "example.businesstrip.費用負担区分", "会社カード");
         assertEquals("example.businesstrip.会社カード", v.getClass().getName());
     }
 
@@ -122,7 +124,17 @@ class CompileSpecChapter23Test {
      */
     @Test
     void approvalRequiresTheApplicantsManager() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
+        Map<String, byte[]> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
+        classes.put("example.businesstrip.固定時刻", Subclasses.compile(classes,
+                "example.businesstrip.固定時刻", """
+                        package example.businesstrip;
+                        public final class 固定時刻 extends 現在時刻 {
+                            public java.time.LocalDateTime apply() {
+                                return java.time.LocalDateTime.parse("2026-07-15T12:00:00");
+                            }
+                        }
+                        """));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Map<String, Object> 申請 = Map.of(
                 "申請者", Map.of("id", "e1", "役職", Map.of("type", "一般社員"), "上長ID", "boss"),
@@ -134,10 +146,10 @@ class CompileSpecChapter23Test {
                 "事前承認理由リスト", List.of(Map.of("type", "高額出張", "基準金額", 100000L)));
         Object 事前承認待ち = Codecs.decoded(loader, "example.businesstrip.事前承認待ち", 申請);
 
-        Object clock = java.lang.reflect.Proxy.newProxyInstance(loader,
-                new Class<?>[]{Behavior.class}, (p, m, a) -> java.time.LocalDateTime.parse("2026-07-15T12:00:00"));
+        Class<?> 現在時刻 = loader.loadClass("example.businesstrip.現在時刻");
+        Object clock = loader.loadClass("example.businesstrip.固定時刻").getConstructor().newInstance();
         Object 事前承認する = loader.loadClass("example.businesstrip.事前承認する" + "$Impl")
-                .getConstructor(Behavior.class).newInstance(clock);
+                .getConstructor(現在時刻).newInstance(clock);
         var apply = 事前承認する.getClass().getMethod("apply", Object.class, Object.class);
 
         Object stranger = Codecs.decoded(loader, "example.businesstrip.従業員ID", "someone");

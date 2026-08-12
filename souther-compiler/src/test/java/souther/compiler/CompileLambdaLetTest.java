@@ -1,14 +1,15 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A lambda is a value: it may be bound to a local with {@code let} and applied. When it does not
@@ -71,7 +72,9 @@ class CompileLambdaLetTest {
                 }
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(module));
-        assertTrue(ex.getMessage().contains("not a value"),
-                "expected a block-is-not-a-value rejection, got: " + ex.getMessage());
+        // It is refused for what is actually missing: nothing here says what the function takes.
+        // Applied in this scope its parameter types would be read off the application; carried out
+        // of it, only a written type can say.
+        assertInstanceOf(HelperMessage.TheFunctionsTypeCannotBeRead.class, ex.diagnostic().said(), ex.getMessage());
     }
 }

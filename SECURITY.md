@@ -13,7 +13,7 @@ security fixes.
 ## Reporting a vulnerability
 
 Please report a suspected vulnerability privately through GitHub's
-[private vulnerability reporting](https://github.com/kawasima/souther/security/advisories/new)
+[private vulnerability reporting](https://github.com/souther-lang/souther/security/advisories/new)
 (the repository's **Security** tab → **Report a vulnerability**). Do not open a public
 issue for a suspected vulnerability.
 

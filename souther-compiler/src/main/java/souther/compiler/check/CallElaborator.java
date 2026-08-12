@@ -1,0 +1,797 @@
+package souther.compiler.check;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.core.Core;
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Localizable;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Typing a call: a builtin, a helper, an injected behavior, or a data construction. Resolves the
+ * argument types, binds any type variables the callee declares, and picks the result from them.
+ */
+public final class CallElaborator {
+
+    private CallElaborator() {}
+
+    /** Where the element whose order is required sits in a kernel's result. */
+    private enum OrderedElement { OF_THE_LIST, OF_THE_OPTION }
+
+    /**
+     * The kernels whose element must be an ordered value, and where in the result to find it.
+     *
+     * <p>Souther has no type classes, so "the element is ordered" is not something a signature can
+     * say (ADR-0053). The declaration states the shape and this states the rest, keyed by the kernel
+     * it constrains — which is what {@code sort} has always done, written out by hand.
+     */
+    private static final Map<String, OrderedElement> ORDERED_ELEMENT = Map.of(
+            "list.sort", OrderedElement.OF_THE_LIST,
+            "list.max", OrderedElement.OF_THE_OPTION,
+            "list.min", OrderedElement.OF_THE_OPTION);
+
+    /**
+     * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
+     * over one — it carries its ordering as {@code Comparable}. A product data does not and would
+     * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
+     * fine: it sorts to itself and its max is {@code None}.
+     */
+    private static void requiresOrdering(String key, Ast.Apply call, Type result, CheckContext ctx) {
+        OrderedElement where = ORDERED_ELEMENT.get(key);
+        if (where == null) {
+            return;
+        }
+        boolean inOption = where == OrderedElement.OF_THE_OPTION;
+        Type element = switch (result) {
+            case Type.OptionOf o when inOption -> o.element();
+            case Type.ListOf l when !inOption -> l.element();
+            default -> null;
+        };
+        if (element == null || element instanceof Type.Nothing
+                || TypeOps.supportsOrdering(element, ctx.symbols())) {
+            return;
+        }
+        String name = call.written().substring(call.written().indexOf('.') + 1);
+        throw needsOrdered(call.pos(), name, element,
+                name + " needs a list of ordered values (Int, String, Decimal, Date, Time, DateTime, Instant, a"
+                        + " newtype over one of these, or an enumeration), but the element is "
+                        + element + " — use its ordered field instead (e.g. map to it first)");
+    }
+
+    /**
+     * Refuses a sort key with no natural order. The constraint is on what the key answers, not on
+     * what the list holds, so it reads the binding the key's declared result took rather than the
+     * call's result.
+     */
+    private static void requiresOrderedKey(String key, Ast.Apply call, Type.FnOf declaredKey,
+                                           Map<String, Type> bindings, CheckContext ctx) {
+        if (!key.equals("list.sortBy")) {
+            return;
+        }
+        Type answered = TypeOps.substitute(declaredKey.result(), bindings);
+        if (BottomInfer.isBottom(answered) || answered instanceof Type.Var
+                || TypeOps.supportsOrdering(answered, ctx.symbols())) {
+            return;
+        }
+        throw CompileException.of(Diagnostic
+                        .at(call.pos())
+                        .hint(new TypeMessage.MapToAnOrderedFieldFirst()).say(new TypeMessage.TheKeyMustBeAnOrderedValue(call.written(), Type.show(answered))).build());
+    }
+
+    /**
+     * A library name written where a value goes, or null where the name is not a library value.
+     *
+     * <p>A declaration with no parameter list is a value ([#fn-declaration]), and the library's are
+     * the two empty collections. Their type comes from the context the way {@code []}'s does: the
+     * expected type pins what the declaration left open, and what it does not pin is the bottom that
+     * a later position fixes (ADR-0028).
+     *
+     * <p>The Core is the one the application spelling produced, so nothing downstream of here tells
+     * the two apart — which is what keeps a growing fold's seed the seed it was.
+     */
+    static Core libraryValue(Ast.Var v, CheckContext ctx, Type expected) {
+        if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
+            return null;
+        }
+        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+        if (entry == null || !entry.declaration().params().isEmpty()) {
+            return null;
+        }
+        Type declared = entry.signature().result();
+        Map<String, Type> bindings = new HashMap<>();
+        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
+        return new Core.Call(new ReachName.OfLibrary(lib), List.of(),
+                TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
+    }
+
+    static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
+                                      Type expected) {
+        // A call this representation said it keeps standing, asked before anything tries to expand or
+        // resolve it: what it names is settled, and the only question left is its signature. Asked of
+        // the representation and not of the operation — whether anything downstream has a rule about
+        // it is not this walk's business, and a kept call with no rule types like any other.
+        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        if (kept != null) {
+            return preservedCall(call, kept, env, ctx, expected);
+        }
+        CallArgs ca = new CallArgs(call.args(), env, ctx);
+        Type result = typeOfCall(ca, call, env, ctx, expected);
+        // applying something this body binds is a different operation from calling something
+        // declared elsewhere, and it is the only one that carries a binding into the emitted tree
+        if (call.denotes() instanceof ValueName.Local local
+                && env.typeOf(local.id()) instanceof Type.FnOf) {
+            return new Core.Apply(
+                    new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
+                    ca.cores(), result, call.pos());
+        }
+        return new Core.Call(call.reachedAs(), ca.cores(), result, call.pos());
+    }
+
+    /**
+     * A kept call, typed by applying the signature it was declared with.
+     *
+     * <p>The same application a recursive helper's call goes through: a declaration that is not
+     * expanded is typed from what it declares, and its type variables are settled by the arguments it
+     * was given. What differs is only that this one is a node of its own, so a reader that has no
+     * business with a call left standing meets it as itself rather than as an ordinary call it might
+     * try to emit.
+     */
+    private static Core preservedCall(Ast.Apply call, CompleteSignature kept, Scope env,
+                                      CheckContext ctx, Type expected) {
+        List<Type> params = kept.params();
+        CallArgs ca = new CallArgs(call.args(), env, ctx);
+        if (call.args().size() != params.size()) {
+            arity(call, params.size());
+        }
+        Map<String, Type> bind = settledByValues(call, params, kept.result(), expected, ca::type, ctx);
+        requireValueArgs(call, params, ca, bind);
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) instanceof Type.FnOf declared) {
+                Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
+                Type answered = ca.block(i, call.written(), at.params());
+                // What the function answers settles the rest: this is an application of a declared
+                // signature and nothing more. The fold rule that reads a step's result as an
+                // accumulator to grow is one operation's meaning, and an operation kept standing is
+                // kept because its meaning belongs to whoever reads it, not to this.
+                //
+                // Refused here rather than inside the walk, and by the sentence a value argument is
+                // refused by: both kinds of argument are one rule, and this is the reader that
+                // still has the argument to point at.
+                if (TypeOps.unify(declared.result(), answered, bind, ctx.symbols())
+                        instanceof Fit.Disagrees d) {
+                    throw Elaborator.doesNotFit(call.args().get(i), d.actual(), d.expected(),
+                            "argument " + (i + 1) + " of " + call.written());
+                }
+            }
+        }
+        return new Core.PreservedCall(call.denotes(), ca.cores(),
+                TypeOps.substitute(kept.result(), bind), call.pos());
+    }
+
+    /**
+     * What a call settles of the signature it applies, before any function argument is typed.
+     *
+     * <p>Two things state something about a polymorphic signature's variables, and they are asked in
+     * this order because the order is the whole of the rule.
+     *
+     * <ol>
+     *   <li>What the context expects of the result, where the signature takes a function at all. A
+     *       variable a function parameter mentions has to be decided before that function is typed,
+     *       and where no argument decides it the position the call stands in is the only thing that
+     *       does.</li>
+     *   <li>What each value argument states, the ones that state something first. An argument that
+     *       answers no value — an empty collection carries a bottom — says nothing about what it
+     *       holds, and letting it settle a variable would hold every other argument to the element
+     *       type of nothing. A bottom then widens to what the others settled instead of the other way
+     *       round.</li>
+     * </ol>
+     *
+     * <p>Every reader of a declared signature asks this: the call that expands one, the call that
+     * keeps one standing, and the walk that reads one to learn what a function it was handed takes.
+     * They differ in what they do with a function argument afterwards — a fold reads its result as
+     * the accumulator to grow, an ordinary application does not — and in nothing before it. Said once
+     * because a difference here is not a failure but a variable settled to the wrong type, which is
+     * reported somewhere else as something else.
+     */
+    static Map<String, Type> settledByValues(Ast.Apply call, List<Type> params, Type result,
+                                             Type expected,
+                                             java.util.function.IntFunction<Type> argType,
+                                             CheckContext ctx) {
+        Map<String, Type> bind = new HashMap<>();
+        if (params.stream().anyMatch(Type.FnOf.class::isInstance)) {
+            BottomInfer.pinResultTypeVars(result, expected, bind, ctx.symbols());
+        }
+        // Each value argument is asked once, here, in the order it is written. What the ordering
+        // below decides is which of them settles a variable first, and nothing about how many times
+        // an argument is read: typing one can decide a variable of the application it stands in, so a
+        // second reading is a second answer, and then the argument classified and the argument
+        // unified are not the same reading of it.
+        Type[] stated = new Type[params.size()];
+        List<Integer> stating = new ArrayList<>();
+        List<Integer> bottoms = new ArrayList<>();
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) instanceof Type.FnOf) {
+                continue;
+            }
+            stated[i] = argType.apply(i);
+            (Type.mentions(stated[i], BottomInfer::answersNoValue) ? bottoms : stating).add(i);
+        }
+        stating.addAll(bottoms);
+        // What an argument settles, and not whether it fits: that is required of each argument once
+        // the substitution is complete, and required there because that is where the argument itself
+        // is in hand. A refusal from here would name the argument in words and point at the callee,
+        // the two being as far apart as an argument list is long.
+        for (int i : stating) {
+            TypeOps.bindVars(params.get(i), stated[i], bind, ctx.symbols());
+        }
+        return bind;
+    }
+
+    /**
+     * The arguments of one call, each elaborated once, as the call's typing rule reaches it. A rule
+     * types its arguments in its own order and shape — some through a required type, a step through
+     * the accumulator the other arguments fixed — so the Core for each argument is collected here
+     * rather than by a separate walk that would have to reconstruct that context.
+     */
+    static final class CallArgs {
+        private final List<Ast.Expr> args;
+        private final Core[] cores;
+        private final Scope env;
+        private final CheckContext ctx;
+
+        CallArgs(List<Ast.Expr> args, Scope env, CheckContext ctx) {
+            this.args = args;
+            this.cores = new Core[args.size()];
+            this.env = env;
+            // An argument is not the value a `?` field is being given, whatever encloses the call, so
+            // it does not make an optional (ADR-0011). An argument is also typed with no expected
+            // type, which already refuses `None`; dropping the permission states the rule here rather
+            // than leaving it to rest on that.
+            this.ctx = ctx.makingAnOptional(false);
+        }
+
+        /**
+         * The type of argument {@code i}, elaborated with no expected type (bottom-up) the first
+         * time it is asked and remembered.
+         *
+         * <p>Remembered because elaborating an argument is not a question with a stable answer:
+         * typing it can decide a variable of the application it stands in, and the decision is
+         * written into the enclosing substitution. A second elaboration would then read the state the
+         * first one left, so two readers of one argument would be reading two arguments — and the
+         * Core that reached the tree would be the later one while the type a rule reasoned about was
+         * the earlier. A rule may ask in whatever order it types in ({@link #requireTyped} already
+         * rests on this), so the guarantee belongs here rather than in each rule remembering to ask
+         * once.
+         */
+        Type type(int i) {
+            if (cores[i] == null) {
+                cores[i] = Elaborator.elaborate(args.get(i), env, ctx);
+            }
+            return cores[i].type();
+        }
+
+        /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */
+        void require(int i, Type expected, String what) {
+            Core c = Elaborator.elaborate(args.get(i), env, ctx);
+            cores[i] = c;
+            Elaborator.requireType(args.get(i), c.type(), expected, ctx.symbols(), what);
+        }
+
+        /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
+         *  now that the signature's variables are settled. Reads the stored core — the
+         *  expression's own type did not change, only what is asked of it — so nothing is
+         *  elaborated twice. */
+        void requireTyped(int i, Type required, String what) {
+            if (cores[i] == null) {
+                throw new IllegalStateException(
+                        "argument " + (i + 1) + " required before it was typed");
+            }
+            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.symbols(), what);
+        }
+
+        /** Argument {@code i} as a block (or a function value standing in for one), returning the
+         * result type the block yields at {@code paramTypes}. */
+        Type block(int i, String fnName, List<Type> paramTypes) {
+            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), paramTypes, env, ctx);
+            cores[i] = c;
+            return ((Type.FnOf) c.type()).result();
+        }
+
+        void put(int i, Core c) {
+            cores[i] = c;
+        }
+
+        /** The elaborated arguments. Every argument must have been reached: a rule that yields a type
+         * without touching one of its arguments would leave the emitter a node with no type. */
+        List<Core> cores() {
+            List<Core> out = new ArrayList<>();
+            for (int i = 0; i < cores.length; i++) {
+                if (cores[i] == null) {
+                    throw new IllegalStateException(
+                            "argument " + (i + 1) + " was never typed at " + args.get(i).pos());
+                }
+                out.add(cores[i]);
+            }
+            return out;
+        }
+    }
+
+    /**
+     * The answer for a call this module has no callee for. Resolution already said what the name is,
+     * and by here every answer it can give is something: a name it could not place is thrown out at
+     * the top of {@link #typeOfCall}, where the report belongs to the position it was written at.
+     * Telling the author of a name the compiler classified that it "is not a behavior or a builtin"
+     * is discarding what the compiler knows and sending them after a typo they did not make — what is
+     * wrong is the position, not the name.
+     *
+     * <p>Exhaustive over {@link ValueName} on purpose, with no default: a classification added later
+     * cannot quietly fall through to a sentence that would be false about it. The three that reach an
+     * author are the three a program can be written into. The rest name a call that should have been
+     * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
+     * with itself and not something an author can act on.
+     */
+    static RuntimeException noCallee(Ast.Apply call) {
+        return switch (call.denotes()) {
+            // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
+            // one (spec [#calling-a-behavior])
+            case ValueName.Behavior _ -> CompileException.of(Diagnostic.at(call.appliedAt())
+                            .hint(new BehaviorMessage.WhatReachesABehavior(call.written()))
+                            .say(new BehaviorMessage.ABehaviorCannotBeCalledFromHere(call.written())).build());
+            // A type applied to an argument is a construction, and every place a construction is
+            // allowed rewrites it before the check reads it. Reaching here means it was written
+            // somewhere no rewrite covers, so say what it is rather than what it is not.
+            case ValueName.OfType named -> CompileException.of(Diagnostic
+                            .at(call.appliedAt()).say(new DataMessage.AConstructionCannotBeWrittenHere(named.name())).build());
+            // A binding applied to arguments, whose type here is not a function. Either it is not one
+            // — a value applied as though it were — or it has no type yet, which is what an inference
+            // probe sees when it types a body before the binding it asks about has one and reads the
+            // report to find out. The same sentence answers both: at the point of the report, this
+            // name is not a function here.
+            case ValueName.Local _ -> CompileException.of(Diagnostic
+                            .at(call.appliedAt()).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
+            case ValueName.Helper _ -> unelaborated("a helper", call);
+            case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
+            // A name the language itself gives (`None`), applied. `Some`/`None` applications are
+            // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
+            case ValueName.Builtin b -> CompileException.of(Diagnostic
+                            .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
+            // thrown out at the top of typeOfCall, before any of the work above
+            case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
+            case null -> unelaborated("nothing", call);
+        };
+    }
+
+    private static IllegalStateException unelaborated(String what, Ast.Apply call) {
+        return new IllegalStateException("`" + call.written() + "` denotes " + what
+                + " and reached call elaboration unexpanded, at " + call.pos());
+    }
+
+    /**
+     * The type of a call, by what the name it applies denotes.
+     *
+     * <p>Which of these a name is was answered when the module's names were resolved, so the order
+     * the cases are written in here decides nothing. Before that this was a sequence of attempts —
+     * the library, then a function-typed binding, then an injected behavior — and a name that could
+     * be read two ways was whichever came first.
+     */
+    /** What one application of a declared signature settled: the declared result with the
+     *  signature's variables substituted, and that substitution itself — for the checks a kernel
+     *  runs on the outcome. Settled at construction: the map is copied, not shared with the
+     *  unifier. */
+    private record Applied(Type result, Map<String, Type> substitution) {
+        private Applied {
+            substitution = Map.copyOf(substitution);
+        }
+    }
+
+    /**
+     * Types an application against a declared signature — the same four steps whichever holds the
+     * signature, a kernel declaration or a function type in scope (a function-typed parameter, a
+     * recursive helper's signature):
+     *
+     * <ol>
+     *   <li>pin the result's type variables from the expected type, only where a function argument
+     *       waits on them — a fold whose seed is {@code []}/{@code Map.empty} has its accumulator
+     *       bound from the context before the step is checked (issue #70). With no function
+     *       argument nothing waits, and pinning anyway would answer an argument mismatch against
+     *       the type the context wanted rather than the one the declaration asks for;</li>
+     *   <li>type the value arguments, settle what they say of the signature's variables, and
+     *       require each of them against the parameter it was given to;</li>
+     *   <li>type the function arguments last, against parameter types the earlier arguments
+     *       settled. A failure that is genuinely an empty-collection seed nothing typed — one that
+     *       reported the unresolved bottom — is re-pointed at the seed rather than at the
+     *       arithmetic the bottom reached; an unrelated error in the step is rethrown untouched
+     *       (issue #70);</li>
+     *   <li>substitute into the declared result.</li>
+     * </ol>
+     *
+     * <p>The value arguments are required before a function argument is typed because a function
+     * argument is typed against what they settled. Where one of them does not fit, what the
+     * signature says the function takes was worked out from a type the call does not have — and a
+     * body checked against that reports something wrong with the block, which is the reader's cue
+     * to look at a block that is not the problem. Held in the other order, {@code List.sortBy(x ->
+     * String.length(x), n)} on an {@code n} that is no list answers about {@code String.length}.
+     *
+     * <p>Arity is the caller's to check first, in its own words; this throws where the two
+     * disagree rather than walking off the shorter list.
+     */
+    private static Applied applySignature(Ast.Apply call, Type.FnOf signature, CallArgs ca,
+                                          Type expected, Scope env, CheckContext ctx) {
+        List<Ast.Expr> args = call.args();
+        if (args.size() != signature.params().size()) {
+            throw new IllegalStateException("`" + call.written() + "` reached signature application"
+                    + " with " + args.size() + " argument(s) against " + signature.params().size());
+        }
+        Map<String, Type> bind = settledByValues(call, signature.params(), signature.result(),
+                expected, ca::type, ctx);
+        requireValueArgs(call, signature.params(), ca, bind);
+        try {
+            for (int i = 0; i < args.size(); i++) {
+                if (signature.params().get(i) instanceof Type.FnOf declaredStep) {
+                    ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep,
+                            args.get(i), bind, env, ctx));
+                }
+            }
+        } catch (CompileException stepError) {
+            int seed = BottomInfer.untypedEmptySeed(args, signature, bind, call.pos());
+            if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
+                throw stepError;
+            }
+            Diagnostic.Builder b = Diagnostic
+                    .at(args.get(seed).reportedAt());
+            if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
+                b.secondary(stepError.diagnostic().region(), new NameMessage.TheAccumulatorsTypeStaysUnknown());
+            }
+            throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
+        }
+        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
+    }
+
+    /** Each value argument held to the parameter it was given to, at its own position — the
+     * refusal {@link #settledByValues} leaves to whoever has the argument in hand. */
+    private static void requireValueArgs(Ast.Apply call, List<Type> params, CallArgs ca,
+                                         Map<String, Type> bind) {
+        for (int i = 0; i < params.size(); i++) {
+            Type param = params.get(i);
+            if (!(param instanceof Type.FnOf)) {
+                ca.requireTyped(i, TypeOps.substitute(param, bind),
+                        "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+    }
+
+    static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
+        List<Ast.Expr> args = call.args();
+        if (call.denotes() == null) {
+            throw new IllegalStateException(
+                    "`" + call.written() + "` reached the check unresolved, at " + call.pos());
+        }
+        if (call.denotes() instanceof ValueName.Unresolved) {
+            // reported where the name was written; this definition has no meaning to work out
+            throw new Unanswerable(call.pos());
+        }
+        boolean library = call.denotes() instanceof ValueName.Stdlib;
+        Prelude.PreludeEntry entry = library ? Prelude.entry(call.reaches()) : null;
+        // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
+        // `()` would be a second spelling of it. The library was the last place that spelling was
+        // still accepted.
+        if (entry != null && entry.declaration().params().isEmpty()) {
+            throw CompileException.of(Diagnostic
+                            .at(call.appliedAt())
+                            .hint(new NameMessage.WriteItOnItsOwn(call.written())).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
+        }
+        // A shipped kernel behaves like a built-in: check the call against the declared signature
+        // and yield its result type; the backend emits the primitive for its key. A Souther-bodied
+        // library call — a recursive helper such as `List.foldFrom` — is not one of these and takes
+        // the paths below, as any helper does.
+        if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
+            Prelude.Signature intrinsic = entry.signature();
+            if (args.size() != intrinsic.params().size()) {
+                throw CompileException.of(Diagnostic
+                                .at(call.appliedAt())
+                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.params().size()), String.valueOf(args.size()))).build());
+            }
+            Applied applied = applySignature(call,
+                    new Type.FnOf(intrinsic.params(), intrinsic.result()), ca, expected, env, ctx);
+            // What remains is the kernel's own: constraints its key names on the outcome the
+            // signature could not state, and the emitter's special cases. They read the settled
+            // substitution and result — they are checks on what the application became, not part
+            // of how an application is typed.
+            for (Type param : intrinsic.params()) {
+                if (param instanceof Type.FnOf declaredStep) {
+                    requiresOrderedKey(kernel.key(), call, declaredStep, applied.substitution(), ctx);
+                }
+            }
+            requiresOrdering(kernel.key(), call, applied.result(), ctx);
+            if (kernel.key().equals("list.sum") || kernel.key().equals("list.product")) {
+                return numericFold(call, applied.result(), expected);
+            }
+            if (kernel.key().equals("string.matches")) {
+                validateRegexPattern(args.get(0));
+            }
+            return applied.result();
+        }
+        return switch (library ? call.reaches() : "") {
+            case "Date", "Time", "DateTime", "Instant" -> {
+                arity(call, 1);
+                ca.type(0);   // the literal text, which temporalLiteral parses
+                yield temporalLiteral(call);
+            }
+            default -> {
+                // a function-typed value in scope (a helper's function parameter) applied to
+                // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
+                // reaches here — NewtypeDesugar has lowered it to a NewData literal.
+                // a function value in force, or a recursive helper's signature: which of the two
+                // is the denotation's to say, and only one of them is bound here
+                if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
+                    if (args.size() != fn.params().size()) {
+                        throw CompileException.of(Diagnostic
+                                        .at(call.appliedAt())
+                                        .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
+                    }
+                    yield applySignature(call, fn, ca, expected, env, ctx).result();
+                }
+                // A library name that matched no builtin or intrinsic above is a wrong stdlib call
+                // (spec §stdlib) — reported as that, not as a missing behavior. Asked of which kind
+                // of name this reaches and not of whether the spelling holds a dot: a field read
+                // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
+                // what is wrong with it is that it is not a function, which the report below says.
+                if (call.reachedAs() instanceof ReachName.OfLibrary) {
+                    throw CompileException.of(Diagnostic
+                                    .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
+                }
+                // A helper another module declares is expanded where it is called, or — where it
+                // recurses — bound as a signature and answered above. Reaching here it is neither,
+                // which is this compiler having failed to do one of them rather than anything the
+                // author wrote. Said outright: reported as a wrong library call, it named a library
+                // the author never wrote.
+                if (call.reachedAs() instanceof ReachName.OfModule reached) {
+                    throw new IllegalStateException("`" + reached + "` was neither expanded nor"
+                            + " bound before the call to it at " + call.pos() + " was typed");
+                }
+                // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
+                // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
+                // declaration; where the behavior comes from at run time is the backend's to know.
+                ReqSig callee = ctx.reqs().get(call.reaches());
+                if (callee == null) {
+                    callee = ctx.callees().get(call.reaches());
+                }
+                if (callee == null) {
+                    Elaborator.optionCaseWritten(call.written(), call.pos());
+                    CompileException bareLibraryName = StdlibNames.writtenBare(
+                            call.written(), call.written(), call.name().region());
+                    if (bareLibraryName != null) {
+                        throw bareLibraryName;
+                    }
+                    throw noCallee(call);
+                }
+                arity(call, callee.params().size());
+                for (int i = 0; i < callee.params().size(); i++) {
+                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.written());
+                }
+                yield callee.success();
+            }
+        };
+    }
+
+    /**
+     * The constant a newtype construction wraps, if its {@code value} argument folds — for
+     * {@code 金額(500)} (lowered to {@code 金額 { value = 500 }} by NewtypeDesugar) or the record
+     * form written directly. Empty when the argument is a runtime value or the data is not a
+     * single-{@code value} wrapper (e.g. a product).
+     */
+    static Optional<Object> newtypeConstantArg(Ast.NewData nd) {
+        if (nd.spreads().isEmpty() && nd.inits().size() == 1
+                && nd.inits().get(0).name().equals("value")) {
+            return ConstEval.eval(nd.inits().get(0).value());
+        }
+        return Optional.empty();
+    }
+
+    /** The pattern of {@code String.matches} must evaluate to a string at compile time, so it is
+     * validated (and can be compiled) there: a malformed regex is a compile error, not a runtime
+     * exception, and the value it constrains is proven at construction (spec §stdlib-string). A
+     * literal is one such expression and so is a {@code ++} of literals and of a module's values,
+     * which is what lets several formats share a part (issue #208). What is validated is the string
+     * the whole expression composes to, not the pieces it was written in. */
+    static void validateRegexPattern(Ast.Expr e) {
+        String pattern = ConstEval.evalString(e).orElse(null);
+        if (pattern == null) {
+            throw CompileException.of(Diagnostic
+                            .at(e.pos()).say(new TypeMessage.ThePatternMustBeWrittenOut()).build());
+        }
+        try {
+            java.util.regex.Pattern.compile(pattern);
+        } catch (java.util.regex.PatternSyntaxException ex) {
+            // getDescription() is the one-line reason ("Unclosed character class near index 3");
+            // getMessage() would also dump the pattern and a caret, which the source region already shows.
+            throw CompileException.of(Diagnostic
+                            .at(e.pos()).say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
+        }
+    }
+
+    /** A stdlib argument-type error: {@code subject} (a function name) expects a container of kind
+     * {@code kindKey} (a localized phrase such as "a List"), but got {@code actual}. */
+    static CompileException expects(SourcePos pos, String subject, String kindKey, Type actual,
+                                            String legacy) {
+        return CompileException.of(Diagnostic.at(pos)
+                        .say(new DeclarationMessage.ItExpectsAnotherType(subject, Localizable.of(kindKey), Type.show(actual))).build());
+    }
+
+    /**
+     * The element {@code List.sum} / {@code List.product} answers with. It is {@code Int} or
+     * {@code Decimal} — the two types {@code +} and {@code *} are defined for — and nothing else:
+     * a newtype over one of them declares neither an addition nor a zero, so it is rejected here
+     * rather than folded as the value it wraps.
+     *
+     * <p>Over the empty-list literal there is no element to read, and the seed the fold answers with
+     * is {@code 0} or {@code 0.0m} by which of the two this is. That comes from the position the call
+     * is written in — the field, the annotated binding, the declared output it feeds. A {@code ?}
+     * field asks for the value it wraps rather than for an optional (ADR-0011), so the optional is
+     * peeled before the position is read, exactly as a written literal has it peeled.
+     *
+     * <p>Three things the position can be, and they are three different reports. It states one of
+     * the two: that is the answer. It states nothing: the answer is asked for rather than defaulted,
+     * since defaulting to {@code Int} would make a numeric-literal default rule out of one library
+     * function. It states something else: nothing about the element is unknown, and what is wrong is
+     * that a sum does not go here — asking for an annotation would send the reader after something
+     * the position already carries.
+     */
+    private static Type numericFold(Ast.Apply call, Type element, Type expected) {
+        if (element == Type.INT || element == Type.DECIMAL) {
+            return element;
+        }
+        if (BottomInfer.isBottom(element)) {
+            Type position = expected instanceof Type.OptionOf o ? o.element() : expected;
+            if (position == Type.INT || position == Type.DECIMAL) {
+                return position;
+            }
+            if (position == null || BottomInfer.isBottom(position)) {
+                throw CompileException.of(Diagnostic
+                                .at(call.appliedAt())
+                                .hint(new TypeMessage.AnnotateThePositionTheCallFeeds()).say(new TypeMessage.OverTheEmptyListTheSeedDecides(call.written())).build());
+            }
+            throw CompileException.of(Diagnostic
+                            .at(call.appliedAt())
+                            
+                            .hint(new TypeMessage.ANewtypeIsBuiltFromTheResult(call.written())).say(new TypeMessage.ItAnswersANumberAndThisPositionNeedsAnother(call.written(), Type.show(position))).build());
+        }
+        throw CompileException.of(Diagnostic
+                        .at(call.appliedAt())
+                        
+                        .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).say(new DeclarationMessage.ItNeedsANumericElement(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))).build());
+    }
+
+    /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
+     * function itself, and a call may be written either way. */
+    private static String shortName(String fn) {
+        int dot = fn.indexOf('.');
+        return dot < 0 ? fn : fn.substring(dot + 1);
+    }
+
+    /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
+    static CompileException needsOrdered(SourcePos pos, String subject, Type element, String legacy) {
+        return CompileException.of(Diagnostic.at(pos)
+                        
+                        .hint(new TypeMessage.MapToAnOrderedFieldFirst()).say(new DeclarationMessage.ItNeedsAnOrderedElement(subject, Localizable.of("kind.ordered.list"), Type.show(element))).build());
+    }
+
+    /** A written temporal — {@code Date("2026-07-01")}, {@code Time("09:00")},
+     * {@code DateTime("2026-07-01T09:00")}, {@code Instant("2026-07-01T09:00:00Z")}. The argument
+     * must be a string literal: the compiler parses it here, so malformed text fails the build
+     * rather than a run (and an {@code example} fixture, which may only hold literals, can carry a
+     * temporal at all). This form spells one out; a temporal computed from values comes from the
+     * boundary, from the arithmetic, or from {@code Date.fromParts} / {@code Time.fromParts}, which
+     * answer a case where the parts name no such moment. */
+    static Type temporalLiteral(Ast.Apply call) {
+        Type.Prim kind = Type.Prim.named(call.reaches());
+        if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
+            throw CompileException.of(Diagnostic
+                            .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
+        }
+        parseTemporal(call.written(), lit.value(), lit.reportedAt());
+        return kind;
+    }
+
+    /** Parses a written temporal, reporting a malformed one against {@code at} — the text the
+     * message quotes, which is the part of the form a reader cannot work out from the message.
+     * Returns the parsed value so the backend and the example verifier share this one reading of
+     * the text. */
+    public static Object parseTemporal(String fn, String text, Region at) {
+        Type.Prim kind = Type.Prim.named(fn);
+        Object parsed;
+        try {
+            parsed = switch (kind) {
+                case DATE -> java.time.LocalDate.parse(text);
+                case TIME -> java.time.LocalTime.parse(text);
+                case DATETIME -> java.time.LocalDateTime.parse(text);
+                case INSTANT -> instantInUtc(text, at);
+                case INT, STRING, BOOL, DECIMAL, RAW ->
+                        throw new IllegalStateException("`" + fn + "` names no temporal");
+            };
+        } catch (java.time.format.DateTimeParseException _) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
+        }
+        return toTheSecond(parsed, fn, text, at);
+    }
+
+    /**
+     * A written {@code Instant}: refused where it names a second that does not exist, and where it is
+     * not spelled in UTC.
+     *
+     * <p>A leap second is the substitution this type exists not to make. {@code Instant.parse} takes
+     * {@code 23:59:60} and answers {@code 23:59:59}, so a written moment the language cannot
+     * represent would become a different one with nothing saying so — the defect this whole rule is
+     * about, made by the reader that enforces it. Java hands the fact over separately
+     * ({@code DateTimeFormatter.parsedLeapSecond}), and that is what is read.
+     *
+     * <p>The {@code Z} form is the other rule and a different kind of thing. A numeric offset names
+     * the same moment — {@code 09:30+09:00} and {@code 00:30Z} are one instant, and either determines
+     * it — so it is not refused for being wrong. It is refused because a written value is written the
+     * way the value is written back (spec §fixture-is-written-not-carried), and an {@code Instant} is
+     * written in UTC. A boundary reads either form.
+     *
+     * <p>An offset is a spelling and not a zone. A zone is a place with rules about when its offset
+     * changes ({@code ZoneId}), an offset is a displacement from UTC ({@code ZoneOffset}), and this
+     * language names neither — which is why the refusal above is about the written form and not
+     * about a zone leaking in.
+     *
+     * <p>Both are asked after parsing, so text that is no instant at all is still reported as that.
+     */
+    private static java.time.Instant instantInUtc(String text, Region at) {
+        java.time.Instant parsed = java.time.Instant.parse(text);
+        if (Boolean.TRUE.equals(java.time.format.DateTimeFormatter.ISO_INSTANT.parse(text)
+                .query(java.time.format.DateTimeFormatter.parsedLeapSecond()))) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.ALeapSecondIsNotAMoment(text)).build());
+        }
+        if (!text.endsWith("Z")) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.AnInstantIsWrittenInUtc(text)).build());
+        }
+        return parsed;
+    }
+
+    /** A written time of day is spelled to the second. {@code Time} and {@code DateTime} hold no
+     * finer (spec §temporal-literal), so text carrying a fraction is refused where it stands rather
+     * than losing it on the way in. {@code Instant} is the temporal that keeps a sub-second reading,
+     * and a {@code Date} has no time of day to carry one. */
+    private static Object toTheSecond(Object parsed, String fn, String text, Region at) {
+        int nano = switch (parsed) {
+            case java.time.LocalTime t -> t.getNano();
+            case java.time.LocalDateTime d -> d.getNano();
+            default -> 0;
+        };
+        if (nano != 0) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.ATimeOfDayIsWrittenToTheSecond(fn, text)).build());
+        }
+        return parsed;
+    }
+
+    static void arity(Ast.Apply call, int n) {
+        if (call.args().size() != n) {
+            throw CompileException.of(Diagnostic
+                            .at(call.appliedAt())
+                            .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(n),
+                                    String.valueOf(call.args().size()))).build());
+        }
+    }
+}

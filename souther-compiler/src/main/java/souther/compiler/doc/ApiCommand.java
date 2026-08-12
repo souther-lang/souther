@@ -1,0 +1,194 @@
+package souther.compiler.doc;
+
+import souther.compiler.check.Prelude;
+import souther.compiler.ast.Ast;
+import souther.compiler.types.Type;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * {@code souther api}: the standard library's published surface, one name per line with the
+ * signature the checker resolved. The listing answers "what is there and how is it called"; the
+ * {@code --source} form prints a module's own {@code .sou} text, whose comments say why each
+ * declaration is shaped the way it is.
+ */
+public final class ApiCommand {
+
+    private ApiCommand() {}
+
+    public static int run(String[] args, PrintStream out, PrintStream err) {
+        return run(args, out, err, Caller.CLI);
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
+        if (args.length == 0) {
+            listPublished(out, null);
+            return 0;
+        }
+        // Which of the things this line asked for is the one being answered. The forms below read
+        // the front of the line and nothing after it, so `api Option --source String` answered about
+        // `Option` and dropped an option of its own without a word — a listing a reader has no way
+        // to tell from the one they asked for. What `souther doc` already says, said here too.
+        int reads = args[0].equals("--source") || args[0].equals("--search") ? 2 : 1;
+        if (args.length > reads) {
+            err.println("`souther api` reads one at a time; asked for "
+                    + String.join(", ", List.of(args)) + " — reading `"
+                    + String.join(" ", List.of(args).subList(0, reads)) + "`");
+        }
+        if (args[0].equals("--source")) {
+            if (args.length < 2) {
+                err.println("usage: souther api --source <Module>");
+                return 2;
+            }
+            return printSource(args[1], out, err);
+        }
+        if (args[0].equals("--search")) {
+            if (args.length < 2 || args[1].isBlank()) {
+                err.println("`--search` needs a term to look for");
+                err.println("usage: souther api --search <term>");
+                return 2;
+            }
+            String needle = args[1].toLowerCase();
+            List<String> found = surface().entrySet().stream()
+                    .filter(e -> e.getKey().toLowerCase().contains(needle))
+                    .map(e -> line(e.getKey(), e.getValue()))
+                    .toList();
+            if (found.isEmpty()) {
+                err.println("no stdlib name contains `" + args[1] + "`");
+                return 0;
+            }
+            found.forEach(out::println);
+            return 0;
+        }
+        String asked = args[0];
+        if (asked.contains(".")) {
+            Signature signature = surface().get(asked);
+            if (signature == null) {
+                err.println("no stdlib declaration `" + asked + "`");
+                return 2;
+            }
+            out.println(line(asked, signature));
+            // A signature says what to pass, not what it means — whether a span counts both ends,
+            // whether a division aborts or answers a case. That is in the module's own source.
+            err.println(caller.stdlibSource(asked.substring(0, asked.indexOf('.'))));
+            return 0;
+        }
+        if (!Prelude.isQualifier(asked)) {
+            err.println("no stdlib module `" + asked + "`");
+            err.println("modules: " + String.join(", ", Prelude.qualifiers().stream().sorted().toList()));
+            return 2;
+        }
+        listPublished(out, asked + ".");
+        return 0;
+    }
+
+    /** One published name's parameters, as written, and the type it answers with. A name declaring
+     *  none is a value rather than a function of no arguments. */
+    record Signature(List<String> paramNames, List<Type> paramTypes, Type result) {}
+
+    private static void listPublished(PrintStream out, String prefix) {
+        surface().forEach((name, signature) -> {
+            if (prefix == null || name.startsWith(prefix)) {
+                out.println(line(name, signature));
+            }
+        });
+    }
+
+    /**
+     * Every name a program may write, in module order.
+     *
+     * <p>This is the surface a reader writes, not the declared one: a name written as sugar over a
+     * private helper — {@code List.fold}, which the checker rewrites to {@code List.foldFrom(…, 0)}
+     * — is what the specification tells a reader to call, so it is listed under its own name and
+     * with only the arguments its caller writes. Leaving it out would have this command contradict the
+     * specification about what exists.
+     *
+     * <p>Which names those are and what order they come in are both {@link Prelude#published()}'s
+     * answer, walked here rather than rebuilt: a listing assembled from the declarations and then
+     * the rewrites puts every sugar after every module, whichever module it reads as. What each
+     * name's signature comes from is this command's own question, and the only one it decides.
+     */
+    static Map<String, Signature> surface() {
+        Map<String, Signature> surface = new LinkedHashMap<>();
+        for (String name : Prelude.published()) {
+            Prelude.Rewrite rewrite = Prelude.rewriteOf(name);
+            if (rewrite != null) {
+                Prelude.PreludeEntry target = Prelude.entry(rewrite.target().qualified());
+                if (target != null) {
+                    surface.put(name, declared(target, rewrite.keptArgs()));
+                }
+                continue;
+            }
+            Prelude.PreludeEntry entry = Prelude.entry(name);
+            if (entry != null) {
+                surface.put(name, declared(entry, entry.signature().params().size()));
+            }
+        }
+        return surface;
+    }
+
+    private static Signature declared(Prelude.PreludeEntry entry, int arity) {
+        List<Ast.FnParam> params = entry.declaration().params();
+        List<Type> types = entry.signature().params();
+        List<String> names = new ArrayList<>();
+        List<Type> kept = new ArrayList<>();
+        for (int i = 0; i < arity && i < params.size(); i++) {
+            names.add(params.get(i).binder().name());
+            kept.add(types.get(i));
+        }
+        return new Signature(names, kept, entry.signature().result());
+    }
+
+    /**
+     * One name as its caller writes it. A parameter list is written where the declaration declares
+     * one; a declaration with none is a value, which is named where the value it stands for would go
+     * and refused where it is applied (E1803). No parameters is that case and only that case: the
+     * parameter list is what tells a function from a value, and an empty {@code ()} is refused
+     * rather than being a second spelling of either.
+     */
+    private static String line(String qualifiedName, Signature signature) {
+        StringBuilder sb = new StringBuilder(qualifiedName);
+        if (!signature.paramNames().isEmpty()) {
+            sb.append("(");
+            for (int i = 0; i < signature.paramNames().size(); i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+                sb.append(signature.paramNames().get(i)).append(": ")
+                        .append(Type.show(signature.paramTypes().get(i)));
+            }
+            sb.append(")");
+        }
+        if (signature.result() != null) {
+            sb.append(" : ").append(Type.show(signature.result()));
+        }
+        return sb.toString();
+    }
+
+    private static int printSource(String alias, PrintStream out, PrintStream err) {
+        if (!Prelude.isQualifier(alias)) {
+            err.println("no stdlib module `" + alias + "`");
+            err.println("modules: " + String.join(", ", Prelude.qualifiers().stream().sorted().toList()));
+            return 2;
+        }
+        String resource = "/souther/" + alias.toLowerCase() + ".sou";
+        try (InputStream in = ApiCommand.class.getResourceAsStream(resource)) {
+            if (in == null) {
+                err.println("no bundled source for `" + alias + "`");
+                return 2;
+            }
+            out.print(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return 0;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+}

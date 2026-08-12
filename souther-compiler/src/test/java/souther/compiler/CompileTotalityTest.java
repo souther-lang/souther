@@ -134,6 +134,23 @@ class CompileTotalityTest {
     }
 
     @Test
+    void recursingThroughTheClosureOfAnyCombinatorTheLibraryHasIsTotal() {
+        // `distinctBy` hands its closure an element of `t.children` exactly as `map` does. Which
+        // operations do that is read off the library, so one it gains walks structurally without the
+        // check being told about it.
+        String src = """
+                module demo
+                data Tree = { children: List<Tree>, label: Int }
+                data Out = Int
+                behavior run : (t: Tree) -> Out constructs Out
+                let total (t: Tree): Int =
+                    List.length(List.distinctBy(c -> total(c), t.children)) + t.label
+                let run (t) = Out(total(t))
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
     void recursingOnAParameterInsideAFoldClosureIsStillRejected() {
         // The closure binds `c` as smaller, but the recursion passes `t` (the whole parameter),
         // which does not decrease — must stay rejected even though it is inside a combinator.
@@ -268,15 +285,32 @@ class CompileTotalityTest {
     }
 
     @Test
-    void markingOneMemberPartialOptsTheWholeMutualGroupOut() {
-        // Marking `isOdd` partial opts the whole cycle out of the totality check — `isEven`, sharing
-        // the cycle, is not independently certified either.
+    void everyMemberOfAMutualGroupNeedsTheWordNotJustOne() {
+        // Marking `isOdd` partial opts the cycle out of size-change analysis, but `isEven` reaches
+        // `isOdd` and so carries no termination guarantee either. It has to say so.
         String src = """
                 module demo
                 data N = Int
                 data Out = Int
                 behavior run : (n: N) -> Out constructs Out
                 let isEven (n: Int): Int = if n == 0 then 1 else isOdd(n - 1)
+                partial let isOdd (n: Int): Int = if n == 0 then 0 else isEven(n - 1)
+                let run (n) = Out(isEven(n.value))
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue("E2001".equals(ex.code()), "expected E2001, got " + ex.code() + ": " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("isEven -> isOdd"),
+                "expected the path, got " + ex.getMessage());
+    }
+
+    @Test
+    void aMutualGroupWithTheWordOnEveryMemberIsAccepted() {
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior run : (n: N) -> Out constructs Out
+                partial let isEven (n: Int): Int = if n == 0 then 1 else isOdd(n - 1)
                 partial let isOdd (n: Int): Int = if n == 0 then 0 else isEven(n - 1)
                 let run (n) = Out(isEven(n.value))
                 """;

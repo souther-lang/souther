@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import souther.runtime.PersistentVector;
+
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -17,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code ==} is value equality (spec 7.1), and the generated equals/hashCode agree with it.
+ * {@code ==} is value equality (spec §equality), and the generated equals/hashCode agree with it.
  *
  * <p>For {@code Decimal} that means ignoring scale: {@code BigDecimal.equals} calls 1.0 and 1.00
  * different, but the same amount arrives with a different scale depending on whether it was read
@@ -36,6 +38,10 @@ class CompileEqualityTest {
             data No
             data Answer = Yes | No
             data R = { v: Bool }
+            data Rates = { values: List<Decimal> }
+
+            behavior 料金が同じか : (x: Rates, y: Rates) -> R constructs R
+            let 料金が同じか (x, y) = R { v = x.values == y.values }
 
             behavior 同じか : (p: Pair) -> R constructs R
             behavior 違うか : (p: Pair) -> R constructs R
@@ -146,5 +152,50 @@ class CompileEqualityTest {
         Object t2 = make(loader, "Money", new BigDecimal("1E+1"));
         assertEquals(t1, t2);
         assertEquals(t1.hashCode(), t2.hashCode());
+    }
+
+    /**
+     * An amount inside a field's collection is the same amount, so a data holding one compares and
+     * hashes by it. The field is a reference, so its equality is not the Decimal branch of the
+     * generated equals but the one every other reference field takes.
+     *
+     * <p>A list reaches a field as whichever {@code java.util.List} built it — a literal is a
+     * {@code List.copyOf}, a decoded one comes from the codec, a mapped one is a
+     * {@link PersistentVector} — so each is asked here. Two that hold the same amounts are one value
+     * whichever pair of implementations they are.
+     */
+    @Test
+    void anAmountInsideAFieldsListIsStillTheSameAmount() throws Exception {
+        BytesClassLoader loader = loader();
+        for (List<BigDecimal> scaled : listsOf(new BigDecimal("1.0"))) {
+            for (List<BigDecimal> plain : listsOf(new BigDecimal("1"))) {
+                Object r1 = make(loader, "Rates", scaled);
+                Object r2 = make(loader, "Rates", plain);
+                String pair = scaled.getClass() + " vs " + plain.getClass();
+                assertEquals(r1, r2, pair);
+                assertEquals(r1.hashCode(), r2.hashCode(), "equal values must hash the same: " + pair);
+                assertEquals(1, new HashSet<>(List.of(r1, r2)).size(), pair);
+            }
+        }
+    }
+
+    /** The same, read through the language's own {@code ==} rather than the generated equals. */
+    @Test
+    void twoListsOfTheSameAmountsCompareEqual() throws Exception {
+        BytesClassLoader loader = loader();
+        for (List<BigDecimal> scaled : listsOf(new BigDecimal("1.0"))) {
+            for (List<BigDecimal> plain : listsOf(new BigDecimal("1"))) {
+                assertTrue(run(loader, "料金が同じか",
+                        make(loader, "Rates", scaled), make(loader, "Rates", plain)),
+                        scaled.getClass() + " vs " + plain.getClass());
+            }
+        }
+    }
+
+    /** The list implementations a Souther list arrives as. */
+    private List<List<BigDecimal>> listsOf(BigDecimal value) {
+        return List.of(List.of(value),
+                new java.util.ArrayList<>(List.of(value)),
+                PersistentVector.from(List.of(value)));
     }
 }

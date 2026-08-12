@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A behavior's generated class capitalizes its first letter (spec 19.5). Data names are already
+ * A behavior's generated class capitalizes its first letter (spec §jvm-behavior). Data names are already
  * capitalized, so {@code behavior quote} producing {@code data Quote} would generate two classes
  * named {@code Quote}. The compiler rejects the collision rather than let one class silently
  * overwrite the other.
@@ -40,6 +40,37 @@ class CompileBehaviorNameCollisionTest {
                 let Run (n) = n
                 """;
         assertThrows(CompileException.class, () -> Compiler.compile(src));
+    }
+
+    @Test
+    void aResultUnionWhoseClassCollidesWithADataIsRejected() {
+        String src = """
+                module demo
+                data Req = { n: Int }
+                data Ok = { v: Int }
+                data NotFound
+                data BillResult = { x: Int }
+                behavior bill : (r: Req) -> Ok | NotFound constructs Ok, NotFound
+                let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("BillResult"), e.getMessage());
+    }
+
+    @Test
+    void aResultUnionWhoseClassCollidesWithABehaviorIsRejected() {
+        String src = """
+                module demo
+                data Req = { n: Int }
+                data Ok = { v: Int }
+                data NotFound
+                behavior bill : (r: Req) -> Ok | NotFound constructs Ok, NotFound
+                let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
+                behavior billResult : (r: Req) -> Ok constructs Ok
+                let billResult (r) = Ok { v = r.n }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("BillResult"), e.getMessage());
     }
 
     @Test

@@ -1,43 +1,78 @@
 package souther.compiler.check;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * "Did you mean" hints for unknown names. When a name the checker cannot resolve is a near-miss of
  * one that is in scope, the error carries the likely intended name, so a typo reads as a typo. The
  * closeness bound is Levenshtein distance ≤ 2 and strictly less than the name's length, so a short
  * name does not match every candidate.
+ *
+ * <p>What "near" measures is one thing across the compiler and the documentation tools: an edit
+ * distance, not a containment. How near is near enough is not — a class identifier and a section
+ * anchor are not the same length — so {@link #nearest} takes its bound from the caller while the
+ * measure stays here.
  */
-final class Suggest {
+public final class Suggest {
+
+    /** The bound an unknown identifier is matched under. */
+    private static final int NEAR_ENOUGH = 2;
 
     private Suggest() {
     }
 
-    /** {@code " (did you mean `X`?)"} for the closest candidate within bound, or {@code ""}. */
-    static String hint(String name, Collection<String> candidates) {
-        String best = candidate(name, candidates);
-        return best == null ? "" : " (did you mean `" + best + "`?)";
-    }
-
-    /** The closest in-scope candidate to {@code name} within the closeness bound, or {@code null}.
-     * The structured form of {@link #hint}, for a diagnostic's {@code suggestion} field. */
-    static String candidate(String name, Collection<String> candidates) {
-        String best = null;
-        int bestDistance = Integer.MAX_VALUE;
+    /**
+     * The candidates within {@code bound} edits of {@code name}, closest first, at most
+     * {@code limit} of them.
+     *
+     * <p>A candidate must also be further than its own length is short — a two-letter name would
+     * otherwise be within two edits of everything and suggest something it has nothing to do with.
+     *
+     * <p>Ties are broken by the name. A candidate list carries no order the author chose, so an
+     * answer that depended on the one it happens to arrive in would be no answer at all.
+     */
+    public static List<String> nearest(String name, Collection<String> candidates, int bound, int limit) {
+        record Near(String candidate, int distance) {}
+        List<Near> near = new ArrayList<>();
         for (String candidate : candidates) {
             if (candidate.equals(name)) {
                 continue;
             }
             int d = distance(name, candidate);
-            if (d < bestDistance) {
-                bestDistance = d;
-                best = candidate;
+            if (d <= bound && d < name.length()) {
+                near.add(new Near(candidate, d));
             }
         }
-        if (best != null && bestDistance <= 2 && bestDistance < name.length()) {
-            return best;
-        }
-        return null;
+        return near.stream()
+                .sorted(Comparator.comparingInt(Near::distance).thenComparing(Near::candidate))
+                .limit(limit)
+                .map(Near::candidate)
+                .toList();
+    }
+
+    /** {@code " (did you mean `X`?)"} for the closest candidate within bound, or {@code ""}. */
+    public static String hint(String name, Collection<String> candidates) {
+        String best = candidate(name, candidates);
+        return best == null ? "" : " (did you mean `" + best + "`?)";
+    }
+
+    /**
+     * The closest in-scope candidate to {@code name} within the closeness bound, or {@code null}.
+     * The structured form of {@link #hint}, for a diagnostic's {@code suggestion} field.
+     *
+     * <p>Answered through {@link #nearest} so that two candidates at the same distance are decided
+     * by the same total order both ways of asking use. The collections a caller offers are sets and
+     * key views built by {@code Map.copyOf}, whose iteration order the JVM salts per run: a
+     * selection that kept whichever of two equally close names it met first named a different one
+     * on a different run of the same compile. Which of them the author meant is not something an
+     * encounter order knows, so the tie is settled by the name.
+     */
+    public static String candidate(String name, Collection<String> candidates) {
+        List<String> near = nearest(name, candidates, NEAR_ENOUGH, 1);
+        return near.isEmpty() ? null : near.getFirst();
     }
 
     /** Levenshtein edit distance (insert/delete/substitute), on Unicode code points. */

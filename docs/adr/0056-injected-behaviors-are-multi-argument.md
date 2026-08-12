@@ -4,13 +4,13 @@ Status: Accepted.
 
 ## Context
 
-An injected behavior — a `behavior` with no `let`, implemented from Java — was limited to a single input. Declaring two or more parameters was silently accepted and every parameter after the first was dropped: the natural call `send(a, b)` failed with an unexplained arity error, while `send(a)` on a two-input spec compiled and quietly discarded the second input. This is a correctness hole and it is inconsistent with a `let`-implemented (fn) behavior, which already takes several arguments (`会員へ通知する : (会員, 件名) -> …`).
+An injected behavior — a `behavior` with no `let`, implemented from Java — was limited to a single input. Declaring two or more parameters was silently accepted and every parameter after the first was dropped: the natural call `send(a, b)` failed with an unexplained arity error, while `send(a)` on a two-input spec compiled and quietly discarded the second input. This is a correctness hole and it is inconsistent with a `let`-implemented (fn) behavior, which already takes several arguments (`notifyMember : (Member, subject) -> …`).
 
 The single-input assumption was baked into three layers: the checker's `ReqSig` held one `param` and the call-check hard-coded arity 1; the injected base class always `implements Behavior` (whose `apply` is unary); and every required-call site emitted a unary `Behavior.apply(Object)` with at most one argument.
 
 The unary `Behavior<I, O>` is deliberate — it is the composition contract for `>->`, where a pipeline stage takes one value and yields one. The mistake was treating "injected behavior" as a synonym for "unary `Behavior<I, O>`". A fn behavior already avoids that: its codegen branches on parameter count — one input `extends Behavior<In, Out>` (composes with `>->`), two or more is a standalone functional interface with a typed `apply(A, B, …)` (does not compose).
 
-Separately, a collection parameter of any multi-argument `apply` degraded to `Object` (and a single-input behavior with a collection input/output lost its whole `Behavior<In, Out>` signature), so a Java/Kotlin/Scala author received a raw `Object` to cast rather than a typed `List<明細>`.
+Separately, a collection parameter of any multi-argument `apply` degraded to `Object` (and a single-input behavior with a collection input/output lost its whole `Behavior<In, Out>` signature), so a Java/Kotlin/Scala author received a raw `Object` to cast rather than a typed `List<Line>`.
 
 ## Decision
 
@@ -22,7 +22,7 @@ Because a multi-argument base has no shared `Behavior` interface, a required mul
 
 ## Consequences
 
-- `通知メールを送る : (宛先: アクティベート済み, 件名: String) -> 送信済み` is written directly, and the Java implementation overrides `apply(アクティベート済み, String)`. The record wrapper (`data 通知 = { 宛先, 件名 }`) that only existed to work around the single-input limit is removed from the member example.
+- `sendNotificationMail : (to: Activated, subject: String) -> Sent` is written directly, and the Java implementation overrides `apply(Activated, String)`. The record wrapper (`data Notification = { to, subject }`) that only existed to work around the single-input limit is removed from the member example.
 - The base is an ordinary JVM abstract class, so Kotlin/Scala/Clojure implement it. A collection parameter arrives typed, which a Clojure persistent collection (a `java.util` collection) satisfies directly. Clojure uses `proxy`/`gen-class` and reaches the `protected` factories via `gen-class`'s `:exposes-methods`; the factories stay `protected` because that is the construction confinement (ADR-0015), not an interop knob.
 - Example evaluation (`fake`) supports a multi-argument injected dependency: its base is an abstract class (not the unary `Behavior` a JDK `Proxy` needs), so the fake is a runtime-generated subclass whose typed `apply` looks the input tuple up in the table.
 - The compiler's unary-vs-multi dispatch is a single decision (`CodegenContext`) shared by the base class, the `$Impl` field/constructor, the `bind` factory, and every call site, so they cannot drift; the example verifier reads it back from the fake's runtime type.

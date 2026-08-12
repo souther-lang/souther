@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Immutable collections are element-covariant (spec 6): with {@code A} a case of the sum {@code S}
+ * Immutable collections are element-covariant (spec §collections): with {@code A} a case of the sum {@code S}
  * ({@code A <: S}), a {@code List}/{@code Map}/{@code Option} of {@code A} is assignable where one
  * of {@code S} is expected. This is sound because the collections cannot be mutated, so no write
  * can smuggle a sibling case in. Covariance follows the case→sum relation only; two sibling cases stay

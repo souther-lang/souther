@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * List literals, guard-only comprehensions {@code [e | cond]}, and concat {@code ++} let a
- * behavior build a {@code List} — including the conditional-accumulation shape of spec 23's
+ * behavior build a {@code List} — including the conditional-accumulation shape of spec §example's
  * {@code 事前承認要否を判定する -> List<事前承認理由>}, previously unbuildable.
  */
 class CompileListLiteralTest {
@@ -35,7 +35,7 @@ class CompileListLiteralTest {
         assertEquals(List.of(5L), pick(5, -1));      // guard fails: only the literal
     }
 
-    // spec 23 shape: a List<sum> built from conditionally-included case values.
+    // spec §example shape: a List<sum> built from conditionally-included case values.
     private static final String REASONS = """
             module demo
 

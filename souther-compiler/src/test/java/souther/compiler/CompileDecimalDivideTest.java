@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -7,12 +8,14 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Decimal division states its rounding as a domain decision: {@code divide(a, b, scale, mode)}
- * gives a Decimal rounded to {@code scale} places by {@code mode} (spec 18.3). A zero divisor is a
+ * gives a Decimal rounded to {@code scale} places by {@code mode} (spec §stdlib-decimal). A zero divisor is a
  * possible input, so it returns a {@code DivisionByZero} case rather than aborting. The 2-argument
  * {@code divide} stays Int-only.
  */
@@ -61,6 +64,36 @@ class CompileDecimalDivideTest {
         assertEquals(false, m.get("ok"));
     }
 
+    /**
+     * The two names are two declarations. Sharing one rule made them interchangeable aliases picked
+     * apart by argument count, so each was reachable under the other's name — and the spec sentence
+     * saying `Decimal.divide(a, b)` cannot be written was not true.
+     */
+    @Test
+    void eachDivideTakesOnlyItsOwnArguments() {
+        CompileException four = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Pair = { a: Int, b: Int }
+                data Out = { n: Int }
+                behavior divv : (p: Pair) -> Out constructs Out
+                let divv (p) = match Int.divide(p.a, p.b, 2, HALF_UP) with
+                    | Decimal as q -> Out { n = 0 }
+                    | DivisionByZero -> Out { n = 0 }
+                """));
+        assertTrue(four.getMessage().contains("`Int.divide` takes 2"), four.getMessage());
+
+        CompileException two = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Pair = { a: Decimal, b: Decimal }
+                data Out = { n: Int }
+                behavior divv : (p: Pair) -> Out constructs Out
+                let divv (p) = match Decimal.divide(p.a, p.b) with
+                    | Int as q -> Out { n = q }
+                    | DivisionByZero -> Out { n = 0 }
+                """));
+        assertTrue(two.getMessage().contains("`Decimal.divide` takes 4"), two.getMessage());
+    }
+
     @Test
     void twoArgDivideOnDecimalIsRejected() {
         String src = """
@@ -72,5 +105,19 @@ class CompileDecimalDivideTest {
                 let divv (p) = Out { value = divide(p.a, p.b) }
                 """;
         assertThrows(CompileException.class, () -> Compiler.compile(src));
+    }
+
+    /** A mode is a unit data, so applying one to arguments is the ordinary answer for a type
+     * written where a call goes: naming it constructs it, and a construction is not a function. */
+    @Test
+    void aRoundingModeAppliedToArgumentsIsToldItIsNotAFunction() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data In = { n: Int }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = HALF_UP(i.n) }
+                """));
+        assertInstanceOf(DataMessage.AConstructionCannotBeWrittenHere.class, e.diagnostic().said());
     }
 }

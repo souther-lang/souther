@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The primitive types beyond Int/String — Bool, Decimal, Date, DateTime (spec section 7.1) —
+ * The primitive types beyond Int/String — Bool, Decimal, Date, DateTime (spec §primitives) —
  * must be usable as data fields and round-trip through the derived decoder/encoder.
  */
 class CompilePrimitiveTypesTest {
@@ -60,7 +60,9 @@ class CompilePrimitiveTypesTest {
                 """);
         Result<?> r = Codecs.decode(loader, "demo.Price", new BigDecimal("12.50"));
         assertTrue(r instanceof Ok, "a bare decimal decodes as a newtype");
-        assertEquals(new BigDecimal("12.50"), Codecs.encode(loader, "demo.Price", ((Ok<?>) r).value()));
+        // The round trip is by value, and the boundary writes the amount rather than the scale it
+        // was handed ([#primitives]) — 12.50 and 12.5 are one price and one number written.
+        assertEquals(new BigDecimal("12.5"), Codecs.encode(loader, "demo.Price", ((Ok<?>) r).value()));
     }
 
     @Test

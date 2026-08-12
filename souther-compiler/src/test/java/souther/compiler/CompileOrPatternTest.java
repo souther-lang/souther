@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An or-pattern {@code | A | B -> body} runs one body for several cases (spec 16.3). Its cases
+ * An or-pattern {@code | A | B -> body} runs one body for several cases (spec §match). Its cases
  * count toward exhaustiveness; covering a case twice is an overlap error; and with {@code as x} the
  * binding is the scrutinee's sum type, since no single case type fits every alternative.
  */

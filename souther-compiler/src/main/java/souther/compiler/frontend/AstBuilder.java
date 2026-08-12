@@ -1,6 +1,11 @@
 package souther.compiler.frontend;
 
+import souther.compiler.diag.msg.Reported;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.CoverageOrigin;
+import souther.compiler.ast.StructuralCost;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.LineIndex;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
@@ -8,19 +13,32 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.ParseMessage;
+import souther.compiler.diag.msg.InvariantMessage;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.AttemptMessage;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Builds the compiler's {@link Ast} from a concrete syntax tree. This is where the surface forms the
  * parser deliberately kept lossless are lowered to the desugared AST every later stage expects:
- * {@code |>} folds into a call's last argument, {@code require} becomes an {@code if}, {@code let}
+ * {@code |>} folds into a call's last argument, {@code guard} becomes an {@code if}, {@code let}
  * becomes a {@code LetIn}, {@code T?} becomes {@code Option<T>}, and the {@code let}/{@code match}
  * destructurings expand into positional reads. The CST feeds the formatter and the LSP untouched;
  * only the compiler pipeline runs through here.
@@ -32,20 +50,51 @@ public final class AstBuilder {
     private int matchWholeCounter = 0;
     private int tupleCounter = 0;
     private int getterCounter = 0;
+    private int patternCounter = 0;
+    private int spreadCounter = 0;
+    /**
+     * How many coverage-bearing constructs this source has been read to hold, which is what numbers
+     * the next one ({@link CoverageOrigin}).
+     *
+     * <p>One number per construct the author wrote, not per fork object built. An {@code if} that is
+     * written as an attempted construction is one construct however many of the three shapes below it
+     * takes, and a comprehension is one construct whose guards derive their forks from it — so the
+     * number is taken once, where the construct is recognised.
+     */
+    private int constructCounter = 0;
 
-    private AstBuilder(String source) {
-        this.lines = new LineIndex(source);
+    private AstBuilder(String source, String sourceId) {
+        this.lines = new LineIndex(source, sourceId);
     }
 
-    /** Builds a module from a parsed source file. A header-less source is named
-     * {@code defaultModuleName}; a {@code null} default makes the header required. */
-    public static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName) {
-        return new AstBuilder(source).module(sourceFile, defaultModuleName);
+    /**
+     * Builds a module from a parsed source file. A header-less source is named
+     * {@code defaultModuleName}; a {@code null} default makes the header required. Every position
+     * the module carries names {@code sourceId}, which is null for a source the caller has no name
+     * for — a module read off the module path, which is in no source of the compile reading it.
+     *
+     * <p>Requires a CST the parser accepted: every node it reads has the children the grammar gives
+     * it, and a missing one is dereferenced rather than reported. {@link CstFrontend#parse} is the
+     * one caller and raises the parser's first error before building — which is why this is
+     * package-private, and what a second caller would have to guarantee.
+     */
+    static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName,
+                            String sourceId) {
+        return new AstBuilder(source, sourceId).module(sourceFile, defaultModuleName);
+    }
+
+    /** The next construct of this source a coverage obligation can be about. Called once where a
+     * construct is recognised, never per node the construct is built as. */
+    private CoverageOrigin construct() {
+        return CoverageOrigin.written(moduleName, constructCounter++);
     }
 
     // --- module ---
 
-    private Ast.Module module(SyntaxNode file, String defaultModuleName) {
+    private Ast.Module module(SyntaxNode file, String defaultModuleNameSpelling) {
+        // A header-less source is named by its caller — the CLI's file stem, an
+        // annotation processor, a test — which is a name arriving from outside.
+        String defaultModuleName = souther.compiler.Reserved.name(defaultModuleNameSpelling);
         Optional<SyntaxNode> exampleFile = file.child(SyntaxKind.EXAMPLES_FILE_HEADER);
         if (exampleFile.isPresent()) {
             return exampleFileModule(file, exampleFile.get());
@@ -60,10 +109,20 @@ public final class AstBuilder {
             name = qualifiedNameText(h.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
             pos = pos(h);
         } else if (defaultModuleName != null) {
+            // The name written in a header was read by the scan and is a name by that. This one was
+            // read by nothing — a file's stem, or what an embedding handed in — so it is held to
+            // the alphabet here, where it becomes the module's name.
+            for (String part : defaultModuleName.split("\\.", -1)) {
+                if (!souther.compiler.cst.IdentifierAlphabet.isName(part)) {
+                    throw error(pos(file),
+                            new ParseMessage.ASourceIsNamedAfterSomethingThatIsNotAName(
+                                    defaultModuleName));
+                }
+            }
             name = defaultModuleName;
             pos = pos(file);
         } else {
-            throw error(pos(file), "parse.module", "expected `module` declaration");
+            throw error(pos(file), new ParseMessage.ASourceFileStartsWithAModuleDeclaration());
         }
         moduleName = name;   // set before any type is read, so type-variable gating knows the namespace
         header.flatMap(h -> h.child(SyntaxKind.EXPOSING_CLAUSE))
@@ -86,40 +145,60 @@ public final class AstBuilder {
                 default -> { /* MODULE_HEADER handled above; ERROR nodes are reported already */ }
             }
         }
+        // A source file declares; what the module takes on to emit follows from what its bodies reach
+        // and is worked out where that is known, which is not here.
         return new Ast.Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
-                examples, fakes, null, pos);
+                List.of(), examples, fakes, null, pos);
     }
 
-    /** An {@code examples for <module>} file: an example-only contribution to its target module. Any
-     * non-example declaration in it is E1906. The returned {@link Ast.Module} carries only examples
-     * and its {@code exampleFileTarget}; the compiler merges it into the target. */
+    /**
+     * An {@code examples for <module>} file: what its target module's rows are written in. It holds the
+     * rows, the fakes they run against, and the values those rows name; anything else in it is E1906. The
+     * returned {@link Ast.Module} carries those and its {@code exampleFileTarget}; the compiler merges it
+     * into the target.
+     *
+     * <p>A value is a {@code let} with no parameter list, and it is here because a row that names one had
+     * nowhere in this file to declare it — so the fixture went back to the model file, which is the file
+     * the rows exercise rather than the one they are written in (issue #210). A {@code let} with
+     * parameters is a helper, which is a method the target module emits, and a companion file does not
+     * add to what the model compiles to.
+     */
     private Ast.Module exampleFileModule(SyntaxNode file, SyntaxNode header) {
         String target = qualifiedNameText(header.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
         moduleName = target;
         SourcePos pos = pos(header);
         List<Ast.Example> examples = new ArrayList<>();
         List<Ast.Fake> fakes = new ArrayList<>();
+        List<Ast.FnDef> values = new ArrayList<>();
         for (SyntaxNode n : file.childNodes()) {
             switch (n.kind()) {
                 case EXAMPLE_DEF -> examples.add(example(n));
                 case FAKE_DEF -> fakes.add(fake(n));
                 case EXAMPLES_FILE_HEADER -> { /* the header itself */ }
-                case IMPORT_DECL, DATA_DEF, BEHAVIOR_DEF, FN_DEF -> throw CompileException.of(
-                        Diagnostic.of("E1906", "check.example.file.only").title("check.example.title")
-                                .at(pos(n)).build(),
-                        "an `examples for` file may contain only examples");
+                case FN_DEF -> {
+                    Ast.FnDef fn = fnDef(n);
+                    if (!fn.params().isEmpty()) {
+                        throw onlyExamples(n);
+                    }
+                    values.add(fn);
+                }
+                case IMPORT_DECL, DATA_DEF, BEHAVIOR_DEF -> throw onlyExamples(n);
                 default -> { /* ERROR nodes already reported */ }
             }
         }
         return new Ast.Module(target, List.of(), new HashMap<>(), List.of(), List.of(), List.of(),
-                List.of(), examples, fakes, target, pos);
+                values, List.of(), examples, fakes, target, pos);
+    }
+
+    private CompileException onlyExamples(SyntaxNode n) {
+        return CompileException.of(Diagnostic.at(pos(n)).say(new ExampleMessage.AnExamplesFileHoldsOnlyExamples()).build());
     }
 
     /** {@code example <target> | rows...}. The contextual {@code example} lexes as an identifier, so
      * the target is the second identifier token. */
     private Ast.Example example(SyntaxNode n) {
         List<SyntaxToken> idents = identTokens(n);
-        String target = idents.size() >= 2 ? idents.get(1).text() : "";
+        String target = idents.size() >= 2 ? ident(idents.get(1)) : "";
         SourcePos pos = idents.size() >= 2 ? posOf(idents.get(1)) : pos(n);
         List<Ast.ExampleRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
@@ -154,7 +233,7 @@ public final class AstBuilder {
      * target is the second identifier token. */
     private Ast.Fake fake(SyntaxNode n) {
         List<SyntaxToken> idents = identTokens(n);
-        String target = idents.size() >= 2 ? idents.get(1).text() : "";
+        String target = idents.size() >= 2 ? ident(idents.get(1)) : "";
         SourcePos pos = idents.size() >= 2 ? posOf(idents.get(1)) : pos(n);
         List<Ast.FakeRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
@@ -188,80 +267,124 @@ public final class AstBuilder {
 
     private Ast.Import importDecl(SyntaxNode n) {
         String module = qualifiedNameText(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
-        List<String> names = new ArrayList<>();
+        String alias = n.child(SyntaxKind.IMPORT_ALIAS)
+                .map(a -> ident(identTokens(a).get(0))).orElse(null);
+        List<Ast.ImportedName> names = new ArrayList<>();
         n.child(SyntaxKind.NAME_LIST).ifPresent(list -> {
             for (SyntaxToken t : identTokens(list)) {
-                names.add(t.text());
+                names.add(new Ast.ImportedName(nameOf(t)));
             }
         });
-        return new Ast.Import(module, names, pos(n));
+        return new Ast.Import(module, alias, names, pos(n));
     }
 
     // --- data ---
 
     private Ast.Def dataDef(SyntaxNode n) {
-        String name = firstIdentText(n);
+        WrittenName declared = nameOf(firstIdentToken(n));
+        String name = declared.canonical();
         SourcePos pos = pos(n);
-        Optional<Ast.Expr> invariant = invariant(n);
+        List<Ast.InvariantClause> clauses = invariants(n, name);
 
         Optional<SyntaxNode> product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
-            List<String> includes = new ArrayList<>();
+            List<Ast.Name> includes = new ArrayList<>();
             List<Ast.Field> fields = new ArrayList<>();
             for (SyntaxNode member : product.get().childNodes()) {
                 if (member.kind() == SyntaxKind.SPREAD_MEMBER) {
-                    includes.add(firstIdentText(member));
+                    SyntaxToken included = identTokens(member).get(0);
+                    includes.add(new Ast.Name(nameOf(included), null));
                 } else if (member.kind() == SyntaxKind.FIELD) {
                     fields.add(field(member));
                 }
             }
-            return new Ast.Data(name, false, includes, fields, invariant,
+            // `data T = { }` names a type with one value, which is what a unit data is — but it is
+            // built as `T {}` where a unit is built by name, so the two spellings mean the same
+            // thing and reject each other's construction. One way to write it (spec §unit-data).
+            if (includes.isEmpty() && fields.isEmpty()) {
+                throw CompileException.of(Diagnostic
+                                .at(bodyRegion(product.get()))
+                                .hint(new DataMessage.WriteItAsAUnitDataOrGiveItFields(name)).say(new DataMessage.ADataWithAnEmptyBody(name)).build());
+            }
+            return new Ast.Data(declared, false, includes, fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
         }
         Optional<SyntaxNode> sum = n.child(SyntaxKind.SUM_BODY);
         if (sum.isPresent()) {
-            List<String> cases = new ArrayList<>();
+            List<Ast.Name> cases = new ArrayList<>();
             for (SyntaxToken t : identTokens(sum.get())) {
-                cases.add(t.text());
+                cases.add(new Ast.Name(nameOf(t), null));
             }
-            return new Ast.SumData(name, cases, Optional.empty(), Optional.empty(), pos);
+            return new Ast.SumData(declared, cases, Optional.empty(), Optional.empty(), pos);
         }
         Optional<SyntaxNode> newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
-            SyntaxToken inner = identTokens(newtype.get()).get(0);
-            Ast.TypeRef innerType = new Ast.TypeRef(inner.text(), null, posOf(inner));
-            List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, posOf(inner)));
-            return new Ast.Data(name, true, List.of(), fields, invariant,
+            SyntaxNode inner = typeChild(newtype.get());
+            Ast.TypeRef innerType = typeRef(inner);
+            if (newtype.get().token(SyntaxKind.QUESTION).isPresent()) {
+                innerType = new Ast.TypeRef("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
+            }
+            List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
+            return new Ast.Data(declared, true, List.of(), fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
         }
-        return new Ast.UnitData(name, pos);
+        // No body of any kind: a unit data, which has no fields for an invariant to observe (spec
+        // §unit-data). The parser takes an `invariant` clause after any data, so this is where a
+        // clause that has nothing to constrain is refused — reaching `Ast.UnitData`, which has no
+        // slot for one, would silently drop it and with it any error inside it.
+        for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
+            throw CompileException.of(Diagnostic
+                            .at(pos(clause)).say(new InvariantMessage.AUnitDataHasNothingToObserve(name)).build());
+        }
+        return new Ast.UnitData(declared, pos);
     }
 
-    /** Conjoins every {@code invariant} clause under {@code &&}; each line must hold. */
-    private Optional<Ast.Expr> invariant(SyntaxNode dataDef) {
-        Optional<Ast.Expr> acc = Optional.empty();
+    /**
+     * Every {@code invariant} clause in the order it is written; each must hold. A clause keeps the
+     * name written for it, which is what an attempt's departure arm and a boundary issue read.
+     *
+     * <p>The name is the clause's own identifier, so two clauses of one declaration cannot share one:
+     * an arm naming it would answer neither rule in particular.
+     */
+    private List<Ast.InvariantClause> invariants(SyntaxNode dataDef, String typeName) {
+        List<Ast.InvariantClause> out = new ArrayList<>();
+        Set<String> named = new HashSet<>();
         for (SyntaxNode clause : childNodes(dataDef, SyntaxKind.INVARIANT_CLAUSE)) {
-            Ast.Expr next = expr(onlyExpr(clause));
-            acc = Optional.of(acc.map(prev -> (Ast.Expr)
-                            new Ast.Binary(Ast.BinOp.AND, prev, next, next.pos()))
-                    .orElse(next));
+            Ast.Expr expr = expr(onlyExpr(clause));
+            Optional<String> name = Optional.empty();
+            if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
+                SyntaxToken label = identTokens(clause).get(0);
+                // `_` is what an attempt writes for the clauses that carry no name, so a clause named
+                // `_` could not be answered by name at all: the arm reading it would be that wildcard.
+                // Refused here rather than left to be discovered at the attempt.
+                if (ident(label).equals("_")) {
+                    throw CompileException.of(Diagnostic
+                                    .at(posOf(label))
+                                    .hint(new InvariantMessage.NameTheClauseOrLeaveItUnnamed()).say(new InvariantMessage.UnderscoreCannotNameAClause(typeName)).build());
+                }
+                if (!named.add(ident(label))) {
+                    throw CompileException.of(Diagnostic
+                                    .at(posOf(label)).say(new InvariantMessage.TwoClausesShareOneName(ident(label), typeName)).build());
+                }
+                name = Optional.of(ident(label));
+            }
+            out.add(new Ast.InvariantClause(name, expr, pos(clause)));
         }
-        return acc;
+        return out;
     }
 
     private Ast.Field field(SyntaxNode n) {
-        String name = firstIdentText(n);
-        Ast.TypeRef type = typeRef(typeChild(n));
+        Ast.TypeTerm type = typeTerm(typeChild(n));
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
             type = new Ast.TypeRef("Option", type, type.pos());   // `T?` → Option<T>
         }
-        return new Ast.Field(name, type, pos(n));
+        return new Ast.Field(nameOf(firstIdentToken(n)), type);
     }
 
     // --- behavior ---
 
     private Ast.BehaviorDef behaviorDef(SyntaxNode n) {
-        String name = firstIdentText(n);
+        WrittenName declared = nameOf(firstIdentToken(n));
         SourcePos pos = pos(n);
         Optional<SyntaxNode> sig = n.child(SyntaxKind.BEHAVIOR_SIG);
         if (sig.isPresent()) {
@@ -269,82 +392,150 @@ public final class AstBuilder {
             List<Ast.Param> params = new ArrayList<>();
             s.child(SyntaxKind.PARAM_LIST).ifPresent(pl -> {
                 for (SyntaxNode p : childNodes(pl, SyntaxKind.PARAM)) {
-                    params.add(new Ast.Param(firstIdentText(p), retType(p.child(SyntaxKind.RET_TYPE).orElseThrow()), pos(p)));
+                    params.add(new Ast.Param(nameOf(firstIdentToken(p)),
+                            retType(p.child(SyntaxKind.RET_TYPE).orElseThrow())));
                 }
             });
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
-            List<String> constructs = new ArrayList<>();
-            List<String> requires = new ArrayList<>();
+            List<Ast.Name> constructs = new ArrayList<>();
+            List<Ast.Var> dependsOn = new ArrayList<>();
             for (SyntaxNode clause : s.childNodes()) {
+                // either clause may name through a module, so the idents of one name are joined and
+                // a comma starts the next
                 if (clause.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
-                    for (SyntaxToken t : identTokens(clause)) {
-                        constructs.add(t.text());
-                    }
-                } else if (clause.kind() == SyntaxKind.REQUIRES_CLAUSE) {
-                    for (SyntaxToken t : identTokens(clause)) {
-                        requires.add(t.text());
+                    constructs.addAll(dottedNames(clause, 0));
+                } else if (clause.kind() == SyntaxKind.DEPENDS_CLAUSE) {
+                    // one ident past the keyword is the `on` of `depends on`, which lexes as an
+                    // ordinary identifier and is no part of the list
+                    for (Ast.Name dep : dottedNames(clause, 1)) {
+                        dependsOn.add(new Ast.Var(dep.name(), null, null));
                     }
                 }
             }
-            return new Ast.SpecBehavior(name, params, ret, constructs, requires, pos);
+            return new Ast.SpecBehavior(declared, params, ret, constructs, dependsOn, pos);
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
-        List<String> stages = new ArrayList<>();
+        List<Ast.Var> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
-            StringBuilder sb = new StringBuilder();
-            for (SyntaxToken t : identTokens(st)) {
-                if (sb.length() > 0) {
-                    sb.append('.');
-                }
-                sb.append(t.text());
-            }
-            stages.add(sb.toString());
+            stages.add(new Ast.Var(qualifiedNameOf(st), null, null));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
-        return new Ast.PipeBehavior(name, stages, declaredOut, pos);
+        return new Ast.PipeBehavior(declared, stages, declaredOut, pos);
     }
 
     // --- fn ---
 
     private Ast.FnDef fnDef(SyntaxNode n) {
-        String name = firstIdentText(n);
+        WrittenName declared = nameOf(firstIdentToken(n));
         SourcePos pos = pos(n);
         List<Ast.FnParam> params = new ArrayList<>();
+        // parallel to params: the pattern a parameter was written as, or null where it was a name
+        List<SyntaxNode> paramPatterns = new ArrayList<>();
         n.child(SyntaxKind.FN_PARAM_LIST).ifPresent(pl -> {
             for (SyntaxNode p : childNodes(pl, SyntaxKind.FN_PARAM)) {
-                params.add(fnParam(p));
+                SyntaxNode pat = optionalPatternChild(p);
+                paramPatterns.add(pat);
+                params.add(fnParam(p, pat));
             }
         });
         Ast.RetType declaredReturn = n.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         boolean partial = n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent();
+        Optional<SyntaxNode> privateModifier = n.child(SyntaxKind.PRIVATE_MODIFIER);
+        if (privateModifier.isPresent() && !isReservedNamespace(moduleName)) {
+            // Like `intrinsic`, and for the same reason: what the standard library keeps to itself
+            // is the library's own business, and a user module has no surface to hide anything from
+            // — everything it declares is published (ADR-0075).
+            throw error(pos(privateModifier.get()), new ParseMessage.PrivateIsACorePrivilege());
+        }
+        Ast.Modifiers modifiers = new Ast.Modifiers(partial, privateModifier.isPresent());
 
         Optional<SyntaxNode> intrinsic = n.child(SyntaxKind.INTRINSIC_BODY);
         if (intrinsic.isPresent()) {
             if (!isReservedNamespace(moduleName)) {
-                throw error(pos, "parse.intrinsic.core",
-                        "`intrinsic` is a core privilege: only a module in the reserved `souther`"
-                                + " namespace may declare one (ADR-0028)");
+                throw error(pos, new ParseMessage.IntrinsicIsACorePrivilege());
             }
             String key = stringValue(intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow().text());
-            return new Ast.FnDef(name, params, declaredReturn, key, null, partial, pos);
+            return new Ast.FnDef(declared, moduleName, params, declaredReturn,
+                    new Ast.FnBody.Intrinsic(key), modifiers, pos);
         }
         SyntaxNode bodyNode = onlyExpr(n);
-        return new Ast.FnDef(name, params, declaredReturn, null, expr(bodyNode), partial, pos);
-    }
-
-    private Ast.FnParam fnParam(SyntaxNode p) {
-        String name = firstIdentText(p);
-        Ast.ParamType type = null;
-        Optional<SyntaxNode> fnType = p.child(SyntaxKind.FN_TYPE);
-        if (fnType.isPresent()) {
-            type = fnType(fnType.get());
-        } else {
-            Optional<SyntaxNode> rt = p.child(SyntaxKind.RET_TYPE);
-            if (rt.isPresent()) {
-                type = retType(rt.get());
+        Ast.Expr body = expr(bodyNode);
+        // `let f = (x) -> e` is the parameter-list form written the other way round: the parameters
+        // move to the left of `=` and the two spellings settle to one definition. A definition that
+        // already wrote parameters keeps a lambda body as its result. Only a lambda the source wrote
+        // moves — a `.field` getter is a block too, but its parameter is synthesized, and lifting it
+        // would name a definition's parameter something the author never wrote.
+        //
+        // A written function type moves nothing either. It says what the definition is, and what it
+        // says is a function — so the definition is a value of that type, and lifting its parameters
+        // out would leave the type describing something the definition no longer is.
+        if (params.isEmpty() && bodyNode.kind() == SyntaxKind.LAMBDA_EXPR
+                && (declaredReturn == null || declaredReturn.asFn() == null)
+                && body instanceof Ast.Block lambda) {
+            for (Ast.Binder p : lambda.params()) {
+                params.add(new Ast.FnParam(p, null, false));
+            }
+            body = lambda.body();
+        }
+        // a pattern parameter took a fresh name above; it opens itself at the top of the body, so
+        // the helper still takes plain names and nothing downstream sees a pattern
+        for (int i = paramPatterns.size() - 1; i >= 0; i--) {
+            SyntaxNode pat = paramPatterns.get(i);
+            if (pat != null) {
+                // positioned on the pattern: what a complaint about it has to name is the parameter
+                // the author wrote, not the definition it sits in
+                SourcePos at = pos(pat);
+                // What the pattern lowers to holds the body, so it covers what the body covers.
+                body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at), body, at,
+                        body.region());
             }
         }
-        return new Ast.FnParam(name, type, pos(p));
+        // What the definition says, measured on what was built for it. Folding a block writes a
+        // level per structural step and folding a pattern writes one per binding and one to take
+        // them out of the value, which is what those cost (spec
+        // [#source-structural-complexity-is-bounded]) — so this is the source's number, arrived at
+        // the only place it is ever arrived at.
+        int costs = StructuralCost.of(body);
+        if (costs > StructuralCost.MAX) {
+            throw errorWithHint(pos,
+                    new DeclarationMessage.ADefinitionIsMoreStructureThanIsHeld(
+                            declared.spelling(), costs, StructuralCost.MAX),
+                    new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
+        }
+        return new Ast.FnDef(declared, moduleName, params, declaredReturn,
+                new Ast.FnBody.Written(body), modifiers, pos);
+    }
+
+    private Ast.FnParam fnParam(SyntaxNode p, SyntaxNode pat) {
+        // A parameter the author named binds that name where it is written. One that is a pattern
+        // takes a carrier the author never wrote; the pattern opens itself at the top of the body,
+        // and the names it binds are written there.
+        Ast.Binder bound = pat == null
+                ? binderOf(p)
+                : Ast.Binder.desugared("$p" + (patternCounter++), pos(p));
+        Ast.RetType type = null;
+        Optional<SyntaxNode> rt = p.child(SyntaxKind.RET_TYPE);
+        if (rt.isPresent()) {
+            type = retType(rt.get());
+        }
+        if (type == null && pat != null && pat.kind() == SyntaxKind.PATTERN_CTOR) {
+            // `let count (Tags(xs))` says the parameter is a Tags; writing `: Tags` beside it would
+            // only repeat what the pattern already named
+            SourcePos at = pos(pat);
+            type = new Ast.RetType(
+                    List.of(new Ast.TypeRef(qualifiedNameOf(pat), null, null)), at);
+            return new Ast.FnParam(bound, type, true);
+        }
+        return new Ast.FnParam(bound, type, false);
+    }
+
+    private SyntaxNode optionalPatternChild(SyntaxNode n) {
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternKind(c.kind())) {
+                return c;
+            }
+        }
+        return null;
     }
 
     private Ast.FnType fnType(SyntaxNode n) {
@@ -368,56 +559,107 @@ public final class AstBuilder {
     // --- types ---
 
     private Ast.RetType retType(SyntaxNode n) {
-        List<Ast.TypeRef> cases = new ArrayList<>();
+        List<Ast.TypeTerm> cases = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                cases.add(typeRef(c));
+            if (isTypeTermKind(c.kind())) {
+                cases.add(typeTerm(c));
             }
+        }
+        if (n.token(SyntaxKind.QUESTION).isPresent()) {
+            cases = List.of(optional(cases, pos(n)));
         }
         return new Ast.RetType(cases, cases.get(0).pos());
     }
 
-    private Ast.TypeRef typeRef(SyntaxNode n) {
+    private static boolean isTypeTermKind(SyntaxKind k) {
+        return k == SyntaxKind.TYPE_REF || k == SyntaxKind.TUPLE_TYPE || k == SyntaxKind.FN_TYPE;
+    }
+
+    /** One term of a written type: a function type, or a reference. A parenthesised single term is
+     * grouping, so {@code ((Int) -> Bool)} is the function type it wraps rather than a one-tuple. */
+    private Ast.TypeTerm typeTerm(SyntaxNode n) {
+        if (n.kind() == SyntaxKind.FN_TYPE) {
+            return fnType(n);
+        }
         if (n.kind() == SyntaxKind.TUPLE_TYPE) {
-            List<Ast.TypeRef> elems = new ArrayList<>();
+            List<SyntaxNode> elems = new ArrayList<>();
             for (SyntaxNode c : n.childNodes()) {
-                if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                    elems.add(typeRef(c));
+                if (isTypeTermKind(c.kind())) {
+                    elems.add(c);
                 }
             }
             if (elems.size() == 1) {
-                return elems.get(0);   // `(T)` reads as grouping
+                return typeTerm(elems.get(0));
+            }
+        }
+        return typeRef(n);
+    }
+
+    /**
+     * {@code T?} in a signature — a stdlib combinator that consumes an optional says so in its own
+     * type ({@code List.filterMap(f: ('a) -> 'b?, …)}). Like a type variable it is written only in the
+     * shipped core: a user still writes an optional on a field and never names one anywhere else
+     * (ADR-0011), so the type stays out of the surface language. A sum cannot take the mark — an
+     * absent {@code A | B} has no case to be absent as.
+     */
+    private Ast.TypeRef optional(List<Ast.TypeTerm> cases, SourcePos pos) {
+        if (!isReservedNamespace(moduleName)) {
+            throw errorWithHint(pos, new ParseMessage.AnOptionalIsOnlyWrittenOnAFieldOrInTheCore(),
+                    new ParseMessage.LeaveTheTypeOffAndTheOptionalIsInferred());
+        }
+        if (cases.size() > 1) {
+            throw error(pos, new ParseMessage.AQuestionMarkFollowsASumOfCases(
+                    String.valueOf(cases.size())));
+        }
+        // `T?` is `Option<T>` for whatever T is: the two spellings are one type, and what may
+        // stand in a position is decided by what the position requires of that type, not here
+        return new Ast.TypeRef("Option", cases.get(0), cases.get(0).pos());
+    }
+
+    private Ast.TypeRef typeRef(SyntaxNode n) {
+        if (n.kind() == SyntaxKind.TUPLE_TYPE) {
+            List<Ast.TypeTerm> elems = new ArrayList<>();
+            for (SyntaxNode c : n.childNodes()) {
+                if (isTypeTermKind(c.kind())) {
+                    elems.add(typeTerm(c));
+                }
+            }
+            if (elems.size() == 1 && elems.get(0) instanceof Ast.TypeRef only) {
+                return only;   // `(T)` reads as grouping
             }
             return new Ast.TypeRef(null, null, elems, pos(n));
         }
         Optional<SyntaxToken> typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
-            String v = typevar.get().text();
+            String v = souther.compiler.Reserved.name(typevar.get().text());
             if (!isReservedNamespace(moduleName)) {
-                throw error(pos(n), "parse.typevar.core",
-                        "type variable `" + v + "` is only allowed in the core (the reserved `souther`"
-                                + " namespace); a user model stays bounded (ADR-0028)", v);
+                throw error(pos(n), new ParseMessage.ATypeVariableIsOnlyAllowedInTheCore(v));
             }
             return new Ast.TypeRef(v, null, pos(n));   // name begins with `'` → Type.Var
         }
-        String name = firstIdentText(n);
+        WrittenName written = qualifiedNameOf(n);   // `Amount`, `example.billing.Amount`, `B.Amount`
+        String name = written.canonical();
         Optional<SyntaxNode> args = n.child(SyntaxKind.TYPE_ARGS);
         if (args.isEmpty()) {
-            return new Ast.TypeRef(name, null, pos(n));
+            return new Ast.TypeRef(written, null, null);
         }
-        List<Ast.TypeRef> typeArgs = new ArrayList<>();
+        List<Ast.TypeTerm> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                typeArgs.add(typeRef(c));
+            if (isTypeTermKind(c.kind())) {
+                typeArgs.add(typeTerm(c));
             }
+        }
+        if (typeArgs.isEmpty()) {
+            return new Ast.TypeRef(written, null, null);   // the missing argument is reported by name
         }
         if (name.equals("Map")) {
             // carry the value in `arg` and the key in `tupleElems` (ADR-0040)
-            Ast.TypeRef key = typeArgs.get(0);
-            Ast.TypeRef value = typeArgs.get(typeArgs.size() - 1);
-            return new Ast.TypeRef("Map", value, List.of(key), pos(n));
+            Ast.TypeTerm key = typeArgs.get(0);
+            Ast.TypeTerm value = typeArgs.get(typeArgs.size() - 1);
+            return new Ast.TypeRef(written, value, List.of(key));
         }
-        return new Ast.TypeRef(name, typeArgs.get(0), pos(n));   // List<T> / Set<T> / Option<T>
+        // List<T> / Set<T> / Option<T>
+        return new Ast.TypeRef(written, typeArgs.get(0), null);
     }
 
     // --- expressions ---
@@ -425,15 +667,17 @@ public final class AstBuilder {
     private Ast.Expr expr(SyntaxNode n) {
         return switch (n.kind()) {
             case LITERAL_EXPR -> literal(n);
-            case VAR_EXPR -> new Ast.Var(firstIdentText(n), pos(n));
+            case VAR_EXPR -> new Ast.Var(nameOf(firstIdentToken(n)), null, null);
             case FIELD_ACCESS -> fieldAccess(n);
-            case CALL_EXPR -> call(n);
+            case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
-            case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n));
+            case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n), region(n));
             case PIPE_EXPR -> pipe(n);
-            case PAREN_EXPR -> expr(onlyExpr(n));
-            case TUPLE_EXPR -> new Ast.Tuple(exprList(n), pos(n));
-            case LIST_EXPR -> new Ast.ListLit(exprList(n), pos(n));
+            // The parentheses are dropped from the tree and not from the file: what stands here is
+            // the expression inside them, written over the whole of what the author bracketed.
+            case PAREN_EXPR -> Ast.withRegion(expr(onlyExpr(n)), region(n));
+            case TUPLE_EXPR -> new Ast.Tuple(exprList(n), pos(n), region(n));
+            case LIST_EXPR -> new Ast.ListLit(exprList(n), pos(n), region(n));
             case LIST_COMP -> listComp(n);
             case IF_EXPR -> ifExpr(n);
             case MATCH_EXPR -> matchExpr(n);
@@ -441,56 +685,70 @@ public final class AstBuilder {
             case FIELD_GETTER -> fieldGetter(n);
             case NEW_DATA_EXPR -> newData(n);
             case BLOCK_EXPR -> block(n);
-            default -> throw error(pos(n), "parse.expr", "expected an expression");
+            case UNREACHABLE_EXPR -> unreachable(n);
+            default -> throw error(pos(n), new ParseMessage.AnExpressionWasExpected());
         };
     }
 
     private Ast.Expr literal(SyntaxNode n) {
         SyntaxToken t = firstMeaningfulToken(n);
         SourcePos pos = posOf(t);
+        // The token's own slice, never the decoded value's length. A literal is written with the
+        // escapes the author typed and read as the characters they stand for, and it is canonicalized
+        // as it is read, so the value is the wrong ruler for the file in two ways at once.
+        Region region = regionOf(t);
         return switch (t.kind()) {
-            case INT_LIT -> new Ast.IntLit(Long.parseLong(t.text()), pos);
-            case DECIMAL_LIT -> new Ast.DecimalLit(new BigDecimal(stripDecimalSuffix(t.text())), pos);
-            case STRING_LIT -> new Ast.StringLit(stringValue(t.text()), pos);
-            case TRUE_KW -> new Ast.BoolLit(true, pos);
-            case FALSE_KW -> new Ast.BoolLit(false, pos);
-            default -> throw error(pos, "parse.expr", "expected a literal");
+            case INT_LIT -> new Ast.IntLit(Long.parseLong(t.text()), pos, region);
+            case DECIMAL_LIT ->
+                    new Ast.DecimalLit(new BigDecimal(stripDecimalSuffix(t.text())), pos, region);
+            case STRING_LIT -> new Ast.StringLit(stringValue(t.text()), pos, region);
+            case TRUE_KW -> new Ast.BoolLit(true, pos, region);
+            case FALSE_KW -> new Ast.BoolLit(false, pos, region);
+            default -> throw error(pos, new ParseMessage.ALiteralWasExpected());
         };
+    }
+
+    /** {@code unreachable "reason"} — the reason is the literal the parser required beside it. */
+    private Ast.Expr unreachable(SyntaxNode n) {
+        Ast.Expr reason = expr(firstExprChild(n));
+        if (!(reason instanceof Ast.StringLit lit)) {
+            throw error(pos(n), new ParseMessage.UnreachableStatesItsReasonAsAString());
+        }
+        return new Ast.Unreachable(lit.value(), pos(n), region(n));
     }
 
     private Ast.Expr fieldAccess(SyntaxNode n) {
         Ast.Expr target = expr(firstExprChild(n));
         SyntaxToken field = lastIdentToken(n);
-        return new Ast.FieldAccess(target, field.text(), posOf(field));
+        return new Ast.FieldAccess(target, nameOf(field), posOf(field), region(n));
     }
 
-    private Ast.Expr call(SyntaxNode n) {
-        StringBuilder fn = new StringBuilder();
-        SyntaxToken first = null;
-        for (SyntaxElement e : meaningful(n)) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
-                if (fn.length() > 0) {
-                    fn.append('.');
-                }
-                fn.append(t.text());
-                if (first == null) {
-                    first = t;
-                }
-            }
-        }
+    /**
+     * An argument list written after any expression — every application, whatever is applied.
+     *
+     * <p>Positioned where the callee starts, not where the callee node says it is: a field read
+     * positions itself at the field, so an application of {@code Map.empty} taken from
+     * {@code function.pos()} would report at {@code empty} and underline {@code Map.empty}'s
+     * length from there, running past the end of what was written.
+     */
+    private Ast.Expr apply(SyntaxNode n) {
+        SyntaxNode callee = exprChildren(n).get(0);
         List<Ast.Expr> args = new ArrayList<>();
         n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
-            for (SyntaxNode a : exprChildren(list)) {
-                args.add(expr(a));
+            for (SyntaxNode arg : exprChildren(list)) {
+                args.add(expr(arg));
             }
         });
-        return new Ast.Call(fn.toString(), args, posOf(first));
+        return new Ast.Apply(expr(callee), args, ConstructionOrigin.own(), pos(callee), region(n));
     }
 
     private Ast.Expr binary(SyntaxNode n) {
         List<SyntaxNode> operands = exprChildren(n);
         SyntaxToken op = operatorToken(n);
-        return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)), posOf(op));
+        // Anchored at the operator, which is what a report about the operation is about, and written
+        // over both operands, which is what the operation is.
+        return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)),
+                construct(), posOf(op), region(n));
     }
 
     private static Ast.BinOp binOp(SyntaxKind k) {
@@ -518,20 +776,27 @@ public final class AstBuilder {
         List<SyntaxNode> operands = exprChildren(n);
         Ast.Expr left = expr(operands.get(0));
         Ast.Expr right = expr(operands.get(1));
-        if (right instanceof Ast.Call c) {
+        // The application this becomes is anchored where the callee is written, which is where a
+        // report about what is being applied belongs, and is written over the whole pipe — the value
+        // on the left is an argument of it however far from the callee the author put it.
+        Region written = region(n);
+        if (right instanceof Ast.Apply c) {
             List<Ast.Expr> args = new ArrayList<>(c.args());
             args.add(left);
-            return new Ast.Call(c.fn(), args, c.pos());
+            return new Ast.Apply(c.function(), args, c.origin(), c.pos(), written);
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Call(v.name(), List.of(left), v.pos());
+            return new Ast.Apply(v, List.of(left), ConstructionOrigin.own(), v.pos(), written);
         }
-        if (right instanceof Ast.FieldAccess fa && fa.target() instanceof Ast.Var base) {
-            return new Ast.Call(base.name() + "." + fa.field(), List.of(left), fa.pos());
+        // `e |> Mod.name`: the read is handed over as the callee it is, rather than reassembled
+        // into a name here. Whether it is a namespace member or a field taken off a binding is
+        // resolution's to say, and it says it once, for this and for `Mod.name(e)` alike.
+        if (right instanceof Ast.FieldAccess fa) {
+            return new Ast.Apply(fa, List.of(left), ConstructionOrigin.own(),
+                    pos(operands.get(1)), written);
         }
-        throw CompileException.of(
-                Diagnostic.of(null, "parse.vpipe.right").title("parse.title").at(right.pos()).build(),
-                "the right side of `|>` must be a function call or a function name");
+        throw CompileException.of(Diagnostic.at(right.pos())
+                .say(new DeclarationMessage.TheRightSideOfAValuePipeIsACall()).build());
     }
 
     private Ast.Expr listComp(SyntaxNode n) {
@@ -541,21 +806,102 @@ public final class AstBuilder {
         for (int i = 1; i < exprs.size(); i++) {
             guards.add(expr(exprs.get(i)));
         }
-        return new Ast.ListComp(element, guards, pos(n));
+        return new Ast.ListComp(element, guards, construct(), pos(n), region(n));
     }
 
     private Ast.Expr ifExpr(SyntaxNode n) {
         List<SyntaxNode> exprs = exprChildren(n);
-        return new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n));
+        SyntaxToken as = attemptBinder(n);
+        String binder = as == null ? null : ident(as);
+        List<Ast.ElseArm> arms = elseArms(n, binder);
+        // One construct, so one origin whichever of the three shapes it is written as.
+        CoverageOrigin origin = construct();
+        if (arms != null) {
+            return new Ast.IfConstructed(expr(exprs.get(0)),
+                    binderOf(as), expr(exprs.get(1)), arms, origin, pos(n), region(n));
+        }
+        return binder == null
+                ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), origin,
+                        pos(n), region(n))
+                : new Ast.IfConstructed(expr(exprs.get(0)),
+                        binderOf(as), expr(exprs.get(1)),
+                        List.of(Ast.ElseArm.any(expr(exprs.get(2)))), origin, pos(n), region(n));
     }
 
-    private Ast.Expr lambda(SyntaxNode n) {
-        List<String> params = new ArrayList<>();
-        for (SyntaxToken t : identTokens(n)) {
-            params.add(t.text());
+    /**
+     * The per-clause departures of an attempted construction, or null where the {@code else} took one
+     * expression. Only an attempt has clauses to answer, so arms without a binder are refused here
+     * rather than reaching a plain {@code If} that has no room for them.
+     */
+    private List<Ast.ElseArm> elseArms(SyntaxNode form, String binder) {
+        Optional<SyntaxNode> node = form.child(SyntaxKind.ELSE_ARMS);
+        if (node.isEmpty()) {
+            return null;
         }
-        Ast.Expr body = expr(lastExprChild(n));
-        return new Ast.Block(params, body, pos(n));
+        if (binder == null) {
+            throw CompileException.of(Diagnostic.at(pos(node.get()))
+                    .say(new AttemptMessage.NothingHereIsAttempted())
+                    .hint(new AttemptMessage.AttemptTheConstructionOrGiveTheElseOneValue())
+                    .build());
+        }
+        List<Ast.ElseArm> arms = new ArrayList<>();
+        Set<String> answered = new HashSet<>();
+        for (SyntaxNode arm : childNodes(node.get(), SyntaxKind.ELSE_ARM)) {
+            SyntaxToken label = identTokens(arm).get(0);
+            if (!answered.add(ident(label))) {
+                throw CompileException.of(Diagnostic.at(posOf(label))
+                        .say(new AttemptMessage.TheClauseIsAnsweredTwice(ident(label)))
+                        .build());
+            }
+            Ast.Expr body = expr(onlyExpr(arm));
+            arms.add(ident(label).equals("_")
+                    ? Ast.ElseArm.any(body)
+                    : new Ast.ElseArm(Optional.of(ident(label)), body, posOf(label)));
+        }
+        return arms;
+    }
+
+    /** The {@code x} of an attempted construction's {@code as x}, or {@code null} where none was
+     * written. The binder is the identifier following {@code as} among the form's own tokens; the
+     * condition is a child node, so its identifiers are not among them. */
+    private static SyntaxToken attemptBinder(SyntaxNode n) {
+        boolean afterAs = false;
+        for (SyntaxElement e : n.children()) {
+            if (!(e instanceof SyntaxToken t)) continue;
+            if (t.kind() == SyntaxKind.AS_KW) {
+                afterAs = true;
+            } else if (afterAs && t.kind() == SyntaxKind.IDENT) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    /** {@code (p, ...) -> body}. A parameter that is more than a name takes a fresh one and opens
+     * itself at the top of the body, so the block keeps taking plain names and nothing downstream
+     * has to know a pattern was written. */
+    private Ast.Expr lambda(SyntaxNode n) {
+        SourcePos pos = pos(n);
+        List<SyntaxNode> pats = patternChildren(n);
+        List<Ast.Binder> params = new ArrayList<>();
+        for (SyntaxNode p : pats) {
+            // A parameter the author named is a name written where it is written; one that is a
+            // pattern takes a fresh name nobody wrote, anchored on the pattern it stands for.
+            params.add(p.kind() == SyntaxKind.PATTERN_NAME
+                    ? binderOf(p)
+                    : Ast.Binder.desugared("$p" + (patternCounter++), pos(p)));
+        }
+        SyntaxNode bodyNode = lastExprChild(n);
+        Ast.Expr body = expr(bodyNode);
+        Region bodyRegion = region(bodyNode);
+        for (int i = pats.size() - 1; i >= 0; i--) {
+            if (pats.get(i).kind() != SyntaxKind.PATTERN_NAME) {
+                SourcePos at = pos(pats.get(i));
+                body = bindPattern(pats.get(i), Ast.Var.desugared(params.get(i).name(), at), body,
+                        at, bodyRegion);
+            }
+        }
+        return new Ast.Block(List.copyOf(params), body, pos, region(n));
     }
 
     private Ast.Expr fieldGetter(SyntaxNode n) {
@@ -566,27 +912,57 @@ public final class AstBuilder {
         SyntaxToken field = lastIdentToken(n);
         SourcePos pos = pos(n);
         String param = "$g" + (getterCounter++);
-        Ast.Expr body = new Ast.FieldAccess(new Ast.Var(param, pos), field.text(), posOf(field));
-        return new Ast.Block(List.of(param), body, pos);
+        // Both the getter and the read inside it are written over the `.field` that stands for
+        // them: the parameter is a name nobody typed, and the characters here are the field's.
+        Ast.Expr body = new Ast.FieldAccess(Ast.Var.desugared(param, pos), nameOf(field),
+                posOf(field), region(n));
+        return Ast.Block.desugared(List.of(param), body, pos, region(n));
     }
 
     private Ast.Expr newData(SyntaxNode n) {
-        String typeName = firstIdentText(n);
+        SyntaxToken head = identTokens(n).get(0);
+        Ast.Name typeName = new Ast.Name(nameOf(head), null);
         List<Ast.FieldInit> inits = new ArrayList<>();
-        List<String> spreads = new ArrayList<>();
+        List<Ast.Var> spreads = new ArrayList<>();
+        // a spread naming a field path (`...c.address`) binds that path first, so the construction
+        // itself still spreads a plain local: `let $s0 = c.address in Address { ...$s0, ... }`
+        List<String> pathNames = new ArrayList<>();
+        List<Ast.Expr> pathValues = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
-                spreads.add(firstIdentText(c));
+                List<SyntaxToken> path = identTokens(c);
+                if (path.size() == 1) {
+                    spreads.add(new Ast.Var(nameOf(path.get(0)), null, null));
+                } else {
+                    String bound = "$s" + (spreadCounter++);
+                    Ast.Expr value = new Ast.Var(nameOf(path.get(0)), null, null);
+                    for (int i = 1; i < path.size(); i++) {
+                        value = new Ast.FieldAccess(value, nameOf(path.get(i)),
+                                posOf(path.get(i)),
+                                new Region(posOf(path.get(0)), lines.posOf(path.get(i).end())));
+                    }
+                    pathNames.add(bound);
+                    pathValues.add(value);
+                    // the path is bound just outside the construction, so this name is answered
+                    // against that binding like any other the source wrote
+                    spreads.add(Ast.Var.desugared(bound, posOf(path.get(0))));
+                }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
-                String field = firstIdentText(c);
+                WrittenName field = nameOf(firstIdentToken(c));
                 Optional<SyntaxNode> value = firstExprChildOpt(c);
-                Ast.Expr v = value.isPresent()
-                        ? expr(value.get())
-                        : new Ast.Var(field, pos(c));   // shorthand `field` means `field = field`
-                inits.add(new Ast.FieldInit(field, v, pos(c)));
+                // shorthand `field` means `field = field`, and the one name is both
+                Ast.Expr v = value.isPresent() ? expr(value.get()) : new Ast.Var(field, null, null);
+                inits.add(new Ast.FieldInit(field, v));
             }
         }
-        return new Ast.NewData(typeName, inits, spreads, pos(n));
+        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, ConstructionOrigin.own(),
+                pos(n), region(n));
+        // The bindings the spread paths become are the construction as it was written: they stand
+        // where it stands and there is nothing else at those characters.
+        for (int i = pathNames.size() - 1; i >= 0; i--) {
+            built = new Ast.LetIn(pathNames.get(i), pathValues.get(i), built, pos(n), region(n));
+        }
+        return built;
     }
 
     private Ast.Expr matchExpr(SyntaxNode n) {
@@ -596,63 +972,113 @@ public final class AstBuilder {
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
             cases.add(matchCase(c));
         }
-        return new Ast.Match(scrutinee, cases, pos(n));
+        return new Ast.Match(scrutinee, cases, construct(), pos(n), region(n));
+    }
+
+    /** A name as the source wrote it — bare, or qualified through a module or an import alias — read
+     * from a run of tokens the parser did not wrap in a node. Advances {@code at} past the name, and
+     * positions the name at its first identifier so a diagnostic points at the name, not the clause. */
+    private Ast.Name dottedName(List<SyntaxElement> es, int[] at) {
+        List<SyntaxToken> parts = new ArrayList<>();
+        parts.add((SyntaxToken) es.get(at[0]++));
+        while (at[0] + 1 < es.size() && isToken(es.get(at[0]), SyntaxKind.DOT)
+                && isToken(es.get(at[0] + 1), SyntaxKind.IDENT)) {
+            at[0]++;                              // .
+            parts.add((SyntaxToken) es.get(at[0]++));
+        }
+        return new Ast.Name(joined(parts), null);
+    }
+
+    /** The comma-separated names of a {@code constructs}/{@code depends on} clause, each possibly
+     * qualified by its module. {@code skipIdents} drops the identifiers that belong to the keyword
+     * rather than to the list — the {@code on} of {@code depends on} lexes as one. */
+    private List<Ast.Name> dottedNames(SyntaxNode clause, int skipIdents) {
+        List<Ast.Name> out = new ArrayList<>();
+        List<SyntaxElement> es = meaningful(clause);
+        int[] at = {1 + skipIdents};              // past the clause keyword
+        while (at[0] < es.size()) {
+            if (isToken(es.get(at[0]), SyntaxKind.COMMA)) {
+                at[0]++;
+                continue;
+            }
+            out.add(dottedName(es, at));
+        }
+        return out;
     }
 
     private Ast.Case matchCase(SyntaxNode n) {
         List<SyntaxElement> es = meaningful(n);
         SourcePos casePos = pos(n);
-        int i = 0;
-        List<String> caseTypes = new ArrayList<>();
-        caseTypes.add(tokenText(es.get(i++)));
-        while (i + 1 < es.size() && isToken(es.get(i), SyntaxKind.PIPE) && isToken(es.get(i + 1), SyntaxKind.IDENT)) {
-            i++;                                  // |
-            caseTypes.add(tokenText(es.get(i++)));
+        int[] at = {0};
+        List<Ast.Name> caseTypes = new ArrayList<>();
+        caseTypes.add(dottedName(es, at));
+        while (at[0] + 1 < es.size() && isToken(es.get(at[0]), SyntaxKind.PIPE)
+                && isToken(es.get(at[0] + 1), SyntaxKind.IDENT)) {
+            at[0]++;                              // |
+            caseTypes.add(dottedName(es, at));
         }
+        int i = at[0];
         // newtype constructor destructuring `X(inner)` / nested `X(Y(s))`: the ident chain inside the
         // parens. The last ident is the bound variable; each earlier ident names a newtype layer peeled.
-        List<String> unwrapNames = new ArrayList<>();
+        List<Ast.Name> unwrapNames = new ArrayList<>();
         if (i < es.size() && isToken(es.get(i), SyntaxKind.LPAREN)) {
             int depth = 0;
-            while (i < es.size()) {
-                SyntaxElement e = es.get(i);
+            while (at[0] < es.size()) {
+                SyntaxElement e = es.get(at[0]);
                 if (isToken(e, SyntaxKind.LPAREN)) {
                     depth++;
-                    i++;
+                    at[0]++;
                 } else if (isToken(e, SyntaxKind.RPAREN)) {
                     depth--;
-                    i++;
+                    at[0]++;
                     if (depth == 0) {
                         break;
                     }
                 } else if (isToken(e, SyntaxKind.IDENT)) {
-                    unwrapNames.add(tokenText(e));
-                    i++;
+                    unwrapNames.add(dottedName(es, at));   // a layer is named like any other type
                 } else {
                     break;
                 }
             }
+            i = at[0];
         }
+        boolean isSome = caseTypes.size() == 1 && caseTypes.get(0).written().equals("Some");
         // Option's positional binding `Some v`: a bare identifier before `{` / `as` / `->`. It never
         // follows a constructor destructure, so a trailing ident after the parens is not consumed here.
+        // Option is the one case with a payload to reach, so every other case binds its value with
+        // `as` and a bare identifier beside its name binds nothing.
         String someBinding = null;
+        SyntaxToken bindingToken = null;   // the name the author wrote for the arm, if they did
         if (unwrapNames.isEmpty() && i < es.size() && isToken(es.get(i), SyntaxKind.IDENT)) {
-            someBinding = tokenText(es.get(i++));
+            String ident = tokenText(es.get(i));
+            // A qualified name is not a case this advice fits: `Some` is the one case with a payload
+            // to bind and it has no qualified spelling, so what is wrong with `Q.C v` is `Q.C`, and
+            // saying so is resolution's to do. The parser has no answer for a name yet.
+            boolean qualified = caseTypes.get(caseTypes.size() - 1).written().indexOf('.') >= 0;
+            if (!isSome && !qualified) {
+                throw error(posOf((SyntaxToken) es.get(i)), new ParseMessage.ACaseValueIsBoundWithAs(
+                        caseTypes.get(caseTypes.size() - 1).written(), ident));
+            }
+            someBinding = ident;
+            bindingToken = (SyntaxToken) es.get(i);
+            i++;
         }
         // field destructuring `{ field [= var], ... }`
         List<String> fieldNames = new ArrayList<>();
-        List<String> fieldVars = new ArrayList<>();
+        List<Ast.Binder> fieldVars = new ArrayList<>();
         if (i < es.size() && isToken(es.get(i), SyntaxKind.LBRACE)) {
             i++;   // {
             while (i < es.size() && !isToken(es.get(i), SyntaxKind.RBRACE)) {
-                String field = tokenText(es.get(i++));
-                String var = field;
+                SyntaxToken fieldToken = (SyntaxToken) es.get(i++);
+                // `{ v }` binds the field's own name; `{ v = x }` binds the name after the `=`.
+                // Either way the binding is written where its token is.
+                SyntaxToken varToken = fieldToken;
                 if (i < es.size() && isToken(es.get(i), SyntaxKind.ASSIGN)) {
                     i++;
-                    var = tokenText(es.get(i++));
+                    varToken = (SyntaxToken) es.get(i++);
                 }
-                fieldNames.add(field);
-                fieldVars.add(var);
+                fieldNames.add(ident(fieldToken));
+                fieldVars.add(binderOf(varToken));
                 if (i < es.size() && isToken(es.get(i), SyntaxKind.COMMA)) {
                     i++;
                 }
@@ -665,103 +1091,322 @@ public final class AstBuilder {
         String asBinding = null;
         if (i < es.size() && isToken(es.get(i), SyntaxKind.AS_KW)) {
             i++;
-            asBinding = tokenText(es.get(i++));
+            asBinding = tokenText(es.get(i));
+            bindingToken = (SyntaxToken) es.get(i++);
         }
-        boolean isSome = caseTypes.size() == 1 && caseTypes.get(0).equals("Some");
         if (isSome && asBinding != null) {
-            throw error(casePos, "parse.option.positional",
-                    "Option's wrapped value is bound positionally: write `| Some v`, not `| Some as v`");
+            throw error(casePos, new ParseMessage.OptionsWrappedValueIsBoundPositionally());
         }
         // `Some(a)` opens nothing (unlike `X(a)` on a user case); the whole-element spelling is `Some v`.
         // Only `Some(X(...))`, which opens a wrapped newtype, uses the paren form.
         if (isSome && unwrapNames.size() == 1) {
-            throw error(casePos, "parse.option.positional",
-                    "write `| Some v` to bind the whole value; `Some(...)` opens a wrapped newtype, as in `| Some(" + unwrapNames.get(0) + "(v))`");
+            throw error(casePos, new ParseMessage.SomeParensOpenAWrappedNewtype(
+                    unwrapNames.get(0).written()));
         }
         // skip the arrow, then the body is the trailing expression node
-        Ast.Expr body = expr(lastExprChild(n));
+        SyntaxNode bodyNode = lastExprChild(n);
+        Ast.Expr body = expr(bodyNode);
+        // What the pattern lowers to holds the arm's body, so that is what those bindings are
+        // written over. The reads they bind are the lowering's own and were written nowhere.
+        Region bodyRegion = region(bodyNode);
 
         String binding = someBinding != null ? someBinding : asBinding;
         if (!fieldNames.isEmpty()) {
             String whole = binding != null ? binding : "$m" + (matchWholeCounter++);
+            if (binding == null) {
+                bindingToken = null;   // the arm holds the value in a name nobody wrote
+            }
             for (int k = fieldNames.size() - 1; k >= 0; k--) {
                 body = new Ast.LetIn(fieldVars.get(k),
-                        new Ast.FieldAccess(new Ast.Var(whole, casePos), fieldNames.get(k), casePos),
-                        body, casePos);
+                        new Ast.FieldAccess(Ast.Var.desugared(whole, casePos), fieldNames.get(k),
+                                casePos),
+                        body, casePos, bodyRegion);
             }
             binding = whole;
         } else if (!unwrapNames.isEmpty()) {
             String whole = binding != null ? binding : "$m" + (matchWholeCounter++);
+            if (binding == null) {
+                bindingToken = null;   // the arm holds the value in a name nobody wrote
+            }
             // open the case's newtype (whole.value), then peel one layer per earlier name; the last
             // name binds the value reached — `アクティベート済み(メールアドレス(s))` binds s to whole.value.value.
             // Option's `Some` binds the unwrapped element already (codegen strips the wrapper), so its
             // first named layer opens that element directly — `Some(従業員ID(v))` binds v to whole.value.
             Ast.Expr target = isSome
-                    ? new Ast.Var(whole, casePos)
-                    : new Ast.FieldAccess(new Ast.Var(whole, casePos), "value", casePos);
+                    ? Ast.Var.desugared(whole, casePos)
+                    : new Ast.FieldAccess(Ast.Var.desugared(whole, casePos), "value", casePos);
             for (int k = 0; k < unwrapNames.size() - 1; k++) {
                 target = new Ast.FieldAccess(target, "value", casePos);
             }
-            body = new Ast.LetIn(unwrapNames.get(unwrapNames.size() - 1), target, body, casePos);
+            Ast.Name innermost = unwrapNames.get(unwrapNames.size() - 1);
+            body = new Ast.LetIn(Ast.Binder.of(innermost), target, body, casePos, bodyRegion);
             binding = whole;
         }
         // null = no constructor destructure; otherwise the inner names (before the bound variable),
         // which the type checker prepends the case type to when verifying the opened layers.
-        List<String> unwrapAsserts = unwrapNames.isEmpty()
+        List<Ast.Name> unwrapAsserts = unwrapNames.isEmpty()
                 ? null
                 : new ArrayList<>(unwrapNames.subList(0, unwrapNames.size() - 1));
-        return new Ast.Case(caseTypes, binding, body, unwrapAsserts, casePos);
+        Ast.Binder bound = binding == null ? null
+                : bindingToken != null ? binderOf(bindingToken)
+                : Ast.Binder.desugared(binding, casePos);
+        return new Ast.Case(caseTypes, bound, body, unwrapAsserts, casePos);
     }
 
-    /** A brace block: its {@code let}/{@code require} statements folded into the result expression. */
+    /** A brace block: its {@code let}/{@code guard} statements folded into the result expression. */
     private Ast.Expr block(SyntaxNode n) {
         List<SyntaxNode> stmts = new ArrayList<>();
         SyntaxNode result = null;
         for (SyntaxNode c : n.childNodes()) {
             switch (c.kind()) {
-                case LET_STMT, TUPLE_DESTRUCTURE, REQUIRE_STMT -> stmts.add(c);
+                case LET_STMT, LET_DESTRUCTURE, GUARD_STMT -> stmts.add(c);
                 default -> result = c;   // the trailing result expression
             }
         }
         return foldStatements(stmts, 0, result);
     }
 
+    /**
+     * How many steps a block takes, blocks written inside it counted along with it, read from the
+     * source before any of it is folded.
+     *
+     * <p>Before, because folding descends once per step and a block whose steps are the ones inside
+     * it too has as many to descend. Each block on its own can be well under the bound while what
+     * they come to together is thousands, and the fold would be that far down before anything could
+     * say so — the answer would come from running out rather than from counting.
+     *
+     * <p>What is counted is the way down: the steps before a statement, the step it is, and then
+     * whatever block it holds. A block held at the first statement of one that takes three hundred
+     * costs what it costs and not three hundred more, which is what makes this never refuse
+     * something the whole count would keep. Anything that is not a block counts as one here — it is
+     * bounded as the source is read, and this is only about what the fold will descend.
+     */
+    private int stepsTakenBy(List<SyntaxNode> stmts, SyntaxNode result) {
+        int stepsBefore = 0;
+        int most = 0;
+        for (SyntaxNode stmt : stmts) {
+            for (SyntaxNode held : exprChildren(stmt)) {
+                most = Math.max(most, stepsBefore + 1 + stepsHeldBy(held));
+            }
+            stepsBefore += stepsTakenBy(stmt);
+        }
+        return Math.max(most, stepsBefore + stepsHeldBy(result));
+    }
+
+    /**
+     * What the deepest block written anywhere in {@code held} would take, or one where there is no
+     * block in it.
+     *
+     * <p>Down through whatever is written around a block and not only where one is written
+     * directly. A block handed to a call or put in a tuple is a block the fold still descends, and
+     * a preflight that only looked at what a statement's value is would be walked past by writing
+     * {@code f({ … })}. What is written around it is not counted — a construct is a level and the
+     * source's nesting is bounded as it is read — so what this comes to is the steps the fold will
+     * take and nothing else.
+     */
+    private int stepsHeldBy(SyntaxNode held) {
+        if (held == null) {
+            return 1;
+        }
+        if (held.kind() == SyntaxKind.BLOCK_EXPR) {
+            List<SyntaxNode> stmts = new ArrayList<>();
+            SyntaxNode result = null;
+            for (SyntaxNode c : held.childNodes()) {
+                switch (c.kind()) {
+                    case LET_STMT, LET_DESTRUCTURE, GUARD_STMT -> stmts.add(c);
+                    default -> result = c;
+                }
+            }
+            return stepsTakenBy(stmts, result);
+        }
+        int most = 1;
+        for (SyntaxNode child : held.childNodes()) {
+            most = Math.max(most, stepsHeldBy(child));
+        }
+        return most;
+    }
+
+    /** How many steps one statement takes: a `let` written with a pattern is what the pattern
+     *  binds, and anything else — an ordinary `let`, a `guard`, which binds nothing — is one. */
+    private int stepsTakenBy(SyntaxNode stmt) {
+        return stmt.kind() == SyntaxKind.LET_DESTRUCTURE
+                ? bindingsIntroducedBy(patternChild(stmt))
+                : 1;
+    }
+
     private Ast.Expr foldStatements(List<SyntaxNode> stmts, int index, SyntaxNode result) {
+        // Before the fold and not after it. Everything a statement is followed by is written inside
+        // what that statement introduced, so folding them descends once per step — a block long
+        // enough to be refused is a block long enough to run this out on the way to saying so.
+        if (index == 0) {
+            int steps = stepsTakenBy(stmts, result);
+            if (steps > StructuralCost.MAX) {
+                // A block holding nothing but another block has no statement to be reported at, and
+                // what it comes to is what that one comes to; the result is where it is written.
+                throw errorWithHint(pos(stmts.isEmpty() ? result : stmts.get(stmts.size() - 1)),
+                        new DeclarationMessage.ABlockTakesMoreStructuralStepsThanADefinitionHolds(
+                                steps, StructuralCost.MAX),
+                        new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
+            }
+        }
         if (index == stmts.size()) {
             return expr(result);   // a block always ends in a result expression
         }
         SyntaxNode s = stmts.get(index);
         SourcePos pos = pos(s);
+        // A statement folded into what follows it is written over both: the expression this becomes
+        // begins at the statement and ends where the block's result does.
+        Region held = spanning(s, result);
         return switch (s.kind()) {
-            case LET_STMT -> new Ast.LetIn(firstIdentText(s), expr(onlyExpr(s)),
-                    foldStatements(stmts, index + 1, result), pos);
-            case REQUIRE_STMT -> {
-                List<SyntaxNode> exprs = exprChildren(s);
-                yield new Ast.If(expr(exprs.get(0)), foldStatements(stmts, index + 1, result),
-                        expr(exprs.get(1)), pos);
+            case LET_STMT -> {
+                Ast.RetType annotation = s.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
+                Ast.Expr value = expr(onlyExpr(s));
+                Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                // The statement starts at its keyword and the binding is written after it. A reader
+                // asking what a cursor is on has only the name to compare against.
+                Ast.Binder bound = binderOf(s);
+                yield annotation == null
+                        ? new Ast.LetIn(bound, value, rest, pos, held)
+                        : Ast.LetIn.annotated(bound, value, annotation, rest, pos, held);
             }
-            case TUPLE_DESTRUCTURE -> tupleDestructure(s, foldStatements(stmts, index + 1, result));
-            default -> throw error(pos, "parse.expr", "unexpected statement");
+            case GUARD_STMT -> {
+                List<SyntaxNode> exprs = exprChildren(s);
+                SyntaxToken as = attemptBinder(s);
+                String binder = as == null ? null : ident(as);
+                Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                List<Ast.ElseArm> arms = elseArms(s, binder);
+                // One construct, so one origin whichever of the three shapes it is written as.
+                CoverageOrigin origin = construct();
+                if (arms != null) {
+                    yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, origin,
+                            pos, held);
+                }
+                Ast.Expr settles = expr(exprs.get(0));
+                Ast.Expr otherwise = expr(exprs.get(1));
+                yield binder == null
+                        ? new Ast.If(settles, rest, otherwise, origin, pos, held)
+                        : new Ast.IfConstructed(settles, binderOf(as), rest,
+                                List.of(Ast.ElseArm.any(otherwise)), origin, pos, held);
+            }
+            case LET_DESTRUCTURE -> {
+                SyntaxNode pat = patternChild(s);
+                yield bindPattern(pat, expr(onlyExpr(s)),
+                        foldStatements(stmts, index + 1, result), pos(pat), held);
+            }
+            default -> throw error(pos, new ParseMessage.AStatementWasExpected());
         };
     }
 
-    private Ast.Expr tupleDestructure(SyntaxNode s, Ast.Expr rest) {
-        List<String> names = new ArrayList<>();
-        for (SyntaxToken t : identTokens(s)) {
-            names.add(t.text());
+    /**
+     * A pattern binding {@code value}, with {@code rest} in its scope. Every shape lowers to the
+     * ordinary reads it stands for — a tuple to indexed gets, a newtype to {@code .value}, a record
+     * to field reads — so nothing past this point has to know a pattern was written. It is the same
+     * lowering a {@code match} arm does; the difference is only that here there is one arm.
+     */
+    /** How many bindings {@code patterns} introduce between them — what they cost, counted from
+     *  what the source wrote rather than from the shape {@link #bindPattern} folds them into. */
+    private int bindingsIntroducedBy(List<SyntaxNode> patterns) {
+        int bindings = 0;
+        for (SyntaxNode pat : patterns) {
+            bindings += pat == null ? 0 : bindingsIntroducedBy(pat);
         }
-        SourcePos pos = pos(s);
-        Ast.Expr value = expr(onlyExpr(s));
-        if (names.size() == 1) {
-            return new Ast.LetIn(names.get(0), value, rest, pos);   // `let (x) = e` is `let x = e`
+        return bindings;
+    }
+
+    /**
+     * How many bindings one pattern introduces.
+     *
+     * <p>The value itself is one, and what is taken out of it is one each: an element of a tuple,
+     * a field a record pattern names, what a case pattern opens. A pattern written inside one of
+     * those counts its own the same way. Nothing here reads the tree the pattern becomes — this is
+     * what the author wrote, and it is what the bound is over.
+     */
+    private int bindingsIntroducedBy(SyntaxNode pat) {
+        return switch (pat.kind()) {
+            case PATTERN_NAME -> 1;
+            case PATTERN_TUPLE -> {
+                List<SyntaxNode> elems = patternChildren(pat);
+                if (elems.size() == 1) {
+                    yield bindingsIntroducedBy(elems.get(0));   // `(p)` is grouping
+                }
+                int bindings = 1;
+                for (SyntaxNode elem : elems) {
+                    bindings += bindingsIntroducedBy(elem);
+                }
+                yield bindings;
+            }
+            case PATTERN_CTOR -> 1 + bindingsIntroducedBy(patternChild(pat));
+            case PATTERN_RECORD -> 1 + childNodes(pat, SyntaxKind.PATTERN_FIELD).size();
+            default -> 1;
+        };
+    }
+
+    private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos,
+                                 Region held) {
+        return switch (pat.kind()) {
+            case PATTERN_NAME -> new Ast.LetIn(binderOf(pat), value, rest, pos, held);
+            case PATTERN_TUPLE -> {
+                List<SyntaxNode> elems = patternChildren(pat);
+                if (elems.size() == 1) {
+                    yield bindPattern(elems.get(0), value, rest, pos, held);   // `(p)` is grouping
+                }
+                String whole = "$t" + (tupleCounter++);
+                Ast.Expr body = rest;
+                for (int i = elems.size() - 1; i >= 0; i--) {
+                    body = bindPattern(elems.get(i),
+                            new Ast.TupleGet(Ast.Var.desugared(whole, pos), i, elems.size(), pos,
+                                    null),
+                            body, pos, held);
+                }
+                yield new Ast.LetIn(whole, value, body, pos, held);
+            }
+            case PATTERN_CTOR -> {
+                String whole = "$p" + (patternCounter++);
+                Ast.Expr inner = new Ast.FieldAccess(Ast.Var.desugared(whole, pos), "value", pos);
+                Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos, held);
+                yield Ast.LetIn.opening(whole, value,
+                        new Ast.Name(qualifiedNameOf(pat), null), body, pos, held);
+            }
+            case PATTERN_RECORD -> {
+                String whole = "$r" + (patternCounter++);
+                Ast.Expr body = rest;
+                List<SyntaxNode> fields = childNodes(pat, SyntaxKind.PATTERN_FIELD);
+                for (int k = fields.size() - 1; k >= 0; k--) {
+                    List<SyntaxToken> names = identTokens(fields.get(k));
+                    String field = ident(names.get(0));
+                    SyntaxToken var = names.size() > 1 ? names.get(1) : names.get(0);
+                    body = new Ast.LetIn(binderOf(var),
+                            new Ast.FieldAccess(Ast.Var.desugared(whole, pos), field, pos), body,
+                            pos, held);
+                }
+                yield new Ast.LetIn(whole, value, body, pos, held);
+            }
+            default -> throw error(pos, new ParseMessage.APatternWasExpected());
+        };
+    }
+
+    private static boolean isPatternKind(SyntaxKind k) {
+        return k == SyntaxKind.PATTERN_NAME || k == SyntaxKind.PATTERN_TUPLE
+                || k == SyntaxKind.PATTERN_CTOR || k == SyntaxKind.PATTERN_RECORD;
+    }
+
+    private SyntaxNode patternChild(SyntaxNode n) {
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternKind(c.kind())) {
+                return c;
+            }
         }
-        String whole = "$t" + (tupleCounter++);
-        Ast.Expr body = rest;
-        for (int i = names.size() - 1; i >= 0; i--) {
-            body = new Ast.LetIn(names.get(i),
-                    new Ast.TupleGet(new Ast.Var(whole, pos), i, names.size(), pos), body, pos);
+        throw new IllegalStateException("no pattern in " + n.kind());
+    }
+
+    private List<SyntaxNode> patternChildren(SyntaxNode n) {
+        List<SyntaxNode> out = new ArrayList<>();
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternKind(c.kind())) {
+                out.add(c);
+            }
         }
-        return new Ast.LetIn(whole, value, body, pos);
+        return out;
     }
 
     // --- CST navigation helpers ---
@@ -807,9 +1452,10 @@ public final class AstBuilder {
 
     private static boolean isExprKind(SyntaxKind k) {
         return switch (k) {
-            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, BINARY_EXPR, UNARY_EXPR, PIPE_EXPR,
+            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, APPLY_EXPR, BINARY_EXPR,
+                 UNARY_EXPR, PIPE_EXPR,
                  PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR, MATCH_EXPR, LAMBDA_EXPR,
-                 FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR -> true;
+                 FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR, UNREACHABLE_EXPR -> true;
             default -> false;
         };
     }
@@ -828,17 +1474,43 @@ public final class AstBuilder {
     private List<SyntaxToken> identTokens(SyntaxNode n) {
         List<SyntaxToken> out = new ArrayList<>();
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 out.add(t);
             }
         }
         return out;
     }
 
-    private String firstIdentText(SyntaxNode n) {
+
+    /** The name a top-level declaration declares: the first identifier in it. This is how the
+     * builder names a {@code data}, a {@code behavior} and a {@code let}, and how the declaration's
+     * source is filed under the same name when a module publishes what it declares. */
+    /**
+     * The name an identifier token spells, canonicalized to NFC.
+     *
+     * <p>A source file is bytes from an editor, and two spellings that Unicode calls canonically
+     * equivalent are the same text — so they have to be the same name. Without this the compiler
+     * holds two names that no reader can tell apart: two fields, two cases, two helpers. It also has
+     * to happen here rather than to the source: normalizing before lexing would shorten a line and
+     * move every position after it, so a diagnostic's caret would point at the wrong column of the
+     * file the author is looking at. A token keeps its own width; only the name it spells is settled.
+     *
+     * <p>A string literal is canonicalized by {@link #stringValue}, for the same reason. A numeric
+     * literal is not: it is parsed, not compared.
+     */
+    private static String ident(SyntaxToken t) {
+        return souther.compiler.Reserved.name(t.text());
+    }
+
+    static String firstIdentText(SyntaxNode n) {
+        return ident(firstIdentToken(n));
+    }
+
+    /** The token that spells what a top-level declaration declares. */
+    static SyntaxToken firstIdentToken(SyntaxNode n) {
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
-                return t.text();
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
+                return t;
             }
         }
         throw new IllegalStateException("no identifier in " + n.kind());
@@ -847,7 +1519,7 @@ public final class AstBuilder {
     private SyntaxToken lastIdentToken(SyntaxNode n) {
         SyntaxToken last = null;
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 last = t;
             }
         }
@@ -872,11 +1544,33 @@ public final class AstBuilder {
 
     private SyntaxNode typeChild(SyntaxNode n) {
         for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
+            if (isTypeTermKind(c.kind())) {
                 return c;
             }
         }
         throw new IllegalStateException("no type in " + n.kind());
+    }
+
+    /**
+     * The name a run of dotted identifiers spells, and where each part of it is written.
+     *
+     * <p>Read off the tokens rather than off the joined spelling. A qualified name is read over
+     * meaningful tokens, so the parts may be separated by whitespace, a comment or a line break, and
+     * counting a dot's worth of characters between them puts the last segment — which is the part a
+     * rename rewrites — in the wrong column.
+     */
+    private WrittenName qualifiedNameOf(SyntaxNode n) {
+        return joined(identTokens(n));
+    }
+
+    /** The one name a run of identifier tokens spells, occupying everything from the first to the
+     *  last of them. */
+    private WrittenName joined(List<SyntaxToken> parts) {
+        WrittenName name = nameOf(parts.get(0));
+        for (int i = 1; i < parts.size(); i++) {
+            name = name.then(nameOf(parts.get(i)));
+        }
+        return name;
     }
 
     private String qualifiedNameText(SyntaxNode n) {
@@ -885,7 +1579,7 @@ public final class AstBuilder {
             if (sb.length() > 0) {
                 sb.append('.');
             }
-            sb.append(t.text());
+            sb.append(ident(t));
         }
         return sb.toString();
     }
@@ -905,7 +1599,14 @@ public final class AstBuilder {
     }
 
     private static String tokenText(SyntaxElement e) {
-        return ((SyntaxToken) e).text();
+        return ident((SyntaxToken) e);
+    }
+
+    /** The name a token spells, kept with the characters that spell it. Every name the source
+     *  wrote enters the tree through here; canonicalizing is {@link WrittenName}'s, so a caller
+     *  cannot hand over a name and a place that are not each other's. */
+    private WrittenName nameOf(SyntaxToken t) {
+        return WrittenName.of(t.text(), posOf(t));
     }
 
     private SyntaxToken firstMeaningfulToken(SyntaxNode n) {
@@ -942,8 +1643,83 @@ public final class AstBuilder {
         return lines.posOf(firstMeaningfulToken(n).start());
     }
 
+    private SyntaxToken lastMeaningfulTokenOrNull(SyntaxNode n) {
+        List<SyntaxElement> children = n.children();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            SyntaxElement e = children.get(i);
+            if (e instanceof SyntaxToken t && !t.isTrivia()) {
+                return t;
+            }
+            if (e instanceof SyntaxNode c) {
+                SyntaxToken inner = lastMeaningfulTokenOrNull(c);
+                if (inner != null) {
+                    return inner;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The stretch of source {@code n} was written over: the first character of its first meaningful
+     * token to the last of its last.
+     *
+     * <p>Both ends off the tokens rather than off the node. A node's own extent takes in the trivia
+     * the parser flushed into it, and what stands between two forms belongs to neither: a comment
+     * after the last operand of a condition is not part of the condition, and an underline that ran
+     * to the end of it would say it was.
+     *
+     * <p>Null for a node holding no meaningful token, which is what a recovery node can be. A form
+     * the parser could not read is not one the author wrote a definite stretch of.
+     */
+    private Region region(SyntaxNode n) {
+        SyntaxToken first = firstMeaningfulTokenOrNull(n);
+        SyntaxToken last = lastMeaningfulTokenOrNull(n);
+        return first == null || last == null ? null
+                : new Region(lines.posOf(first.start()), lines.posOf(last.end()));
+    }
+
     private SourcePos posOf(SyntaxToken t) {
         return lines.posOf(t.start());
+    }
+
+    /** The characters {@code t} is written with — its own slice of the file, escapes and all. */
+    private Region regionOf(SyntaxToken t) {
+        return new Region(lines.posOf(t.start()), lines.posOf(t.end()));
+    }
+
+    /**
+     * From where {@code from} begins to where {@code to} ends.
+     *
+     * <p>What a statement folded into the rest of its block is written over. {@code let x = e} is one
+     * expression holding everything after it, so the characters it covers are its own and the ones
+     * it nests, and neither node has both ends of that on its own.
+     */
+    private Region spanning(SyntaxNode from, SyntaxNode to) {
+        Region begins = region(from);
+        Region ends = region(to);
+        return begins == null || ends == null ? null : new Region(begins.start(), ends.end());
+    }
+
+    /** The name {@code n} binds, written where the source writes it. */
+    private Ast.Binder binderOf(SyntaxNode n) {
+        return binderOf(firstIdentToken(n));
+    }
+
+    /** The name {@code token} spells, bound where it is written. The one way this builder makes a
+     * binding out of something the author wrote: the token carries both halves, so they cannot be
+     * paired wrongly. */
+    private Ast.Binder binderOf(SyntaxToken token) {
+        return Ast.Binder.of(new Ast.Name(nameOf(token), null));
+    }
+
+
+    /** The whole `{ ... }` of a body, so an error about the body underlines both braces. */
+    private Region bodyRegion(SyntaxNode body) {
+        SourcePos open = pos(body);
+        return body.token(SyntaxKind.RBRACE)
+                .map(close -> new Region(open, lines.posOf(close.end())))
+                .orElseGet(() -> Region.point(open));
     }
 
     // --- literal decoding ---
@@ -952,8 +1728,26 @@ public final class AstBuilder {
         return raw.endsWith("m") ? raw.substring(0, raw.length() - 1) : raw;
     }
 
-    /** Decodes a raw string-literal slice (quotes and escapes included) to its value. */
+    /**
+     * Decodes a raw string-literal slice (quotes and escapes included) to its value, canonicalized
+     * to NFC.
+     *
+     * <p>A source file is bytes from an editor, which is the other place text arrives from outside —
+     * the first being a decoder, which canonicalizes for the same reason. Two forms that are
+     * canonically equivalent are the same text by Unicode's definition and different values to a
+     * comparison by code units, so a literal left as written would compare unequal to the same text
+     * that came in through a boundary, and a pattern written in one form would not match a value in
+     * the other. Which form an editor writes is not something the author chose.
+     *
+     * <p>NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a
+     * full-width one, which is a different claim about the text than "these are the same characters".
+     */
     private static String stringValue(String raw) {
+        return java.text.Normalizer.normalize(unescaped(raw), java.text.Normalizer.Form.NFC);
+    }
+
+    /** The literal's characters, with the quotes dropped and the escapes read. */
+    private static String unescaped(String raw) {
         int from = raw.startsWith("\"") ? 1 : 0;
         int to = raw.length() >= 2 && raw.endsWith("\"") ? raw.length() - 1 : raw.length();
         StringBuilder sb = new StringBuilder();
@@ -967,7 +1761,12 @@ public final class AstBuilder {
                     case 'r' -> '\r';
                     case '"' -> '"';
                     case '\\' -> '\\';
-                    default -> e;
+                    // The lexer refuses a backslash written before anything else, and a source
+                    // that did not read never reaches here (CstFrontend raises on the first
+                    // error). Reading it as the character alone would take a character the author
+                    // wrote out of the value and say nothing about it.
+                    default -> throw new IllegalStateException(
+                            "an escape the lexer refuses reached the builder: \\" + e);
                 });
             } else {
                 sb.append(c);
@@ -976,15 +1775,19 @@ public final class AstBuilder {
         return sb.toString();
     }
 
-    private CompileException error(SourcePos pos, String messageKey, String legacyMessage, Object... args) {
-        return CompileException.of(
-                Diagnostic.of(null, messageKey).title("parse.title").at(pos).args(args).build(),
-                legacyMessage);
+    private <M extends Message & Reported> CompileException error(SourcePos pos, M said) {
+        return CompileException.of(Diagnostic.say(said).at(pos).build());
+    }
+
+    /** As {@link #error}, with a hint under it naming the way out. */
+    private <M extends Message & Reported, H extends Message & Supporting>
+            CompileException errorWithHint(SourcePos pos, M said, H hint) {
+        return CompileException.of(Diagnostic.say(said).at(pos).hint(hint).build());
     }
 
     /** Whether {@code name} sits in the compiler-shipped {@code souther} namespace (ADR-0028); only
-     * those modules may write type variables and {@code intrinsic} bodies. */
+     * those modules may write type variables, {@code intrinsic} bodies, and {@code private}. */
     private static boolean isReservedNamespace(String name) {
-        return name.equals("souther") || name.startsWith("souther.");
+        return souther.compiler.Reserved.isNamespace(name);
     }
 }

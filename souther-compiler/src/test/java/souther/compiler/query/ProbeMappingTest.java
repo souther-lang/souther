@@ -1,0 +1,126 @@
+package souther.compiler.query;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.Instrumentation;
+import souther.compiler.coverage.CoverageSites;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * What happens when the plan is not about the bodies being emitted.
+ *
+ * <p>The one failure a measurement may not be quiet about. A body emitted an arm short reports the arm
+ * that ran as one no row reaches, and that reads as a gap in the model — the author goes looking for a
+ * row to write against a branch their rows already take. So the arms are looked up by identity, and a
+ * node the plan does not hold stops the generation rather than producing a body with a hole in it.
+ */
+class ProbeMappingTest {
+
+    private static final String MODEL = """
+            module example.trip
+
+            data Submitted = { cost: Int }
+            data Waiting = { cost: Int }
+
+            behavior submit : (cost: Int) -> Submitted | Waiting
+                constructs Submitted, Waiting
+
+            let submit (cost) = {
+                guard cost <= 100 else Waiting { cost = cost }
+                Submitted { cost = cost }
+            }
+            """;
+
+    private static Compilation compiled() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /**
+     * A plan made from one compile, used to emit another's bodies.
+     *
+     * <p>The two compiles are of the same source, so their bodies are equal in every way a record
+     * compares. That is exactly the case a value-keyed map would answer confidently and wrongly, and
+     * the reason the map is keyed by identity.
+     */
+    @Test
+    void aPlanFromOtherBodiesStopsTheGenerationRatherThanEmitAHole() {
+        Compilation emitting = compiled();
+        Compilation elsewhere = compiled();
+        String module = emitting.modules().get(0);
+        Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
+        CoverageSites.Plan somewhereElse = Output.Evaluated.planOf(elsewhere.db(), module);
+        assertNotNull(in);
+        assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
+
+        IllegalStateException stopped = assertThrows(IllegalStateException.class,
+                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                        in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
+                        in.dischargeClauses(),
+                        Instrumentation.NONE.measuring(somewhereElse)));
+
+        assertTrue(stopped.getMessage().contains("no probe was planned"), stopped.getMessage());
+    }
+
+    /**
+     * An arm the plan counted that nothing put in the bytecode.
+     *
+     * <p>The other half of the same guarantee, and the half that was missing. A body walked without
+     * counting its arms does not fail where it is walked — it just leaves them out, and every one of
+     * them then reads as an arm no row goes through. Catching it means comparing what was planned with
+     * what was emitted, which can only be done once, at the end.
+     */
+    @Test
+    void anArmPlannedAndNotEmittedStopsTheGeneration() {
+        Compilation emitting = compiled();
+        String module = emitting.modules().get(0);
+        Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
+        assertNotNull(in);
+        CoverageSites.Plan real = Output.Evaluated.planOf(emitting.db(), module);
+        assertTrue(real.sites().size() > 0);
+
+        // The same plan with one more arm in it than any body will emit.
+        CoverageSites.Site extra = real.sites().get(0);
+        List<CoverageSites.Site> longer = new java.util.ArrayList<>(real.sites());
+        longer.add(new CoverageSites.Site(extra.behavior(), extra.kind(), "phantom", extra.at(),
+                real.sites().size(), real.sites().size(), extra.obligation()));
+        CoverageSites.Plan overcounted =
+                new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison());
+
+        IllegalStateException stopped = assertThrows(IllegalStateException.class,
+                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                        in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
+                        in.dischargeClauses(),
+                        Instrumentation.NONE.measuring(overcounted)));
+
+        assertTrue(stopped.getMessage().contains("nothing emitted"), stopped.getMessage());
+    }
+
+    /** And the plan made from these bodies emits them, so what the case above rejects is the mismatch
+     * and not the arrangement. */
+    @Test
+    void aPlanFromTheseBodiesEmitsThem() {
+        Compilation emitting = compiled();
+        String module = emitting.modules().get(0);
+
+        assertNotNull(emitting.db().ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value());
+    }
+
+    /** The query turns that into an answer with nothing in it. What reads it reports a measurement it
+     * could not make, which is not the same as a model with a branch nothing reaches. */
+    @Test
+    void theQueryAnswersWithNothingRatherThanWithAHole() {
+        Compilation emitting = compiled();
+        Answer<java.util.Map<String, byte[]>> probed =
+                emitting.db().ask(new Output.Evaluated("no.such.module", Output.CoverageMode.ARMS));
+
+        assertTrue(!probed.present() || probed.value() == null);
+    }
+}

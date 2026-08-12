@@ -8,7 +8,7 @@ A newtype writes its invariant after the type body, on the following line, refer
 implicit `value`:
 
 ```text
-data 数量 = Int
+data Quantity = Int
     invariant value > 0
 ```
 
@@ -35,11 +35,11 @@ A data's `invariant` clause follows the type body — `= Y` for a newtype, `{ ..
 product — never inside the record braces. Several `invariant` lines all apply, conjoined.
 
 ```text
-data 会員 = {
-    id: 会員ID,
-    表示名: String
+data Member = {
+    id: MemberId,
+    displayName: String
 }
-    invariant length(表示名) > 0
+    invariant length(displayName) > 0
 ```
 
 The `...` spread (ADR-0030) stays a comma-separated member inside the braces, because it

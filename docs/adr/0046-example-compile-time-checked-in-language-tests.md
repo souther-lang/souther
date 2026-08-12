@@ -36,9 +36,9 @@ Surface. An `example` names a target behavior and lists `|`-led rows; each row i
 description, an input argument tuple, `->`, and an expected result:
 
 ```
-example 提出する
-    | "上限内なら提出できる" : (申請準備中 { 予定費用 = 金額(50000) }, "…") -> 提出済み
-    | "上限超過は却下"       : (申請準備中 { 予定費用 = 金額(100001) }, "…") -> 却下 { 理由 = "high_cost" }
+example submit
+    | "within the ceiling it submits" : (Drafting { estimatedCost = Amount(50000) }, "…") -> Submitted
+    | "over the ceiling is rejected"       : (Drafting { estimatedCost = Amount(100001) }, "…") -> Rejected { reason = "high_cost" }
 ```
 
 The expected side asserts at two granularities: a bare type name asserts only the result arm (which case
@@ -54,7 +54,7 @@ part of the target module and sees its names directly), and does not open module
 question of which file owns `exposing`. General multi-file modules were considered and rejected for this
 change; a module's identity is header-derived, so the merge stays local to `compileModules`.
 
-Evaluation. Only a behavior with a `let` body and no `requires` is evaluable — the same runnable set the
+Evaluation. Only a behavior with a `let` body and no `depends on` is evaluable — the same runnable set the
 CLI `run` uses; an injected, `>->`, or dependency-taking target is refused with a reason (`E1902`). The
 evaluator reuses the existing boundary machinery rather than emitting new code: it turns each fixture
 expression into its neutral form, decodes it into the parameter type through the derived decoder, applies
