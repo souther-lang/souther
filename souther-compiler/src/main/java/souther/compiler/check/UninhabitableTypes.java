@@ -1,9 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.numeric.Cardinality;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,15 +20,21 @@ import java.util.Set;
  * is the matter with. Said of all of them, the one thing the author has to change is somewhere in a
  * list of things that will come right when it does.
  *
- * <p>Two readings narrow it. Declarations written in terms of each other have no value together and
- * are one thing to say — there is no first among them, and naming each in turn says the same thing
- * three times. And a group that stops having none once what it reads is granted anything was never
- * the matter: it is the group it reads that is, and that one is named instead.
+ * <p>What separates them is asked by granting: take every other declaration that has no value to have
+ * one, read them all again, and see which are left with none. A declaration that has none whatever
+ * else is granted has none of its own; one that stops is a declaration that was answering for
+ * something else.
  *
- * <p>What is left is a group whose having no value survives everything around it being granted a
- * value. Where the count came from does not enter into it: a recursion with nowhere to stop, rules
- * that cannot all hold, and a collection asking for more than it can be given are all groups of this
- * kind and are told apart by nothing here.
+ * <p>Read again rather than followed along edges. What a count was is not what it would have been:
+ * a record whose only field is an absent value has one value because what the field would hold has
+ * none, and one is too few to fill a set of two — so a set with no value can be one nothing is the
+ * matter with, with no declaration between them having no value for an edge to run through. Only
+ * granting and reading afresh finds that.
+ *
+ * <p>The question is asked of the declarations that are answered together, and the answer is about
+ * the members. Two written in terms of each other are one thing to say only where both are left with
+ * none; where one of them has a rule of its own that leaves it nothing, it is named and the other,
+ * which was answering for it, is not.
  */
 public final class UninhabitableTypes {
 
@@ -45,35 +53,47 @@ public final class UninhabitableTypes {
         for (Ast.Def def : module.defs()) {
             declaredAt.put(symbols.own(def.name()), declaredAt.size());
         }
-        Map<TypeName, Set<TypeName>> among = amongThoseWithNoValue(solved);
-        List<List<TypeName>> reported = new ArrayList<>();
-        for (List<TypeName> component : TypeComponents.of(among)) {
-            List<TypeName> here = new ArrayList<>(component);
-            here.removeIf(each -> !declaredAt.containsKey(each));
-            if (here.isEmpty() || !solved.noValueOfItsOwn(component)) {
+        Set<TypeName> none = solved.withNoValue();
+        Set<TypeName> ofTheirOwn = new LinkedHashSet<>();
+        for (List<TypeName> together : solved.components()) {
+            if (together.stream().noneMatch(none::contains)) {
                 continue;
             }
-            here.sort(java.util.Comparator.comparingInt(declaredAt::get));
+            Set<TypeName> elsewhere = new LinkedHashSet<>(none);
+            elsewhere.removeAll(together);
+            Map<TypeName, Cardinality> granted = solved.granting(elsewhere);
+            for (TypeName each : together) {
+                if (none.contains(each)
+                        && granted.getOrDefault(each, Cardinality.UNKNOWN).none()) {
+                    ofTheirOwn.add(each);
+                }
+            }
+        }
+        List<List<TypeName>> reported = new ArrayList<>();
+        for (List<TypeName> group : TypeComponents.of(amongThemselves(ofTheirOwn, solved))) {
+            List<TypeName> here = new ArrayList<>(group);
+            here.removeIf(each -> !declaredAt.containsKey(each));
+            if (here.isEmpty()) {
+                continue;
+            }
+            here.sort(Comparator.comparingInt(declaredAt::get));
             reported.add(List.copyOf(here));
         }
-        reported.sort(java.util.Comparator.comparingInt(each -> declaredAt.get(each.get(0))));
+        reported.sort(Comparator.comparingInt(each -> declaredAt.get(each.get(0))));
         return List.copyOf(reported);
     }
 
     /**
-     * The declarations with no value, and which of them each reads.
+     * Which of these each of them reads.
      *
-     * <p>Kept to those with no value, so that what comes out of the walk is the groups of them: an
-     * edge to a declaration that has a value is an edge to somewhere this question does not go.
+     * <p>Grouped again among themselves rather than taken as the groups they were answered in. Two
+     * answered together are one thing to say only while both are left with none, and the one that
+     * was answering for the other is out by the time this is asked.
      */
-    private static Map<TypeName, Set<TypeName>> amongThoseWithNoValue(
-            TypeCardinality.Cardinalities solved) {
+    private static Map<TypeName, Set<TypeName>> amongThemselves(
+            Set<TypeName> ofTheirOwn, TypeCardinality.Cardinalities solved) {
         Map<TypeName, Set<TypeName>> among = new LinkedHashMap<>();
-        solved.all().forEach((name, count) -> {
-            if (count.none()) {
-                among.put(name, new LinkedHashSet<>());
-            }
-        });
+        ofTheirOwn.forEach(each -> among.put(each, new LinkedHashSet<>()));
         among.forEach((name, reads) -> {
             for (TypeName each : solved.edges().getOrDefault(name, Set.of())) {
                 if (among.containsKey(each)) {

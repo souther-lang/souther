@@ -101,6 +101,53 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 """));
     }
 
+    /**
+     * One of a group having a lack of its own is not the group having one.
+     *
+     * <p>{@code A} cannot be built whatever else is true — its own rule about its own field says so —
+     * and {@code B} has no value only because {@code A} has none and {@code Other} has none. They are
+     * written in terms of each other, so they are one group until the question is asked, and the
+     * answer is about the members rather than about the group: granting {@code Other} a value leaves
+     * {@code A} where it was and takes {@code B} out.
+     */
+    @Test
+    void oneMemberOfAGroupMayHaveALackTheOthersDoNot() {
+        assertEquals(List.of(List.of("Other"), List.of("A")), reported("""
+                module demo
+
+                data Other = Int
+                    invariant no = value >= 2 && value <= 1
+
+                data A = { b: B, n: Int }
+                    invariant no = n >= 2 && n <= 1
+
+                data B = A | Other
+                """));
+    }
+
+    /**
+     * A lack reaches a set through a type that has values.
+     *
+     * <p>{@code MaybeBad} has one value — the absent one — because {@code Bad} has none, and one is
+     * too few to fill a set of two. Nothing between them has no value, so the two groups with none
+     * are not joined by anything, and a reading that asked only about what a group reads directly
+     * would call the set's lack its own. Give {@code Bad} a value and the set fills itself.
+     */
+    @Test
+    void aLackReachingASetThroughATypeThatHasValuesIsStillTheLackOfTheFirst() {
+        assertEquals(List.of(List.of("Bad")), reported("""
+                module demo
+
+                data Bad = Int
+                    invariant no = value >= 2 && value <= 1
+
+                data MaybeBad = { x: Bad? }
+
+                data NeedTwo = Set<MaybeBad>
+                    invariant two = Set.size(value) >= 2
+                """));
+    }
+
     /** A set that cannot be filled is its own group, its element having a value of its own. */
     @Test
     void aSetThatCannotBeFilledIsNamedAndItsElementIsNot() {

@@ -221,6 +221,61 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 """);
     }
 
+    /** And where one of two written in terms of each other has a rule of its own that leaves it
+     * nothing, that one is said and the other, which was answering for it, is not. */
+    @Test
+    void oneOfTwoWrittenInTermsOfEachOtherIsReportedWhereOnlyItHasARuleOfItsOwn() {
+        assertEquals(List.of("E1013", "E1013"), codesFor("""
+                module demo
+
+                data Other = Int
+                    invariant no = value >= 2 && value <= 1
+
+                data A = { b: B, n: Int }
+                    invariant no = n >= 2 && n <= 1
+
+                data B = A | Other
+                """), "`Other` and `A`, and not `B` beside them");
+    }
+
+    /**
+     * A lack that reaches a set through a type with values is still the first one's.
+     *
+     * <p>Nothing between them has no value — a record holding an absent value has one — so there is
+     * no edge from one to the other to follow. What settles it is granting the first a value and
+     * finding the set fills itself.
+     */
+    @Test
+    void aSetTooSmallBecauseOfSomethingElseIsNotReportedBesideIt() {
+        refuses("Bad", """
+                module demo
+
+                data Bad = Int
+                    invariant no = value >= 2 && value <= 1
+
+                data MaybeBad = { x: Bad? }
+
+                data NeedTwo = Set<MaybeBad>
+                    invariant two = Set.size(value) >= 2
+                """);
+    }
+
+    /** And where the set is too small on its own, with nothing granted to change it. */
+    @Test
+    void aSetTooSmallOnItsOwnIsReported() {
+        refuses("Pair", """
+                module demo
+
+                data One = Int
+                    invariant only = value >= 1 && value <= 1
+
+                data Held = { x: One? }
+
+                data Pair = Set<Held>
+                    invariant three = Set.size(value) >= 3
+                """);
+    }
+
     /** And where the group reading it has nowhere to stop of its own, both are said. */
     @Test
     void aGroupWithNoValueOfItsOwnIsReportedBesideTheOneItReads() {
