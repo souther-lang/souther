@@ -1153,10 +1153,12 @@ public final class Bodies {
             }
             TypeChecker.Reported reported;
             try {
+                Answer<Set<String>> unbuilt = db.ask(new Names.Unbuilt(name));
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), lowering.value().lowered(),
-                        reqSigs.value(), calleeSigs.value(), sigs.value(), published.value());
+                        reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
+                        unbuilt.present() ? unbuilt.value() : Set.of());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

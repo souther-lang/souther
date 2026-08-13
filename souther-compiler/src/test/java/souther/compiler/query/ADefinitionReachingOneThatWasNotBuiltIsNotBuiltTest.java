@@ -1,13 +1,16 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeName;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -66,6 +69,26 @@ class ADefinitionReachingOneThatWasNotBuiltIsNotBuiltTest {
 
         assertFalse(has(c, "Late"), "`Nowhere` was not answered");
         assertFalse(has(c, "Early"), "which the declaration above it is made of");
+    }
+
+    /**
+     * And nothing is said about one of these a second time. The author has one mistake and is told
+     * about it once; a report against the declaration that merely reaches it sends them to a line
+     * that is correct — here, that `Order` has no decoder, which is not a second mistake but the
+     * first one said again from further downstream.
+     */
+    @Test
+    void theOneMistakeIsReportedOnceAndNotAgainstWhatReachesIt() {
+        Compilation c = compiled("""
+                module m.a exposing ( Order, Line )
+
+                data Order = { total: Nowhere }
+                data Line = { order: Order }
+                """);
+        List<String> said = Located.diagnosticsOf(c.diagnostics()).get("a.sou").stream()
+                .map(d -> d.code() + " " + d.said()).toList();
+
+        assertEquals(1, said.size(), "the unknown name, and nothing about `Line`: " + said);
     }
 
 }
