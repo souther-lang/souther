@@ -16,12 +16,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
- * {@code Symbols.reach} is the inverse of {@code Symbols.resolve}, and is held to it.
+ * What {@code Symbols.reach} writes for a type resolves back to that type.
  *
- * <p>The two are one relation read in two directions: {@code resolve} takes what a module wrote and
- * answers the declaration, {@code reach} takes the declaration and answers what this module writes.
- * A pair that does not compose is a reference the compiler produced and the compiler will not read
- * — which is the whole of what a generated row being writable means.
+ * <p>A section of {@code Symbols.resolve} and not its inverse. {@code Amount}, {@code up.Amount}
+ * and {@code lib.Amount} may all reach one declaration, so there is no inverse to have; {@code
+ * reach} picks one of them, and the one it picks is read back as the type it was asked about. A
+ * pair that does not compose is a reference the compiler produced and the compiler will not read,
+ * which is the whole of what a generated row being writable means.
+ *
+ * <p>Read back by whichever reader reads the position the name is written at. For a declaration
+ * that is {@code resolve}; for the language's own vocabulary — a primitive, the runtime's error
+ * cases — {@code resolve} answers nothing at all and {@code resolveCase} is the reader. Both are
+ * held below, so where the section stops being about {@code resolve} is written down rather than
+ * left out of the list.
  *
  * <p>Held over every declaration a module can meet rather than over cases picked out here. A
  * spelling that happens to round-trip for the type it was written for says nothing about the one
@@ -140,5 +147,31 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         assertEquals("RoundingMode", assertInstanceOf(TypeReachName.Written.class,
                 symbols.reach(language)).rendered());
         assertEquals(language, symbols.resolve("RoundingMode"));
+    }
+
+    /**
+     * The language's own vocabulary is written as itself, and read back by the reader that reads a
+     * case rather than by {@code resolve}, which says nothing about either of them.
+     *
+     * <p>Here rather than left out of {@link #everyDeclaration()}: a section is a section on a
+     * domain, and a domain nothing states is one a later reader assumes is everything. These reach
+     * a position — a primitive heads a union a behavior answers with, and the runtime's failures
+     * are its cases — so a writer meets them and has to be told what they are written as.
+     */
+    @Test
+    void theLanguagesOwnVocabularyIsWrittenAsItselfAndReadBackAsACase() {
+        Symbols symbols = scopeOf("app", LIB, APP);
+
+        for (TypeName vocabulary : List.of(TypeName.primitive("Int"),
+                TypeName.runtime("DivisionByZero"))) {
+            TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
+                    symbols.reach(vocabulary), vocabulary.toString());
+
+            assertEquals(vocabulary.name(), written.rendered());
+            assertEquals(vocabulary, symbols.resolveCase(written.rendered()),
+                    "the reader of the position a case name stands at");
+            assertEquals(null, symbols.resolve(written.rendered()),
+                    "and not this one, which answers for declarations");
+        }
     }
 }

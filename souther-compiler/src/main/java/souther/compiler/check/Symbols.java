@@ -158,8 +158,20 @@ public final class Symbols {
     }
 
     /**
-     * How this module writes {@code type} — the other direction of {@link #resolve}, and the one
-     * thing a writer of surface text cannot work out from the type itself.
+     * How this module writes {@code type} — the one thing a writer of surface text cannot work out
+     * from the type itself.
+     *
+     * <p>A section of {@link #resolve} rather than its inverse. Several spellings reach one
+     * declaration — {@code Amount}, {@code up.Amount} and {@code lib.Amount} may all be it — so
+     * there is no inverse to have; this picks one of them, and what it picks resolves back to the
+     * type it was asked about. That is the whole of the contract, and it is what a generated row
+     * being writable means.
+     *
+     * <p>Read back by whichever reader reads the position the name is written at, which for the
+     * language's own vocabulary is not this one: a primitive and the runtime's error cases are
+     * {@link #resolveCase}'s to answer, and {@code resolve} says nothing about them. They are
+     * written as themselves wherever they are written, so the section holds there through that
+     * reader.
      *
      * <p>Bare only where the bare spelling means this very declaration. Asked as "is the name in
      * scope" instead, a module that declares an {@code Amount} of its own and reaches another
@@ -170,13 +182,12 @@ public final class Symbols {
      * compilation write one reference. Nothing here picks the alias for being better than the
      * others; it picks it for being the same one every time.
      *
-     * <p>The inverse of {@link #resolve} and held to it: what this answers resolves back to the
-     * type it was asked about. So a bare name is answered only where the bare name means this type
-     * <em>here</em>, and that is one question for every kind of type. A primitive's spelling is
-     * reserved (E1502), so nothing can be standing on it. The runtime namespace's own data is not
-     * reserved and is the lowest rung of a module's scope — a module declaring a {@code
-     * RoundingMode} of its own takes the spelling, and the language's one has no other, so it is
-     * unnameable there rather than bare (ADR-0087).
+     * <p>So a bare name is answered only where the bare name means this type <em>here</em>, and
+     * that is one question for every kind of type. A primitive's spelling is reserved (E1502), so
+     * nothing can be standing on it. The runtime namespace's own data is not reserved and is the
+     * lowest rung of a module's scope — a module declaring a {@code RoundingMode} of its own takes
+     * the spelling, and the language's one has no other, so it is unnameable there rather than bare
+     * (ADR-0087).
      *
      * <p>A qualified name reaches only what its module exposes, so a type another module keeps to
      * itself has no name here at all. That happens without anything being wrong with the model: a

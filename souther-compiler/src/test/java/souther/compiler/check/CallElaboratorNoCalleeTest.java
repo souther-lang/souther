@@ -114,9 +114,10 @@ class CallElaboratorNoCalleeTest {
     /**
      * And an application of something that is not a name, which is where the absent denotation
      * actually comes from: {@code Ast.Apply#denotes} answers for the name it applies, and there is
-     * none. Written as a name with no answer instead, this pinned a node the AST refuses to build —
-     * a pass applying a name says what it means (ADR-0067), so the only unanswered callee left is
-     * one that is not a name at all.
+     * none. Written as a name with no answer instead, this pinned a node the constructor a pass
+     * writes an application with no longer builds — a pass applying a name says what it means
+     * (ADR-0067). The shape itself is still writable, since the parser has to hold a tree
+     * resolution has not seen; what is gone is a pass reaching for it.
      */
     @Test
     void anApplicationOfSomethingThatIsNotANameIsAnInternalError() {

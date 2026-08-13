@@ -34,7 +34,7 @@ public sealed interface TypeReachName {
     sealed interface Written extends TypeReachName {
 
         /** The reference as this module writes it — what goes into anything an author reads back,
-         * and what {@code Symbols.resolve} answers {@link #denotes()} for. */
+         * and what the reader of the position it is written at answers {@link #denotes()} for. */
         String rendered();
     }
 
