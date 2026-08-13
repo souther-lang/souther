@@ -86,7 +86,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
      * module's, because nothing a declaration carries says which module wrote it.
      */
     @Test
-    void aDeclarationOfAnotherModuleIsNotOneOfThisModulesOwn() {
+    void aDeclarationWhoseNameThisModuleDoesNotDeclareIsRefused() {
         Symbols app = symbolsOf(APP);
         Ast.Def foreign = declarationOf(LIB, "Amount");
 

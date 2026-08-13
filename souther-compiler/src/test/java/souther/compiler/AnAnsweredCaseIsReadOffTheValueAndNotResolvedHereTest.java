@@ -68,6 +68,27 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
                 | "no"  : (In { n = 0 }) -> No
             """;
 
+    /**
+     * Reaches the type through an alias and declares something else of the spelling its cases carry.
+     * The lookup that missed above answers here — with this module's declaration, which the rows
+     * never mention and no value of theirs is.
+     */
+    private static final String SPELLS_ITS_OWN = """
+            module shadows exposing ( In, Yes, h )
+
+            import lib as up
+
+            data In = { n: Int }
+            data Yes = { irrelevant: String }
+
+            behavior h : (i: In) -> up.Answer constructs up.Yes, up.No
+            let h (i) = if i.n > 0 then up.Yes else up.No
+
+            example h
+                | "yes" : (In { n = 1 }) -> up.Yes
+                | "no"  : (In { n = 0 }) -> up.No
+            """;
+
     private static List<TypeName> armsAnsweredIn(String module, String source) {
         Compilation compilation = Compilation.ofSources(List.of(LIB, source), ModulePath.EMPTY);
         compilation.answerEverything();
@@ -84,6 +105,19 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
         assertEquals(List.of(new TypeName("lib", "Yes"), new TypeName("lib", "No")),
                 armsAnsweredIn("viaalias", THROUGH_AN_ALIAS),
                 "the case a row answered with is the one the value is, whatever this module calls it");
+    }
+
+    /**
+     * The stronger of the two. A miss says the reading failed and can be seen; an answer of the
+     * wrong declaration is a reading that succeeded and means something else, and nothing in the
+     * report says which of the two `Yes` a row confirmed.
+     */
+    @Test
+    void aModuleThatSpellsSomethingElseTheSameObservesTheCasesItsRowsAnswerWith() {
+        assertEquals(List.of(new TypeName("lib", "Yes"), new TypeName("lib", "No")),
+                armsAnsweredIn("shadows", SPELLS_ITS_OWN),
+                "the case a row answered with is the one the value is, and this module's `Yes` is"
+                        + " not a value any of these rows produced");
     }
 
     @Test
