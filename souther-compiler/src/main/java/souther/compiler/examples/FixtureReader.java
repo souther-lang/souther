@@ -341,9 +341,9 @@ public final class FixtureReader {
      * <p>The case's own name, not the spelling: what came out carries the name its type was declared
      * under, so a row spelling that type qualified asserts the same case.
      */
-    String caseOnly(Ast.Expr expected) {
+    TypeName caseOnly(Ast.Expr expected) {
         return expected instanceof Ast.Var v && v.denotes() instanceof ValueName.OfType named
-                ? named.type().name() : null;
+                ? named.type() : null;
     }
 
     // --- what a row asserts ---------------------------------------------------------------------
@@ -602,7 +602,7 @@ public final class FixtureReader {
             // what the position holds. Nothing about the position enters.
             return assertedLive(answered(c, helper));
         }
-        if (!neutral.isNewtype(c.written())) {
+        if (!neutral.isNewtype(appliedType(c))) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
                 throw FixtureException.cannotBeCalled(c.written());
@@ -612,7 +612,7 @@ public final class FixtureReader {
         if (c.args().size() != 1) {
             throw new FixtureException("`" + c.written() + "` takes one argument");
         }
-        return assertedNewtype(symbols.resolve(c.written()), c.args().get(0), c.written());
+        return assertedNewtype(appliedType(c), c.args().get(0), c.written());
     }
 
     /**
@@ -899,7 +899,7 @@ public final class FixtureReader {
         // The type the value is, and not this module's reading of its spelling: a helper a fixture
         // applies may be one another module published, and what it answered with is that module's
         // type however this module spells the same name.
-        TypeName type = answeredType(live);
+        TypeName type = typeOf(live);
         if (type != null && symbols.get(type) instanceof Ast.Data data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             if (data.newtype()) {
@@ -953,7 +953,7 @@ public final class FixtureReader {
         if (expected instanceof Ast.NewData nd) {
             return nd.typeName().written();
         }
-        if (expected instanceof Ast.Apply c && neutral.isNewtype(c.written())) {
+        if (expected instanceof Ast.Apply c && neutral.isNewtype(appliedType(c))) {
             return c.written();
         }
         return null;   // a literal expected (a primitive output)
@@ -1011,8 +1011,8 @@ public final class FixtureReader {
     private TypeName constructedCase(Ast.Expr e, Set<String> followed, List<TypeName> worn) {
         return switch (e) {
             case Ast.NewData nd -> nd.typeName().denotes();
-            case Ast.Apply c when neutral.isNewtype(c.written()) -> {
-                TypeName named = symbols.resolveCase(c.written());
+            case Ast.Apply c when neutral.isNewtype(appliedType(c)) -> {
+                TypeName named = appliedType(c);
                 yield wears(named, c, worn)
                         ? constructedCase(c.args().get(0), followed, worn.subList(1, worn.size()))
                         : named;
@@ -1056,7 +1056,7 @@ public final class FixtureReader {
         if (result instanceof Iterable<?> || result instanceof Map<?, ?>) {
             return showAny(result);
         }
-        Object encoded = encodedOrNull(result, name);
+        Object encoded = encodedOrNull(result, typeOf(result));
         if (encoded != null) {
             return show(name, encoded);
         }
@@ -1086,7 +1086,7 @@ public final class FixtureReader {
             return elements.isEmpty() ? "[]" : "[ " + String.join(", ", elements) + " ]";
         }
         String name = NeutralForm.simpleName(v);
-        Object encoded = encodedOrNull(v, name);
+        Object encoded = encodedOrNull(v, typeOf(v));
         return encoded != null ? show(name, encoded) : name;
     }
 
@@ -1104,16 +1104,11 @@ public final class FixtureReader {
         return m.invoke(null);
     }
 
-    /** {@code result} through its class's derived {@code encoder()}, or null when it has none. */
-    private Object encodedOrNull(Object result, String name) {
-        TypeName type = symbols.resolve(name);
-        return encoded(result, type != null ? type.qualified() : module.name() + "." + name);
-    }
-
-    /** As above, for a type already resolved — a fixture says which case it constructs, and that answer
-     * names the class whether or not the reader spells the type the way its module does. */
+    /** {@code result} through the derived {@code encoder()} of the type it is, or null where the type
+     * is not one a module declares and so has no derived codec to reach. The type names the class
+     * whether or not the reader spells it the way its module does. */
     private Object encodedOrNull(Object result, TypeName type) {
-        return encoded(result, type.qualified());
+        return type == null ? null : encoded(result, type.qualified());
     }
 
     private Object encoded(Object result, String className) {
@@ -1351,7 +1346,7 @@ public final class FixtureReader {
                 // and a fixture is not elaborated, so a value's Java surface would otherwise be
                 // reachable as though it were the data's — `.isEmpty` on a `String` is a method
                 // here and a field nowhere.
-                TypeName answered = answeredType(value);
+                TypeName answered = typeOf(value);
                 if (answered == null || fieldTypeOf(Type.ref(answered), fa.field()) == null) {
                     throw new FixtureException("`" + written + "` answered with a value that"
                             + " declares no field `" + fa.field() + "`");
@@ -1566,8 +1561,8 @@ public final class FixtureReader {
             case Ast.NewData nd -> new Stated.Name(nd.typeName().denotes());
             case Ast.Var v -> statedByName(v);
             case Ast.Apply c when appliedHelper(c) != null -> ELSEWHERE;
-            case Ast.Apply c when neutral.isNewtype(c.written()) ->
-                    caseNamed(symbols.resolveCase(c.written()));
+            case Ast.Apply c when neutral.isNewtype(appliedType(c)) ->
+                    caseNamed(appliedType(c));
             // `Date("…")` is a temporal, and `Set.fromList([…])` a collection: values under no name.
             case Ast.Apply c when Type.Prim.named(c.reaches()) != null
                     || "Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches()) ->
@@ -1581,24 +1576,23 @@ public final class FixtureReader {
         };
     }
 
+    /** Which declaration a live value is — {@link NeutralForm#typeOf}, which every reader of a run
+     *  asks, and {@link #represents} is the same discipline the other way about. */
+    TypeName typeOf(Object value) {
+        return neutral.typeOf(value);
+    }
+
     /**
-     * The data a live value is, read off the class it was generated as. A binary name is a
-     * {@link TypeName}'s qualified form, so this answers the type the value is.
+     * Which declaration an application constructs, where it constructs one — a newtype written in
+     * call form, and null for anything else applied.
      *
-     * <p>Not its simple name resolved here. A helper a fixture applies may be one another module
-     * published, and resolving the spelling in this module's scope would answer for a type this
-     * module happens to declare under the same name rather than for the one the value is — the
-     * same reason {@link #represents} compares a class against a candidate's qualified form
-     * instead of resolving what came out.
+     * <p>What the application already denotes, and not what its spelling means read again here.
+     * {@link Ast.Apply#written()} is what a report quotes: an import lets a name be written without
+     * its qualifier, so a spelling is not a key any table can be asked with.
      */
-    private TypeName answeredType(Object value) {
-        String binary = value.getClass().getName();
-        int dot = binary.lastIndexOf('.');
-        if (dot < 0) {
-            return null;
-        }
-        TypeName named = new TypeName(binary.substring(0, dot), binary.substring(dot + 1));
-        return symbols.contains(named) ? named : null;
+    private static TypeName appliedType(Ast.Apply c) {
+        return c.function() instanceof Ast.Var v && v.denotes() instanceof ValueName.OfType named
+                ? named.type() : null;
     }
 
     /**
@@ -1641,8 +1635,8 @@ public final class FixtureReader {
         return switch (e) {
             case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
             // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
-            case Ast.Apply c when neutral.isNewtype(c.written()) -> {
-                TypeName named = symbols.resolve(c.written());
+            case Ast.Apply c when neutral.isNewtype(appliedType(c)) -> {
+                TypeName named = appliedType(c);
                 yield named == null ? null : Type.ref(named);
             }
             case Ast.FieldAccess fa -> {
@@ -1936,7 +1930,7 @@ public final class FixtureReader {
      * so the two readers of a call cannot come to different answers. */
     private Applied appliedHelper(Ast.Apply c) {
         if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())
-                || neutral.isNewtype(c.written())) {
+                || neutral.isNewtype(appliedType(c))) {
             return null;
         }
         String reached = helperKey(c);
@@ -2078,7 +2072,7 @@ public final class FixtureReader {
             }
             return CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt());
         }
-        if (!neutral.isNewtype(c.written())) {
+        if (!neutral.isNewtype(appliedType(c))) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
                 // A function this module cannot run: a helper whose body produces a function, which
@@ -2099,10 +2093,10 @@ public final class FixtureReader {
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe
-        return neutral.newtypeAt(expected, c.written(),
+        return neutral.newtypeAt(expected, appliedType(c),
                 neutral.shaped(raw(c.args().get(0),
-                                neutral.shapeOf(neutral.newtypeBaseType(c.written())), below(admission)),
-                        neutral.shapeOf(neutral.newtypeBaseType(c.written()))));
+                                neutral.shapeOf(neutral.newtypeBaseType(appliedType(c))), below(admission)),
+                        neutral.shapeOf(neutral.newtypeBaseType(appliedType(c)))));
     }
 
     private Object record(Ast.NewData nd, Type expected, Admission admission) {

@@ -706,8 +706,9 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
+            TypeName only = fixtures.caseOnly(row.expected());
             String stated = asserted != null ? fixtures.shown(asserted)
-                    : fixtures.caseOnly(row.expected());
+                    : only == null ? null : only.name();
             out.add(mismatch(fixtures, row, stated == null ? "the expected value" : stated,
                     "aborted: " + ae.getMessage(), null));
             state.failed(FailurePhase.INVOCATION);
@@ -718,13 +719,15 @@ public final class ExampleVerifier {
             return;
         }
         result = projected(result, sig.outputType());
-        state.resultArm = symbols.resolve(NeutralForm.simpleName(result));
+        // The case the run answered with is the one the value is. Its class names the module that
+        // declares it, and what this module means by that class's spelling is a different question.
+        state.resultArm = fixtures.typeOf(result);
         state.stage = Stage.COMPARED;
-        String arm = fixtures.caseOnly(row.expected());
+        TypeName arm = fixtures.caseOnly(row.expected());
         if (arm != null) {
             // A bare case name asserts the arm and nothing under it, so there is no value to compare.
-            if (!NeutralForm.simpleName(result).equals(arm)) {
-                out.add(mismatch(fixtures, row, arm, fixtures.describeActual(result), null));
+            if (!arm.equals(state.resultArm)) {
+                out.add(mismatch(fixtures, row, arm.name(), fixtures.describeActual(result), null));
                 state.failed(FailurePhase.COMPARISON);
                 return;
             }

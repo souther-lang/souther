@@ -158,10 +158,20 @@ public record FixtureTemplate(String text, Ast.Expr value) {
         };
     }
 
-    /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */
+    /**
+     * A newtype around one value, written in the call form a row writes it in (ADR-0032).
+     *
+     * <p>Applied with what it constructs, as a case naming itself is. Nothing resolves a tree built
+     * here, so a spelling left on its own is a spelling nothing will ever settle, and the reader
+     * would have to work out which declaration it means from the characters — which answers for
+     * whatever the reading module has under them.
+     */
     public static FixtureTemplate newtype(TypeName type, FixtureTemplate inner) {
         return new FixtureTemplate(type.name() + "(" + inner.text() + ")",
-                new Ast.Apply(type.name(), List.of(inner.value()), NOWHERE, NO_SOURCE));
+                new Ast.Apply(type.name(),
+                        new ValueName.OfType(type.name(), type, ConstructionOrigin.own()),
+                        new ReachName.Bare(type.name()), List.of(inner.value()),
+                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 
     /** No elements. A list, a set and a map are all written this way in a fixture: what the position
