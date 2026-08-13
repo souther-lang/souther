@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -435,10 +436,11 @@ class RepresentationsTest {
         return true;
     }
 
-    private static Map<String, Object> object(Object... keysAndValues) {
-        Map<String, Object> m = new LinkedHashMap<>();
+    /** A member written null is a member, so the value side is nullable and the key side is not. */
+    private static Map<String, @Nullable Object> object(@Nullable Object... keysAndValues) {
+        Map<String, @Nullable Object> m = new LinkedHashMap<>();
         for (int i = 0; i < keysAndValues.length; i += 2) {
-            m.put((String) keysAndValues[i], keysAndValues[i + 1]);
+            m.put((String) Objects.requireNonNull(keysAndValues[i]), keysAndValues[i + 1]);
         }
         return m;
     }

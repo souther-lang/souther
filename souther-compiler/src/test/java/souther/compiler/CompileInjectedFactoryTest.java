@@ -10,7 +10,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -128,13 +130,9 @@ class CompileInjectedFactoryTest {
                 data In = { x: Int }
                 behavior mk : (i: In) -> Member | Missing constructs Missing
                 """, "demo.Mk");
-        mk.getDeclaredMethod("Missing");   // present
-        boolean memberFactory = true;
-        try {
-            mk.getDeclaredMethod("Member", long.class);
-        } catch (NoSuchMethodException _) {
-            memberFactory = false;
-        }
-        assertEquals(false, memberFactory, "no factory for a pass-through (non-constructed) type");
+        assertDoesNotThrow(() -> mk.getDeclaredMethod("Missing"),
+                "the constructed type has its factory");
+        assertThrows(NoSuchMethodException.class, () -> mk.getDeclaredMethod("Member", long.class),
+                "no factory for a pass-through (non-constructed) type");
     }
 }

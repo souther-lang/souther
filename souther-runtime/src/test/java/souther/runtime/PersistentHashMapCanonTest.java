@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
@@ -77,9 +76,8 @@ class PersistentHashMapCanonTest {
             // Build a map directly from the surviving entries; a canonical trie must match its shape,
             // hence its iteration order, exactly.
             PersistentHashMap<Integer, Integer> direct = PersistentHashMap.empty();
-            List<Integer> keys = new ArrayList<>(present.keySet());
-            for (Integer k : keys) {
-                direct = direct.assoc(k, present.get(k));
+            for (Map.Entry<Integer, Integer> e : present.entrySet()) {
+                direct = direct.assoc(e.getKey(), e.getValue());
             }
             assertEquals(direct, phm, "trial=" + trial);
             assertEquals(new ArrayList<>(direct.keySet()), new ArrayList<>(phm.keySet()),

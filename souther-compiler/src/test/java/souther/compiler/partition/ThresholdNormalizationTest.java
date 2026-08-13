@@ -8,6 +8,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -216,8 +217,9 @@ class ThresholdNormalizationTest {
         Read read = read(CEILING, "submit");
         Axis cost = axis(read.partitioning(), "request.cost");
 
-        List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, read.symbols(),
-                read.partitioning().domains().get("request.cost"));
+        NumericDomain.Bounds within = read.partitioning().domains().get(cost.term());
+        assertNotNull(within, "the invariant's domain is what this asks the obligations about");
+        List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, read.symbols(), within);
         List<String> described = obligations.stream()
                 .map(o -> o.side() + " " + o.target().right()).toList();
 
@@ -296,8 +298,9 @@ class ThresholdNormalizationTest {
         Axis amount = axis(read.partitioning(), "amount");
         assertEquals(List.of("0 <= x < 3000", "3000 <= x"), labels(amount));
 
-        List<String> described = Partitions.obligationsOf(amount, read.symbols(),
-                read.partitioning().domains().get(amount.path().toString())).stream()
+        NumericDomain.Bounds within = read.partitioning().domains().get(amount.term());
+        assertNotNull(within, "the invariant's domain is what this asks the obligations about");
+        List<String> described = Partitions.obligationsOf(amount, read.symbols(), within).stream()
                 .map(o -> o.side() + " " + o.target().right()).toList();
         assertTrue(described.contains("AT 3000"), described.toString());
         assertTrue(described.contains("BELOW 2999"), described.toString());
