@@ -22,8 +22,16 @@ import souther.compiler.types.TypeName;
  */
 public sealed interface GeneratedClass {
 
+    /**
+     * The classes a derived encoder is emitted beside. A declared type has one, and so does the
+     * union a behavior's anonymous output is generated as; nothing else does, and a
+     * {@code $Enc$Enc} or an encoder beside a lambda is not a class this compiler has any way to
+     * emit. Said as a type, so it is not a class anyone has any way to name either.
+     */
+    sealed interface Encodable extends GeneratedClass {}
+
     /** The class a declared data, sum or unit type is emitted as. */
-    record Value(TypeName type) implements GeneratedClass {
+    record Value(TypeName type) implements Encodable {
         public Value {
             if (type == null) {
                 throw new IllegalArgumentException("a value class stands for a declared type");
@@ -48,7 +56,7 @@ public sealed interface GeneratedClass {
 
     /** The sealed interface a behavior's anonymous union output is emitted as, in the module that
      *  declares the behavior. */
-    record BehaviorResult(String module, String behavior) implements GeneratedClass {
+    record BehaviorResult(String module, String behavior) implements Encodable {
         public BehaviorResult {
             Require.named(module, behavior);
         }
@@ -73,14 +81,15 @@ public sealed interface GeneratedClass {
     }
 
     /** The derived encoder beside the class it encodes. */
-    record Encoder(GeneratedClass of) implements GeneratedClass {
+    record Encoder(Encodable of) implements GeneratedClass {
         public Encoder {
             Require.derivedFrom(of);
         }
     }
 
-    /** One of the derived decoders beside the class it builds. */
-    record Decoder(GeneratedClass of, DecoderKind kind) implements GeneratedClass {
+    /** One of the derived decoders beside the value class it builds. Only a declared type is decoded
+     *  into: a union a behavior answers with is written, never read. */
+    record Decoder(Value of, DecoderKind kind) implements GeneratedClass {
         public Decoder {
             Require.derivedFrom(of);
             if (kind == null) {
@@ -89,8 +98,8 @@ public sealed interface GeneratedClass {
         }
     }
 
-    /** The class carrying a type's compile-time evaluation entry point. */
-    record Ctfe(GeneratedClass of) implements GeneratedClass {
+    /** The class carrying a declared type's compile-time evaluation entry point. */
+    record Ctfe(Value of) implements GeneratedClass {
         public Ctfe {
             Require.derivedFrom(of);
         }
@@ -116,9 +125,16 @@ public sealed interface GeneratedClass {
      *
      * <p>Not part of what a module ships, and here anyway. It is a class this compiler invents and
      * then loads by name, which is the whole of what makes a name a rule two places can disagree
-     * about.
+     * about. Only an injected behavior gets one, so it is that behavior's base it stands in for.
+     *
+     * <p>It is defined into the loader a run uses rather than emitted with the module, and a class
+     * defined there is preferred to one of the same name among the module's own. So it is outside
+     * what the emission registry holds one of each of, and a name it took from a module's class would
+     * shadow that class for the length of the run rather than collide with it. That is why the base
+     * it is built from is a behavior's interface: a module cannot declare anything whose name ends
+     * this way.
      */
-    record ExampleFake(GeneratedClass of) implements GeneratedClass {
+    record ExampleFake(BehaviorInterface of) implements GeneratedClass {
         public ExampleFake {
             Require.derivedFrom(of);
         }

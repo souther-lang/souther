@@ -932,7 +932,8 @@ public final class ExampleVerifier {
     private Object standaloneFakeInstance(Ast.SpecBehavior dep,
                                           java.util.function.Function<Object[], Object> body,
                                           List<Diagnostic> out) {
-        GeneratedClass baseClass = new GeneratedClass.BehaviorInterface(module.name(), dep.name());
+        GeneratedClass.BehaviorInterface baseClass =
+                new GeneratedClass.BehaviorInterface(module.name(), dep.name());
         try {
             Class<?> base = GeneratedClasses.load(loader, baseClass);
             java.lang.reflect.Method apply = null;

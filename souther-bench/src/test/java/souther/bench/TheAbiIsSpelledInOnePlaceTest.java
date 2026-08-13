@@ -13,6 +13,8 @@ import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.classfile.constantpool.StringEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,10 +52,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheAbiIsSpelledInOnePlaceTest {
 
-    /** Everything whose main classes this covers. */
-    private static final List<String> MODULES = List.of(
-            "souther-runtime", "souther-syntax", "souther-fmt", "souther-compiler",
-            "souther-lsp", "souther-cli", "souther-bench");
+    /**
+     * Everything this covers, read off the reactor rather than listed here. A list of its own would
+     * say what was true when it was written: a module added to the build and not to the list would
+     * leave this passing over a tree it never read, which is the shape it exists to refuse.
+     */
+    private static List<String> modules() {
+        String pom;
+        try {
+            pom = Files.readString(repoRoot().resolve("pom.xml"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        List<String> modules = new ArrayList<>();
+        Matcher m = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
+        while (m.find()) {
+            modules.add(m.group(1));
+        }
+        assertFalse(modules.isEmpty(), "the reactor names no modules");
+        return modules;
+    }
 
     /** What a string-concatenation recipe stands each argument as, so a joint in an assembled name is
      *  visible where a word in a sentence is not. */
@@ -79,7 +97,8 @@ class TheAbiIsSpelledInOnePlaceTest {
 
         List<String> violations = new ArrayList<>();
         List<String> scanned = new ArrayList<>();
-        for (String module : MODULES) {
+        List<String> modules = modules();
+        for (String module : modules) {
             for (String where : List.of("target/classes", "target/test-classes")) {
                 Path classes = repoRoot().resolve(module).resolve(where);
                 if (where.endsWith("test-classes") && !Files.isDirectory(classes)) {
@@ -92,7 +111,7 @@ class TheAbiIsSpelledInOnePlaceTest {
             }
             scanned.add(module);
         }
-        assertEquals(MODULES, scanned, "every module was read");
+        assertEquals(modules, scanned, "every module the reactor builds was read");
         assertTrue(violations.isEmpty(),
                 "a generated class's name is assembled outside " + ABI_PACKAGE + ":\n"
                         + String.join("\n", violations));
@@ -103,14 +122,76 @@ class TheAbiIsSpelledInOnePlaceTest {
     @Test
     void andTheScanWouldSeeOneIfItWereThere() {
         Set<String> spellings = abiSpellings();
-        // Built from a spelling the ABI gave, so this control cannot drift from what is looked for —
-        // and this class holds no name of its own to be caught by.
-        String spelling = spellings.iterator().next();
-        assertTrue(offends(JOINT + "." + JOINT + spelling, spellings), "a joint before a spelling");
-        assertTrue(offends("bench.runtime." + JOINT + spelling, spellings), "and one in the middle");
-        assertFalse(offends("a diagnostic mentioning Result and Case", spellings),
-                "prose using the same words is not a joint");
+        // Every case is built out of a spelling the ABI gave, so this class holds no name of its own
+        // for the scan above to catch, and the control cannot drift from what is looked for.
+        String suffixed = spellings.stream().filter(sp -> sp.contains("$")).findFirst().orElseThrow();
+        String worded = spellings.stream().filter(sp -> !sp.contains("$")).findFirst().orElseThrow();
+        assertTrue(offends(JOINT + "." + JOINT + worded, spellings), "a joint before a spelling");
+        assertTrue(offends("bench.runtime." + JOINT + suffixed, spellings), "and one in the middle");
+        assertTrue(offends(JOINT + ".Foo" + suffixed, spellings),
+                "and a constant tail, where the joint is not against the spelling");
+        assertFalse(offends("a diagnostic mentioning " + worded + " and nothing joined", spellings),
+                "prose using the same word is not a joint");
         assertFalse(offends("demo.Quote", spellings), "nor is a name with no spelling in it");
+        // What this cannot see. A behavior's interface has no spelling of its own — it is the
+        // behavior's name with its first letter capitalized — so a reader rebuilding one leaves a
+        // recipe indistinguishable from any other join. That is what the next test is for.
+        assertFalse(offends(JOINT + "." + JOINT, spellings),
+                "a behavior interface rebuilt by hand is not a shape this can name");
+    }
+
+    /**
+     * Nothing outside the ABI capitalizes a behavior's first letter.
+     *
+     * <p>The rule that turns a behavior into the class it is declared as adds no suffix, so the scan
+     * above has nothing to look for and the reconstruction that started all of this — a private copy
+     * of {@code Character.toUpperCase(name.charAt(0)) + name.substring(1)} — would go unseen. What it
+     * does leave is a call, and in the compiler there is one caller of it. Tests uppercase for their
+     * own reasons and are not held to this.
+     */
+    @Test
+    void andNothingOutsideTheAbiCapitalizesABehaviorsFirstLetter() {
+        List<String> callers = new ArrayList<>();
+        for (String module : modules()) {
+            Path classes = repoRoot().resolve(module).resolve("target/classes");
+            assertTrue(Files.isDirectory(classes), module + " has no built classes");
+            walkFor(classes, callers, TheAbiIsSpelledInOnePlaceTest::capitalizes);
+        }
+        assertEquals(List.of(), callers,
+                "the rule a behavior's class name follows is stated somewhere else too");
+    }
+
+    /** Whether {@code model} calls {@code Character.toUpperCase}. */
+    private static boolean capitalizes(java.lang.classfile.ClassModel model) {
+        for (PoolEntry entry : model.constantPool()) {
+            if (entry instanceof java.lang.classfile.constantpool.MethodRefEntry m
+                    && m.owner().asInternalName().equals("java/lang/Character")
+                    && m.name().stringValue().equals("toUpperCase")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void walkFor(Path classes, List<String> found,
+                                java.util.function.Predicate<java.lang.classfile.ClassModel> offending) {
+        try (Stream<Path> files = Files.walk(classes)) {
+            files.filter(p -> p.toString().endsWith(".class")).forEach(p -> {
+                byte[] bytes;
+                try {
+                    bytes = Files.readAllBytes(p);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                var model = ClassFile.of().parse(bytes);
+                String owner = model.thisClass().asInternalName().replace('/', '.');
+                if (!owner.startsWith(ABI_PACKAGE) && offending.test(model)) {
+                    found.add(owner);
+                }
+            });
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
@@ -131,7 +212,8 @@ class TheAbiIsSpelledInOnePlaceTest {
             out.add(beyond(new GeneratedClass.Decoder(value, kind), value));
         }
         out.add(beyond(new GeneratedClass.Ctfe(value), value));
-        out.add(beyond(new GeneratedClass.ExampleFake(value), value));
+        GeneratedClass.BehaviorInterface behavior = new GeneratedClass.BehaviorInterface("m", "x");
+        out.add(beyond(new GeneratedClass.ExampleFake(behavior), behavior));
         out.add(afterTheModule(new GeneratedClass.ModuleDeclarations("m")));
         out.add(afterTheModule(new GeneratedClass.Helpers("m")));
         // A lambda is numbered, and the number is not part of the spelling.
@@ -157,9 +239,24 @@ class TheAbiIsSpelledInOnePlaceTest {
         return SoutherJvmAbi.nameOf(generated).binaryName().substring("m".length());
     }
 
+    /**
+     * Whether {@code constant} is a generated class's name being put together.
+     *
+     * <p>A spelling the ABI writes with a {@code $} is a word no sentence uses, so a recipe holding
+     * one anywhere is a name being assembled — which catches a constant tail as well as a joint
+     * right before it: {@code m + ".Foo$Impl"} leaves the joint two characters away. The two
+     * spellings that are ordinary words are only read where a joint stands immediately before them,
+     * so a diagnostic that says Case or Result is not mistaken for one.
+     */
     private static boolean offends(String constant, Set<String> spellings) {
         for (String spelling : spellings) {
-            if (constant.contains(JOINT + spelling) || constant.equals(spelling)) {
+            if (constant.equals(spelling)) {
+                return true;
+            }
+            boolean found = spelling.contains("$")
+                    ? constant.contains(JOINT) && constant.contains(spelling)
+                    : constant.contains(JOINT + spelling);
+            if (found) {
                 return true;
             }
         }

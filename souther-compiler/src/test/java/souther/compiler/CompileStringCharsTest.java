@@ -28,8 +28,7 @@ class CompileStringCharsTest {
     private long runInt(String module, String behavior, Object input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", input);
-        String cls = Character.toUpperCase(behavior.charAt(0)) + behavior.substring(1);
-        Object b = Emitted.behavior(loader, "demo", cls).getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", behavior).getDeclaredConstructor().newInstance();
         return (long) Codecs.encode(loader, "demo.Out", Codecs.apply(b, in));
     }
 

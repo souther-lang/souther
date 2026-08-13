@@ -90,7 +90,7 @@ class SoutherJvmAbiTest {
                 stated.add(kind);
             }
         }
-        List<Class<?>> kinds = List.of(GeneratedClass.class.getPermittedSubclasses());
+        List<Class<?>> kinds = NoPublicWayToMakeAGeneratedClassNameTest.kindsOf(GeneratedClass.class);
         List<Class<?>> missing = new ArrayList<>(kinds);
         missing.removeAll(stated);
         assertEquals(List.of(), missing, "a kind of generated class with no name written down");

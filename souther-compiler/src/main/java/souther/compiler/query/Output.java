@@ -13,6 +13,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
@@ -64,12 +65,12 @@ public final class Output {
                 return Answer.absent();
             }
             try {
-                Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
+                Emissions emitted = Backend.generate(
                         in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses()));
-                stamp(db, classes);
-                return Answer.of(Ordered.map(classes));
+                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses());
+                stamp(db, emitted);
+                return Answer.of(Ordered.map(emitted.byBinaryName()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -125,7 +126,7 @@ public final class Output {
          * read off the path, and its jar was stamped where it was built; and the declarations are
          * only asked for once the module has checked, so they are there.
          */
-        private void stamp(Db db, Map<String, byte[]> classes) {
+        private void stamp(Db db, Emissions classes) {
             stamp(db, name, classes);
         }
 
@@ -137,7 +138,7 @@ public final class Output {
          * class missing would be a second program, and whether a row holds would be a fact about
          * which of the two it met.
          */
-        static void stamp(Db db, String module, Map<String, byte[]> classes) {
+        static void stamp(Db db, String module, Emissions classes) {
             String name = module;
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             String id = layout == null ? null : layout.idOfModule().get(name);
@@ -307,13 +308,13 @@ public final class Output {
                         CoverageSites.of(sourceIdOf(db, name), in.checked().behaviorBodies()));
             }
             try {
-                Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
+                Emissions emitted = Backend.generate(
                         in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
-                        instrumentation));
-                Classes.stamp(db, name, classes);
-                return Answer.of(Ordered.map(classes));
+                        instrumentation);
+                Classes.stamp(db, name, emitted);
+                return Answer.of(Ordered.map(emitted.byBinaryName()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             } catch (IllegalStateException _) {

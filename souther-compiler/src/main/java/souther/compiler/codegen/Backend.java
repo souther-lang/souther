@@ -116,7 +116,7 @@ public final class Backend {
      * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
      * is what a derived decoder's constraint mapping reads (spec §decoder-error). */
-    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
@@ -142,7 +142,7 @@ public final class Backend {
      * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
      * the arm that ran as one nothing reaches.
      */
-    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
@@ -163,7 +163,7 @@ public final class Backend {
         }
     }
 
-    private static Map<String, byte[]> generating(Ast.Module module, Symbols symbols,
+    private static Emissions generating(Ast.Module module, Symbols symbols,
                                                   Map<String, String> typePackage,
                                                   Map<String, Sig> sigs,
                                                   Map<String, Sig> importedSigs,
@@ -452,7 +452,7 @@ public final class Backend {
                     + " site(s) that nothing emitted: " + missed
                     + "; a body was walked without counting what it holds");
         }
-        return out.byBinaryName();
+        return out;
     }
 
     /**

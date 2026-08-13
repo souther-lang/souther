@@ -21,20 +21,20 @@ import java.util.Map;
  * so a naming scheme changed later cannot bring the silence back.
  *
  * <p>A caller says which {@link GeneratedClass} it is emitting, not what that class is called. The two
- * are not the same question and cannot be one key: {@code Value(a.Foo)} and {@code Value(b.Foo)}
- * bridged into one module are different identities that this ABI spells the same, and keying on the
- * identity would hold both and let the JVM discover the collision at load time. So the key is the
+ * are not the same question and cannot be one key: {@code BridgeCase("m", a.Foo)} and
+ * {@code BridgeCase("m", b.Foo)} are different identities that this ABI spells the same, and keying on
+ * the identity would hold both and let the JVM discover the collision at load time. So the key is the
  * spelling — collisions are detected where they exist — and what is kept under it is the identity, so
  * the report says which two things collided rather than only which name was written twice.
  */
-final class Emissions {
+public final class Emissions {
 
     /** A class, and the Souther identity it was emitted for. */
     private record Emission(GeneratedClass generated, byte[] bytes) {}
 
     private final Map<JvmClassName, Emission> byName = new LinkedHashMap<>();
 
-    void put(GeneratedClass generated, byte[] bytes) {
+    public void put(GeneratedClass generated, byte[] bytes) {
         JvmClassName name = SoutherJvmAbi.nameOf(generated);
         Emission held = byName.get(name);
         if (held != null) {
@@ -50,9 +50,24 @@ final class Emissions {
         classes.forEach(this::put);
     }
 
+    /**
+     * The class held for {@code generated}, rewritten. What is written onto a class after it is built
+     * — a declaration, say — arrives this way rather than as a second write of its name, so a rewrite
+     * of something nothing emitted is refused instead of quietly becoming the emission of it.
+     */
+    public void rewrite(GeneratedClass generated, java.util.function.UnaryOperator<byte[]> rewriting) {
+        JvmClassName name = SoutherJvmAbi.nameOf(generated);
+        Emission held = byName.get(name);
+        if (held == null) {
+            throw new IllegalStateException("no class was emitted as " + name
+                    + " for " + generated + " to carry anything");
+        }
+        byName.put(name, new Emission(generated, rewriting.apply(held.bytes())));
+    }
+
     /** What the compilation hands on: a class loader and a file path want the binary name, and by
      *  here every one of them came from the ABI. */
-    Map<String, byte[]> byBinaryName() {
+    public Map<String, byte[]> byBinaryName() {
         Map<String, byte[]> out = new LinkedHashMap<>();
         byName.forEach((name, emission) -> out.put(name.binaryName(), emission.bytes()));
         return out;

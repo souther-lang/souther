@@ -74,10 +74,25 @@ class NoPublicWayToMakeAGeneratedClassNameTest {
      *  reader to notice the switch has no default. */
     @Test
     void everyGeneratedClassHasAName() {
-        for (Class<?> c : GeneratedClass.class.getPermittedSubclasses()) {
-            assertTrue(c.isRecord(), c + " is a record naming what identifies it");
-        }
-        assertEquals(12, GeneratedClass.class.getPermittedSubclasses().length,
+        assertEquals(12, kindsOf(GeneratedClass.class).size(),
                 "the kinds of class this compiler invents; changing this is changing the ABI");
+    }
+
+    /**
+     * The kinds under {@code sealed}, with the interfaces between flattened out. An intermediate —
+     * the classes a derived encoder may sit beside, say — narrows what can be built without being a
+     * kind of class itself.
+     */
+    static List<Class<?>> kindsOf(Class<?> sealed) {
+        List<Class<?>> kinds = new ArrayList<>();
+        for (Class<?> c : sealed.getPermittedSubclasses()) {
+            if (c.isRecord()) {
+                kinds.add(c);
+            } else {
+                assertTrue(c.isSealed(), c + " is neither a record nor a narrowing of the kinds");
+                kinds.addAll(kindsOf(c));
+            }
+        }
+        return kinds;
     }
 }
