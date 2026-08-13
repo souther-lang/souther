@@ -1622,10 +1622,10 @@ public final class TypeOps {
                     // In scope denoting nothing: the import line that could not bring it in was
                     // reported there, and a use of it takes the error type rather than being
                     // reported again here.
-                    case Denotation.Nothing ignored -> {
+                    case Denotation.StandsForNothing ignored -> {
                         yield Type.ERRONEOUS;
                     }
-                    case Denotation.Unknown ignored -> { }
+                    case Denotation.NotInScope ignored -> { }
                 }
                 // A union's case names a type where a type goes. A `match` arm has always read it
                 // that way; a declaration reads it the same, which is what lets `Int |

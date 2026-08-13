@@ -430,8 +430,8 @@ public final class Resolve {
             switch (symbols.resolve(denoted.written())) {
                 case Denotation.Denotes d ->
                         denotations.add(new TypeUse(denoted.written(), d.type()));
-                case Denotation.Nothing ignored -> failed++;
-                case Denotation.Unknown ignored -> { }
+                case Denotation.StandsForNothing ignored -> failed++;
+                case Denotation.NotInScope ignored -> { }
             }
         }
         return denoted;
@@ -469,11 +469,11 @@ public final class Resolve {
                 continue;
             }
             Denotation answer = symbols.resolve(c.name());
-            if (answer instanceof Denotation.Unknown) {
+            if (answer instanceof Denotation.NotInScope) {
                 throw CompileException.of(Diagnostic
                                 .at(s.pos()).say(new BehaviorMessage.UnknownCaseInASum(c.written(), s.name())).build());
             }
-            if (answer instanceof Denotation.Nothing) {
+            if (answer instanceof Denotation.StandsForNothing) {
                 out.add(answered(c.unanswered()));
                 continue;
             }
@@ -1123,8 +1123,8 @@ public final class Resolve {
             // In scope standing for nothing: a name an import line could not bring in takes the
             // error type rather than being reported as an unknown name at every use. The import
             // line is where that was reported, so nothing more is said here.
-            case Denotation.Nothing ignored -> n.unanswered();
-            case Denotation.Unknown ignored -> nothingDenotes(n);
+            case Denotation.StandsForNothing ignored -> n.unanswered();
+            case Denotation.NotInScope ignored -> nothingDenotes(n);
         });
     }
 
@@ -1145,8 +1145,8 @@ public final class Resolve {
         }
         return answered(switch (symbols.resolveCase(n.name())) {
             case Denotation.Denotes d -> n.denoting(d.type());
-            case Denotation.Nothing ignored -> n.unanswered();
-            case Denotation.Unknown ignored -> {
+            case Denotation.StandsForNothing ignored -> n.unanswered();
+            case Denotation.NotInScope ignored -> {
                 TypeName option = TypeName.optionCase(n.written());
                 yield option != null ? n.denoting(option) : nothingDenotes(n);
             }

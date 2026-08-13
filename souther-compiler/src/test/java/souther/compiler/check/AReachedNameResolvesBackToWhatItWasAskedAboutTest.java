@@ -172,7 +172,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
             assertEquals(vocabulary.name(), written.rendered());
             assertEquals(vocabulary, symbols.resolveCase(spelled(written.rendered())).type(),
                     "the reader of the position a case name stands at");
-            assertEquals(Denotation.UNKNOWN, symbols.resolve(spelled(written.rendered())),
+            assertEquals(Denotation.NOT_IN_SCOPE, symbols.resolve(spelled(written.rendered())),
                     "and not this one, which answers for declarations");
         }
     }

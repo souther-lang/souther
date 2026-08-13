@@ -148,15 +148,15 @@ public final class Symbols {
             // The prelude's runtime-backed data is nameable everywhere, on the lowest rung: a
             // module's own declaration or import of the same name is what the name means there.
             TypeName runtime = Prelude.runtimeBackedType(written);
-            return runtime != null ? new Denotation.Denotes(runtime) : Denotation.UNKNOWN;
+            return runtime != null ? new Denotation.Denotes(runtime) : Denotation.NOT_IN_SCOPE;
         }
         String target = moduleOfQualifier(written.substring(0, dot));
         if (target == null) {
-            return Denotation.UNKNOWN;
+            return Denotation.NOT_IN_SCOPE;
         }
         TypeName candidate = new TypeName(target, written.substring(dot + 1));
         return contains(candidate) && exposes(target, candidate.name())
-                ? new Denotation.Denotes(candidate) : Denotation.UNKNOWN;
+                ? new Denotation.Denotes(candidate) : Denotation.NOT_IN_SCOPE;
     }
 
     /**

@@ -599,7 +599,7 @@ public final class Names {
      */
     private static void nameless(Map<String, Denotation> scope, List<String> names) {
         for (String written : names) {
-            scope.putIfAbsent(written, Denotation.NOTHING);
+            scope.putIfAbsent(written, Denotation.STANDS_FOR_NOTHING);
         }
     }
 
