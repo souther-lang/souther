@@ -177,7 +177,7 @@ final class CardinalityTransfer {
                                      Predicate<TypeName> granted, Set<TypeName> worn) {
         Cardinality named = known(solution, ref.name());
         if (granted.test(ref.name())
-                || !(symbols.get(ref.name()) instanceof Ast.Data data) || !data.newtype()
+                || !(symbols.declarations().declaration(ref.name()) instanceof Ast.Data data) || !data.newtype()
                 || !worn.add(ref.name())) {
             return named;
         }

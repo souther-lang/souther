@@ -427,7 +427,7 @@ public final class Resolve {
         Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
-            switch (symbols.resolve(denoted.written())) {
+            switch (symbols.scope().resolve(denoted.written())) {
                 case Denotation.Denotes d ->
                         denotations.add(new TypeUse(denoted.written(), d.type()));
                 case Denotation.StandsForNothing ignored -> failed++;
@@ -468,7 +468,7 @@ public final class Resolve {
                 out.add(c);
                 continue;
             }
-            Denotation answer = symbols.resolve(c.name());
+            Denotation answer = symbols.scope().resolve(c.name());
             if (answer instanceof Denotation.NotInScope) {
                 throw CompileException.of(Diagnostic
                                 .at(s.pos()).say(new BehaviorMessage.UnknownCaseInASum(c.written(), s.name())).build());
@@ -850,7 +850,7 @@ public final class Resolve {
             }
             return null;
         }
-        if (symbols.resolve(name) instanceof Denotation.Denotes d) {
+        if (symbols.scope().resolve(name) instanceof Denotation.Denotes d) {
             return new ValueName.OfType(written, d.type(),
                     applied ? null : ConstructionOrigin.own());
         }
@@ -946,7 +946,7 @@ public final class Resolve {
     /** Whether {@code qualifier} names a namespace a member may be reached through: a
      *  standard-library one, or a module of this compilation (or an alias for one). */
     private boolean isNamespace(String qualifier) {
-        return Prelude.isQualifier(qualifier) || symbols.moduleOfQualifier(qualifier) != null;
+        return Prelude.isQualifier(qualifier) || symbols.scope().moduleOfQualifier(qualifier) != null;
     }
 
     /** The name a chain of field reads is rooted at, or null where it is rooted at anything else —
@@ -1076,7 +1076,7 @@ public final class Resolve {
         // Said as what is known — that module has it — rather than as an instruction, since reaching
         // it qualified needs no import at all.
         String elsewhere = written.canonical().indexOf('.') < 0
-                ? symbols.moduleExposing(name) : null;
+                ? symbols.scope().moduleExposing(name) : null;
         if (elsewhere != null) {
             report = report.hint(new NameMessage.ItIsExposedByAnotherModule(elsewhere, name));
         }
@@ -1118,7 +1118,7 @@ public final class Resolve {
         if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
-        return answered(switch (symbols.resolve(n.name())) {
+        return answered(switch (symbols.scope().resolve(n.name())) {
             case Denotation.Denotes d -> n.denoting(d.type());
             // In scope standing for nothing: a name an import line could not bring in takes the
             // error type rather than being reported as an unknown name at every use. The import
@@ -1143,7 +1143,7 @@ public final class Resolve {
         if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
-        return answered(switch (symbols.resolveCase(n.name())) {
+        return answered(switch (symbols.scope().resolveCase(n.name())) {
             case Denotation.Denotes d -> n.denoting(d.type());
             case Denotation.StandsForNothing ignored -> n.unanswered();
             case Denotation.NotInScope ignored -> {

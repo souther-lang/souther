@@ -34,7 +34,7 @@ public final class MatchElaborator {
             return elaborateCasesMatch(m, scrutinee, union.members(), "union `" + Type.show(union) + "`",
                     st, env, ctx, expected);
         }
-        if (!(st instanceof Type.Ref ref) || !(ctx.symbols().get(ref.name()) instanceof Ast.SumData sum)) {
+        if (!(st instanceof Type.Ref ref) || !(ctx.symbols().declarations().declaration(ref.name()) instanceof Ast.SumData sum)) {
             throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
         }
         return elaborateCasesMatch(m, scrutinee, new HashSet<>(TypeOps.caseNames(sum)),
@@ -52,8 +52,8 @@ public final class MatchElaborator {
                                             Set<TypeName> cases, Symbols symbols) {
         String caseName = written.written();
         String otherSum = null;
-        for (TypeName name : symbols.visibleNames()) {
-            if (!(symbols.get(name) instanceof Ast.SumData sum)) {
+        for (TypeName name : symbols.scope().visibleNames()) {
+            if (!(symbols.declarations().declaration(name) instanceof Ast.SumData sum)) {
                 continue;
             }
             List<TypeName> others = TypeOps.caseNames(sum);

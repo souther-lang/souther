@@ -290,14 +290,14 @@ public final class TypeOps {
      * sum. A {@code fold} whose seed is a case ({@code PricedCart}) and whose step grows and matches the
      * accumulator at the sum ({@code PricedCart | NotFound}) is typed at that sum, not the seed case. */
     public static Type enclosingSum(Type t, Symbols symbols) {
-        if (!(t instanceof Type.Ref ref) || symbols.get(ref.name()) instanceof Ast.SumData) {
+        if (!(t instanceof Type.Ref ref) || symbols.declarations().declaration(ref.name()) instanceof Ast.SumData) {
             return null;
         }
         // A sum and its cases are declared together, so only that module can hold the sum this case
         // belongs to. A case may belong to more than one; pick by name so the choice is deterministic
         // across runs rather than dependent on the symbol map's iteration order.
         String chosen = null;
-        for (Ast.Def d : symbols.declaredIn(ref.name().module()).values()) {
+        for (Ast.Def d : symbols.declarations().declaredIn(ref.name().module()).values()) {
             if (d instanceof Ast.SumData sum && caseNames(sum).contains(ref.name())
                     && (chosen == null || sum.name().compareTo(chosen) < 0)) {
                 chosen = sum.name();
@@ -308,7 +308,7 @@ public final class TypeOps {
 
     public static boolean isSumType(Type t, Symbols symbols) {
         return t instanceof Type.Union
-                || (t instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.SumData);
+                || (t instanceof Type.Ref r && symbols.declarations().declaration(r.name()) instanceof Ast.SumData);
     }
 
     /** The cases of {@code t} when it is a sum — a declared {@code data S = A | B} or the union a
@@ -320,7 +320,7 @@ public final class TypeOps {
 
     private static List<TypeName> sumCases(Type t, Symbols symbols, Set<TypeName> visiting) {
         List<TypeName> names;
-        if (t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum) {
+        if (t instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Ast.SumData sum) {
             if (!visiting.add(ref.name())) {
                 return List.of();   // a sum reaching itself; DataChecker reports it, this must terminate
             }
@@ -332,7 +332,7 @@ public final class TypeOps {
         }
         List<TypeName> leaves = new ArrayList<>();
         for (TypeName name : names) {
-            List<TypeName> nested = symbols.get(name) instanceof Ast.SumData
+            List<TypeName> nested = symbols.declarations().declaration(name) instanceof Ast.SumData
                     ? sumCases(Type.ref(name), symbols, visiting) : null;
             if (nested == null) {
                 leaves.add(name);
@@ -372,7 +372,7 @@ public final class TypeOps {
         if (name.isPrimitive()) {
             return CaseShape.WRAPPED;   // a bare scalar carries no key the discriminator could go on
         }
-        return switch (symbols.get(name)) {
+        return switch (symbols.declarations().declaration(name)) {
             case Ast.Data d when d.newtype() -> CaseShape.WRAPPED;
             case Ast.Data _ -> CaseShape.PRODUCT;
             case Ast.UnitData _ -> CaseShape.UNIT;
@@ -838,7 +838,7 @@ public final class TypeOps {
     /** Whether {@code name} declares a field called {@code key}, spread fields included. A newtype's
      * one field is named {@code value} and a unit has none, so only a record can. */
     static boolean declaresField(TypeName name, String key, Symbols symbols) {
-        return symbols.get(name) instanceof Ast.Data data && !data.newtype()
+        return symbols.declarations().declaration(name) instanceof Ast.Data data && !data.newtype()
                 && fieldTypes(data, symbols).containsKey(key);
     }
 
@@ -863,7 +863,7 @@ public final class TypeOps {
     private static void collectLeafCases(Type t, Symbols symbols, Set<TypeName> out,
                                          Set<TypeName> visiting) {
         for (TypeName name : namesOf(t)) {
-            if (symbols.get(name) instanceof Ast.SumData s) {
+            if (symbols.declarations().declaration(name) instanceof Ast.SumData s) {
                 if (!visiting.add(name)) {
                     continue;   // a sum reaching itself; DataChecker reports it, this must terminate
                 }
@@ -960,11 +960,11 @@ public final class TypeOps {
                         throw new IllegalStateException("the include `" + include.written()
                                 + "` of `" + declared + "` has not been resolved");
                     }
-                    yield symbols.resolve(written.name()).type();
+                    yield symbols.scope().resolve(written.name()).type();
                 }
             };
             if (source != null && seen.add(source)
-                    && symbols.get(source) instanceof Ast.Data included) {
+                    && symbols.declarations().declaration(source) instanceof Ast.Data included) {
                 walkFields(included, source, symbols, seen, out, resolving);
             }
         }
@@ -985,7 +985,7 @@ public final class TypeOps {
                 continue;
             }
             TypeName included = inc.denotes();
-            if (!(symbols.get(included) instanceof Ast.Data id)) {
+            if (!(symbols.declarations().declaration(included) instanceof Ast.Data id)) {
                 throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
                         .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
                         .build());
@@ -1039,7 +1039,7 @@ public final class TypeOps {
      * not a product. Only {@link #fieldTypes} turns those into a diagnostic, and every declared data
      * goes through it; the readers asked about one field or one invariant answer for what they see. */
     private static Ast.Data spreadTarget(Ast.Name inc, Symbols symbols) {
-        return symbols.get(inc.denotes()) instanceof Ast.Data d ? d : null;
+        return symbols.declarations().declaration(inc.denotes()) instanceof Ast.Data d ? d : null;
     }
 
     /** Whether a data has a field of that name, without resolving any type. */
@@ -1076,7 +1076,7 @@ public final class TypeOps {
         }
         Set<TypeName> common = null;
         for (TypeName c : cases) {
-            Set<TypeName> spreads = symbols.get(c) instanceof Ast.Data d
+            Set<TypeName> spreads = symbols.declarations().declaration(c) instanceof Ast.Data d
                     ? spreadAncestors(d, symbols) : Set.of();
             if (common == null) {
                 common = new LinkedHashSet<>(spreads);
@@ -1089,7 +1089,7 @@ public final class TypeOps {
         }
         Map<String, Type> fields = new LinkedHashMap<>();
         for (TypeName ancestor : common) {
-            if (symbols.get(ancestor) instanceof Ast.Data d) {
+            if (symbols.declarations().declaration(ancestor) instanceof Ast.Data d) {
                 fields.putAll(fieldTypes(d, symbols));
             }
         }
@@ -1180,7 +1180,7 @@ public final class TypeOps {
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not
      * a newtype — the implicit inner field is {@code value}. */
     public static Type newtypeInner(TypeName name, Symbols symbols) {
-        if (symbols.get(name) instanceof Ast.Data d && d.newtype()) {
+        if (symbols.declarations().declaration(name) instanceof Ast.Data d && d.newtype()) {
             return fieldTypes(d, symbols).get("value");
         }
         return null;
@@ -1263,7 +1263,7 @@ public final class TypeOps {
      * (issue #161, ADR-0040). A sum with even one field-bearing case keeps the discriminator object.
      */
     public static boolean isUnitOnlySum(Type t, Symbols symbols) {
-        return t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum
+        return t instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Ast.SumData sum
                 && isUnitOnlySum(sum, symbols);
     }
 
@@ -1273,7 +1273,7 @@ public final class TypeOps {
             return false;
         }
         for (TypeName leaf : leaves) {
-            if (!(symbols.get(leaf) instanceof Ast.UnitData)) {
+            if (!(symbols.declarations().declaration(leaf) instanceof Ast.UnitData)) {
                 return false;
             }
         }
@@ -1320,12 +1320,12 @@ public final class TypeOps {
         if (name.isPrimitive()) {
             return !"Raw".equals(name.name());
         }
-        return symbols.declaredByCompilation(name);
+        return symbols.declarations().declaredByCompilation(name);
     }
 
     public static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();
+                && symbols.declarations().declaration(ref.name()) instanceof Ast.Data d && d.newtype();
     }
 
     /** The ordered primitives: the ones the JVM carries as {@link Comparable}, so {@code <}/{@code >}
@@ -1367,7 +1367,7 @@ public final class TypeOps {
             return !union.members().isEmpty();
         }
         return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
-                || (symbols.get(enumeration) instanceof Ast.SumData sum
+                || (symbols.declarations().declaration(enumeration) instanceof Ast.SumData sum
                     && leafCases(sum, symbols).contains(ref.name())));
     }
 
@@ -1411,10 +1411,10 @@ public final class TypeOps {
         if (!(t instanceof Type.Ref ref)) {
             return null;
         }
-        if (symbols.get(ref.name()) instanceof Ast.SumData sum) {
+        if (symbols.declarations().declaration(ref.name()) instanceof Ast.SumData sum) {
             return isUnitOnlySum(sum, symbols) ? Set.of(ref.name()) : null;
         }
-        if (!(symbols.get(ref.name()) instanceof Ast.UnitData)) {
+        if (!(symbols.declarations().declaration(ref.name()) instanceof Ast.UnitData)) {
             return null;
         }
         // A sum and its cases are declared together (a case declared elsewhere cannot join a union
@@ -1422,7 +1422,7 @@ public final class TypeOps {
         // that module rather than what is visible keeps the answer the same in every module that
         // reads the value.
         Set<TypeName> owners = new LinkedHashSet<>();
-        for (Ast.Def def : symbols.declaredIn(ref.name().module()).values()) {
+        for (Ast.Def def : symbols.declarations().declaredIn(ref.name().module()).values()) {
             if (def instanceof Ast.SumData s && isUnitOnlySum(s, symbols)
                     && leafCases(s, symbols).contains(ref.name())) {
                 owners.add(ref.name().sibling(s.name()));
@@ -1457,7 +1457,7 @@ public final class TypeOps {
         Set<TypeName> worn = new LinkedHashSet<>();
         Type at = t;
         while (isSingleValueNewtype(at, symbols) && worn.add(((Type.Ref) at).name())) {
-            Ast.Data data = (Ast.Data) symbols.get(((Type.Ref) at).name());
+            Ast.Data data = (Ast.Data) symbols.declarations().declaration(((Type.Ref) at).name());
             layers.add(new Layer(((Type.Ref) at).name(), data));
             Type inner = fieldTypes(data, symbols).get("value");
             if (inner == null) {
@@ -1512,7 +1512,7 @@ public final class TypeOps {
      * with that newtype), or {@code null} for anything that is not one. */
     static Type wrapped(Type t, Symbols symbols) {
         if (isSingleValueNewtype(t, symbols)) {
-            return fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
+            return fieldTypes((Ast.Data) symbols.declarations().declaration(((Type.Ref) t).name()), symbols).get("value");
         }
         return null;
     }
@@ -1615,7 +1615,7 @@ public final class TypeOps {
                 if (ref.name().startsWith("'")) {
                     yield Type.var(ref.name());   // a type variable, admitted only in the core
                 }
-                switch (symbols.resolve(ref.written())) {
+                switch (symbols.scope().resolve(ref.written())) {
                     case Denotation.Denotes d -> {
                         yield Type.ref(d.type());
                     }
@@ -1631,7 +1631,7 @@ public final class TypeOps {
                 // that way; a declaration reads it the same, which is what lets `Int |
                 // DivisionByZero` be written rather than only met. Asked after the module's own
                 // declarations, so a name a model declares keeps its meaning.
-                if (symbols.resolveCase(ref.written()) instanceof Denotation.Denotes asCase) {
+                if (symbols.scope().resolveCase(ref.written()) instanceof Denotation.Denotes asCase) {
                     yield Type.ref(asCase.type());
                 }
                 throw unknownType(ref, symbols);
@@ -1729,23 +1729,23 @@ public final class TypeOps {
         if (dot >= 0) {
             String qualifier = canonical.substring(0, dot);
             String name = canonical.substring(dot + 1);
-            String module = symbols.moduleOfQualifier(qualifier);
+            String module = symbols.scope().moduleOfQualifier(qualifier);
             if (module == null) {
                 return CompileException.of(Diagnostic.say(new ModuleMessage.NoModuleOfThatName(qualifier, name))
                                 .at(written.reportedAt())
-                                .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
+                                .suggestion(Suggest.candidate(qualifier, symbols.scope().qualifiers()))
                                 .build());
             }
-            boolean declared = symbols.contains(new TypeName(module, name));
+            boolean declared = symbols.declarations().contains(new TypeName(module, name));
             return CompileException.of(Diagnostic.at(written.reportedAt())
                             .say(declared
                                     ? new ModuleMessage.ItIsDeclaredThereAndNotExposed(name, module)
                                     : new ModuleMessage.TheModuleDeclaresNoSuchQualifiedName(name,
                                             module))
-                            .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
+                            .suggestion(Suggest.candidate(name, symbols.declarations().declaredIn(module).keySet()))
                             .build());
         }
-        Set<String> known = symbols.namesInScope();
+        Set<String> known = symbols.scope().namesInScope();
         return CompileException.of(Diagnostic
                         .at(written.reportedAt())
                         

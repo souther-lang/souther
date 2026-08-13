@@ -69,7 +69,7 @@ final class PartitionClasses {
         // is a reference, and a module reaching a name through an alias answers them differently.
         List<TypeReachName.Written> writes = new ArrayList<>();
         for (TypeName each : worn) {
-            if (!(symbols.reach(each) instanceof TypeReachName.Written written)) {
+            if (!(symbols.scope().reach(each) instanceof TypeReachName.Written written)) {
                 // A name the position wears that nothing here writes. The classes are still the
                 // position's, and no row for any of them can be written down, so each says that
                 // rather than being offered a value spelled with a name that resolves to nothing.
@@ -194,10 +194,10 @@ final class PartitionClasses {
         // A case whose module does not expose it: a value of the position all the same, and one no
         // author here can write down. Said as that, rather than offered under a spelling that
         // resolves to nothing wherever the row is pasted (issue #696).
-        if (!(symbols.reach(leaf) instanceof TypeReachName.Written names)) {
+        if (!(symbols.scope().reach(leaf) instanceof TypeReachName.Written names)) {
             return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
         }
-        if (!(symbols.get(leaf) instanceof Ast.Data data)) {
+        if (!(symbols.declarations().declaration(leaf) instanceof Ast.Data data)) {
             return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));

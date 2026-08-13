@@ -312,7 +312,7 @@ public final class Backend {
                 List<TypeName> unitCases = new ArrayList<>();
                 for (Ast.TypeTerm term : spec.ret().cases()) {
                     if (term instanceof Ast.TypeRef t && t.denotes() instanceof Type.Ref r
-                            && b.symbols.get(r.name()) instanceof Ast.UnitData) {
+                            && b.symbols.declarations().declaration(r.name()) instanceof Ast.UnitData) {
                         unitCases.add(r.name());
                     }
                 }
@@ -322,7 +322,7 @@ public final class Backend {
                     for (Ast.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.get(tn.denotes()) instanceof Ast.Data
+                        if (b.symbols.declarations().declaration(tn.denotes()) instanceof Ast.Data
                                 && seenConstruct.add(tn.denotes())) {
                             dataConstructs.add(tn.denotes());
                         }
@@ -730,7 +730,7 @@ public final class Backend {
     private void emitDataFactory(ClassBuilder cb, TypeName construct) {
         // The type as the `constructs` clause resolved it: an entry there may name a type another
         // module declares, and the class of one is that module's.
-        Ast.Data data = (Ast.Data) symbols.get(construct);
+        Ast.Data data = (Ast.Data) symbols.declarations().declaration(construct);
         ClassDesc cdType = ctx.cd(construct);
         Map<String, Type> fields = ctx.fieldTypes(data);
         ClassDesc[] fieldDs = fieldDescs(fields, ctx);

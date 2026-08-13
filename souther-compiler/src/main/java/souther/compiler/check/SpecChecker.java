@@ -460,15 +460,15 @@ public final class SpecChecker {
         for (Ast.Name name : spec.constructs()) {
             String c = name.written();
             TypeName built = name.denotes();
-            if (symbols.get(built) instanceof Ast.UnitData) {
+            if (symbols.declarations().declaration(built) instanceof Ast.UnitData) {
                 continue;   // a unit has a generated factory
             }
             // What Java needs is a way in: the decoder, which a module publishes by exposing the type.
             // For a type of another module that is its own `exposing` to answer, not this one's.
             // `exposed` lists this module's own names, so the resolved name is what to look up — a
             // type of this module written through it (`down.Out`) is the same one as `Out`
-            boolean buildable = symbols.isForeign(built)
-                    ? symbols.isExposed(built) : exposeAll || exposed.contains(built.name());
+            boolean buildable = symbols.scope().isForeign(built)
+                    ? symbols.scope().isExposed(built) : exposeAll || exposed.contains(built.name());
             if (!buildable) {
                 throw CompileException.of(Diagnostic.at(spec.pos())
                                 .hint(new DeclarationMessage.ExposeItOrMakeItAUnitData(c)).say(new DeclarationMessage.AnInjectedBehaviorConstructsWhatIsKept(spec.name(), c)).build());
@@ -627,8 +627,8 @@ public final class SpecChecker {
     /** Whether a reader outside the declaring module can write {@code name}. */
     private static boolean nameableOutside(TypeName name, Symbols symbols, boolean exposeAll,
                                            Set<String> exposed) {
-        return symbols.isForeign(name)
-                ? symbols.isExposed(name) : exposeAll || exposed.contains(name.name());
+        return symbols.scope().isForeign(name)
+                ? symbols.scope().isExposed(name) : exposeAll || exposed.contains(name.name());
     }
 
     /**

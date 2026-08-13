@@ -240,7 +240,7 @@ final class CodecGen {
     }
 
     private void invokeCodec(CodeBuilder code, TypeName type, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(type), method, mtd, symbols.get(type) instanceof Ast.SumData);
+        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type) instanceof Ast.SumData);
     }
 
     byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
@@ -534,7 +534,7 @@ final class CodecGen {
             }
             for (Ast.Name written : sum.cases()) {
                 TypeName caseName = written.denotes();
-                Ast.Def caseDef = symbols.get(caseName);
+                Ast.Def caseDef = symbols.declarations().declaration(caseName);
                 if (caseDef instanceof Ast.UnitData) continue;   // the discriminator alone, no column
                 if (!(caseDef instanceof Ast.Data d)) return false;   // a nested sum is not a row
                 // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
@@ -564,7 +564,7 @@ final class CodecGen {
         if (t instanceof Type.ListOf || t instanceof Type.MapOf || t instanceof Type.SetOf
                 || t instanceof Type.Union) return false;
         if (t instanceof Type.Ref r) {
-            return symbols.get(r.name()) instanceof Ast.Data d
+            return symbols.declarations().declaration(r.name()) instanceof Ast.Data d
                     && d.decoder().orElse(null) instanceof Ast.PrimDecoder;   // newtype column only
         }
         return true;   // primitive scalar
@@ -848,7 +848,7 @@ final class CodecGen {
     }
 
     boolean isMapInput(Ast.Name typeName) {
-        return isMapInputOf(symbols.get(typeName.denotes()));
+        return isMapInputOf(symbols.declarations().declaration(typeName.denotes()));
     }
 
     private boolean isMapInputOf(Ast.Def def) {
@@ -1997,7 +1997,7 @@ final class CodecGen {
      * travels as that member's name — the form a named sum of units has (spec §encoder-derivation). */
     private boolean isEnumeration(List<TypeName> members) {
         for (TypeName member : members) {
-            if (!(symbols.get(member) instanceof Ast.UnitData)) {
+            if (!(symbols.declarations().declaration(member) instanceof Ast.UnitData)) {
                 return false;
             }
         }

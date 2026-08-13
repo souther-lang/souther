@@ -211,7 +211,7 @@ public final class TypeCardinality {
         }
         while (!left.isEmpty()) {
             TypeName name = left.remove(left.size() - 1);
-            if (declared.containsKey(name) || !(symbols.get(name) instanceof Ast.Def def)) {
+            if (declared.containsKey(name) || !(symbols.declarations().declaration(name) instanceof Ast.Def def)) {
                 continue;
             }
             declared.put(name, def);

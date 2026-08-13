@@ -34,7 +34,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         assertNotNull(symbols, "the model did not compile");
         TypeName named = new TypeName(module, type);
-        Ast.Data data = (Ast.Data) symbols.get(named);
+        Ast.Data data = (Ast.Data) symbols.declarations().declaration(named);
         assertNotNull(data, "no `" + type + "` in " + module);
         return FieldDomains.of(named, data, symbols);
     }
@@ -298,7 +298,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
         assertNotNull(symbols, "the model did not compile");
         TypeName named = new TypeName("example.report", "Forecast");
-        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.declarations().declaration(named), symbols);
 
         assertTrue(domains.allRulesRead(),
                 "the rule is `value >= 0.0m` wherever it is declared");
@@ -364,7 +364,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         compilation.answerEverything();
         Symbols symbols = compilation.db().ask(new Shapes.Scope("example.pair")).value();
         TypeName named = new TypeName("example.pair", "Pair");
-        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.declarations().declaration(named), symbols);
 
         assertBounds(domains.at("a"), 0, 9);
         assertBounds(domains.at("b"), 1, 10);
@@ -465,7 +465,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         compilation.answerEverything();
         Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
         TypeName named = new TypeName("example.report", "Pair");
-        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.declarations().declaration(named), symbols);
 
         assertBounds(domains.at("a"), 0, 9);
         assertBounds(domains.at("b"), 1, 10);

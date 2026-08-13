@@ -70,9 +70,9 @@ final class BodyGen {
     /** The fields a construction spread copies from a value of {@code src}: a data's own, or the part
      * every case of a sum spreads, which the sum's sealed interface declares as accessors. */
     private Map<String, Type> spreadableFields(TypeName src) {
-        return symbols.get(src) instanceof Ast.SumData sum
+        return symbols.declarations().declaration(src) instanceof Ast.SumData sum
                 ? TypeOps.commonSpreadFields(sum, symbols)
-                : fieldTypes((Ast.Data) symbols.get(src));
+                : fieldTypes((Ast.Data) symbols.declarations().declaration(src));
     }
 
     private Type successType(Ast.RetType ret) {
@@ -240,7 +240,7 @@ final class BodyGen {
          */
         private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
             MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
-            if (symbols.get(ownerName) instanceof Ast.SumData) {
+            if (symbols.declarations().declaration(ownerName) instanceof Ast.SumData) {
                 // a field every case spreads is declared on the sum's sealed interface (issue #160)
                 code.invokeinterface(cd(ownerName), field, mtd);
             } else {
@@ -253,7 +253,7 @@ final class BodyGen {
          * non-newtype operand untouched. Used so comparison operators read the value a newtype wraps. */
         private Type unwrapNewtypeValue(Type t) {
             if (t instanceof Type.Ref ref
-                    && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype()) {
+                    && symbols.declarations().declaration(ref.name()) instanceof Ast.Data d && d.newtype()) {
                 Type inner = fieldTypes(d).get("value");
                 if (inner != null) {
                     emitFieldRead(code, ref.name(), "value", inner);
@@ -438,7 +438,7 @@ final class BodyGen {
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
+                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.declarations().declaration(nd.typeName()));
                     emitFieldValues(flds, nd.inits(), nd.spreads());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
@@ -937,13 +937,13 @@ final class BodyGen {
         }
 
         private void newData(Core.NewData nd) {
-            Ast.Data owner = (Ast.Data) symbols.get(nd.typeName());
+            Ast.Data owner = (Ast.Data) symbols.declarations().declaration(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
             TypeName built = nd.typeName();
             // A type of another module is built through its checked entry: `new` reaches a constructor
             // that is not public, and the checked entry is the declared path either way.
-            if (DataChecker.isInvariantBearing(built, symbols) || symbols.isForeign(built)) {
+            if (DataChecker.isInvariantBearing(built, symbols) || symbols.scope().isForeign(built)) {
                 // In value position (a match arm, a non-tail let, a call argument, ...) the checked
                 // construction goes through __construct just as it does in tail (see emitTail): the
                 // invariant runs and orThrow either yields the value or aborts with a
@@ -1008,7 +1008,7 @@ final class BodyGen {
          */
         private Attempt emitAttempt(Core.IfConstructed ic) {
             Core.NewData nd = ic.construct();
-            Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
+            Map<String, Type> flds = fieldTypes((Ast.Data) symbols.declarations().declaration(nd.typeName()));
             ClassDesc cdType = cd(nd.typeName());
             emitFieldValues(flds, nd.inits(), nd.spreads());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
@@ -1109,10 +1109,10 @@ final class BodyGen {
          * violation, which a behavior's guard is meant to have discharged); a plain newtype is stashed
          * and built with {@code new}/{@code <init>}. */
         private Type wrapNewtypeValue(TypeName ntName, Type base) {
-            Ast.Data owner = (Ast.Data) symbols.get(ntName);
+            Ast.Data owner = (Ast.Data) symbols.declarations().declaration(ntName);
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(ntName);
-            if (DataChecker.isInvariantBearing(ntName, symbols) || symbols.isForeign(ntName)) {
+            if (DataChecker.isInvariantBearing(ntName, symbols) || symbols.scope().isForeign(ntName)) {
                 finishInvariantConstruct(cdType, flds);
             } else {
                 int s = slot(base);

@@ -66,7 +66,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     /** The same name as this module writes it, which is what a row is written with. */
     private souther.compiler.types.TypeReachName.Written reached(String name) {
-        return (souther.compiler.types.TypeReachName.Written) symbols.reach(named(name));
+        return (souther.compiler.types.TypeReachName.Written) symbols.scope().reach(named(name));
     }
 
     private PartitionClass classOf(String type, String id) {

@@ -414,7 +414,7 @@ public final class Partitions {
 
     /** A count written at a position, wearing every name that position declares. */
     private static FixtureTemplate standing(Type type, Carrier carrier, Place at, Symbols symbols) {
-        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at, symbols::reach), symbols);
+        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
     }
 
     /** A classifier that reads the term's count out of a row and answers about it. */
@@ -710,7 +710,7 @@ public final class Partitions {
      */
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
         TypeName read = readAs(type, symbols);
-        return read != null && symbols.get(read) instanceof Ast.Data data
+        return read != null && symbols.declarations().declaration(read) instanceof Ast.Data data
                 ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
     }
 
@@ -725,7 +725,7 @@ public final class Partitions {
      */
     private static TypeName readAs(Type type, Symbols symbols) {
         TypeName written = nameOf(type);
-        return written != null && symbols.get(written) instanceof Ast.Data ? written
+        return written != null && symbols.declarations().declaration(written) instanceof Ast.Data ? written
                 : heldIn(type, symbols);
     }
 
@@ -787,7 +787,7 @@ public final class Partitions {
             Carrier carrier = type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
             Place at = inside(within, carrier);
             FixtureTemplate standing = at == null ? null
-                    : FixtureTemplate.on(carrier, at, symbols::reach);
+                    : FixtureTemplate.on(carrier, at, symbols.scope()::reach);
             return standing == null ? List.of() : List.of(standing);
         }
         if (type == Type.STRING) {
@@ -839,13 +839,13 @@ public final class Partitions {
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
-        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data) {
+        if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Ast.Data data) {
             if (!data.newtype()) {
                 return composed(ref.name(), symbols, expanding);
             }
             // A newtype nothing here names has no value anything here can write: the name goes on
             // the value as it is written, and there is none to put on.
-            return symbols.reach(ref.name()) instanceof TypeReachName.Written written
+            return symbols.scope().reach(ref.name()) instanceof TypeReachName.Written written
                     ? insideTheNewtype(ref.name(), symbols, within, expanding).stream()
                             .map(t -> FixtureTemplate.newtype(written, t)).toList()
                     : List.of();
@@ -894,7 +894,7 @@ public final class Partitions {
      */
     private static List<FixtureTemplate> composed(TypeName record, Symbols symbols,
                                                   java.util.Set<TypeName> expanding) {
-        if (expanding.contains(record) || !(symbols.get(record) instanceof Ast.Data data)) {
+        if (expanding.contains(record) || !(symbols.declarations().declaration(record) instanceof Ast.Data data)) {
             return List.of();
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
@@ -922,7 +922,7 @@ public final class Partitions {
                 left = FieldDomains.of(record, data, symbols, settled);
             }
         }
-        return symbols.reach(record) instanceof TypeReachName.Written written
+        return symbols.scope().reach(record) instanceof TypeReachName.Written written
                 ? List.of(FixtureTemplate.record(written, chosen)) : List.of();
     }
 
@@ -1133,11 +1133,11 @@ public final class Partitions {
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
         Place held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
         FixtureTemplate at = held == null ? null
-                : FixtureTemplate.on(own.carrier(), held, symbols::reach);
+                : FixtureTemplate.on(own.carrier(), held, symbols.scope()::reach);
         if (at != null) {
             candidates.add(at);
         }
-        if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
+        if (base == Type.STRING && symbols.declarations().declaration(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                 for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     if (InvariantConstraints.of(each, base).orElse(null)
@@ -1196,7 +1196,7 @@ public final class Partitions {
      */
     static List<FixtureTemplate> inReserve(Type type, Symbols symbols,
                                            NumericDomain.Bounds within) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
+        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name()) instanceof Ast.Data data)
                 || !data.newtype()) {
             return List.of();
         }

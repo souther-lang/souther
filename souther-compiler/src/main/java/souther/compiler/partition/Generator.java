@@ -429,7 +429,7 @@ public final class Generator {
             declared = at1 < 0 || at1 >= subject.types().size() ? null : subject.types().get(at1);
         }
         return declared == null ? null
-                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at, subject.symbols()::reach),
+                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at, subject.symbols().scope()::reach),
                         subject.symbols());
     }
 
@@ -1086,7 +1086,7 @@ public final class Generator {
      */
     private static FieldDomains rulesOf(Type type, Symbols symbols, Map<String, Count> settled) {
         return type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
+                && symbols.declarations().declaration(ref.name()) instanceof Ast.Data data && !data.newtype()
                 ? FieldDomains.of(ref.name(), data, symbols, settled) : FieldDomains.NONE;
     }
 
@@ -1282,12 +1282,12 @@ public final class Generator {
             // and a value composed without them is of a type the parameter does not declare.
             List<TypeReachName.Written> worn = new ArrayList<>();
             for (TypeOps.Layer layer : view.wrappers()) {
-                if (!(symbols.reach(layer.named()) instanceof TypeReachName.Written written)) {
+                if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
                     return null;   // a name this module cannot write leaves no value to write
                 }
                 worn.add(written);
             }
-            if (!(symbols.reach(product.name()) instanceof TypeReachName.Written written)) {
+            if (!(symbols.scope().reach(product.name()) instanceof TypeReachName.Written written)) {
                 return null;
             }
             FixtureTemplate record = RepresentativeSource.under(worn,
@@ -1345,7 +1345,7 @@ public final class Generator {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             FixtureTemplate standing = Witnesses.wrapped(axis.type(),
-                    FixtureTemplate.on(carrier, at, symbols::reach), symbols);
+                    FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
             return standing == null
                     ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
                     : new Edge(List.of(standing), null, at, null);

@@ -92,10 +92,10 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
 
         List<String> broken = new ArrayList<>();
         for (TypeName type : everyDeclaration()) {
-            if (symbols.reach(type) instanceof TypeReachName.Written written) {
-                if (!type.equals(symbols.resolve(spelled(written.rendered())).type())) {
+            if (symbols.scope().reach(type) instanceof TypeReachName.Written written) {
+                if (!type.equals(symbols.scope().resolve(spelled(written.rendered())).type())) {
                     broken.add(written.rendered() + " is written for " + type + " and resolves to "
-                            + symbols.resolve(spelled(written.rendered())).type());
+                            + symbols.scope().resolve(spelled(written.rendered())).type());
                 }
             }
         }
@@ -110,7 +110,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
 
         List<TypeName> unnameable = new ArrayList<>();
         for (TypeName type : everyDeclaration()) {
-            if (symbols.reach(type) instanceof TypeReachName.Unnameable u) {
+            if (symbols.scope().reach(type) instanceof TypeReachName.Unnameable u) {
                 unnameable.add(u.denotes());
             }
         }
@@ -120,7 +120,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         for (TypeName type : unnameable) {
             for (String spelling : List.of(type.name(), type.qualified(),
                     "up." + type.name(), "lib." + type.name())) {
-                assertFalse(type.equals(symbols.resolve(spelled(spelling)).type()),
+                assertFalse(type.equals(symbols.scope().resolve(spelled(spelling)).type()),
                         "`" + spelling + "` reaches " + type + " after all");
             }
         }
@@ -135,9 +135,9 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     void aRuntimeBackedTypeThisModuleTookTheSpellingOfHasNoNameHere() {
         TypeName language = TypeName.runtime("RoundingMode");
 
-        assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).reach(language));
+        assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).scope().reach(language));
         assertEquals(new TypeName("app", "RoundingMode"),
-                scopeOf("app", LIB, APP).resolve(spelled("RoundingMode")).type());
+                scopeOf("app", LIB, APP).scope().resolve(spelled("RoundingMode")).type());
     }
 
     /** And where nothing here took it, it is written as itself. */
@@ -147,8 +147,8 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         TypeName language = TypeName.runtime("RoundingMode");
 
         assertEquals("RoundingMode", assertInstanceOf(TypeReachName.Written.class,
-                symbols.reach(language)).rendered());
-        assertEquals(language, symbols.resolve(spelled("RoundingMode")).type());
+                symbols.scope().reach(language)).rendered());
+        assertEquals(language, symbols.scope().resolve(spelled("RoundingMode")).type());
     }
 
     /**
@@ -167,12 +167,12 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         for (TypeName vocabulary : List.of(TypeName.primitive("Int"),
                 TypeName.runtime("DivisionByZero"))) {
             TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
-                    symbols.reach(vocabulary), vocabulary.toString());
+                    symbols.scope().reach(vocabulary), vocabulary.toString());
 
             assertEquals(vocabulary.name(), written.rendered());
-            assertEquals(vocabulary, symbols.resolveCase(spelled(written.rendered())).type(),
+            assertEquals(vocabulary, symbols.scope().resolveCase(spelled(written.rendered())).type(),
                     "the reader of the position a case name stands at");
-            assertEquals(Denotation.NOT_IN_SCOPE, symbols.resolve(spelled(written.rendered())),
+            assertEquals(Denotation.NOT_IN_SCOPE, symbols.scope().resolve(spelled(written.rendered())),
                     "and not this one, which answers for declarations");
         }
     }

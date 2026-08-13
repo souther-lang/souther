@@ -64,7 +64,7 @@ public final class DataChecker {
 
     private static void collectConstChecks(Ast.Expr e, Symbols symbols, List<ConstCheck> out) {
         if (e instanceof Ast.NewData nd && !(nd.typeName() instanceof Ast.Name.Unanswered)
-                && symbols.get(nd.typeName().denotes()) instanceof Ast.Data nt
+                && symbols.declarations().declaration(nd.typeName().denotes()) instanceof Ast.Data nt
                 && nt.newtype() && isInvariantBearing(nd.typeName().denotes(), symbols)) {
             CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
                     out.add(new ConstCheck(nd.typeName().written(), nd.typeName().denotes(), v, nd.pos())));
@@ -73,7 +73,7 @@ public final class DataChecker {
     }
 
     public static boolean isInvariantBearing(TypeName typeName, Symbols symbols) {
-        return typeName != null && symbols.get(typeName) instanceof Ast.Data d
+        return typeName != null && symbols.declarations().declaration(typeName) instanceof Ast.Data d
                 && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
     }
 
@@ -250,8 +250,8 @@ public final class DataChecker {
             // `constructs` governs what this compilation declares; a unit the language gives
             // (`HALF_UP`) is vocabulary, not business data — as `None` is.
             case Ast.Var v when v.denotes() instanceof ValueName.OfType named
-                    && symbols.declaredByCompilation(named.type())
-                    && symbols.get(named.type()) instanceof Ast.UnitData -> {
+                    && symbols.declarations().declaredByCompilation(named.type())
+                    && symbols.declarations().declaration(named.type()) instanceof Ast.UnitData -> {
                 Map<TypeName, String> side = named.origin().carried(named.type())
                         ? out.carried() : out.originated();
                 side.putIfAbsent(named.type(), v.written().quoted());
@@ -321,7 +321,7 @@ public final class DataChecker {
      * out — codec derivation runs before this check and stops at the repeat for the same reason. */
     private static List<String> sumCycle(TypeName target, Symbols symbols,
                                          LinkedHashSet<TypeName> path) {
-        if (!(symbols.get(path.isEmpty() ? target : last(path)) instanceof Ast.SumData s)) {
+        if (!(symbols.declarations().declaration(path.isEmpty() ? target : last(path)) instanceof Ast.SumData s)) {
             return null;
         }
         for (Ast.Name caseName : s.cases()) {
@@ -333,7 +333,7 @@ public final class DataChecker {
                 out.add(caseName.written());
                 return out;
             }
-            if (symbols.get(caseName.denotes()) instanceof Ast.SumData && path.add(caseName.denotes())) {
+            if (symbols.declarations().declaration(caseName.denotes()) instanceof Ast.SumData && path.add(caseName.denotes())) {
                 List<String> found = sumCycle(target, symbols, path);
                 if (found != null) {
                     return found;
@@ -359,7 +359,7 @@ public final class DataChecker {
         // being a member: no value satisfies the type and an exhaustive switch over it has no arms
         // (ADR-0057, the declared-sum counterpart of E1606).
         for (Ast.Name c : sum.cases()) {
-            if (symbols.isForeign(c.denotes())) {
+            if (symbols.scope().isForeign(c.denotes())) {
                 throw CompileException.of(Diagnostic
                                 .at(c.name().reportedAt())
                                 
@@ -376,7 +376,7 @@ public final class DataChecker {
             // §sum-discrimination)
             Set<TypeName> dispatchable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
             for (Ast.Variant v : disc.variants()) {
-                Ast.Def caseDef = symbols.get(v.caseType().denotes());
+                Ast.Def caseDef = symbols.declarations().declaration(v.caseType().denotes());
                 if (!dispatchable.contains(v.caseType().denotes())) {
                     throw CompileException.of(Diagnostic.at(v.pos())
                             .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
@@ -413,7 +413,7 @@ public final class DataChecker {
                             .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
                             .build());
                 }
-                Ast.Def caseDef = symbols.get(v.caseType().denotes());
+                Ast.Def caseDef = symbols.declarations().declaration(v.caseType().denotes());
                 boolean caseEncodes = caseDef instanceof Ast.UnitData
                         || (caseDef instanceof Ast.Data d && d.encoder().isPresent())
                         || (caseDef instanceof Ast.SumData s && s.encoder().isPresent());
@@ -454,7 +454,7 @@ public final class DataChecker {
             // The group is one thing to say and is said at the first of them the module declares.
             // Which one that is settles where the report sits and not what it is about: the others
             // have no value in the same way and for the same reason.
-            Ast.Def at = (Ast.Def) symbols.get(group.get(0));
+            Ast.Def at = (Ast.Def) symbols.declarations().declaration(group.get(0));
             found.add(CompileException.of(Diagnostic.at(at.pos())
                     .say(new DataMessage.DataCannotBeConstructed(at.name()))
                     .build()));
@@ -576,7 +576,7 @@ public final class DataChecker {
             case Ast.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
             case Ast.DataDecRef d -> {
-                Ast.Def def = symbols.get(d.typeName().denotes());
+                Ast.Def def = symbols.declarations().declaration(d.typeName().denotes());
                 boolean hasDecoder = (def instanceof Ast.Data dd && dd.decoder().isPresent())
                         || (def instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!hasDecoder) {
@@ -650,11 +650,11 @@ public final class DataChecker {
             String sp = spread.name();
             Type bound = env.typeOf(spread.binding());
             if (bound instanceof Type.Ref ref
-                    && ctx.symbols().get(ref.name()) instanceof Ast.SumData sum) {
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Ast.SumData sum) {
                 fromSums.add(Type.show(bound));
                 provided.putAll(spreadOfSum(sp, sum, bound, pos, ctx));
             } else if (bound instanceof Type.Ref ref
-                    && ctx.symbols().get(ref.name()) instanceof Ast.Data sd) {
+                    && ctx.symbols().declarations().declaration(ref.name()) instanceof Ast.Data sd) {
                 provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
             } else {
                 Diagnostic.Builder d = Diagnostic.at(pos)
@@ -761,7 +761,7 @@ public final class DataChecker {
                 }
             }
             case Ast.EncodeRaw e -> {
-                Ast.Def encDef = ctx.symbols().get(e.typeName().denotes());
+                Ast.Def encDef = ctx.symbols().declarations().declaration(e.typeName().denotes());
                 boolean hasEncoder = (encDef instanceof Ast.Data ed && ed.encoder().isPresent())
                         || (encDef instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!hasEncoder) {
@@ -812,7 +812,7 @@ public final class DataChecker {
             }
             case Ast.DataEnc d -> {
                 // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
-                Ast.Def def = symbols.get(d.typeName().denotes());
+                Ast.Def def = symbols.declarations().declaration(d.typeName().denotes());
                 boolean hasEncoder = (def instanceof Ast.Data dd && dd.encoder().isPresent())
                         || (def instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!elemType.equals(Type.ref(d.typeName().denotes())) || !hasEncoder) {

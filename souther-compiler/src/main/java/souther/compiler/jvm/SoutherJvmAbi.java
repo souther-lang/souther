@@ -55,7 +55,7 @@ public final class SoutherJvmAbi {
      *
      * <p>Which is why this answers half a question and is named for its half. Whether a type is
      * there is a module's scope to answer, and the caller that has one asks it:
-     * {@code candidate != null && symbols.contains(candidate)}. An ABI that answered both would be
+     * {@code candidate != null && symbols.declarations().contains(candidate)}. An ABI that answered both would be
      * claiming a declaration it has no way to see — the same shape as an authority that hands out
      * half an answer, pointed the other way.
      */

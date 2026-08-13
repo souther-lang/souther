@@ -397,7 +397,7 @@ final class Witnesses {
             return null;
         }
         return wrapped(type, FixtureTemplate.on(
-                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, symbols::reach), symbols);
+                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, symbols.scope()::reach), symbols);
     }
 
     /**
@@ -410,12 +410,12 @@ final class Witnesses {
      */
     static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
         if (bare == null || !(type instanceof Type.Ref ref)
-                || !(symbols.get(ref.name()) instanceof Ast.Data data) || !data.newtype()) {
+                || !(symbols.declarations().declaration(ref.name()) instanceof Ast.Data data) || !data.newtype()) {
             return bare;
         }
         TypeName name = ref.name();
         FixtureTemplate inner = wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols);
-        return inner != null && symbols.reach(name) instanceof TypeReachName.Written written
+        return inner != null && symbols.scope().reach(name) instanceof TypeReachName.Written written
                 ? FixtureTemplate.newtype(written, inner) : null;
     }
 

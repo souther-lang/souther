@@ -100,7 +100,7 @@ public final class NewtypeDesugar {
                 // construction — both of which compile, so the meaning would change in silence.
                 TypeName built = call.answered() != null
                         && call.denotes() instanceof ValueName.OfType named ? named.type() : null;
-                if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
+                if (built != null && symbols.declarations().declaration(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(Diagnostic
                                         .at(call.appliedAt())

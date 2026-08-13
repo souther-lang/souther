@@ -29,7 +29,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
 
         FieldDomains domainsOf(String type) {
             TypeName named = new TypeName(module, type);
-            Ast.Data data = (Ast.Data) symbols.get(named);
+            Ast.Data data = (Ast.Data) symbols.declarations().declaration(named);
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, data, symbols);
         }

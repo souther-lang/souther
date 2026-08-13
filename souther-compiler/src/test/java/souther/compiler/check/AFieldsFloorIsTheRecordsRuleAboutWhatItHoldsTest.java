@@ -37,7 +37,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         assertNotNull(symbols, "the model did not compile");
         TypeName named = new TypeName(module, type);
-        Ast.Data data = (Ast.Data) symbols.get(named);
+        Ast.Data data = (Ast.Data) symbols.declarations().declaration(named);
         assertNotNull(data, "no `" + type + "` in " + module);
         return FieldDomains.of(named, data, symbols, settled);
     }

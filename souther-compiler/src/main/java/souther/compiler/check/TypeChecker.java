@@ -336,7 +336,7 @@ public final class TypeChecker {
                     exposed.add(e);
                     continue;
                 }
-                boolean imported = symbols.inScope(e);
+                boolean imported = symbols.scope().inScope(e);
 
                 String why = imported
                         ? " is imported into this module, not defined here; `exposing` lists a"
