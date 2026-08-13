@@ -147,17 +147,23 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
                         "Req { amount = lib.Amount(499), kind = Overseas }",
                         "Req { amount = lib.Amount(500), kind = Overseas }"),
                 rows);
-        assertEquals(List.of(), outOfScope(source, rows.get(0)),
+        assertEquals(List.of("E1905"), addedByPasting(source, rows.get(0)),
                 "and the qualified form compiles where it is offered");
     }
 
     /**
      * And the row compiles where it is offered, which is the whole of what a row being a row means.
      *
-     * <p>Pasted back into the module it was written for. Beside it, the row this used to offer —
-     * the same values under the declarations' own spellings — so that the check is one this model
-     * can fail: the names are the only difference between the two, and one of them is out of scope
-     * in the module both are pasted into.
+     * <p>Pasted back into the module it was written for, and held to every diagnostic the compile
+     * reports rather than to the absence of one of them: a row that named nothing out of scope
+     * could still be a syntax error or a value of the wrong type, and a check written as "no
+     * E1023" would call that a row. What is left is E1905, the expectation this pastes in being
+     * deliberately not the one the behavior answers with — the row was read, which is the point.
+     *
+     * <p>Beside it, the row this used to offer — the same values under the declarations' own
+     * spellings — so the check is one this model can fail. The names are the only difference
+     * between the two, and one of them is two names out of scope in the module both are pasted
+     * into.
      */
     @Test
     void aRowCompilesInTheModuleItIsOfferedToAndTheDeclarationsOwnSpellingDoesNot() {
@@ -165,29 +171,39 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
         String offered = rowsFor(source).get(0);
         String declared = offered.replace("up.", "");
 
-        assertEquals(List.of(), outOfScope(source, offered),
-                "the row the generator offers names nothing this module cannot reach");
-        assertEquals(List.of("E1023", "E1023"), outOfScope(source, declared),
+        assertEquals(List.of("E1905"), addedByPasting(source, offered),
+                "the row was read, and only the expectation pasted beside it disagrees");
+        assertEquals(List.of("E1023", "E1023"), addedByPasting(source, declared),
                 "and the declarations' own spellings are two names that are not in scope here");
     }
 
     /**
-     * The names-not-in-scope diagnostics a compile of {@code source} with {@code row} pasted into it
-     * reports. Only those: whether the value the row expects is the one the behavior answers with is
-     * a different question, and a row that names everything it needs may still disagree.
+     * What pasting {@code row} into {@code source} adds to what that model already reported.
+     *
+     * <p>The difference and not the whole, because a model can have something to say without the
+     * row — one of these leaves an import it does not use — and what is under test is the row. Held
+     * as everything the compile added rather than as the absence of one code: a row that named
+     * nothing out of scope could still be a syntax error or a value of the wrong type, and a check
+     * written as "no E1023" would call that a row.
      */
-    private static List<String> outOfScope(String source, String row) {
-        return codesFor(source, row).stream().filter(each -> each.equals("E1023")).toList();
-    }
-
-    /** Every diagnostic a compile of {@code source} with {@code row} pasted into it reports. */
-    private static List<String> codesFor(String source, String row) {
-        Compilation pasted = compiled(source + """
+    private static List<String> addedByPasting(String source, String row) {
+        List<String> before = new java.util.ArrayList<>(codesFor(source));
+        List<String> added = new java.util.ArrayList<>();
+        for (String each : codesFor(source + """
 
                 example f
                     | "boundary" : (%s) -> No
-                """.formatted(row));
-        return pasted.diagnostics().values().stream().flatMap(List::stream)
+                """.formatted(row))) {
+            if (!before.remove(each)) {
+                added.add(each);
+            }
+        }
+        return added;
+    }
+
+    /** Every diagnostic a compile of {@code source} reports. */
+    private static List<String> codesFor(String source) {
+        return compiled(source).diagnostics().values().stream().flatMap(List::stream)
                 .map(d -> d.diagnostic().code()).toList();
     }
 }

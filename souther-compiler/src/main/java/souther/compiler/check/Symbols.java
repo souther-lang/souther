@@ -170,6 +170,14 @@ public final class Symbols {
      * compilation write one reference. Nothing here picks the alias for being better than the
      * others; it picks it for being the same one every time.
      *
+     * <p>The inverse of {@link #resolve} and held to it: what this answers resolves back to the
+     * type it was asked about. So a bare name is answered only where the bare name means this type
+     * <em>here</em>, and that is one question for every kind of type. A primitive's spelling is
+     * reserved (E1502), so nothing can be standing on it. The runtime namespace's own data is not
+     * reserved and is the lowest rung of a module's scope — a module declaring a {@code
+     * RoundingMode} of its own takes the spelling, and the language's one has no other, so it is
+     * unnameable there rather than bare (ADR-0087).
+     *
      * <p>A qualified name reaches only what its module exposes, so a type another module keeps to
      * itself has no name here at all. That happens without anything being wrong with the model: a
      * sum is reached through its module and its cases through the sum, so a case a module does not
@@ -178,9 +186,14 @@ public final class Symbols {
      * nothing wherever it was put.
      */
     public TypeReachName reach(TypeName type) {
-        if (type.isPrimitive() || TypeName.RUNTIME.equals(type.module())
-                || type.equals(scope.get(type.name()))) {
+        if (type.isPrimitive() || type.equals(scope.get(type.name()))) {
             return new TypeReachName.Bare(type);
+        }
+        if (TypeName.RUNTIME.equals(type.module())) {
+            // Reached bare, and only while nothing else here is: the runtime namespace is not a
+            // module a qualifier names, so a module declaring the spelling leaves it with no name.
+            return scope.containsKey(type.name()) ? new TypeReachName.Unnameable(type)
+                    : new TypeReachName.Bare(type);
         }
         if (!exposes(type.module(), type.name())) {
             return new TypeReachName.Unnameable(type);

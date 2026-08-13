@@ -1,10 +1,13 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -42,13 +45,45 @@ class ANameAnsweredHalfwayIsRefusedTest {
         assertThrows(IllegalStateException.class, written::reaches);
     }
 
-    /** What it denotes without how it is reached is not a state a rewrite may leave behind. */
+    /**
+     * Half an answer is not a state a rewrite may leave behind, whichever half it is. One way round
+     * leaves a reference that resolves to a declaration and reaches nothing; the other leaves a key
+     * with nothing saying what it means, and there is nowhere for it to have come from —
+     * {@link ReachName#of} takes the denotation to work one out.
+     */
     @Test
-    void aNameThatDenotesSomethingAndReachesNothingCannotBeBuilt() {
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+    void aNameAnsweredOnOneCountOnlyCannotBeBuilt() {
+        IllegalArgumentException noReach = assertThrows(IllegalArgumentException.class,
                 () -> new Ast.Var(WrittenName.of("spin", POS), DECLARED, null));
+        IllegalArgumentException noDenotation = assertThrows(IllegalArgumentException.class,
+                () -> new Ast.Var(WrittenName.of("spin", POS), null,
+                        new ReachName.OfModule("demo", "spin")));
 
-        assertEquals(true, refused.getMessage().contains("spin"), refused.getMessage());
+        assertEquals(true, noReach.getMessage().contains("spin"), noReach.getMessage());
+        assertEquals(true, noDenotation.getMessage().contains("spin"), noDenotation.getMessage());
+    }
+
+    /**
+     * And a pass applying a name says what it means. The application a pass writes takes both
+     * answers and takes them as answers: the constructor that took a spelling alone is gone, and
+     * this is the one that replaced it, so a caller with nothing to say cannot say it here either.
+     *
+     * <p>Refused at the application rather than left to {@link Ast.Var}, which admits the pair
+     * being absent — that is the parser's state, and the parser builds its own callee. A pass has
+     * resolution behind it or is writing a name for someone downstream to resolve, which is what
+     * ADR-0067 rules out.
+     */
+    @Test
+    void anApplicationAPassWritesCannotLeaveItsNameUnanswered() {
+        assertThrows(NullPointerException.class,
+                () -> new Ast.Apply("spin", null, new ReachName.OfModule("demo", "spin"),
+                        List.of(), ConstructionOrigin.own(), POS, null));
+        assertThrows(NullPointerException.class,
+                () -> new Ast.Apply("spin", DECLARED, null,
+                        List.of(), ConstructionOrigin.own(), POS, null));
+        assertThrows(NullPointerException.class,
+                () -> new Ast.Apply("spin", null, null,
+                        List.of(), ConstructionOrigin.own(), POS, null));
     }
 
     /** Answered, it says both. */

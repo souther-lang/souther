@@ -16,6 +16,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
@@ -1418,11 +1419,17 @@ public interface Ast {
         /**
          * A name that has been resolved has both answers or neither.
          *
+         * <p>Both, or neither: a name the parser read is unanswered on both counts, and a name
+         * resolution answered is answered on both. Nothing in between is a state — the pair comes
+         * from one pass, which has both or has not run.
+         *
          * <p>Refused rather than allowed to stand, because what a name reaches is asked of a table
          * and a table answers a key it has not got with silence. A rewrite that carried the
          * denotation across and dropped the reach name would leave a reference that resolves to a
          * declaration and reaches nothing, and the first reader of it would read the spelling
-         * instead — which is what this pair was separated out to stop.
+         * instead — which is what this pair was separated out to stop. The other half is the same
+         * defect facing the other way: a reach name beside no denotation is a key nothing says the
+         * meaning of, and {@link ReachName#of} is where one would have to come from.
          *
          * <p>The region is the expression's and the name's is {@code written}'s, and they part
          * company only where the author wrapped the name in something the tree does not keep:
@@ -1431,9 +1438,10 @@ public interface Ast {
          * name is written somewhere this expression is not, which no source can produce.
          */
         public Var {
-            if (denotes != null && reachedAs == null) {
-                throw new IllegalArgumentException("`" + written.canonical() + "` denotes " + denotes
-                        + " and says nothing about how this module reaches it");
+            if ((denotes == null) != (reachedAs == null)) {
+                throw new IllegalArgumentException("`" + written.canonical() + "` denotes "
+                        + denotes + " and is reached as " + reachedAs
+                        + "; a name has both answers or neither");
             }
             if (written.region() != null && region == null) {
                 throw new IllegalArgumentException("`" + written.canonical()
@@ -1662,7 +1670,16 @@ public interface Ast {
          */
         public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
                      ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(Var.respelled(fn, denotes, reachedAs, pos, null), args, origin, pos, region);
+            this(Var.respelled(fn, Objects.requireNonNull(denotes, unanswered(fn, "denotes")),
+                            Objects.requireNonNull(reachedAs, unanswered(fn, "is reached as")),
+                            pos, null),
+                    args, origin, pos, region);
+        }
+
+        /** Why a pass may not apply a name it has not answered for. */
+        private static String unanswered(String fn, String half) {
+            return "a pass applying `" + fn + "` says what it means: nothing here " + half
+                    + " it, and the spelling would be resolved again wherever this is read";
         }
 
         /** Whether what this applies is a name. A reader that wants the name itself matches on
