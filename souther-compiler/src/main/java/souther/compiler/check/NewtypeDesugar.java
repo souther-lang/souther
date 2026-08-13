@@ -83,7 +83,7 @@ public final class NewtypeDesugar {
      */
     public static Ast.Def rewriteInvariantsOf(Ast.Def def, Symbols symbols) {
         if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-            return new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
+            return new Ast.Data(d.written(), d.declaredIn(), d.newtype(), d.includes(), d.fields(),
                     Ast.mapClauses(d.invariants(), inv -> go(inv, symbols)),
                     d.decoder(), d.encoder(), d.pos());
         }

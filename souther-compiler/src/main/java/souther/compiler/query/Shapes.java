@@ -459,7 +459,7 @@ public final class Shapes {
                     HelperInliner inliner = HelperInliner.forHelpers(name,
                             HelperInliner.helpersOf(declaring), published, InliningPolicy.DISCHARGE);
                     List<ClauseDischarge> clauses = new ArrayList<>();
-                    TypeName named = new TypeName(name, data.name());
+                    TypeName named = data.declares();
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.

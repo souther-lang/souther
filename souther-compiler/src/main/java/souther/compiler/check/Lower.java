@@ -94,7 +94,7 @@ public final class Lower {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                defs.add(new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
+                defs.add(new Ast.Data(d.written(), d.declaredIn(), d.newtype(), d.includes(), d.fields(),
                         Ast.mapClauses(d.invariants(), Lower::desugar),
                         d.decoder(), d.encoder(), d.pos()));
             } else {

@@ -115,7 +115,7 @@ public final class HelperNames {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
             defs.add(def instanceof Ast.Data d && !d.invariants().isEmpty()
-                    ? new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
+                    ? new Ast.Data(d.written(), d.declaredIn(), d.newtype(), d.includes(), d.fields(),
                             Ast.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
                             d.decoder(), d.encoder(), d.pos())
                     : def);

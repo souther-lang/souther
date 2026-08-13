@@ -80,7 +80,7 @@ final class CodecGen {
     }
 
     private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
-    private GeneratedClass.Value valueOf(Ast.Def def) { return new GeneratedClass.Value(symbols.own(def)); }
+    private GeneratedClass.Value valueOf(Ast.Def def) { return new GeneratedClass.Value(def.declares()); }
     private GeneratedClass decoderOf(Ast.Def def, Src src) { return new GeneratedClass.Decoder(valueOf(def), src.kind()); }
     private ClassDesc cd(Ast.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
@@ -695,7 +695,7 @@ final class CodecGen {
      * decoder is generated where the type is declared.
      */
     private List<Ast.InvariantClause> dischargeForm(Ast.Data data) {
-        return TypeOps.effectiveInvariants(new TypeName(ctx.module(), data.name()), data, symbols,
+        return TypeOps.effectiveInvariants(data.declares(), data, symbols,
                 ctx.dischargeInvariants()::get);
     }
 
@@ -1588,9 +1588,9 @@ final class CodecGen {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 2);
                 code.aload(1);
                 code.checkcast(cdName);
-                int selfSlot = gen.slot(Type.ref(symbols.own(data)));
+                int selfSlot = gen.slot(Type.ref(data.declares()));
                 code.astore(selfSlot);
-                gen.bind(enc.self(), selfSlot, Type.ref(symbols.own(data)));
+                gen.bind(enc.self(), selfSlot, Type.ref(data.declares()));
                 emitRawExpr(code, gen, enc.result());
                 code.areturn();
             });

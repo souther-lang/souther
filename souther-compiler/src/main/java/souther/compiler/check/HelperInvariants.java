@@ -70,7 +70,7 @@ public final class HelperInvariants {
         Map<TypeName, List<Ast.InvariantClause>> out = new LinkedHashMap<>();
         for (Ast.Def def : settled.defs()) {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                TypeName declared = new TypeName(m.name(), d.name());
+                TypeName declared = d.declares();
                 out.put(declared, Ast.mapClauses(d.invariants(),
                         clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));
             }
@@ -94,8 +94,8 @@ public final class HelperInvariants {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                BindingOwner declared = new BindingOwner.OfData(new TypeName(m.name(), d.name()));
-                defs.add(new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
+                BindingOwner declared = new BindingOwner.OfData(d.declares());
+                defs.add(new Ast.Data(d.written(), d.declaredIn(), d.newtype(), d.includes(), d.fields(),
                         Ast.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
                         d.decoder(), d.encoder(), d.pos()));
             } else {

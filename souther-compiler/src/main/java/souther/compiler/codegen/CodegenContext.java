@@ -322,7 +322,7 @@ final class CodegenContext {
 
     /** The class of a declaration of the module being generated. */
     ClassDesc cd(Ast.Def def) {
-        return cd(symbols.own(def));
+        return cd(def.declares());
     }
 
     ClassDesc cdBehavior(String name) {

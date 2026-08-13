@@ -207,7 +207,7 @@ public final class TypeCardinality {
         Map<TypeName, Ast.Def> declared = new LinkedHashMap<>();
         List<TypeName> left = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
-            left.add(symbols.own(def));
+            left.add(def.declares());
         }
         while (!left.isEmpty()) {
             TypeName name = left.remove(left.size() - 1);

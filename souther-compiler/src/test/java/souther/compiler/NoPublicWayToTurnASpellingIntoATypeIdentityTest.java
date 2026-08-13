@@ -15,8 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * A spelling means something in the module that wrote it, and only the pass that reads that module
@@ -42,6 +41,12 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
             data Note = { text: String }
             """;
 
+    private static final String APP_WITH_AMOUNT = """
+            module app2
+
+            data Amount = { yen: Int }
+            """;
+
     /**
      * No public method takes a spelling and answers with an identity. A caller outside the pass has
      * a type or it has nothing, and the way to get one is to be handed it.
@@ -64,6 +69,21 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                 "a spelling reaches a declaration only through the pass that resolves it");
     }
 
+    /** And the same holds of a declaration, which is what answers with an identity now that
+     * nothing pairs a name with a module of its own. */
+    @Test
+    void nothingPublicOnADeclarationTakesAStringAndAnswersWithAnIdentity() {
+        List<String> answering = new ArrayList<>();
+        for (Method m : Ast.Def.class.getMethods()) {
+            if (m.getReturnType() == TypeName.class
+                    && List.of(m.getParameterTypes()).contains(String.class)) {
+                answering.add(m.getName());
+            }
+        }
+        assertEquals(List.of(), answering,
+                "a declaration says what it declares and is told nothing to say it with");
+    }
+
     /** And the pass's own way in is not reachable from outside it. */
     @Test
     void resolutionIsNotPartOfTheSurface() {
@@ -76,34 +96,30 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     }
 
     /**
-     * The one entry that answers with an identity of this module holds what it is handed to being
-     * one. Its name says the declaration is this module's, and a declaration is an argument like any
-     * other, so a caller can hand over another module's — which is how a {@code constructs} entry
-     * naming an imported type was answered about a class of the module that names it.
-     *
-     * <p>Held to the name being declared here, which is as far as this can be held: a declaration
-     * another module wrote under a name this one also writes is not told apart from one of this
-     * module's, because nothing a declaration carries says which module wrote it.
+     * A declaration answers with the type it declares, and there is no module for a caller to
+     * supply. What one is asked through — a scope, a registry, a check — has no say in the answer,
+     * so handing one somewhere it did not come from cannot name a declaration of wherever it is
+     * being read.
      */
     @Test
-    void aDeclarationWhoseNameThisModuleDoesNotDeclareIsRefused() {
-        Symbols app = symbolsOf(APP);
-        Ast.Def foreign = declarationOf(LIB, "Amount");
-
-        IllegalArgumentException refused =
-                assertThrows(IllegalArgumentException.class, () -> app.own(foreign));
-        assertTrue(refused.getMessage().contains("not declared in"), refused.getMessage());
+    void aDeclarationAnswersWithTheModuleThatWroteIt() {
+        assertEquals(new TypeName("app", "Note"), declarationOf(APP, "Note").declares());
+        assertEquals(new TypeName("lib", "Amount"), declarationOf(LIB, "Amount").declares());
     }
 
-    /** And the same question about this module's own declaration is answered. */
+    /**
+     * Two modules that write one spelling declare two types, and holding either says which. This is
+     * what nothing could tell apart while the module came from the reader: a declaration under a
+     * name the reading module also writes was answered about the reader's.
+     */
     @Test
-    void aDeclarationOfThisModuleIsAnsweredWithItsName() {
-        assertEquals(new TypeName("app", "Note"),
-                symbolsOf(APP).own(declarationOf(APP, "Note")));
-    }
+    void oneSpellingWrittenByTwoModulesIsTwoDeclarations() {
+        TypeName mine = declarationOf(APP_WITH_AMOUNT, "Amount").declares();
+        TypeName theirs = declarationOf(LIB, "Amount").declares();
 
-    private static Symbols symbolsOf(String source) {
-        return Symbols.of(resolved(source));
+        assertEquals("Amount", mine.name());
+        assertEquals("Amount", theirs.name());
+        assertNotEquals(mine, theirs);
     }
 
     private static Ast.Module resolved(String source) {

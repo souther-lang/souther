@@ -700,9 +700,44 @@ public interface Ast {
          */
         WrittenName written();
 
+        /**
+         * The module that wrote this declaration, as {@link FnDef#declaredIn} is for a {@code let}.
+         *
+         * <p>Written once, where the source is parsed, and copied by every pass after. It is here
+         * because a declaration is read apart from the module holding it — a registry answers with
+         * one, a scope names one, a check is handed one — and from there the name cannot say which
+         * module declares it. A reader that pairs the name with the module it happens to be
+         * compiling answers for a declaration here whatever the name came from, which is what
+         * issues #464, #696 and #700 each were.
+         *
+         * <p>Not what the declaration is reached under. A runtime-backed data is written in a
+         * standard-library module and reached in the runtime namespace, because that is where its
+         * implementation class is; which module declares it and which name it answers to are two
+         * questions, and this is the first.
+         */
+        String declaredIn();
+
         /** What the declaration is called. */
         default String name() {
             return written().canonical();
+        }
+
+        /**
+         * The type this declares.
+         *
+         * <p>Answered by the declaration, so a reader holding one has the name it goes by and no
+         * module of its own to pair it with. A spelling says nothing about which module declares
+         * what it spells, and a reader that supplies the module it happens to be compiling answers
+         * for a declaration here whatever the name came from.
+         */
+        default TypeName declares() {
+            return new TypeName(declaredIn(), name());
+        }
+
+        /** Whether {@code module} is the module that wrote this. Asked of the declaration, so it
+         * answers for the module that wrote it however the module reading it reaches it. */
+        default boolean declaredBy(String module) {
+            return declaredIn() != null && declaredIn().equals(module);
         }
 
         /** Where the name is written, or null where nobody wrote it. */
@@ -723,6 +758,7 @@ public interface Ast {
      * representation differs.
      */
     record Data(WrittenName written,
+                String declaredIn,
                 boolean newtype,
                 List<Name> includes,
                 List<Field> fields,
@@ -757,6 +793,7 @@ public interface Ast {
 
     /** A sum data definition {@code data X = A | B | ...} with optional discriminate decoder/encoder. */
     record SumData(WrittenName written,
+                   String declaredIn,
                    List<Name> cases,
                    Optional<Discriminate> decoder,
                    Optional<SumEncoder> encoder,
@@ -768,11 +805,12 @@ public interface Ast {
     record EncVariant(Name caseType, String tag, SourcePos pos) implements Ast {}
 
     /** A unit data definition {@code data U} with no fields. */
-    record UnitData(WrittenName written, SourcePos pos) implements Def {
+    record UnitData(WrittenName written, String declaredIn, SourcePos pos) implements Def {
 
-        /** A unit data a construction implied — declared nowhere the author wrote. */
-        public UnitData(String name, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), pos);
+        /** A unit data a construction implied — declared nowhere the author wrote, by the module
+         * whose text implied it. */
+        public UnitData(String name, String declaredIn, SourcePos pos) {
+            this(WrittenName.synthetic(name, pos), declaredIn, pos);
         }
     }
 

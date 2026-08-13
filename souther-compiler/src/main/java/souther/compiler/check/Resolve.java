@@ -439,19 +439,21 @@ public final class Resolve {
     // --- definitions ---
 
     private Ast.Def def(Ast.Def def) {
-        owner = new BindingOwner.OfData(symbols.own(def));
+        owner = new BindingOwner.OfData(def.declares());
         return switch (def) {
             case Ast.UnitData u -> u;
             // an invariant reads the fields of the data it belongs to, which are what bind its
             // names — `value > 0` is about this declaration's `value`, whatever else is in scope
             case Ast.Data d -> {
                 declareFields(d);
-                yield new Ast.Data(d.written(), d.newtype(), names(d.includes()), fields(d.fields()),
+                yield new Ast.Data(d.written(), d.declaredIn(), d.newtype(), names(d.includes()),
+                        fields(d.fields()),
                         Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
                         d.decoder().map(this::decoder), d.encoder().map(this::encoder),
                         d.pos());
             }
-            case Ast.SumData s -> new Ast.SumData(s.written(), sumCases(s), s.decoder().map(this::discriminate),
+            case Ast.SumData s -> new Ast.SumData(s.written(), s.declaredIn(), sumCases(s),
+                    s.decoder().map(this::discriminate),
                     s.encoder().map(this::sumEncoder), s.pos());
         };
     }
@@ -496,7 +498,7 @@ public final class Resolve {
      * declaring declaration's, so this is where an editor is answered from either way.
      */
     private void declareFields(Ast.Data d) {
-        Map<String, BindingId> bindings = TypeOps.fieldBindingsWhileResolving(symbols.own(d), d, symbols);
+        Map<String, BindingId> bindings = TypeOps.fieldBindingsWhileResolving(d.declares(), d, symbols);
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
             if (binding != null) {
@@ -510,7 +512,7 @@ public final class Resolve {
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again
         for (Map.Entry<String, BindingId> f
-                : TypeOps.fieldBindingsWhileResolving(symbols.own(d), d, symbols).entrySet()) {
+                : TypeOps.fieldBindingsWhileResolving(d.declares(), d, symbols).entrySet()) {
             bound = bound.and(f.getKey(), new ValueName.Local(f.getKey(), f.getValue()));
         }
         return bound;

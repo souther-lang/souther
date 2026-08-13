@@ -178,7 +178,7 @@ public final class Backend {
             if (def instanceof Ast.SumData sum) {
                 for (Ast.Name caseName : sum.cases()) {
                     caseToSums.computeIfAbsent(caseName.denotes().name(), k -> new ArrayList<>())
-                            .add(new GeneratedClass.Value(symbols.own(sum)));
+                            .add(new GeneratedClass.Value(sum.declares()));
                 }
             }
         }
@@ -217,7 +217,7 @@ public final class Backend {
         // declarations that landed on it.
         Map<JvmClassName, Ast.Def> localTypes = new LinkedHashMap<>();
         for (Ast.Def d : module.defs()) {
-            localTypes.put(SoutherJvmAbi.nameOf(new GeneratedClass.Value(symbols.own(d))), d);
+            localTypes.put(SoutherJvmAbi.nameOf(new GeneratedClass.Value(d.declares())), d);
         }
         Map<JvmClassName, String> behaviorClassOwner = new LinkedHashMap<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {

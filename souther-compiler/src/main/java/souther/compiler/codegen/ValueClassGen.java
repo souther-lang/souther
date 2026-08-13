@@ -58,7 +58,7 @@ final class ValueClassGen {
     }
 
     private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
-    private GeneratedClass.Value valueOf(Ast.Def def) { return new GeneratedClass.Value(symbols.own(def)); }
+    private GeneratedClass.Value valueOf(Ast.Def def) { return new GeneratedClass.Value(def.declares()); }
     private ClassDesc cd(Ast.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
@@ -165,7 +165,7 @@ final class ValueClassGen {
                     BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
                     int slot = 0;
                     Map<String, BindingId> bound =
-                            TypeOps.fieldBindings(symbols.own(data), data, symbols);
+                            TypeOps.fieldBindings(data.declares(), data, symbols);
                     for (Map.Entry<String, Type> f : fields.entrySet()) {
                         gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
                         slot += width(f.getValue());
@@ -659,7 +659,7 @@ final class ValueClassGen {
                         BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
                         int slot = 0;
                         Map<String, BindingId> bound =
-                                TypeOps.fieldBindings(symbols.own(data), data, symbols);
+                                TypeOps.fieldBindings(data.declares(), data, symbols);
                         for (Map.Entry<String, Type> f : fields.entrySet()) {
                             gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
                             slot += width(f.getValue());

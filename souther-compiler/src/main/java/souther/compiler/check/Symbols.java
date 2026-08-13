@@ -83,33 +83,6 @@ public final class Symbols {
         return module;
     }
 
-    /**
-     * The type a declaration of the module being compiled is.
-     *
-     * <p>Asked with the declaration and not with a name. A spelling says nothing about which module
-     * declares what it spells, so stamping this module onto one answers for a declaration here
-     * whatever the spelling came from — a name read off a class, a name another module wrote. A
-     * caller holding the declaration is a caller that has it from this module's own tree.
-     */
-    public TypeName own(Ast.Def def) {
-        TypeName named = new TypeName(module, def.name());
-        // Held to a name this module declares. Asked only where this module's declarations are
-        // known: a module in an import cycle is compiled with nothing registered for it, and
-        // refusing there would replace the report about the cycle with one about a declaration that
-        // is fine.
-        //
-        // Not held to being the declaration registered under that name. A module that declares a
-        // name twice registers one of them, and the pass that reports it walks both. So a
-        // declaration another module wrote under a name this one also writes is admitted here, and
-        // nothing this holds can tell the two apart — which declaration a definition is stays
-        // something worked out from a name until a declaration carries its own.
-        if (get(named) == null && !declaredIn(module).isEmpty()) {
-            throw new IllegalArgumentException(
-                    "`" + def.name() + "` is not declared in `" + module + "`");
-        }
-        return named;
-    }
-
     /** The definition of {@code name}, or null when no module declares it. The runtime namespace
      * declares the prelude's runtime-backed data ({@code RoundingMode}), which no module of the
      * compilation holds, so it is answered from the prelude's registration. */

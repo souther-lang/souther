@@ -67,7 +67,7 @@ public final class Deriver {
         }
         // the decoder and the encoder each read the value under a name of their own, so each owns
         // the bindings it writes rather than sharing the declaration's
-        BindingOwner declared = new BindingOwner.OfData(symbols.own(d));
+        BindingOwner declared = new BindingOwner.OfData(d.declares());
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
                 ? d.decoder()
                 : Optional.of(deriveDecoder(d, shapes, symbols,
@@ -78,7 +78,8 @@ public final class Deriver {
                 : Optional.of(deriveEncoder(d, shapes,
                         new Ast.Binders(new BindingOwner.Synthesized(declared,
                                 BindingOwner.Pass.DERIVER, 1))));
-        return new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(), d.invariants(),
+        return new Ast.Data(d.written(), d.declaredIn(), d.newtype(), d.includes(), d.fields(),
+                d.invariants(),
                 decoder, encoder, d.pos());
     }
 
@@ -87,7 +88,7 @@ public final class Deriver {
     private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, CodecShape> shapes,
                                                Symbols symbols, Ast.Binders binders) {
         SourcePos pos = d.pos();
-        Ast.Name self = Ast.Name.resolved(symbols.own(d), pos);
+        Ast.Name self = Ast.Name.resolved(d.declares(), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
         // with one field (spec §newtype).
         Map.Entry<String, CodecShape> single = bareField(d, shapes);
@@ -261,7 +262,7 @@ public final class Deriver {
         Optional<Ast.SumEncoder> encoder = s.encoder().isPresent()
                 ? s.encoder()
                 : Optional.of(new Ast.SumEncoder("type", encVariants(s, leaves), s.pos()));
-        return new Ast.SumData(s.written(), s.cases(), decoder, encoder, s.pos());
+        return new Ast.SumData(s.written(), s.declaredIn(), s.cases(), decoder, encoder, s.pos());
     }
 
     /**

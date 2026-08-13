@@ -304,7 +304,7 @@ public final class AstBuilder {
                                 .at(bodyRegion(product.get()))
                                 .hint(new DataMessage.WriteItAsAUnitDataOrGiveItFields(name)).say(new DataMessage.ADataWithAnEmptyBody(name)).build());
             }
-            return new Ast.Data(declared, false, includes, fields, clauses,
+            return new Ast.Data(declared, moduleName, false, includes, fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
         }
         Optional<SyntaxNode> sum = n.child(SyntaxKind.SUM_BODY);
@@ -313,7 +313,8 @@ public final class AstBuilder {
             for (SyntaxToken t : identTokens(sum.get())) {
                 cases.add(Ast.Name.written(nameOf(t)));
             }
-            return new Ast.SumData(declared, cases, Optional.empty(), Optional.empty(), pos);
+            return new Ast.SumData(declared, moduleName, cases, Optional.empty(), Optional.empty(),
+                    pos);
         }
         Optional<SyntaxNode> newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
@@ -323,7 +324,7 @@ public final class AstBuilder {
                 innerType = Ast.TypeRef.written("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
             }
             List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
-            return new Ast.Data(declared, true, List.of(), fields, clauses,
+            return new Ast.Data(declared, moduleName, true, List.of(), fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
         }
         // No body of any kind: a unit data, which has no fields for an invariant to observe (spec
@@ -334,7 +335,7 @@ public final class AstBuilder {
             throw CompileException.of(Diagnostic
                             .at(pos(clause)).say(new InvariantMessage.AUnitDataHasNothingToObserve(name)).build());
         }
-        return new Ast.UnitData(declared, pos);
+        return new Ast.UnitData(declared, moduleName, pos);
     }
 
     /**

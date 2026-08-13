@@ -59,7 +59,7 @@ public final class UninhabitableTypes {
                                                              TypeCardinality.Cardinalities solved) {
         Map<TypeName, Integer> declaredAt = new LinkedHashMap<>();
         for (Ast.Def def : module.defs()) {
-            declaredAt.put(symbols.own(def), declaredAt.size());
+            declaredAt.put(def.declares(), declaredAt.size());
         }
         Set<TypeName> none = solved.withNoValue();
         if (none.isEmpty()) {
