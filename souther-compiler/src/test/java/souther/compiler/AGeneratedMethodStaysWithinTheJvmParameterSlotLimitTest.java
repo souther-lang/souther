@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -182,7 +183,9 @@ class AGeneratedMethodStaysWithinTheJvmParameterSlotLimitTest {
     private void loadAll(Map<String, byte[]> classes) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         for (String name : classes.keySet()) {
-            Class.forName(name, false, loader).getDeclaredMethods();
+            // getDeclaredMethods is what forces the descriptors to be parsed; the methods
+            // themselves are not the question, whether the JVM accepts them is.
+            assertDoesNotThrow(() -> Class.forName(name, false, loader).getDeclaredMethods(), name);
         }
     }
 }

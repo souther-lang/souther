@@ -51,6 +51,15 @@
         <maven.compiler.release>25</maven.compiler.release>
         <raoh.version>0.7.2</raoh.version>
         <jspecify.version>1.0.0</jspecify.version>
+        <errorprone.version>2.50.0</errorprone.version>
+        <nullaway.version>0.13.8</nullaway.version>
+        <!-- Which Error Prone checks a build runs. Measured on `clean test-compile`, whole
+             reactor, one run each: 8.7s with no Error Prone at all, 12.0s with NullAway alone,
+             38.0s with the default checks as well. The nullness gate is the rule this repository
+             holds itself to, and it costs three seconds; the other five hundred checks cost
+             twenty-six, which is too much to spend on every compile while writing code. So a
+             development build runs the gate, and the `lint` profile below runs the rest. -->
+        <errorprone.checks>-XepDisableAllChecks</errorprone.checks>
         <junit.version>6.1.2</junit.version>
         <!-- A JVM per two cores. Named here so -DforkCount=N reaches it: a literal in the plugin's
              configuration outranks the property surefire declares, so the override the comment
@@ -163,6 +172,52 @@
             </plugins>
         </pluginManagement>
         <plugins>
+            <!-- The null analysis runs here, in javac, rather than in an editor: a rule only some
+                 checkouts enforce is not a rule. NullAway reads the JSpecify annotations
+                 souther-runtime already carries, and `OnlyNullMarked` is what decides where it
+                 looks — the packages that declare `@NullMarked`, and no others. Adopting a package
+                 is then one line in its `package-info.java`, and the packages that have not adopted
+                 it compile as they did. Declaring the whole of souther-compiler annotated instead
+                 reports 1024 findings at once, which is a migration and not a check.
+
+                 The `compilePolicy` and `should-stop` arguments below are Error Prone's, not ours:
+                 its checks read the flow graph, and javac builds one per class only under that
+                 policy. The exports the plugin needs to reach javac's internals are in
+                 `.mvn/jvm.config`, because the compiler runs in the Maven JVM; without them the
+                 build stops at `IllegalAccessError` before any source is read. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.15.0</version>
+                <configuration>
+                    <compilerArgs>
+                        <!-- javac prints a hundred warnings per compilation and stops counting.
+                             A report that stops at a round number reads as the whole of what was
+                             found, so the limit is raised past anything this build produces. -->
+                        <arg>-Xmaxwarns</arg>
+                        <arg>100000</arg>
+                        <arg>-XDcompilePolicy=simple</arg>
+                        <arg>--should-stop=ifError=FLOW</arg>
+                        <!-- UnicodeInCode is off for good. It reads a non-ASCII identifier as a
+                             thing that confuses a reader, and this compiler's tests call methods
+                             the language named in Japanese: the check would be asking the tests to
+                             stop covering what Souther supports. -->
+                        <arg>-Xplugin:ErrorProne ${errorprone.checks} -Xep:UnicodeInCode:OFF -Xep:NullAway:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true</arg>
+                    </compilerArgs>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.google.errorprone</groupId>
+                            <artifactId>error_prone_core</artifactId>
+                            <version>${errorprone.version}</version>
+                        </path>
+                        <path>
+                            <groupId>com.uber.nullaway</groupId>
+                            <artifactId>nullaway</artifactId>
+                            <version>${nullaway.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <!-- Implementation-Version in every jar's manifest. A compiled Souther module records
                  the compiler that produced it, and this is where that string comes from: Maven
                  fills it from the project version, so the root pom stays the one place the version
@@ -183,6 +238,25 @@
     </build>
 
     <profiles>
+        <!-- Error Prone's own checks, on top of the nullness gate every build runs. On in CI,
+             which sets `CI` in the environment, and available anywhere as `mvn -Plint verify`.
+             What this buys is the checks that are errors by default — the first run of it found a
+             `String` handed to a `Map<NumericTerm, ...>`, which had left two tests asserting
+             something about a domain they were never given. What it costs is three times the
+             compile, which is why it is not what a build runs while code is being written. A
+             finding can therefore reach CI without having been seen locally; `mvn -Plint` on the
+             module in hand is the way to answer it. -->
+        <profile>
+            <id>lint</id>
+            <activation>
+                <property>
+                    <name>env.CI</name>
+                </property>
+            </activation>
+            <properties>
+                <errorprone.checks/>
+            </properties>
+        </profile>
         <!-- Activate for a Central release: `mvn -Prelease deploy`. Attaches sources and
              javadoc, GPG-signs every artifact, and publishes the reactor to the Sonatype
              Central Portal (autoPublish=false, so the bundle is reviewed in the Portal before
