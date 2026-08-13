@@ -171,12 +171,14 @@ public final class Resolve {
     }
 
     /**
-     * A resolved module, every name the pass answered in it, and the names it could not answer.
+     * What the pass worked out about the names a module writes, and nothing else.
      *
-     * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
-     * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
-     * resolved as if the mistake were not there — so an author is told about every unknown name at
-     * once instead of one per compile, and an editor can still say what the names around it mean.
+     * <p>Every entry is an answer it reached. A name it could not answer is in none of them, so a
+     * reader asking about one is told there is nothing there rather than handed a declaration that
+     * was never written — the identity the traversal carries past a mistake stands for the absence
+     * and is not an identity anything declares. This is what a reader outside the compiler is
+     * offered, which is why it is a partial record rather than a total one: an incomplete module has
+     * incomplete answers about it, and the answers it does have are as good as any other module's.
      *
      * <p>{@code binders} says what each binding is called and where the author wrote that name. A
      * binding is not its position — a pass that expands a helper stamps the call site over the
@@ -191,8 +193,20 @@ public final class Resolve {
      * something else, so a reader answered with one of these would be answered about a name that is
      * not there, at a width that is not its.
      */
-    public record Resolved(Ast.Module module, List<Denotation> denotations, List<ValueUse> values,
-                           List<CompileException> unresolved, Map<BindingId, BoundName> binders) {}
+    public record ResolutionIndex(List<Denotation> types, List<ValueUse> values,
+                                  Map<BindingId, BoundName> binders) {}
+
+    /**
+     * A resolved module, what the pass worked out about the names in it, and the names it could not
+     * answer.
+     *
+     * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
+     * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
+     * resolved as if the mistake were not there — so an author is told about every unknown name at
+     * once instead of one per compile, and an editor can still say what the names around it mean.
+     */
+    public record Resolved(Ast.Module module, ResolutionIndex index,
+                           List<CompileException> unresolved) {}
 
     /** What a binding is called, and the occurrence of that name the author wrote. */
     public record BoundName(WrittenName written) {
@@ -279,8 +293,9 @@ public final class Resolve {
                 new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
                         behaviors, fns, m.takenOn(), examples, fakes, m.exampleFileTarget(),
                         m.pos()),
-                List.copyOf(r.denotations), List.copyOf(r.values0), List.copyOf(r.unresolved),
-                Map.copyOf(r.binders));
+                new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
+                        Map.copyOf(r.binders)),
+                List.copyOf(r.unresolved));
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {
@@ -919,9 +934,14 @@ public final class Resolve {
      * wraps — is a use of that type as much as one written in a field's type is, and is recorded as
      * one too. Otherwise renaming the type would rewrite every other mention of it and leave these,
      * which is a rename that stops the workspace compiling.
+     *
+     * <p>A name nothing answered to is recorded nowhere. What this collects is what the pass worked
+     * out, and it did not work that one out: the name it carries stands for the absence so that the
+     * traversal can go on past it, and a reader handed that name back would be told a binding is
+     * there under a spelling nothing binds.
      */
     private ValueName answered(WrittenName written, ValueName denotes) {
-        if (written.pos() == null) {
+        if (written.pos() == null || denotes instanceof ValueName.Unresolved) {
             return denotes;
         }
         values0.add(new ValueUse(written, denotes));
@@ -1084,9 +1104,10 @@ public final class Resolve {
     }
 
     /** Records what a name was answered with, and hands it back. A name with no position was
-     * synthesized by an earlier pass rather than written, so there is nothing to point at. */
+     * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
+     * name nothing answered is an absence rather than a declaration to record. */
     private Ast.Name answered(Ast.Name n) {
-        if (n.pos() != null) {
+        if (n.pos() != null && !n.denotes().isUnresolved()) {
             denotations.add(new Denotation(n.name(), n.denotes()));
         }
         return n;

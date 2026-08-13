@@ -389,7 +389,7 @@ class ResolvedValueNamesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        for (Resolve.ValueUse use : c.db().ask(new Names.Resolution("m.a")).value().values()) {
+        for (Resolve.ValueUse use : c.db().ask(new Names.Facts("m.a")).value().values()) {
             if (use.written().canonical().equals(written)
                     && use.denotes() instanceof ValueName.Local local) {
                 return c.db().ask(new Names.ValueDeclaredAt(local)).value();
