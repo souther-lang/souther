@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -92,10 +93,6 @@ public final class Symbols {
      */
     public TypeName own(Ast.Def def) {
         TypeName named = new TypeName(module, def.name());
-        // Held to, and not taken on trust. A declaration is an argument like any other, so a caller
-        // holding one of another module's can hand it over and be answered about a type of this one
-        // — which is the reading a `constructs` entry naming an imported type got, silently, for as
-        // long as the answer was worked out from a spelling.
         // Held to a name this module declares. Asked only where this module's declarations are
         // known: a module in an import cycle is compiled with nothing registered for it, and
         // refusing there would replace the report about the cycle with one about a declaration that
@@ -180,6 +177,69 @@ public final class Symbols {
         }
         TypeName candidate = new TypeName(target, written.substring(dot + 1));
         return contains(candidate) && exposes(target, candidate.name()) ? candidate : null;
+    }
+
+    /**
+     * How this module writes {@code type} — the one thing a writer of surface text cannot work out
+     * from the type itself.
+     *
+     * <p>A section of {@link #resolve} rather than its inverse. Several spellings reach one
+     * declaration — {@code Amount}, {@code up.Amount} and {@code lib.Amount} may all be it — so
+     * there is no inverse to have; this picks one of them, and what it picks resolves back to the
+     * type it was asked about. That is the whole of the contract, and it is what a generated row
+     * being writable means.
+     *
+     * <p>Read back by whichever reader reads the position the name is written at, which for the
+     * language's own vocabulary is not this one: a primitive and the runtime's error cases are
+     * {@link #resolveCase}'s to answer, and {@code resolve} says nothing about them. They are
+     * written as themselves wherever they are written, so the section holds there through that
+     * reader.
+     *
+     * <p>Bare only where the bare spelling means this very declaration. Asked as "is the name in
+     * scope" instead, a module that declares an {@code Amount} of its own and reaches another
+     * module's under an alias would write the imported one bare, and the reference would name the
+     * declaration it is not — silently, since both spellings resolve.
+     *
+     * <p>An alias is chosen by name where a module has more than one, so that two runs of the same
+     * compilation write one reference. Nothing here picks the alias for being better than the
+     * others; it picks it for being the same one every time.
+     *
+     * <p>So a bare name is answered only where the bare name means this type <em>here</em>, and
+     * that is one question for every kind of type. A primitive's spelling is reserved (E1502), so
+     * nothing can be standing on it. The runtime namespace's own data is not reserved and is the
+     * lowest rung of a module's scope — a module declaring a {@code RoundingMode} of its own takes
+     * the spelling, and the language's one has no other, so it is unnameable there rather than bare
+     * (ADR-0087).
+     *
+     * <p>A qualified name reaches only what its module exposes, so a type another module keeps to
+     * itself has no name here at all. That happens without anything being wrong with the model: a
+     * sum is reached through its module and its cases through the sum, so a case a module does not
+     * expose is a value a reader takes and cannot write. It is answered as
+     * {@link TypeReachName.Unnameable} rather than as the qualified spelling, which would resolve to
+     * nothing wherever it was put.
+     */
+    public TypeReachName reach(TypeName type) {
+        if (type.isPrimitive() || type.equals(scope.get(type.name()))) {
+            return new TypeReachName.Bare(type);
+        }
+        if (TypeName.RUNTIME.equals(type.module())) {
+            // Reached bare, and only while nothing else here is: the runtime namespace is not a
+            // module a qualifier names, so a module declaring the spelling leaves it with no name.
+            return scope.containsKey(type.name()) ? new TypeReachName.Unnameable(type)
+                    : new TypeReachName.Bare(type);
+        }
+        if (!exposes(type.module(), type.name())) {
+            return new TypeReachName.Unnameable(type);
+        }
+        String alias = null;
+        for (Map.Entry<String, String> each : aliases.entrySet()) {
+            if (each.getValue().equals(type.module())
+                    && (alias == null || each.getKey().compareTo(alias) < 0)) {
+                alias = each.getKey();
+            }
+        }
+        return alias != null ? new TypeReachName.ViaAlias(alias, type)
+                : new TypeReachName.ViaModule(type);
     }
 
     /**

@@ -23,6 +23,7 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -389,9 +390,9 @@ public final class Partitions {
         List<PartitionClass> classes = new ArrayList<>();
         for (Place value : values) {
             String written = carrier.written(value);
-            classes.add(PartitionClass.of(term + "/= " + written, "= " + written,
+            classes.add(classAt(term + "/= " + written, "= " + written,
                     holding(term, carrier, at -> at.sameAs(value)),
-                    RepresentativeSource.of(standing(type, carrier, value, symbols))));
+                    standing(type, carrier, value, symbols)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
@@ -401,15 +402,25 @@ public final class Partitions {
                         holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
                         "nothing here composed a value of this position other than the ones"
                                 + " singled out")
-                : PartitionClass.of(term + "/" + label, label,
+                : classAt(term + "/" + label, label,
                         holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
-                        RepresentativeSource.of(standing(type, carrier, other, symbols))));
+                        standing(type, carrier, other, symbols)));
         return List.copyOf(classes);
+    }
+
+    /** A class over the one value that stands for it, or one nothing produces where there is no
+     *  such value — which is what a position wearing a name this module cannot write leaves. */
+    private static PartitionClass classAt(String id, String label, Classifier is,
+                                          FixtureTemplate standing) {
+        return standing == null
+                ? PartitionClass.ungeneratable(id, label, is,
+                        "nothing here can write a value of this position")
+                : PartitionClass.of(id, label, is, RepresentativeSource.of(standing));
     }
 
     /** A count written at a position, wearing every name that position declares. */
     private static FixtureTemplate standing(Type type, Carrier carrier, Place at, Symbols symbols) {
-        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at), symbols);
+        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at, symbols::reach), symbols);
     }
 
     /** A classifier that reads the term's count out of a row and answers about it. */
@@ -781,7 +792,9 @@ public final class Partitions {
         if (type == Type.INT || type == Type.DECIMAL) {
             Carrier carrier = type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
             Place at = inside(within, carrier);
-            return at == null ? List.of() : List.of(FixtureTemplate.on(carrier, at));
+            FixtureTemplate standing = at == null ? null
+                    : FixtureTemplate.on(carrier, at, symbols::reach);
+            return standing == null ? List.of() : List.of(standing);
         }
         if (type == Type.STRING) {
             return List.of(FixtureTemplate.string("x"));
@@ -833,10 +846,15 @@ public final class Partitions {
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data) {
-            return data.newtype()
+            if (!data.newtype()) {
+                return composed(ref.name(), symbols, expanding);
+            }
+            // A newtype nothing here names has no value anything here can write: the name goes on
+            // the value as it is written, and there is none to put on.
+            return symbols.reach(ref.name()) instanceof TypeReachName.Written written
                     ? insideTheNewtype(ref.name(), symbols, within, expanding).stream()
-                            .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList()
-                    : composed(ref.name(), symbols, expanding);
+                            .map(t -> FixtureTemplate.newtype(written, t)).toList()
+                    : List.of();
         }
         return List.of();
     }
@@ -910,7 +928,8 @@ public final class Partitions {
                 left = FieldDomains.of(record, data, symbols, settled);
             }
         }
-        return List.of(FixtureTemplate.record(record, chosen));
+        return symbols.reach(record) instanceof TypeReachName.Written written
+                ? List.of(FixtureTemplate.record(written, chosen)) : List.of();
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules
@@ -1119,8 +1138,10 @@ public final class Partitions {
         DeclaredBounds.Bounds own = DeclaredBounds.of(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
         Place held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
-        if (held != null) {
-            candidates.add(FixtureTemplate.on(own.carrier(), held));
+        FixtureTemplate at = held == null ? null
+                : FixtureTemplate.on(own.carrier(), held, symbols::reach);
+        if (at != null) {
+            candidates.add(at);
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {

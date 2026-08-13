@@ -361,6 +361,7 @@ final class NeutralForm {
                 : type instanceof Type.SetOf s ? s.element() : null;
     }
 
+    /** As above, for a construction written as a call, where the name is what the row spelled. */
     /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,
      * or it is untyped here and every sum that lists the case is one. */
     boolean readsABareName(Type expected, TypeName caseName) {
@@ -419,8 +420,9 @@ final class NeutralForm {
         return declaredType == null ? null : declaredType.denotes();
     }
 
-    /** Whether a name is a newtype's. Asked of what a reference denotes: an imported value's body
-     * names its own module's types, which the module reading the row need not have imported. */
+    /** Whether {@code name} is a newtype — asked of a name resolution settled, never of a spelling:
+     * an imported value's body names its own module's types, which the module reading the row need
+     * not have imported, and a module of its own may declare something else of that spelling. */
     boolean isNewtype(TypeName name) {
         return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype();
     }

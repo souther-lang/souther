@@ -156,11 +156,13 @@ public final class StructuralCost {
             if (node == null) {
                 continue;
             }
+            // Asked of the name only where something is being substituted for it. What a name
+            // reaches is an answer resolution gives, and the tree this is measured on before that
+            // has none — a definition is counted as written the moment it is parsed, and nothing is
+            // substituted into it there.
             if (node instanceof Ast.Var name) {
-                Ast.Expr body = Path.holds(step.path(), name.reaches())
-                        ? null
-                        : reaches.substitutedAt(name);
-                if (body != null) {
+                Ast.Expr body = reaches.substitutedAt(name);
+                if (body != null && !Path.holds(step.path(), name.reaches())) {
                     todo.add(new Step(body, step.above(), name,
                             new Path(name.reaches(), step.path())));
                     continue;

@@ -14,6 +14,7 @@ import souther.compiler.observe.Classification;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -429,7 +430,8 @@ public final class Generator {
             declared = at1 < 0 || at1 >= subject.types().size() ? null : subject.types().get(at1);
         }
         return declared == null ? null
-                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at), subject.symbols());
+                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at, subject.symbols()::reach),
+                        subject.symbols());
     }
 
     /** A row at a line drawn at one count of one position. */
@@ -1279,9 +1281,18 @@ public final class Generator {
             // Under the names the position is written with, which the reading that found the fields
             // took off to find them. A row at a `data SlotN = Slot` carries `SlotN(Slot { ... })`,
             // and a value composed without them is of a type the parameter does not declare.
-            FixtureTemplate record = RepresentativeSource.under(
-                    view.wrappers().stream().map(TypeOps.Layer::named).toList(),
-                    FixtureTemplate.record(product.name(), built));
+            List<TypeReachName.Written> worn = new ArrayList<>();
+            for (TypeOps.Layer layer : view.wrappers()) {
+                if (!(symbols.reach(layer.named()) instanceof TypeReachName.Written written)) {
+                    return null;   // a name this module cannot write leaves no value to write
+                }
+                worn.add(written);
+            }
+            if (!(symbols.reach(product.name()) instanceof TypeReachName.Written written)) {
+                return null;
+            }
+            FixtureTemplate record = RepresentativeSource.under(worn,
+                    FixtureTemplate.record(written, built));
             return recipe == null ? record : recipe.written(record);
         }
         return null;
@@ -1334,8 +1345,11 @@ public final class Generator {
             // written as a literal of another — which is how a date-time's second count reached a
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
-            return new Edge(List.of(Witnesses.wrapped(axis.type(),
-                    FixtureTemplate.on(carrier, at), symbols)), null, at, null);
+            FixtureTemplate standing = Witnesses.wrapped(axis.type(),
+                    FixtureTemplate.on(carrier, at, symbols::reach), symbols);
+            return standing == null
+                    ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : new Edge(List.of(standing), null, at, null);
         }
         int size = CountDomain.asCount(at);
         if (size < 0) {
