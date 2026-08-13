@@ -269,18 +269,78 @@ public final class Shapes {
         @Override
         public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> derived = db.ask(new Derived(name));
-            if (!derived.present()) {
+            Answer<Map<String, Ast.FnDef>> fns = db.ask(new DesugaredFns(name));
+            if (!derived.present() || !fns.present()) {
                 return Answer.absent();
             }
+            List<Ast.FnDef> out = new ArrayList<>();
+            for (Ast.FnDef fn : derived.value().fns()) {
+                Ast.FnDef came = fns.value().get(fn.name());
+                if (came == null) {
+                    return Answer.absent();
+                }
+                out.add(came);
+            }
+            Ast.Module m = derived.value();
+            return Answer.of(new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+                    m.defs(), m.behaviors(), out, m.takenOn(), m.examples(), m.fakes(),
+                    m.exampleFileTarget(), m.pos()));
+        }
+    }
+
+    /**
+     * A module's definitions by name, each with the newtype constructions written in its body
+     * rewritten to the constructions they are, and only the ones that came out.
+     *
+     * <p>A definition at a time, and every one of them worked out whether or not the one before it
+     * came out. What it reads about the declarations it names is asked for a declaration at a time
+     * too, so a declaration that did not come out leaves the definitions that do not name it with
+     * their answers.
+     */
+    public record DesugaredFns(String name) implements Key<Map<String, Ast.FnDef>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Ast.FnDef>> compute(Db db) {
+            Answer<Ast.Module> settling = db.ask(new Settling(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.DERIVED);
-            if (!scope.present()) {
+            if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
-            try {
-                return Answer.of(NewtypeDesugar.rewrite(derived.value(), scope.value()));
-            } catch (CompileException e) {
-                return Answer.absent(e);
+            Map<String, Ast.FnDef> out = new LinkedHashMap<>();
+            List<Report> reports = new ArrayList<>();
+            for (Ast.FnDef fn : settling.value().fns()) {
+                try {
+                    out.put(fn.name(), NewtypeDesugar.rewriteOf(fn, scope.value()));
+                } catch (CompileException e) {
+                    reports.addAll(Report.of(e));
+                }
             }
+            return Answer.of(Map.copyOf(out), reports);
+        }
+    }
+
+    /**
+     * One definition with the newtype constructions in its body rewritten — its own question, so a
+     * reader depends on the definition it named and not on everything defined beside it.
+     */
+    public record DesugaredFn(String module, String fn) implements Key<Ast.FnDef> {
+        @Override
+        public String module() {
+            return module;
+        }
+
+        @Override
+        public Answer<Ast.FnDef> compute(Db db) {
+            Answer<Map<String, Ast.FnDef>> fns = db.ask(new DesugaredFns(module));
+            if (!fns.present()) {
+                return Answer.absent();
+            }
+            Ast.FnDef came = fns.value().get(fn);
+            return came == null ? Answer.absent() : Answer.of(came);
         }
     }
 

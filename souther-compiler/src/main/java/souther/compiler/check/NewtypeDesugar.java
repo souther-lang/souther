@@ -32,15 +32,28 @@ public final class NewtypeDesugar {
     public static Ast.Module rewrite(Ast.Module m, Symbols symbols) {
         List<Ast.FnDef> fns = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
-            Ast.FnBody body = switch (fn.body()) {
-                case Ast.FnBody.Written w -> new Ast.FnBody.Written(go(w.expr(), symbols));
-                case Ast.FnBody.Intrinsic i -> i;
-            };
-            fns.add(fn.withBody(body));
+            fns.add(rewriteOf(fn, symbols));
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 m.defs(), m.behaviors(), fns, m.takenOn(), m.examples(), m.fakes(),
                 m.exampleFileTarget(), m.pos());
+    }
+
+    /**
+     * One definition's body, with each newtype construction written in it rewritten to the
+     * construction it is.
+     *
+     * <p>A definition at a time, because an application that wraps no single value is wrong in the
+     * body that wrote it and in no other. Rewriting them together answers for a whole module, and
+     * one such application would leave every other definition without the form the check and the
+     * backend read.
+     */
+    public static Ast.FnDef rewriteOf(Ast.FnDef fn, Symbols symbols) {
+        Ast.FnBody body = switch (fn.body()) {
+            case Ast.FnBody.Written w -> new Ast.FnBody.Written(go(w.expr(), symbols));
+            case Ast.FnBody.Intrinsic i -> i;
+        };
+        return fn.withBody(body);
     }
 
     /**
