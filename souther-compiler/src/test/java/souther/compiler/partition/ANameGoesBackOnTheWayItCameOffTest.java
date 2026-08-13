@@ -61,7 +61,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     }
 
     private TypeName named(String name) {
-        return symbols.own(name);
+        return new TypeName(symbols.module(), name);
     }
 
     /** The same name as this module writes it, which is what a row is written with. */

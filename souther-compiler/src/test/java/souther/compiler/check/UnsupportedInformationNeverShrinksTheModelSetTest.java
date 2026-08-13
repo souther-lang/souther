@@ -39,14 +39,14 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = compilation.symbols("demo");
-        return FieldDomains.of(symbols.own(name), data(compilation, name), symbols);
+        return FieldDomains.of(new TypeName(symbols.module(), name), data(compilation, name), symbols);
     }
 
     private static OccurrenceCounts countsOf(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = compilation.symbols("demo");
-        return OccurrenceCounts.of(symbols.own(name), data(compilation, name), symbols);
+        return OccurrenceCounts.of(new TypeName(symbols.module(), name), data(compilation, name), symbols);
     }
 
     /** Two clauses that cannot both hold, both of them read. */

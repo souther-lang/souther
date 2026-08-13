@@ -116,7 +116,7 @@ final class ObservedValues {
                     ? new ObservedValue.Unknown("an optional's value could not be read")
                     : walk(inner, depth);
         }
-        TypeName type = symbols.resolve(name);
+        TypeName type = neutral.typeOf(live);
         if (type == null) {
             return new ObservedValue.Unknown("`" + name + "` is not a type this module can name");
         }

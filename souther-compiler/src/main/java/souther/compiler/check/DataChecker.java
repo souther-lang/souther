@@ -361,7 +361,7 @@ public final class DataChecker {
                                 .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), c.denotes().module())).build());
             }
         }
-        List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
+        List<String> cycle = sumCycle(symbols.own(sum), symbols, new LinkedHashSet<>());
         if (cycle != null) {
             throw CompileException.of(Diagnostic
                             .at(sum.pos()).say(new BehaviorMessage.ASumContainsItself(sum.name(), String.join(" | ", cycle))).build());
@@ -369,7 +369,7 @@ public final class DataChecker {
         sum.decoder().ifPresent(disc -> {
             // a derived codec dispatches over the leaves, so a nested sum's cases count too (§sum-data,
             // §sum-discrimination)
-            Set<TypeName> dispatchable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
+            Set<TypeName> dispatchable = TypeOps.leafCases(Type.ref(symbols.own(sum)), symbols);
             for (Ast.Variant v : disc.variants()) {
                 Ast.Def caseDef = symbols.get(v.caseType().denotes());
                 if (!dispatchable.contains(v.caseType().denotes())) {
@@ -394,14 +394,14 @@ public final class DataChecker {
             // declaring a field of that name and the tag want one key. Refused here rather than
             // written over where it is encoded, which would lose the value with nothing said.
             TypeName carrying = TypeOps.memberCarryingField(
-                    Type.ref(symbols.own(sum.name())), enc.key(), symbols);
+                    Type.ref(symbols.own(sum)), enc.key(), symbols);
             if (carrying != null) {
                 throw CompileException.of(Diagnostic
                                 .at(sum.pos())
                                 .hint(new DataMessage.TheTagAndTheFieldWantOneKey(enc.key())).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), enc.key(), sum.name())).build());
             }
             Set<TypeName> covered = new HashSet<>();
-            Set<TypeName> encodable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
+            Set<TypeName> encodable = TypeOps.leafCases(Type.ref(symbols.own(sum)), symbols);
             for (Ast.EncVariant v : enc.variants()) {
                 if (!encodable.contains(v.caseType().denotes())) {
                     throw CompileException.of(Diagnostic.at(v.pos())
@@ -520,7 +520,7 @@ public final class DataChecker {
     }
 
     private static Scope fieldScope(CheckContext ctx) {
-        return fieldScope(ctx.symbols().own(ctx.data().name()), ctx.data(), ctx.symbols());
+        return fieldScope(ctx.symbols().own(ctx.data()), ctx.data(), ctx.symbols());
     }
 
     /**
@@ -589,7 +589,7 @@ public final class DataChecker {
 
     private static void checkConstruct(Ast.Construct c, CheckContext ctx, Map<String, Type> fields,
                                        Scope env) {
-        if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
+        if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data()))) {
             throw CompileException.of(Diagnostic.at(c.pos())
                     .say(new CodecMessage.TheDecoderBuildsAnotherType(ctx.data().name(),
                             c.typeName().written()))
@@ -713,7 +713,7 @@ public final class DataChecker {
     }
 
     private static void checkEncoder(Ast.EncoderDef enc, CheckContext ctx) {
-        Scope env = Scope.NONE.with(enc.self(), Type.ref(ctx.symbols().own(ctx.data().name())));
+        Scope env = Scope.NONE.with(enc.self(), Type.ref(ctx.symbols().own(ctx.data())));
         checkRawExpr(enc.result(), env, ctx);
     }
 

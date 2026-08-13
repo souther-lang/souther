@@ -316,16 +316,20 @@ final class CodegenContext {
     }
 
     /**
-     * The class of a name as the source (or a derived codec) wrote it. It is resolved the same way
-     * the checker resolved it, so an imported type lands in its own package. A name nothing declares
-     * is one this backend made up — a generated {@code $Enc}/{@code Result} class — and belongs to
-     * the module being generated.
+     * The class of a name this backend made up, in the module being generated — a {@code $Enc}, a
+     * {@code $Dec}, a {@code $Ctfe}. Nothing declares these, so there is nothing to look up and no
+     * other module they could belong to.
+     *
+     * <p>Not for a type. Which module declares a type is what its {@link TypeName} says, and reading
+     * it back off a spelling here answers for whatever this module has under that spelling.
      */
-    ClassDesc cd(String typeName) {
-        return typeDescs.computeIfAbsent(typeName, n -> {
-            TypeName resolved = symbols.resolve(n);
-            return ClassDesc.of(resolved != null ? resolved.qualified() : pkg + "." + n);
-        });
+    ClassDesc generated(String simpleName) {
+        return typeDescs.computeIfAbsent(simpleName, n -> ClassDesc.of(pkg + "." + n));
+    }
+
+    /** The class of a declaration of the module being generated. */
+    ClassDesc cd(Ast.Def def) {
+        return cd(symbols.own(def));
     }
 
     ClassDesc cdBehavior(String name) {
@@ -484,7 +488,7 @@ final class CodegenContext {
     ClassDesc[] caseInterfaces(String name) {
         List<ClassDesc> ifaces = new ArrayList<>();
         for (String sum : caseToSums.getOrDefault(name, List.of())) {
-            ifaces.add(cd(sum));
+            ifaces.add(generated(sum));
         }
         return ifaces.toArray(new ClassDesc[0]);
     }

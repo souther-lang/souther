@@ -50,10 +50,10 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Symbols symbols = compilation.symbols("demo");
         TypeCardinality.Cardinalities solved =
                 TypeCardinality.solve(compilation.module("demo"), symbols);
-        assertEquals(Cardinality.NO_VALUE, solved.of(symbols.own(reader)),
+        assertEquals(Cardinality.NO_VALUE, solved.of(new TypeName(symbols.module(), reader)),
                 "`" + reader + "` has no value while nothing is granted");
-        assertFalse(solved.granting(Set.of(symbols.own(granted)))
-                        .get(symbols.own(reader)).none(),
+        assertFalse(solved.granting(Set.of(new TypeName(symbols.module(), granted)))
+                        .get(new TypeName(symbols.module(), reader)).none(),
                 "`" + reader + "` reaches `" + granted + "` and was granted it has values");
     }
 
@@ -134,7 +134,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Symbols symbols = compilation.symbols("demo");
         assertEquals(Cardinality.NO_VALUE,
                 TypeCardinality.solve(compilation.module("demo"), symbols)
-                        .granting(Set.of(symbols.own("Granted"))).get(symbols.own("Bad")),
+                        .granting(Set.of(new TypeName(symbols.module(), "Granted"))).get(new TypeName(symbols.module(), "Bad")),
                 "and what it wraps was not granted anything");
     }
 
@@ -169,7 +169,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 TypeCardinality.solve(compilation.module("demo"), symbols);
 
         assertEquals(List.of(Cardinality.NO_VALUE, Cardinality.NO_VALUE),
-                List.of(solved.of(symbols.own("A")), solved.of(symbols.own("B"))),
+                List.of(solved.of(new TypeName(symbols.module(), "A")), solved.of(new TypeName(symbols.module(), "B"))),
                 "neither of them can be built");
     }
 }

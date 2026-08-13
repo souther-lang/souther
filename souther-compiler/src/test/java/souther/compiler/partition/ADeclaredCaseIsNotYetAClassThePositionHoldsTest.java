@@ -10,6 +10,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.List;
 
@@ -60,7 +61,7 @@ class ADeclaredCaseIsNotYetAClassThePositionHoldsTest {
     @Test
     void theTypeDeclaresEveryCaseWhateverItsRulesSay() {
         assertEquals(List.of("Prospecting", "Qualified", "Won"),
-                PartitionClasses.of(Type.ref(symbols.own("StageI")), symbols).stream()
+                PartitionClasses.of(Type.ref(new TypeName(symbols.module(), "StageI")), symbols).stream()
                         .map(PartitionClass::id).toList());
     }
 

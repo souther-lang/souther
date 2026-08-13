@@ -74,7 +74,7 @@ public final class Deriver {
         }
         // the decoder and the encoder each read the value under a name of their own, so each owns
         // the bindings it writes rather than sharing the declaration's
-        BindingOwner declared = new BindingOwner.OfData(symbols.own(d.name()));
+        BindingOwner declared = new BindingOwner.OfData(symbols.own(d));
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
                 ? d.decoder()
                 : Optional.of(deriveDecoder(d, shapes, symbols,
@@ -94,7 +94,7 @@ public final class Deriver {
     private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, CodecShape> shapes,
                                                Symbols symbols, Ast.Binders binders) {
         SourcePos pos = d.pos();
-        Ast.Name self = Ast.Name.resolved(symbols.own(d.name()), pos);
+        Ast.Name self = Ast.Name.resolved(symbols.own(d), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
         // with one field (spec §newtype).
         Map.Entry<String, CodecShape> single = bareField(d, shapes);

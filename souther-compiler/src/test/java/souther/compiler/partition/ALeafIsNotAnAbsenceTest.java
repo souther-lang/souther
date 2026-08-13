@@ -6,6 +6,7 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +47,7 @@ class ALeafIsNotAnAbsenceTest {
     }
 
     private Type named(String name) {
-        return Type.ref(symbols.own(name));
+        return Type.ref(new TypeName(symbols.module(), name));
     }
 
     // --- a leaf says one thing ------------------------------------------------------------------

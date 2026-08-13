@@ -25,8 +25,11 @@ import java.util.Set;
  * a map's entries — are the same rules whichever direction arrives at them, so they are here rather
  * than restated on one side and read from the other.
  *
- * <p>Nothing here knows about the JVM classes an example runs against ({@link HelperInvoker} does) or
- * about diagnostics: a form that cannot be reached is a {@link FixtureException}, which the row reports.
+ * <p>Running an example is {@link HelperInvoker}'s, and diagnostics are the row's: a form that cannot
+ * be reached is a {@link FixtureException}, which the row reports. What is here is the one reading of
+ * the classes a run answers with — {@link #typeOf} for which declaration a value is and
+ * {@link #simpleName} for what a report quotes — because a live value's type is a question every
+ * reader of a run asks and only one answer to it is right.
  */
 final class NeutralForm {
 
@@ -95,7 +98,7 @@ final class NeutralForm {
         if (name.equals("Option$Some")) {
             return of(field(live, "value", helper), opened, helper);
         }
-        TypeName caseName = symbols.resolve(name);
+        TypeName caseName = typeOf(live);
         if (caseName == null) {
             throw new FixtureException("`" + helper + "` returned a " + name
                     + ", which is not a type this example can read");
@@ -570,7 +573,33 @@ final class NeutralForm {
                 || v instanceof java.time.Instant;
     }
 
-    /** The case name a live value carries: its class's simple name, which is the type's own name. */
+    /**
+     * Which declaration a live value is, read off the class it was generated as. A binary name is a
+     * {@link TypeName}'s qualified form, so the class the run answered with says both the module and
+     * the name, and this answers for the type the value is.
+     *
+     * <p>Not its simple name resolved here. A helper a fixture applies may be one another module
+     * published, and resolving the spelling in this module's scope answers for whatever this module
+     * has under it: nothing, where the type is reached through an alias and no bare name of this
+     * module spells it, and the wrong declaration where this module spells something else the same.
+     * The class carries the module, and dropping it is what makes those two answers possible.
+     */
+    TypeName typeOf(Object live) {
+        if (live == null) {
+            return null;
+        }
+        String binary = live.getClass().getName();
+        int dot = binary.lastIndexOf('.');
+        if (dot < 0) {
+            return null;
+        }
+        TypeName named = new TypeName(binary.substring(0, dot), binary.substring(dot + 1));
+        return symbols.contains(named) ? named : null;
+    }
+
+    /** What a report quotes a live value's class as. Its own name, and not the type's identity —
+     *  {@link #typeOf} is that, and the two are separate answers because a report about a value of a
+     *  type this module cannot name still has to say what it was. */
     static String simpleName(Object o) {
         if (o == null) {
             return "null";

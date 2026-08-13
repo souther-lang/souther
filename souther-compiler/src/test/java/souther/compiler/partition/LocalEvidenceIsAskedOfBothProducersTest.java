@@ -8,6 +8,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.List;
 
@@ -60,7 +61,7 @@ class LocalEvidenceIsAskedOfBothProducersTest {
 
     private LocalInspection inspect(String type) {
         return LocalInspection.inspect(
-                PartitionInput.of(TypeView.of(Type.ref(symbols.own(type)), symbols)),
+                PartitionInput.of(TypeView.of(Type.ref(new TypeName(symbols.module(), type)), symbols)),
                 TermPath.of("x"), symbols, null);
     }
 

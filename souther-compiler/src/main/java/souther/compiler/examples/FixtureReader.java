@@ -341,9 +341,9 @@ public final class FixtureReader {
      * <p>The case's own name, not the spelling: what came out carries the name its type was declared
      * under, so a row spelling that type qualified asserts the same case.
      */
-    String caseOnly(Ast.Expr expected) {
+    TypeName caseOnly(Ast.Expr expected) {
         return expected instanceof Ast.Var v && v.denotes() instanceof ValueName.OfType named
-                ? named.type().name() : null;
+                ? named.type() : null;
     }
 
     // --- what a row asserts ---------------------------------------------------------------------
@@ -918,7 +918,7 @@ public final class FixtureReader {
         // The type the value is, and not this module's reading of its spelling: a helper a fixture
         // applies may be one another module published, and what it answered with is that module's
         // type however this module spells the same name.
-        TypeName type = answeredType(live);
+        TypeName type = typeOf(live);
         if (type != null && symbols.get(type) instanceof Ast.Data data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             if (data.newtype()) {
@@ -1075,7 +1075,7 @@ public final class FixtureReader {
         if (result instanceof Iterable<?> || result instanceof Map<?, ?>) {
             return showAny(result);
         }
-        Object encoded = encodedOrNull(result, name);
+        Object encoded = encodedOrNull(result, typeOf(result));
         if (encoded != null) {
             return show(name, encoded);
         }
@@ -1105,7 +1105,7 @@ public final class FixtureReader {
             return elements.isEmpty() ? "[]" : "[ " + String.join(", ", elements) + " ]";
         }
         String name = NeutralForm.simpleName(v);
-        Object encoded = encodedOrNull(v, name);
+        Object encoded = encodedOrNull(v, typeOf(v));
         return encoded != null ? show(name, encoded) : name;
     }
 
@@ -1123,16 +1123,11 @@ public final class FixtureReader {
         return m.invoke(null);
     }
 
-    /** {@code result} through its class's derived {@code encoder()}, or null when it has none. */
-    private Object encodedOrNull(Object result, String name) {
-        TypeName type = symbols.resolve(name);
-        return encoded(result, type != null ? type.qualified() : module.name() + "." + name);
-    }
-
-    /** As above, for a type already resolved — a fixture says which case it constructs, and that answer
-     * names the class whether or not the reader spells the type the way its module does. */
+    /** {@code result} through the derived {@code encoder()} of the type it is, or null where the type
+     * is not one a module declares and so has no derived codec to reach. The type names the class
+     * whether or not the reader spells it the way its module does. */
     private Object encodedOrNull(Object result, TypeName type) {
-        return encoded(result, type.qualified());
+        return type == null ? null : encoded(result, type.qualified());
     }
 
     private Object encoded(Object result, String className) {
@@ -1370,7 +1365,7 @@ public final class FixtureReader {
                 // and a fixture is not elaborated, so a value's Java surface would otherwise be
                 // reachable as though it were the data's — `.isEmpty` on a `String` is a method
                 // here and a field nowhere.
-                TypeName answered = answeredType(value);
+                TypeName answered = typeOf(value);
                 if (answered == null || fieldTypeOf(Type.ref(answered), fa.field()) == null) {
                     throw new FixtureException("`" + written + "` answered with a value that"
                             + " declares no field `" + fa.field() + "`");
@@ -1599,24 +1594,10 @@ public final class FixtureReader {
         };
     }
 
-    /**
-     * The data a live value is, read off the class it was generated as. A binary name is a
-     * {@link TypeName}'s qualified form, so this answers the type the value is.
-     *
-     * <p>Not its simple name resolved here. A helper a fixture applies may be one another module
-     * published, and resolving the spelling in this module's scope would answer for a type this
-     * module happens to declare under the same name rather than for the one the value is — the
-     * same reason {@link #represents} compares a class against a candidate's qualified form
-     * instead of resolving what came out.
-     */
-    private TypeName answeredType(Object value) {
-        String binary = value.getClass().getName();
-        int dot = binary.lastIndexOf('.');
-        if (dot < 0) {
-            return null;
-        }
-        TypeName named = new TypeName(binary.substring(0, dot), binary.substring(dot + 1));
-        return symbols.contains(named) ? named : null;
+    /** Which declaration a live value is — {@link NeutralForm#typeOf}, which every reader of a run
+     *  asks, and {@link #represents} is the same discipline the other way about. */
+    TypeName typeOf(Object value) {
+        return neutral.typeOf(value);
     }
 
     /**

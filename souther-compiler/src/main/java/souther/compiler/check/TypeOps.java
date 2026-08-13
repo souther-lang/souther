@@ -882,7 +882,24 @@ public final class TypeOps {
     public static Map<String, BindingId> fieldBindings(TypeName declared, Ast.Data data,
                                                        Symbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
-        walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
+        walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings, false);
+        return bindings;
+    }
+
+    /**
+     * As above, asked by {@link Resolve} while it is resolving.
+     *
+     * <p>The one caller for which an include may still be a name nothing has answered for. Reading
+     * the spelling there is the pass doing its own work, and it is a separate way in so that it
+     * cannot be reached by a reader after the pass: one that met an unanswered include and repaired
+     * it from characters would be answering for whatever the reading module has under them, and
+     * would hide the producer that left the name unanswered — which is the whole of what this
+     * change is about.
+     */
+    static Map<String, BindingId> fieldBindingsWhileResolving(TypeName declared, Ast.Data data,
+                                                              Symbols symbols) {
+        Map<String, BindingId> bindings = new LinkedHashMap<>();
+        walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings, true);
         return bindings;
     }
 
@@ -903,18 +920,29 @@ public final class TypeOps {
      * says nothing more.
      */
     private static void walkFields(Ast.Data data, TypeName declared, Symbols symbols,
-                                   Set<TypeName> seen, Map<String, BindingId> out) {
+                                   Set<TypeName> seen, Map<String, BindingId> out,
+                                   boolean resolving) {
         BindingOwner owner = new BindingOwner.OfFields(declared);
         int ordinal = 0;
         for (Ast.Field field : data.fields()) {
             out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
         }
         for (Ast.Name include : data.includes()) {
-            TypeName source = include.denotes() != null
-                    ? include.denotes() : symbols.resolve(include.written());
+            TypeName source = include.denotes();
+            if (source == null) {
+                if (!resolving) {
+                    // Resolve answers every name it reads, an unknown one included, so a tree it
+                    // wrote has none of these. One here is a tree some other producer built, and
+                    // reading the spelling to carry on would answer for whatever this module has
+                    // under it and leave the producer unmentioned.
+                    throw new IllegalStateException("the include `" + include.written()
+                            + "` of `" + declared + "` denotes nothing");
+                }
+                source = symbols.resolve(include.name());
+            }
             if (source != null && seen.add(source)
                     && symbols.get(source) instanceof Ast.Data included) {
-                walkFields(included, source, symbols, seen, out);
+                walkFields(included, source, symbols, seen, out, resolving);
             }
         }
     }
@@ -1558,7 +1586,7 @@ public final class TypeOps {
                 if (ref.name().startsWith("'")) {
                     yield Type.var(ref.name());   // a type variable, admitted only in the core
                 }
-                TypeName resolved = symbols.resolve(ref.name());
+                TypeName resolved = symbols.resolve(ref.written());
                 if (resolved != null) {
                     yield resolved.isUnresolved() ? Type.ERRONEOUS : Type.ref(resolved);
                 }
@@ -1566,7 +1594,7 @@ public final class TypeOps {
                 // that way; a declaration reads it the same, which is what lets `Int |
                 // DivisionByZero` be written rather than only met. Asked after the module's own
                 // declarations, so a name a model declares keeps its meaning.
-                TypeName asCase = symbols.resolveCase(ref.name());
+                TypeName asCase = symbols.resolveCase(ref.written());
                 if (asCase != null && !asCase.isUnresolved()) {
                     yield Type.ref(asCase);
                 }
