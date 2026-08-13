@@ -132,7 +132,7 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     /** The absent optional, which the language names rather than any module. */
     public static FixtureTemplate none() {
         return new FixtureTemplate("None",
-                new Ast.Var(WrittenName.synthetic("None", NOWHERE),
+                Ast.Var.denoting(WrittenName.synthetic("None", NOWHERE),
                         new ValueName.Builtin("None"), new ReachName.Bare("None")));
     }
 
@@ -140,7 +140,7 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     public static FixtureTemplate unitCase(TypeReachName.Written type) {
         String written = type.rendered();
         return new FixtureTemplate(written,
-                new Ast.Var(WrittenName.synthetic(written, NOWHERE),
+                Ast.Var.denoting(WrittenName.synthetic(written, NOWHERE),
                         new ValueName.OfType(written, type.denotes(), ConstructionOrigin.own()),
                         new ReachName.Bare(written)));
     }

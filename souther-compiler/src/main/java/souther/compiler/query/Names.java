@@ -6,6 +6,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.Suggest;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -300,7 +301,7 @@ public final class Names {
                 // The module is one this compilation has and could not read. What is wrong with it
                 // is reported on its own source; saying anything here sends the author to a file
                 // that is fine.
-                return reached(ref, new ValueName.Unresolved(written));
+                return ref.unanswered();
             }
             if (!declared.value().contains(bare)) {
                 return nothing(ref, unknown.report(ref, declared.value()));
@@ -316,7 +317,7 @@ public final class Names {
         private Ast.Var bare(Ast.Var ref, String written, Unknown unknown) {
             BehaviorsInScope.Of scope = db.ask(new BehaviorsInScope(m.name())).value();
             if (scope == null) {
-                return reached(ref, new ValueName.Unresolved(written));
+                return ref.unanswered();
             }
             ValueName.Behavior named = scope.byName().get(written);
             if (named != null) {
@@ -325,7 +326,7 @@ public final class Names {
             if (!scope.whole()) {
                 // An import that could not be followed may have been where this name came from.
                 // Whatever is wrong with that module is reported there.
-                return reached(ref, new ValueName.Unresolved(written));
+                return ref.unanswered();
             }
             return nothing(ref, unknown.report(ref, scope.byName().keySet()));
         }
@@ -357,7 +358,7 @@ public final class Names {
         /** Records why a name denotes nothing, and gives it the name that says so. */
         private Ast.Var nothing(Ast.Var ref, Report report) {
             reports.add(report);
-            return reached(ref, new ValueName.Unresolved(ref.name()));
+            return ref.unanswered();
         }
     }
 
@@ -468,8 +469,8 @@ public final class Names {
 
         @Override
         public Answer<Map<String, Ast.Def>> compute(Db db) {
-            Answer<Ast.Module> m = db.ask(new Resolved(name));
-            return m.present() ? Answer.of(defsOf(m.value())) : Answer.absent();
+            Answer<ResolvedModule> m = db.ask(new Resolved(name));
+            return m.present() ? Answer.of(defsOf(m.value().module())) : Answer.absent();
         }
     }
 
@@ -711,7 +712,7 @@ public final class Names {
                     || unbuilt.value().contains(named.name())) {
                 return Answer.absent();
             }
-            for (Ast.Def def : resolution.value().module().defs()) {
+            for (Ast.Def def : resolution.value().module().module().defs()) {
                 if (def.name().equals(named.name())) {
                     return Answer.of(def);
                 }
@@ -1069,14 +1070,14 @@ public final class Names {
     }
 
     /** The resolved module — {@link Resolution} without the record of how it got there. */
-    public record Resolved(String name) implements Key<Ast.Module> {
+    public record Resolved(String name) implements Key<ResolvedModule> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
+        public Answer<ResolvedModule> compute(Db db) {
             Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
             return resolution.present() ? Answer.of(resolution.value().module()) : Answer.absent();
         }
@@ -1328,8 +1329,7 @@ public final class Names {
                 case ValueName.Helper h -> h.module();
                 case ValueName.Behavior b -> b.module();
                 case ValueName.Local l -> l.id().owner().module();
-                case ValueName.Stdlib _, ValueName.OfType _,
-                        ValueName.Builtin _, ValueName.Unresolved _ -> null;
+                case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _ -> null;
             };
         }
 

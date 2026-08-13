@@ -151,6 +151,9 @@ final class PartialReachability {
      * not be written where a value goes. A value takes none and is read rather than handed over.
      */
     boolean isPartialFunctionNamed(Ast.Var v) {
+        if (v.answered() == null) {
+            return false;   // it names no helper, partial or otherwise
+        }
         Ast.FnDef declared = declarationOf(v.denotes(), v.reachedAs(), inliner);
         return declared != null && declared.partial() && !declared.params().isEmpty();
     }
@@ -250,13 +253,14 @@ final class PartialReachability {
 
     private static void collectReached(Ast.Expr e, HelperInliner inliner, Set<String> out) {
         switch (e) {
-            case Ast.Apply call -> {
+            // A name nothing answered reaches no declaration, so it makes no edge.
+            case Ast.Apply call when call.answered() != null -> {
                 Ast.FnDef applied = declarationOf(call.denotes(), call.reachedAs(), inliner);
                 if (applied != null) {
                     out.add(keyOf(call.denotes(), call.reachedAs()));
                 }
             }
-            case Ast.Var v -> {
+            case Ast.Var v when v.answered() != null -> {
                 Ast.FnDef read = declarationOf(v.denotes(), v.reachedAs(), inliner);
                 if (read != null && read.params().isEmpty()) {
                     out.add(keyOf(v.denotes(), v.reachedAs()));

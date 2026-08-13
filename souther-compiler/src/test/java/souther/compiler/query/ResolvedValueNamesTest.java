@@ -17,8 +17,10 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -36,7 +38,7 @@ class ResolvedValueNamesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        return c.db().ask(new Names.Resolved("m.a")).value();
+        return c.db().ask(new Names.Resolved("m.a")).value().module();
     }
 
     /** Every name used as a value in the module's bodies, in the order it is written. */
@@ -59,6 +61,18 @@ class ResolvedValueNamesTest {
 
     private static ValueName denotes(Ast.Expr e) {
         return e instanceof Ast.Var v ? v.denotes() : ((Ast.Apply) e).denotes();
+    }
+
+    /** The name written as {@code written}, whatever state resolution left it in. */
+    private static Ast.Var nameOf(String source, String written) {
+        for (Ast.Expr e : named(resolve(source))) {
+            Ast.Var v = e instanceof Ast.Var name ? name
+                    : ((Ast.Apply) e).function() instanceof Ast.Var f ? f : null;
+            if (v != null && v.name().equals(written)) {
+                return v;
+            }
+        }
+        throw new AssertionError("nothing named `" + written + "` in the resolved module");
     }
 
     /** The one named {@code written}, which each of these writes once. */
@@ -265,7 +279,10 @@ class ResolvedValueNamesTest {
                 let f (n) = nosuch
                 """;
 
-        assertInstanceOf(ValueName.Unresolved.class, denotationOf(source, "nosuch"));
+        Ast.Var name = nameOf(source, "nosuch");
+        assertInstanceOf(Ast.Var.Unanswered.class, name);
+        // and it holds no stand-in for a reader below to take for a declaration
+        assertThrows(IllegalStateException.class, name::denotes);
     }
 
     /** Every name in every body is answered — nothing is left as a spelling for a later reader to
@@ -289,6 +306,7 @@ class ResolvedValueNamesTest {
                 """);
 
         for (Ast.Expr e : named(m)) {
+            assertFalse(e instanceof Ast.Var.Written, "name nothing has read in " + e);
             assertTrue(denotes(e) != null, "unanswered name in " + e);
         }
     }

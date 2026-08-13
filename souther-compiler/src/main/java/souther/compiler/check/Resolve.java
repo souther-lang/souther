@@ -35,9 +35,11 @@ import java.util.Set;
  * {@link TypeName} it denotes, and a check that wants to know whether two names are the same type
  * compares what they denote. There is no spelling left to compare.
  *
- * <p>A name that denotes nothing is reported here and denotes {@link TypeName#unresolved} — which
- * becomes {@link souther.compiler.types.Type#ERRONEOUS} — so no later pass sees an unresolved name
- * and none of them needs a null branch. The pass does not stop: the rest of the module is resolved
+ * <p>A name that denotes nothing is reported here and is {@link Ast.Name.Unanswered} from there on
+ * — a state of the name and not a stand-in identity, so nothing below reads it as a declaration and
+ * nothing below has a spelling to fall back to. Where a type reference stands on such a name, what
+ * it denotes is {@link souther.compiler.types.Type#ERRONEOUS}. The pass does not stop: the rest of
+ * the module is resolved
  * as if the mistake were not there, which is what lets an author be told about every unknown name at
  * once and lets an editor still say what the names around one mean. A name a pass synthesized
  * already knowing what it means (a codec {@code Deriver} builds from a field's type) is left as it
@@ -215,12 +217,13 @@ public final class Resolve {
      * A resolved module, what the pass worked out about the names in it, and the names it could not
      * answer.
      *
-     * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
-     * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
-     * resolved as if the mistake were not there — so an author is told about every unknown name at
-     * once instead of one per compile, and an editor can still say what the names around it mean.
+     * <p>A name that denotes nothing does not end the pass. It is {@link Ast.Name.Unanswered}, a
+     * type reference standing on one denotes {@link souther.compiler.types.Type#ERRONEOUS}, and the
+     * rest of the module is resolved as if the mistake were not there — so an author is told about
+     * every unknown name at once instead of one per compile, and an editor can still say what the
+     * names around it mean.
      */
-    public record Resolved(Ast.Module module, ResolutionIndex index,
+    public record Resolved(ResolvedModule module, ResolutionIndex index,
                            List<CompileException> unresolved,
                            Map<String, OfDeclaration> declarations) {}
 
@@ -258,7 +261,7 @@ public final class Resolve {
             // the compiler, not something an author can be told about and carry on past.
             throw resolved.unresolved().get(0);
         }
-        return resolved.module();
+        return resolved.module().module();
     }
 
     /** As {@link #module(Ast.Module, Symbols)}, keeping what each name was answered with. */
@@ -333,9 +336,9 @@ public final class Resolve {
             exposedOutputs.put(e.getKey(), r.retType(e.getValue()));
         }
         return new Resolved(
-                new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
-                        behaviors, fns, m.takenOn(), examples, fakes, m.exampleFileTarget(),
-                        m.pos()),
+                new ResolvedModule(new Ast.Module(m.name(), m.exposing(), exposedOutputs,
+                        m.imports(), defs, behaviors, fns, m.takenOn(), examples, fakes,
+                        m.exampleFileTarget(), m.pos())),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
                         Map.copyOf(r.binders)),
                 List.copyOf(r.unresolved), Map.copyOf(declarations));
@@ -408,7 +411,7 @@ public final class Resolve {
     /** A written type reference, with what it denotes decided here — once, and in the module that
      * wrote it, so no later reader has to know where it was written. */
     private Ast.TypeRef typeRef(Ast.TypeRef ref) {
-        if (ref == null || ref.denotes() != null) {
+        if (ref == null || ref instanceof Ast.TypeRef.Denoting) {
             return ref;
         }
         Ast.TypeTerm arg = typeTerm(ref.arg());
@@ -419,7 +422,7 @@ public final class Resolve {
                 elems.add(typeTerm(e));
             }
         }
-        Ast.TypeRef resolved = new Ast.TypeRef(ref.written(), arg, elems, null, ref.anchor());
+        Ast.TypeRef resolved = new Ast.TypeRef.Written(ref.written(), arg, elems, ref.anchor());
         Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
@@ -458,7 +461,7 @@ public final class Resolve {
     private List<Ast.Name> sumCases(Ast.SumData s) {
         List<Ast.Name> out = new ArrayList<>();
         for (Ast.Name c : s.cases()) {
-            if (c.denotes() != null) {
+            if (!(c instanceof Ast.Name.Written)) {
                 out.add(c);
                 continue;
             }
@@ -466,6 +469,10 @@ public final class Resolve {
             if (denoted == null) {
                 throw CompileException.of(Diagnostic
                                 .at(s.pos()).say(new BehaviorMessage.UnknownCaseInASum(c.written(), s.name())).build());
+            }
+            if (denoted.isUnresolved()) {
+                out.add(answered(c.unanswered()));
+                continue;
             }
             // Recorded like any other written name. A case is a name this module wrote and this pass
             // answered, so leaving it out made it a use nothing could see — an editor asked about it
@@ -732,21 +739,26 @@ public final class Resolve {
      * type name is.
      */
     private Ast.Var name(Ast.Var written, Bindings bound) {
-        return written.denotes() != null ? written
-                : reached(written, bound);
+        return written instanceof Ast.Var.Written ? reached(written, bound) : written;
     }
 
     /** An application of a name, with what the name denotes and how this module reaches it answered
      * here — the same pair, from the same place, as a name standing on its own. */
     private Ast.Expr applied(Ast.Apply call, Bindings bound) {
-        ValueName denotes = answered(call.name(), calledName(call, bound));
+        ValueName denotes = calledName(call, bound);
         // Answered rather than rebuilt: what the callee means is settled here and where it is
         // written is not this pass's to decide. Building one from the name would take its extent
         // from the characters that spell it, which is short of what a parenthesized callee covers.
-        Ast.Var name = call.function() instanceof Ast.Var applied
-                ? applied.denoting(denotes, ReachName.of(denotes, call.written(), values.module()))
-                : new Ast.Var(call.name(), denotes,
-                        ReachName.of(denotes, call.written(), values.module()));
+        Ast.Var written = call.function() instanceof Ast.Var applied ? applied
+                : Ast.Var.written(call.name());
+        Ast.Var name;
+        if (denotes == null) {
+            name = written.unanswered();
+        } else {
+            answered(call.name(), denotes);
+            name = written.denoting(denotes,
+                    ReachName.of(denotes, call.written(), values.module()));
+        }
         return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos(),
                 call.region());
     }
@@ -760,7 +772,11 @@ public final class Resolve {
      * this carries the answer to avoid.
      */
     private Ast.Var reached(Ast.Var v, Bindings bound) {
-        ValueName denotes = answered(v.written(), valueName(v.written(), bound));
+        ValueName denotes = valueName(v.written(), bound);
+        if (denotes == null) {
+            return v.unanswered();
+        }
+        answered(v.written(), denotes);
         return v.denoting(denotes, ReachName.of(denotes, v.name(), values.module()));
     }
 
@@ -888,14 +904,15 @@ public final class Resolve {
      */
     private Ast.Var qualifiedName(Ast.FieldAccess fa, boolean applied, Bindings bound) {
         Ast.Var root = rootName(fa);
-        if (root == null || root.denotes() != null || bound.binderOf(root.name()) != null) {
+        if (root == null || !(root instanceof Ast.Var.Written)
+                || bound.binderOf(root.name()) != null) {
             return null;
         }
         WrittenName written = dottedName(fa);
         ValueName denotes = lookup(written, applied, bound);
         if (denotes != null) {
             ValueName resolved = answered(written, denotes);
-            return new Ast.Var(written, resolved,
+            return Ast.Var.denoting(written, resolved,
                     ReachName.of(resolved, written.canonical(), values.module()));
         }
         return unknownMember(fa, written, applied, bound);
@@ -918,10 +935,8 @@ public final class Resolve {
         if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
         }
-        CompileException why = unknownIdentifier(written, bound);
-        ValueName resolved = answered(written, nothing(written.canonical(), why));
-        return new Ast.Var(written, resolved,
-                ReachName.of(resolved, written.canonical(), values.module()));
+        nothing(unknownIdentifier(written, bound));
+        return new Ast.Var.Unanswered(written, written.region());
     }
 
     /** Whether {@code qualifier} names a namespace a member may be reached through: a
@@ -952,11 +967,10 @@ public final class Resolve {
         };
     }
 
-    /** What a name used as a value denotes, and the report for one that denotes nothing. */
+    /** What a name used as a value denotes, or null where nothing does — reported here. */
     private ValueName valueName(WrittenName written, Bindings bound) {
         ValueName denotes = lookup(written, false, bound);
-        return denotes != null ? denotes
-                : nothing(written.canonical(), unknownIdentifier(written, bound));
+        return denotes != null ? denotes : nothing(unknownIdentifier(written, bound));
     }
 
     /**
@@ -968,8 +982,7 @@ public final class Resolve {
      */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
         ValueName denotes = lookup(call.name(), true, bound);
-        return denotes != null ? denotes
-                : nothing(call.written(), unknownIdentifier(call.name(), bound));
+        return denotes != null ? denotes : nothing(unknownIdentifier(call.name(), bound));
     }
 
     /**
@@ -986,10 +999,6 @@ public final class Resolve {
      * there under a spelling nothing binds.
      */
     private ValueName answered(WrittenName written, ValueName denotes) {
-        if (denotes instanceof ValueName.Unresolved) {
-            failed++;
-            return denotes;
-        }
         if (written.pos() == null) {
             return denotes;
         }
@@ -1000,10 +1009,17 @@ public final class Resolve {
         return denotes;
     }
 
-    /** Records that a name in a body denotes nothing, and gives it the name that says so. */
-    private ValueName nothing(String written, CompileException why) {
+    /**
+     * Records that a name in a body denotes nothing, and answers with nothing.
+     *
+     * <p>The name that carries this is {@link Ast.Var.Unanswered}, built where the reference is:
+     * a stand-in identity handed back here would say a binding is there under a spelling nothing
+     * binds, and every reader below would have to know not to believe it.
+     */
+    private ValueName nothing(CompileException why) {
         unresolved.add(why);
-        return new ValueName.Unresolved(written);
+        failed++;
+        return null;
     }
 
     /** The names a body could have written where it wrote one nothing answers to. */
@@ -1095,14 +1111,14 @@ public final class Resolve {
 
     /** A name that must denote a declared type. */
     private Ast.Name type(Ast.Name n) {
-        if (n.denotes() != null) {
+        if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
         TypeName denoted = symbols.resolve(n.name());
         if (denoted == null) {
-            return answered(n.denoting(nothingDenotes(n)));
+            return answered(nothingDenotes(n));
         }
-        return answered(n.denoting(denoted));
+        return answered(standingFor(n, denoted));
     }
 
     /** The names a {@code match} arm may write: a declared case, a primitive heading a union
@@ -1117,7 +1133,7 @@ public final class Resolve {
     }
 
     private Ast.Name caseName(Ast.Name n) {
-        if (n.denotes() != null) {
+        if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
         TypeName denoted = symbols.resolveCase(n.name());
@@ -1125,9 +1141,9 @@ public final class Resolve {
             denoted = TypeName.optionCase(n.written());
         }
         if (denoted == null) {
-            return answered(n.denoting(nothingDenotes(n)));
+            return answered(nothingDenotes(n));
         }
-        return answered(n.denoting(denoted));
+        return answered(standingFor(n, denoted));
     }
 
     /**
@@ -1147,17 +1163,27 @@ public final class Resolve {
         }
     }
 
-    /** Records that {@code n} denotes nothing, and gives it the name that says so. */
-    private TypeName nothingDenotes(Ast.Name n) {
+    /** Reports that nothing declares {@code n}, and hands back the name that says so. */
+    private Ast.Name nothingDenotes(Ast.Name n) {
         unresolved.add(TypeOps.unknownType(n.name(), symbols));
-        return TypeName.unresolved(n.written());
+        return n.unanswered();
+    }
+
+    /**
+     * {@code n} against what the scope answered with, which is not always a declaration: a name an
+     * import line could not bring in is in scope standing for nothing, so that a use of it takes the
+     * error type rather than being reported as an unknown name at every use. The import line is
+     * where that was reported, so nothing more is said here.
+     */
+    private Ast.Name standingFor(Ast.Name n, TypeName denoted) {
+        return denoted.isUnresolved() ? n.unanswered() : n.denoting(denoted);
     }
 
     /** Records what a name was answered with, and hands it back. A name with no position was
      * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
      * name nothing answered is an absence rather than a declaration to record. */
     private Ast.Name answered(Ast.Name n) {
-        if (n.denotes().isUnresolved()) {
+        if (n instanceof Ast.Name.Unanswered) {
             failed++;
         } else if (n.pos() != null) {
             denotations.add(new Denotation(n.name(), n.denotes()));

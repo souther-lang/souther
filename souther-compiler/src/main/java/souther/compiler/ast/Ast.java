@@ -168,28 +168,38 @@ public interface Ast {
      * runs; every name-bearing position in this tree carries one of these, so no later pass decides
      * for itself what a spelling means or whether a qualified one is allowed here (issue #177).
      *
-     * <p>A check reads {@link #denotes()}, which is set on every name the resolve pass let through —
-     * a name that denotes nothing is reported there and the compile stops, so nothing downstream sees
-     * an unresolved one. {@link #written()} is the name, and is not what a report quotes: a bare and
+     * <p>A check reads {@link #denotes()}, which every name the pass answered carries. A name
+     * nothing declares is reported where it is written and is {@link Unanswered} from there on,
+     * which the check over its declaration is what settles ({@code Names.Unbuilt}): the pass does
+     * not stop, so an author is told about every unknown name at once and the definitions beside it
+     * are still checked. {@link #written()} is the name, and is not what a report quotes: a bare and
      * a qualified spelling of one type are one name, and a decomposed and a composed spelling are
      * one name too, so neither says what the author typed. A report asks {@link WrittenName#quoted()}
      * and underlines {@link WrittenName#region()}.
      */
-    record Name(WrittenName name, TypeName denotes) implements Ast {
+    sealed interface Name extends Ast permits Name.Written, Name.Denoting, Name.Unanswered {
+
+        /** The name, and the occurrence of it that was read. */
+        WrittenName name();
 
         /** A name as the parser read it, before the resolve pass has said what it denotes. Only the
          * parser writes one: every other producer knows what it means and says so. The spelling is
          * the source's, not one a caller canonicalized on the way in — {@link WrittenName} is what
          * canonicalizes, so the name and the characters it was written with stay one value. */
-        public static Name written(String spelling, SourcePos pos) {
-            return new Name(WrittenName.of(spelling, pos), null);
+        static Name written(String spelling, SourcePos pos) {
+            return new Written(WrittenName.of(spelling, pos));
+        }
+
+        /** The same, off an occurrence the parser has already read. */
+        static Name written(WrittenName name) {
+            return new Written(name);
         }
 
         /** A name a pass synthesized, already knowing what it denotes. It is written nowhere;
          * {@code pos} is what a complaint about it points at. The spelling is the declaration's own,
          * which is what a reference internal to a module reaches it by. */
-        public static Name resolved(TypeName denotes, SourcePos pos) {
-            return new Name(WrittenName.synthetic(denotes.name(), pos), denotes);
+        static Name resolved(TypeName denotes, SourcePos pos) {
+            return new Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
         }
 
         /**
@@ -199,28 +209,99 @@ public interface Ast {
          * every module writes, so a name synthesized with it quotes a spelling the reader cannot
          * write. What it denotes is the same either way.
          */
-        public static Name reached(TypeReachName.Written type, SourcePos pos) {
-            return new Name(WrittenName.synthetic(type.rendered(), pos), type.denotes());
+        static Name reached(TypeReachName.Written type, SourcePos pos) {
+            return new Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
-        public String written() {
-            return name.canonical();
+        default String written() {
+            return name().canonical();
         }
 
         /** Where the name is written, or where a synthesized one is anchored. */
-        public SourcePos pos() {
-            return name.pos();
+        default SourcePos pos() {
+            return name().pos();
+        }
+
+        /**
+         * The declaration this names, for a reader that is asking which one it is.
+         *
+         * <p>Refused two ways, and they are not the same thing. A {@link Written} one is a pass
+         * reading it before resolution answered it, which is a fault in this compiler. An
+         * {@link Unanswered} one is a mistake in the source, reported where the name is written —
+         * refused here because there is no declaration to hand back, and a reader that wants to go
+         * on without one asks which of the two it is rather than taking the spelling. This is the
+         * one place that says so.
+         */
+        default TypeName denotes() {
+            if (this instanceof Denoting denoting) {
+                return denoting.type();
+            }
+            throw new IllegalStateException("`" + written() + "` at " + pos()
+                    + (this instanceof Unanswered
+                            ? " denotes nothing and was read as though it did"
+                            : " was read as a declaration before it was resolved"));
         }
 
         /** The same name, resolved to what it denotes. */
-        public Name denoting(TypeName resolved) {
-            return new Name(name, resolved);
+        default Name denoting(TypeName resolved) {
+            return new Denoting(name(), resolved);
         }
 
-        @Override
-        public String toString() {
-            return written();
+        /** The same name, read and found to name nothing. */
+        default Name unanswered() {
+            return new Unanswered(name());
+        }
+
+        /** A name as the parser read it. */
+        record Written(WrittenName name) implements Name {
+
+            @Override
+            public String toString() {
+                return written();
+            }
+        }
+
+        /**
+         * A name resolution answered, and the declaration it names.
+         *
+         * <p>The declaration is one that is there. A name nothing declares is {@link Unanswered},
+         * which is a different type — so "this has been resolved" and "this names something" are
+         * not two readings of one value, which is what a stand-in identity made them.
+         */
+        record Denoting(WrittenName name, TypeName type) implements Name {
+
+            public Denoting {
+                if (type == null) {
+                    throw new IllegalArgumentException("a name that denotes names a declaration: "
+                            + name);
+                }
+                if (type.isUnresolved()) {
+                    throw new IllegalArgumentException("`" + name.canonical()
+                            + "` denotes nothing, and a name that denotes nothing is Unanswered");
+                }
+            }
+
+            @Override
+            public String toString() {
+                return written();
+            }
+        }
+
+        /**
+         * A name resolution read and found no declaration for.
+         *
+         * <p>Reported where it is written, and the declaration it is in has no meaning to work out
+         * — which {@code Names.Unbuilt} is what settles, so the rest of the module goes on being
+         * answered. Not {@link Written}: that one is a name nothing has looked at yet, and the two
+         * were one value for as long as a missing identity stood for both.
+         */
+        record Unanswered(WrittenName name) implements Name {
+
+            @Override
+            public String toString() {
+                return written();
+            }
         }
     }
 
@@ -726,46 +807,46 @@ public interface Ast {
      * reuses {@code tupleElems} to carry its key type (a single element) while {@code name} is
      * {@code "Map"} and {@code arg} is the value type (ADR-0040).
      *
-     * <p>{@code denotes} is the type the reference stands for, decided once by {@code Resolve}
-     * (issue #177). Every reference the pass let through carries one, so nothing downstream resolves
-     * a written type a second time — nor has to know which module the reference was written in, which
-     * is what a second resolution needed to get right.
+     * <p>The two forms are the two states a reference is in, as {@link Binder}'s are. The parser
+     * writes {@link Written}, which is the spelling and the shape around it; {@code Resolve} answers
+     * it with {@link Denoting}, which carries the type it stands for. There is no third state and no
+     * absent type: a reference that stands for a type and one that has not been read are different
+     * types, so nothing downstream tests for a missing one.
+     *
+     * <p>The type is decided once (issue #177), which is what keeps a later reader from resolving a
+     * written type a second time — and from having to know which module the reference was written
+     * in, which is what a second resolution needed to get right.
      */
-    record TypeRef(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems, Type denotes,
-                   SourcePos anchor) implements TypeTerm {
+    sealed interface TypeRef extends TypeTerm permits TypeRef.Written, TypeRef.Denoting {
+
+        /** The name as it is spelled, or null where the reference names none — a tuple, or a type a
+         * pass settled and left no surface for. */
+        WrittenName written();
+
+        /** The single type argument, as {@code List<T>} has. */
+        TypeTerm arg();
+
+        /** A tuple's elements, or the single key type a {@code Map} carries (ADR-0040). */
+        List<TypeTerm> tupleElems();
+
+        /** Where a reference with no name to start at begins. */
+        SourcePos anchor();
 
         /** A reference the source wrote, read off the characters that spell it. */
-        public TypeRef(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems) {
-            this(written, arg, tupleElems, null, null);
+        static TypeRef written(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems) {
+            return new Written(written, arg, tupleElems, null);
         }
 
-        /** A reference a pass wrote, named but written nowhere — {@code T?} becoming
-         * {@code Option<T>}, a {@code Map} carrying its key. */
-        public TypeRef(String name, TypeTerm arg, List<TypeTerm> tupleElems, SourcePos pos) {
-            this(name == null ? null : WrittenName.synthetic(name, pos), arg, tupleElems, null, pos);
+        /** A reference a pass wrote before resolution runs, named but written nowhere — {@code T?}
+         * becoming {@code Option<T>}, a {@code Map} carrying its key. */
+        static TypeRef written(String name, TypeTerm arg, List<TypeTerm> tupleElems, SourcePos pos) {
+            return new Written(name == null ? null : WrittenName.synthetic(name, pos), arg,
+                    tupleElems, pos);
         }
 
-        /** An ordinary (non-tuple) reference a pass wrote. */
-        public TypeRef(String name, TypeTerm arg, SourcePos pos) {
-            this(name, arg, null, pos);
-        }
-
-        /** The name this reference stands for, or null where it names none — a tuple, or a type a
-         * pass settled and left no surface for. */
-        public String name() {
-            return written == null ? null : written.canonical();
-        }
-
-        /** Where the reference starts. A named one starts where its name does; {@code anchor} is
-         * for the ones that have no name to start at, which is why it is not asked otherwise: two
-         * places for one reference is two places that can disagree. */
-        public SourcePos pos() {
-            return written == null ? anchor : written.pos();
-        }
-
-        /** The same reference, resolved. */
-        public TypeRef denoting(Type type) {
-            return new TypeRef(written, arg, tupleElems, type, anchor);
+        /** An ordinary (non-tuple) reference a pass wrote before resolution runs. */
+        static TypeRef written(String name, TypeTerm arg, SourcePos pos) {
+            return written(name, arg, null, pos);
         }
 
         /**
@@ -774,14 +855,73 @@ public interface Ast {
          * decided, and there is no source it stands for. Everything downstream of {@code Resolve}
          * reads {@link #denotes()}, so a reference with a decided type is as good as a written one.
          */
-        public static TypeRef of(Type type, SourcePos pos) {
-            return new TypeRef((WrittenName) null, null, null, type, pos);
+        static TypeRef of(Type type, SourcePos pos) {
+            return new Denoting(null, null, null, type, pos);
+        }
+
+        /** The name this reference stands for, or null where it names none. */
+        default String name() {
+            return written() == null ? null : written().canonical();
+        }
+
+        /** Where the reference starts. A named one starts where its name does; {@code anchor} is
+         * for the ones that have no name to start at, which is why it is not asked otherwise: two
+         * places for one reference is two places that can disagree. */
+        default SourcePos pos() {
+            return written() == null ? anchor() : written().pos();
         }
 
         /** A tuple type is the nameless form; a named ref that also carries {@code tupleElems}
          *  (a {@code Map} carrying its key) is not a tuple. */
-        public boolean isTuple() {
-            return written == null && tupleElems != null;
+        default boolean isTuple() {
+            return written() == null && tupleElems() != null;
+        }
+
+        /**
+         * The type this stands for, for a reader that is asking what it is.
+         *
+         * <p>A reference still {@link Written} here is a pass reading a type it was handed before
+         * resolution answered it, which is a fault in the compiler rather than in the source, so it
+         * is refused outright. This is the one place that says so.
+         */
+        default Type denotes() {
+            if (this instanceof Denoting denoting) {
+                return denoting.type();
+            }
+            throw new IllegalStateException("`" + name() + "` at " + pos()
+                    + " was read as a type before it was resolved");
+        }
+
+        /** The same reference, resolved. */
+        default TypeRef denoting(Type type) {
+            return new Denoting(written(), arg(), tupleElems(), type, anchor());
+        }
+
+        /** A reference as the parser read it. */
+        record Written(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems,
+                       SourcePos anchor) implements TypeRef {
+
+            @Override
+            public String toString() {
+                return name() == null ? "(tuple)" : name();
+            }
+        }
+
+        /** A reference resolution answered, and the type it stands for. */
+        record Denoting(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems, Type type,
+                        SourcePos anchor) implements TypeRef {
+
+            public Denoting {
+                if (type == null) {
+                    throw new IllegalArgumentException(
+                            "a reference that denotes is a type: " + written);
+                }
+            }
+
+            @Override
+            public String toString() {
+                return name() == null ? String.valueOf(type) : name();
+            }
         }
     }
 
@@ -1409,40 +1549,27 @@ public interface Ast {
      * substitute an expression for a name — the inliner — binds it ahead of the construction and
      * spreads the binding.
      *
-     * <p>A name that denotes nothing was reported where it was written and carries
-     * {@link ValueName.Unresolved}, so a reader downstream never has a spelling to match and never
-     * repeats the report.
+     * <p>The three forms are the three states a name is in, as {@link Name}'s are: read by the
+     * parser and nothing more, answered with what it names, or read by resolution and found to name
+     * nothing — which is an answer, and was reported where the name is written.
      */
-    record Var(WrittenName written, ValueName denotes, ReachName reachedAs,
-               Region region) implements Expr {
+    sealed interface Var extends Expr permits Var.Written, Var.Denoting, Var.Unanswered {
+
+        /** The name, and the occurrence of it that was read. */
+        WrittenName written();
+
+        /** The stretch of source the expression was written over. */
+        @Override
+        Region region();
 
         /**
-         * A name that has been resolved has both answers or neither.
-         *
-         * <p>Both, or neither: a name the parser read is unanswered on both counts, and a name
-         * resolution answered is answered on both. Nothing in between is a state — the pair comes
-         * from one pass, which has both or has not run.
-         *
-         * <p>Refused rather than allowed to stand, because what a name reaches is asked of a table
-         * and a table answers a key it has not got with silence. A rewrite that carried the
-         * denotation across and dropped the reach name would leave a reference that resolves to a
-         * declaration and reaches nothing, and the first reader of it would read the spelling
-         * instead — which is what this pair was separated out to stop. The other half is the same
-         * defect facing the other way: a reach name beside no denotation is a key nothing says the
-         * meaning of, and {@link ReachName#of} is where one would have to come from.
-         *
-         * <p>The region is the expression's and the name's is {@code written}'s, and they part
-         * company only where the author wrapped the name in something the tree does not keep:
+         * The region is the expression's and the name's is {@code written}'s, and they part company
+         * only where the author wrapped the name in something the tree does not keep:
          * {@code (price)} is one expression written over nine characters and one name written over
          * five. So the one has to hold the other. A region that did not would be a claim that the
          * name is written somewhere this expression is not, which no source can produce.
          */
-        public Var {
-            if ((denotes == null) != (reachedAs == null)) {
-                throw new IllegalArgumentException("`" + written.canonical() + "` denotes "
-                        + denotes + " and is reached as " + reachedAs
-                        + "; a name has both answers or neither");
-            }
+        private static void heldBy(WrittenName written, Region region) {
             if (written.region() != null && region == null) {
                 throw new IllegalArgumentException("`" + written.canonical()
                         + "` is written somewhere and the expression it is was written nowhere");
@@ -1455,14 +1582,13 @@ public interface Ast {
 
         /** A name as the parser read it, before resolution has said what it denotes or how this
          * module reaches it. */
-        public Var(String spelling, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), null, null);
+        static Var written(String spelling, SourcePos pos) {
+            return written(WrittenName.of(spelling, pos));
         }
 
-        /** A name standing as an expression over exactly the characters that spell it — every one
-         * but a name the author parenthesized. */
-        public Var(WrittenName written, ValueName denotes, ReachName reachedAs) {
-            this(written, denotes, reachedAs, written.region());
+        /** The same, off an occurrence the parser has already read. */
+        static Var written(WrittenName written) {
+            return new Written(written, written.region());
         }
 
         /**
@@ -1470,11 +1596,18 @@ public interface Ast {
          *
          * <p>The reach name is given rather than worked out here. A pass writing a name into a body
          * either has one in hand — it is rewriting a name that already carried it — or knows which
-         * module's body it is writing into, and neither is something this constructor can see. Worked
+         * module's body it is writing into, and neither is something this factory can see. Worked
          * out from the spelling it would be the very derivation the carried value exists to remove.
          */
-        public Var(String spelling, ValueName denotes, ReachName reachedAs, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), denotes, reachedAs);
+        static Var denoting(String spelling, ValueName denotes, ReachName reachedAs,
+                            SourcePos pos) {
+            return denoting(WrittenName.of(spelling, pos), denotes, reachedAs);
+        }
+
+        /** The same, off an occurrence already read: a name standing as an expression over exactly
+         * the characters that spell it — every one but a name the author parenthesized. */
+        static Var denoting(WrittenName written, ValueName denotes, ReachName reachedAs) {
+            return new Denoting(written, denotes, reachedAs, written.region());
         }
 
         /**
@@ -1486,39 +1619,9 @@ public interface Ast {
          * is written nowhere and only the expression has a place: the region is the one the name it
          * replaced was read over.
          */
-        public static Var respelled(String spelling, ValueName denotes, ReachName reachedAs,
-                                    SourcePos pos, Region region) {
-            return new Var(WrittenName.synthetic(spelling, pos), denotes, reachedAs, region);
-        }
-
-        /** The bare name this reaches its declaration by, whatever the source spelled. */
-        public String name() {
-            return written.canonical();
-        }
-
-        /** Where the name is written. */
-        public SourcePos pos() {
-            return written.pos();
-        }
-
-        /**
-         * The bare name this reaches its declaration by, whatever the source spelled.
-         *
-         * <p>Every name here has been through resolution by the time anything reads it, including
-         * one that denotes nothing — that is an answer too. A name with no answer at all means a
-         * tree reached a reader without being resolved, which would put this back to matching
-         * spellings, so it says so rather than falling back to the spelling.
-         */
-        public String bare() {
-            if (denotes == null) {
-                throw new IllegalStateException("`" + name() + "` was never resolved");
-            }
-            return denotes.name();
-        }
-
-        /** Whether this name denotes nothing — reported where it was written. */
-        public boolean unresolved() {
-            return denotes instanceof ValueName.Unresolved;
+        static Var respelled(String spelling, ValueName denotes, ReachName reachedAs,
+                             SourcePos pos, Region region) {
+            return new Denoting(WrittenName.synthetic(spelling, pos), denotes, reachedAs, region);
         }
 
         /**
@@ -1528,37 +1631,105 @@ public interface Ast {
          * a reader to work out, so it is given the binder it is reading and answers with that
          * binding. There is no way to write one of these without having the binding in hand.
          */
-        public static Var local(Binder binder, SourcePos pos) {
+        static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
-            return new Var(WrittenName.synthetic(binder.name(), pos), local,
-                    new ReachName.Bare(binder.name()));
+            WrittenName written = WrittenName.synthetic(binder.name(), pos);
+            return new Denoting(written, local, new ReachName.Bare(binder.name()),
+                    written.region());
         }
 
         /** A read of a name a desugaring minted, at the form it is rewriting. Written nowhere: the
          * characters at {@code anchor} spell whatever the author put there, which is not this. */
-        public static Var desugared(String name, SourcePos anchor) {
-            return new Var(WrittenName.synthetic(name, anchor), null, null);
+        static Var desugared(String name, SourcePos anchor) {
+            return written(WrittenName.synthetic(name, anchor));
+        }
+
+        /** The bare name this reaches its declaration by, whatever the source spelled. */
+        default String name() {
+            return written().canonical();
+        }
+
+        /** Where the name is written. */
+        default SourcePos pos() {
+            return written().pos();
         }
 
         /**
-         * The name of the declaration this reference reaches — what a table keyed by a declaration's
-         * name is looked up with. The reading counterpart of {@link Apply#reaches()}:
-         * {@link #name()} is the name the source writes, which an import may have let go without its
-         * qualifier.
+         * This reference where it names a declaration, and null where resolution read it and found
+         * none.
          *
-         * <p>Never the spelling. A name that reached a reader without being resolved has no answer
-         * to this, and it says so rather than handing back the characters — which is the same rule
-         * {@link #bare()} is under, and for the same reason: an import lets a name be written
-         * without its qualifier, so the spelling misses in the very table this is asked for, and a
-         * table answers a key it has not got with silence. Every pass that writes a reference of its
-         * own says what it means (ADR-0067), so there is no tree downstream of resolution for the
-         * fallback to have been for.
+         * <p>What a walk over a body asks. An edge, a substitution, a rewrite is about what a name
+         * stands for; a name nothing declares stands for nothing, so there is no edge to add and
+         * nothing to rewrite, and the mistake was reported where the name is written.
+         *
+         * <p>Which is not what a {@link Written} one is. That is a tree that reached a reader before
+         * resolution answered it — a fault in this compiler — and counting it among the names that
+         * declare nothing would let a pass that failed to answer its own nodes go on quietly, with
+         * every walk below reading the tree as though the author had written an unknown name. So it
+         * is refused, and this is the one place that tells the two apart.
          */
-        public String reaches() {
-            if (reachedAs == null) {
-                throw new IllegalStateException("`" + name() + "` was never resolved");
+        default Denoting answered() {
+            if (this instanceof Denoting denoting) {
+                return denoting;
             }
-            return reachedAs.rendered();
+            if (this instanceof Unanswered) {
+                return null;
+            }
+            throw new IllegalStateException("`" + name() + "` at " + pos()
+                    + " was read as a declaration before it was resolved");
+        }
+
+        /**
+         * What this name names, for a reader that is asking which declaration it is and has no
+         * answer to give where there is none.
+         *
+         * <p>{@link #answered()} is for the reader that has: a walk that adds no edge for a name
+         * nothing declares. This one is for a reader that would have to make something up.
+         */
+        default ValueName denotes() {
+            Denoting names = answered();
+            if (names == null) {
+                throw new IllegalStateException("`" + name() + "` at " + pos()
+                        + " denotes nothing and was read as though it did");
+            }
+            return names.denotes();
+        }
+
+        /**
+         * How this module reaches what the name names — what a table keyed by a declaration's name
+         * is looked up with. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is
+         * the name the source writes, which an import may have let go without its qualifier.
+         */
+        default ReachName reachedAs() {
+            Denoting names = answered();
+            if (names == null) {
+                throw new IllegalStateException("`" + name() + "` at " + pos()
+                        + " reaches nothing this module can name");
+            }
+            return names.reachedAs();
+        }
+
+        /** As {@link #denotes()}, by the bare name of what it names. */
+        default String bare() {
+            return denotes().name();
+        }
+
+        /**
+         * As {@link #reachedAs()}, rendered.
+         *
+         * <p>Never the spelling. An import lets a name be written without its qualifier, so the
+         * spelling misses in the very table this is asked for, and a table answers a key it has not
+         * got with silence. Every pass that writes a reference of its own says what it means
+         * (ADR-0067), so there is no tree downstream of resolution for a fallback to have been for.
+         */
+        default String reaches() {
+            return reachedAs().rendered();
+        }
+
+        /** Whether this name denotes nothing — read by resolution, and reported where it was
+         * written. */
+        default boolean unresolved() {
+            return this instanceof Unanswered;
         }
 
         /**
@@ -1566,23 +1737,85 @@ public interface Ast {
          *
          * <p>The two answers together, because resolution gives them together and they are the two
          * halves of one question: which declaration this reaches, and under what name it reaches it
-         * from here. Handed over separately, a caller could pair one name's denotation with another's
-         * reach name, and nothing would say so.
+         * from here. Handed over separately, a caller could pair one name's denotation with
+         * another's reach name, and nothing would say so. There is no state between: a name has both
+         * or is one of the two that has neither.
          */
-        public Var denoting(ValueName resolved, ReachName reachedAs) {
-            return new Var(written, resolved, reachedAs, region);
+        default Var denoting(ValueName resolved, ReachName reachedAs) {
+            return new Denoting(written(), resolved, reachedAs, region());
         }
 
         /** The same name denoting {@code resolved}, reached as it already was — for a pass that
          * changes what a name says about where its construction came from and not which declaration
          * it reaches. */
-        public Var denoting(ValueName resolved) {
-            return new Var(written, resolved, reachedAs, region);
+        default Var denoting(ValueName resolved) {
+            return new Denoting(written(), resolved, reachedAs(), region());
         }
 
-        @Override
-        public String toString() {
-            return name();
+        /** The same name, over {@code region} — whichever of the three it is. */
+        default Var over(Region region) {
+            return switch (this) {
+                case Written w -> new Written(w.written(), region);
+                case Denoting d -> new Denoting(d.written(), d.denotes(), d.reachedAs(), region);
+                case Unanswered u -> new Unanswered(u.written(), region);
+            };
+        }
+
+        /** The same name, read and found to name nothing. */
+        default Var unanswered() {
+            return new Unanswered(written(), region());
+        }
+
+        /** A name as the parser read it. */
+        record Written(WrittenName written, Region region) implements Var {
+
+            public Written {
+                heldBy(written, region);
+            }
+
+            @Override
+            public String toString() {
+                return name();
+            }
+        }
+
+        /** A name resolution answered, with the declaration it names and how this module reaches
+         * it. */
+        record Denoting(WrittenName written, ValueName denotes, ReachName reachedAs, Region region)
+                implements Var {
+
+            public Denoting {
+                if (denotes == null || reachedAs == null) {
+                    throw new IllegalArgumentException("`" + written.canonical() + "` denotes "
+                            + denotes + " and is reached as " + reachedAs
+                            + "; a name that is answered is answered on both counts");
+                }
+                heldBy(written, region);
+            }
+
+            @Override
+            public String toString() {
+                return name();
+            }
+        }
+
+        /**
+         * A name resolution read and found nothing for.
+         *
+         * <p>Reported where it is written, or on the import line or the module that could not be
+         * read — whichever could say what is wrong. It carries neither answer, so a reader below has
+         * no spelling to match and no report to repeat.
+         */
+        record Unanswered(WrittenName written, Region region) implements Var {
+
+            public Unanswered {
+                heldBy(written, region);
+            }
+
+            @Override
+            public String toString() {
+                return name();
+            }
         }
     }
 
@@ -1762,6 +1995,17 @@ public interface Ast {
             return function instanceof Var v ? v.denotes() : null;
         }
 
+        /**
+         * As {@link Var#answered()}, of the name this applies.
+         *
+         * <p>Null the two ways there is no declaration to look up: what is applied is not a name,
+         * or it is one nothing declares. A callee nothing has read yet is refused there, as it is
+         * of a name standing on its own.
+         */
+        public Var.Denoting answered() {
+            return function instanceof Var v ? v.answered() : null;
+        }
+
 
         /** The same application, carried into a body by a value that body named. A recursive helper
          * is lowered to a method rather than expanded, so a value reaching one leaves an application
@@ -1823,7 +2067,7 @@ public interface Ast {
             case DecimalLit x -> new DecimalLit(x.value(), x.pos(), region);
             case StringLit x -> new StringLit(x.value(), x.pos(), region);
             case BoolLit x -> new BoolLit(x.value(), x.pos(), region);
-            case Var x -> new Var(x.written(), x.denotes(), x.reachedAs(), region);
+            case Var x -> x.over(region);
             case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);

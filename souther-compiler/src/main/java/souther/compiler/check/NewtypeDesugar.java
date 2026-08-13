@@ -98,7 +98,8 @@ public final class NewtypeDesugar {
                 // were resolved. Asking the type namespace again here would read a binding of the
                 // same spelling as the type it shadows, and rewrite an application of it into a
                 // construction — both of which compile, so the meaning would change in silence.
-                TypeName built = call.denotes() instanceof ValueName.OfType named ? named.type() : null;
+                TypeName built = call.answered() != null
+                        && call.denotes() instanceof ValueName.OfType named ? named.type() : null;
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(Diagnostic
@@ -108,7 +109,7 @@ public final class NewtypeDesugar {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
                     yield new Ast.NewData(
-                            new Ast.Name(call.name(), built),
+                            new Ast.Name.Denoting(call.name(), built),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), ConstructionOrigin.own(), call.pos(), call.region());
                 }

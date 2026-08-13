@@ -876,7 +876,7 @@ public final class Analyzer {
                 // a local is named where it is bound and nowhere else; the library and the language
                 // are not this workspace's to rename
                 case ValueName.Local _, ValueName.Stdlib _, ValueName.OfType _,
-                        ValueName.Builtin _, ValueName.Unresolved _ -> null;
+                        ValueName.Builtin _ -> null;
             };
             if (declaring != null) {
                 addExposingAndImportSites(compilation, value.name(), declaring, graph, byUri);
@@ -954,8 +954,7 @@ public final class Analyzer {
             case ValueName.Local _ -> uri;   // bound in the body the cursor is in
             case ValueName.Helper h -> compilation.sourceIdOf(h.module());
             case ValueName.Behavior b -> compilation.sourceIdOf(b.module());
-            case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _,
-                    ValueName.Unresolved _ -> null;
+            case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _ -> null;
         };
     }
 

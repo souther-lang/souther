@@ -7,6 +7,7 @@ import souther.compiler.types.Type;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -20,9 +21,9 @@ class ASettledTypeAnswersLikeAWrittenOneTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    /** {@code List<'a>} as the parser reads it. */
+    /** {@code List<'a>} as the parser reads it, before resolution has said what it stands for. */
     private static Ast.TypeRef written() {
-        return new Ast.TypeRef("List", new Ast.TypeRef("'a", null, POS), POS);
+        return Ast.TypeRef.written("List", Ast.TypeRef.written("'a", null, POS), POS);
     }
 
     @Test
@@ -39,10 +40,19 @@ class ASettledTypeAnswersLikeAWrittenOneTest {
         assertFalse(HelperInliner.mentionsTypeVar(Ast.TypeRef.of(Type.INT, POS)));
     }
 
-    /** A written reference answers what it answered before, so the two readings agree. */
+    /**
+     * A reference resolution has not read is refused rather than answered off its spelling.
+     *
+     * <p>This runs after resolution, so a reference still {@link Ast.TypeRef.Written} here is a
+     * fault in the compiler. Answering it from the characters — {@code 'a} begins with a quote, so
+     * say yes — is what the reading used to do, and it is a second resolution: the same spelling
+     * means different things in different modules, and the reference no longer says which one it
+     * was written in.
+     */
     @Test
-    void aWrittenTypeAnswersAsItDid() {
-        assertTrue(HelperInliner.mentionsTypeVar(written()));
-        assertFalse(HelperInliner.mentionsTypeVar(new Ast.TypeRef("Int", null, POS)));
+    void aTypeNothingHasReadIsRefused() {
+        assertThrows(IllegalStateException.class, () -> HelperInliner.mentionsTypeVar(written()));
+        assertThrows(IllegalStateException.class,
+                () -> HelperInliner.mentionsTypeVar(Ast.TypeRef.written("Int", null, POS)));
     }
 }

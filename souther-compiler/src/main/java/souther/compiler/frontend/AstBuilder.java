@@ -291,7 +291,7 @@ public final class AstBuilder {
             for (SyntaxNode member : product.get().childNodes()) {
                 if (member.kind() == SyntaxKind.SPREAD_MEMBER) {
                     SyntaxToken included = identTokens(member).get(0);
-                    includes.add(new Ast.Name(nameOf(included), null));
+                    includes.add(Ast.Name.written(nameOf(included)));
                 } else if (member.kind() == SyntaxKind.FIELD) {
                     fields.add(field(member));
                 }
@@ -311,7 +311,7 @@ public final class AstBuilder {
         if (sum.isPresent()) {
             List<Ast.Name> cases = new ArrayList<>();
             for (SyntaxToken t : identTokens(sum.get())) {
-                cases.add(new Ast.Name(nameOf(t), null));
+                cases.add(Ast.Name.written(nameOf(t)));
             }
             return new Ast.SumData(declared, cases, Optional.empty(), Optional.empty(), pos);
         }
@@ -320,7 +320,7 @@ public final class AstBuilder {
             SyntaxNode inner = typeChild(newtype.get());
             Ast.TypeRef innerType = typeRef(inner);
             if (newtype.get().token(SyntaxKind.QUESTION).isPresent()) {
-                innerType = new Ast.TypeRef("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
+                innerType = Ast.TypeRef.written("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
             }
             List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
             return new Ast.Data(declared, true, List.of(), fields, clauses,
@@ -374,7 +374,7 @@ public final class AstBuilder {
     private Ast.Field field(SyntaxNode n) {
         Ast.TypeTerm type = typeTerm(typeChild(n));
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
-            type = new Ast.TypeRef("Option", type, type.pos());   // `T?` → Option<T>
+            type = Ast.TypeRef.written("Option", type, type.pos());   // `T?` → Option<T>
         }
         return new Ast.Field(nameOf(firstIdentToken(n)), type);
     }
@@ -406,7 +406,7 @@ public final class AstBuilder {
                     // one ident past the keyword is the `on` of `depends on`, which lexes as an
                     // ordinary identifier and is no part of the list
                     for (Ast.Name dep : dottedNames(clause, 1)) {
-                        dependsOn.add(new Ast.Var(dep.name(), null, null));
+                        dependsOn.add(Ast.Var.written(dep.name()));
                     }
                 }
             }
@@ -415,7 +415,7 @@ public final class AstBuilder {
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         List<Ast.Var> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
-            stages.add(new Ast.Var(qualifiedNameOf(st), null, null));
+            stages.add(Ast.Var.written(qualifiedNameOf(st)));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         return new Ast.PipeBehavior(declared, stages, declaredOut, pos);
@@ -521,7 +521,7 @@ public final class AstBuilder {
             // only repeat what the pattern already named
             SourcePos at = pos(pat);
             type = new Ast.RetType(
-                    List.of(new Ast.TypeRef(qualifiedNameOf(pat), null, null)), at);
+                    List.of(Ast.TypeRef.written(qualifiedNameOf(pat), null, null)), at);
             return new Ast.FnParam(bound, type, true);
         }
         return new Ast.FnParam(bound, type, false);
@@ -611,7 +611,7 @@ public final class AstBuilder {
         }
         // `T?` is `Option<T>` for whatever T is: the two spellings are one type, and what may
         // stand in a position is decided by what the position requires of that type, not here
-        return new Ast.TypeRef("Option", cases.get(0), cases.get(0).pos());
+        return Ast.TypeRef.written("Option", cases.get(0), cases.get(0).pos());
     }
 
     private Ast.TypeRef typeRef(SyntaxNode n) {
@@ -625,7 +625,7 @@ public final class AstBuilder {
             if (elems.size() == 1 && elems.get(0) instanceof Ast.TypeRef only) {
                 return only;   // `(T)` reads as grouping
             }
-            return new Ast.TypeRef(null, null, elems, pos(n));
+            return Ast.TypeRef.written(null, null, elems, pos(n));
         }
         Optional<SyntaxToken> typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
@@ -633,13 +633,13 @@ public final class AstBuilder {
             if (!isReservedNamespace(moduleName)) {
                 throw error(pos(n), new ParseMessage.ATypeVariableIsOnlyAllowedInTheCore(v));
             }
-            return new Ast.TypeRef(v, null, pos(n));   // name begins with `'` → Type.Var
+            return Ast.TypeRef.written(v, null, pos(n));   // name begins with `'` → Type.Var
         }
         WrittenName written = qualifiedNameOf(n);   // `Amount`, `example.billing.Amount`, `B.Amount`
         String name = written.canonical();
         Optional<SyntaxNode> args = n.child(SyntaxKind.TYPE_ARGS);
         if (args.isEmpty()) {
-            return new Ast.TypeRef(written, null, null);
+            return Ast.TypeRef.written(written, null, null);
         }
         List<Ast.TypeTerm> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
@@ -648,16 +648,16 @@ public final class AstBuilder {
             }
         }
         if (typeArgs.isEmpty()) {
-            return new Ast.TypeRef(written, null, null);   // the missing argument is reported by name
+            return Ast.TypeRef.written(written, null, null);   // the missing argument is reported by name
         }
         if (name.equals("Map")) {
             // carry the value in `arg` and the key in `tupleElems` (ADR-0040)
             Ast.TypeTerm key = typeArgs.get(0);
             Ast.TypeTerm value = typeArgs.get(typeArgs.size() - 1);
-            return new Ast.TypeRef(written, value, List.of(key));
+            return Ast.TypeRef.written(written, value, List.of(key));
         }
         // List<T> / Set<T> / Option<T>
-        return new Ast.TypeRef(written, typeArgs.get(0), null);
+        return Ast.TypeRef.written(written, typeArgs.get(0), null);
     }
 
     // --- expressions ---
@@ -665,7 +665,7 @@ public final class AstBuilder {
     private Ast.Expr expr(SyntaxNode n) {
         return switch (n.kind()) {
             case LITERAL_EXPR -> literal(n);
-            case VAR_EXPR -> new Ast.Var(nameOf(firstIdentToken(n)), null, null);
+            case VAR_EXPR -> Ast.Var.written(nameOf(firstIdentToken(n)));
             case FIELD_ACCESS -> fieldAccess(n);
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
@@ -919,7 +919,7 @@ public final class AstBuilder {
 
     private Ast.Expr newData(SyntaxNode n) {
         SyntaxToken head = identTokens(n).get(0);
-        Ast.Name typeName = new Ast.Name(nameOf(head), null);
+        Ast.Name typeName = Ast.Name.written(nameOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
         List<Ast.Var> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
@@ -930,10 +930,10 @@ public final class AstBuilder {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
                 List<SyntaxToken> path = identTokens(c);
                 if (path.size() == 1) {
-                    spreads.add(new Ast.Var(nameOf(path.get(0)), null, null));
+                    spreads.add(Ast.Var.written(nameOf(path.get(0))));
                 } else {
                     String bound = "$s" + (spreadCounter++);
-                    Ast.Expr value = new Ast.Var(nameOf(path.get(0)), null, null);
+                    Ast.Expr value = Ast.Var.written(nameOf(path.get(0)));
                     for (int i = 1; i < path.size(); i++) {
                         value = new Ast.FieldAccess(value, nameOf(path.get(i)),
                                 posOf(path.get(i)),
@@ -949,7 +949,7 @@ public final class AstBuilder {
                 WrittenName field = nameOf(firstIdentToken(c));
                 Optional<SyntaxNode> value = firstExprChildOpt(c);
                 // shorthand `field` means `field = field`, and the one name is both
-                Ast.Expr v = value.isPresent() ? expr(value.get()) : new Ast.Var(field, null, null);
+                Ast.Expr v = value.isPresent() ? expr(value.get()) : Ast.Var.written(field);
                 inits.add(new Ast.FieldInit(field, v));
             }
         }
@@ -984,7 +984,7 @@ public final class AstBuilder {
             at[0]++;                              // .
             parts.add((SyntaxToken) es.get(at[0]++));
         }
-        return new Ast.Name(joined(parts), null);
+        return Ast.Name.written(joined(parts));
     }
 
     /** The comma-separated names of a {@code constructs}/{@code depends on} clause, each possibly
@@ -1363,7 +1363,7 @@ public final class AstBuilder {
                 Ast.Expr inner = new Ast.FieldAccess(Ast.Var.desugared(whole, pos), "value", pos);
                 Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos, held);
                 yield Ast.LetIn.opening(whole, value,
-                        new Ast.Name(qualifiedNameOf(pat), null), body, pos, held);
+                        Ast.Name.written(qualifiedNameOf(pat)), body, pos, held);
             }
             case PATTERN_RECORD -> {
                 String whole = "$r" + (patternCounter++);
@@ -1708,7 +1708,7 @@ public final class AstBuilder {
      * binding out of something the author wrote: the token carries both halves, so they cannot be
      * paired wrongly. */
     private Ast.Binder binderOf(SyntaxToken token) {
-        return Ast.Binder.of(new Ast.Name(nameOf(token), null));
+        return Ast.Binder.of(Ast.Name.written(nameOf(token)));
     }
 
 

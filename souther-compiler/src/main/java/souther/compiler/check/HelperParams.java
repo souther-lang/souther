@@ -339,8 +339,8 @@ final class HelperParams {
      * know which node kinds bind: what the name resolved to already says it.
      */
     private static boolean refersTo(Ast.Expr e, BindingId id) {
-        return e instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local
-                && local.id().equals(id);
+        return e instanceof Ast.Var v && v.answered() != null
+                && v.denotes() instanceof ValueName.Local local && local.id().equals(id);
     }
 
     /** Whether anything inside {@code e}, or {@code e} itself, satisfies {@code leaf}. */

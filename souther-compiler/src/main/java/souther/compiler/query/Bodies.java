@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperGraph;
@@ -566,12 +567,12 @@ public final class Bodies {
             if (Names.cyclic(db, name)) {
                 return Answer.absent();
             }
-            Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
                 return Answer.absent();
             }
             Map<String, Ast.FnDef> out = new LinkedHashMap<>();
-            for (Ast.Import imp : resolved.value().imports()) {
+            for (Ast.Import imp : resolved.value().module().imports()) {
                 Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
                 // Closed against the table that module's own bodies are expanded against, which is
                 // everything it can name and not only what it declares: a published body may call a
@@ -1024,7 +1025,10 @@ public final class Bodies {
         }
         Set<String> names = new HashSet<>();
         for (Ast.Var req : spec.value().dependsOn()) {
-            names.add(req.bare());
+            // Reported where it is written; it names no parameter for a body to be held to.
+            if (!req.unresolved()) {
+                names.add(req.bare());
+            }
         }
         return names;
     }

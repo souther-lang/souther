@@ -402,14 +402,14 @@ public final class TypeOps {
                     }
                 }
                 for (Ast.Name include : d.includes()) {
-                    if (include.denotes() != null && include.denotes().isUnresolved()) {
+                    if (erroneous(include)) {
                         return true;
                     }
                 }
             }
             if (def instanceof Ast.SumData sum) {
                 for (Ast.Name c : sum.cases()) {
-                    if (c.denotes() != null && c.denotes().isUnresolved()) {
+                    if (erroneous(c)) {
                         return true;
                     }
                 }
@@ -426,7 +426,7 @@ public final class TypeOps {
                     return true;
                 }
                 for (Ast.Name constructs : spec.constructs()) {
-                    if (constructs.denotes() != null && constructs.denotes().isUnresolved()) {
+                    if (erroneous(constructs)) {
                         return true;
                     }
                 }
@@ -445,6 +445,24 @@ public final class TypeOps {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether {@code name} is one resolution read and found no declaration for.
+     *
+     * <p>Named as the three states it is one of, so a name nothing has read yet is refused rather
+     * than answered no. A tree reaching here holding one is a pass that did not answer its own
+     * nodes, and calling it "not erroneous" would let that go by while every walk below read the
+     * module as though the author had written it that way.
+     */
+    private static boolean erroneous(Ast.Name name) {
+        return switch (name) {
+            case Ast.Name.Unanswered _ -> true;
+            case Ast.Name.Denoting _ -> false;
+            case Ast.Name.Written written -> throw new IllegalStateException("`"
+                    + written.written() + "` at " + written.pos()
+                    + " was read as a declaration before it was resolved");
+        };
     }
 
     private static boolean erroneous(Ast.RetType ret) {
@@ -927,18 +945,23 @@ public final class TypeOps {
             out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
         }
         for (Ast.Name include : data.includes()) {
-            TypeName source = include.denotes();
-            if (source == null) {
-                if (!resolving) {
-                    // Resolve answers every name it reads, an unknown one included, so a tree it
-                    // wrote has none of these. One here is a tree some other producer built, and
-                    // reading the spelling to carry on would answer for whatever this module has
-                    // under it and leave the producer unmentioned.
-                    throw new IllegalStateException("the include `" + include.written()
-                            + "` of `" + declared + "` denotes nothing");
+            TypeName source = switch (include) {
+                case Ast.Name.Denoting denoting -> denoting.type();
+                // Reported where it is written. A name nothing declares brings in no fields, and
+                // saying so again here would be a second report about the one mistake.
+                case Ast.Name.Unanswered _ -> null;
+                case Ast.Name.Written written -> {
+                    if (!resolving) {
+                        // Resolve answers every name it reads, an unknown one included, so a tree it
+                        // wrote has none of these. One here is a tree some other producer built, and
+                        // reading the spelling to carry on would answer for whatever this module has
+                        // under it and leave the producer unmentioned.
+                        throw new IllegalStateException("the include `" + include.written()
+                                + "` of `" + declared + "` has not been resolved");
+                    }
+                    yield symbols.resolve(written.name());
                 }
-                source = symbols.resolve(include.name());
-            }
+            };
             if (source != null && seen.add(source)
                     && symbols.get(source) instanceof Ast.Data included) {
                 walkFields(included, source, symbols, seen, out, resolving);
@@ -954,6 +977,12 @@ public final class TypeOps {
         // through spreads, holds no such field at all.
         Map<String, String> suppliedBy = new LinkedHashMap<>();
         for (Ast.Name inc : data.includes()) {
+            if (inc instanceof Ast.Name.Unanswered) {
+                // Nothing declares it, which was reported where it is written. It brings in no
+                // fields, and complaining here that it is not a product data would be a second
+                // report about the one mistake.
+                continue;
+            }
             TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
                 throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
