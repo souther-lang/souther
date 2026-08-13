@@ -110,26 +110,28 @@ class SoutherJvmAbiTest {
     }
 
     /**
-     * The one kind that reads back out of a name, and what it does not claim.
+     * The one naming rule that runs backwards, and the half of the question it answers.
      *
-     * <p>A value class is its type, so the two directions are the same rule and it is written once.
-     * The answer is a type this ABI would name that way — {@code demo.Quote} reads as the data
-     * {@code Quote} whether or not anything declared it, and whether or not what is really there is
-     * the interface of a behavior {@code quote}. That is the whole of what a name can say.
+     * <p>A value class is its type, so the two directions are one rule and it is written once. What
+     * comes back is the type whose value class <em>would</em> be spelled that way — nothing more.
+     * Whether such a type is declared is a scope's answer, and so is what was really emitted under
+     * the name: {@code shop.FindOrder$Impl} is not a declaration any source could write, and
+     * {@code souther.Int} is a primitive, which reaches codegen as a boxed class and never as a value
+     * class of its own. Both read back here all the same, because reading back is all this does.
      */
     @Test
-    void andAValueClassReadsBackAsTheTypeItIs() {
+    void andAValueClassNameSaysWhichTypeItWouldBe() {
         for (TypeName type : List.of(ORDER, new TypeName("在庫", "金額"),
                 new TypeName("a.b.c", "Deep"), TypeName.primitive("Int"))) {
-            assertEquals(type, SoutherJvmAbi.declaredTypeOf(
+            assertEquals(type, SoutherJvmAbi.valueTypeCandidate(
                     SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
         }
         assertEquals(new TypeName("shop", "FindOrder$Impl"),
-                SoutherJvmAbi.declaredTypeOf("shop.FindOrder$Impl"),
-                "it answers for the name, not for what was emitted under it");
-        assertEquals(null, SoutherJvmAbi.declaredTypeOf("Loose"), "a name with no module names no type");
-        assertEquals(null, SoutherJvmAbi.declaredTypeOf(".Foo"));
-        assertEquals(null, SoutherJvmAbi.declaredTypeOf("demo."));
+                SoutherJvmAbi.valueTypeCandidate("shop.FindOrder$Impl"),
+                "a candidate for the name, and no claim about what is under it");
+        assertEquals(null, SoutherJvmAbi.valueTypeCandidate("Loose"), "a name with no module names no type");
+        assertEquals(null, SoutherJvmAbi.valueTypeCandidate(".Foo"));
+        assertEquals(null, SoutherJvmAbi.valueTypeCandidate("demo."));
     }
 
     /** And every decoder does, which is the one branch that is a value rather than a kind. */

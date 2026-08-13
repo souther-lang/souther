@@ -43,20 +43,23 @@ public final class SoutherJvmAbi {
     }
 
     /**
-     * The declared type a class of this binary name would be the value class of, or null where the
-     * name is not one a declaration could have produced.
+     * The {@link TypeName} whose {@code Value} identity would have this binary name, or null where no
+     * type's would. It says nothing about whether such a type is declared, or about what was really
+     * emitted under the name.
      *
-     * <p>The inverse of {@code nameOf(new GeneratedClass.Value(type))}, and the only inverse there
-     * can be: a value class is the one kind whose name is its identity, so it is the one kind that
-     * reads back. Every other kind either adds something to a name or is spelled the same as a kind
-     * that does — {@code demo.Quote} is a data {@code Quote} and it is also the interface of a
-     * behavior {@code quote} — so a name alone does not say which, and asking is the only way.
+     * <p>The naming rule for a value class run backwards, and the only rule here that can be: a value
+     * class is its type, so the two directions are one rule. Every other kind either adds something
+     * to a name or shares one with a kind that does — {@code demo.Quote} is a data {@code Quote} and
+     * it is also the interface of a behavior {@code quote} — so a name alone does not say which, and
+     * asking is the only way.
      *
-     * <p>An answer is a type this ABI <em>would</em> name that way, not evidence that anything
-     * declared it. A caller that needs the declaration checks its own scope, which is where that
-     * question is answered.
+     * <p>Which is why this answers half a question and is named for its half. Whether a type is
+     * there is a module's scope to answer, and the caller that has one asks it:
+     * {@code candidate != null && symbols.contains(candidate)}. An ABI that answered both would be
+     * claiming a declaration it has no way to see — the same shape as an authority that hands out
+     * half an answer, pointed the other way.
      */
-    public static TypeName declaredTypeOf(String binaryName) {
+    public static TypeName valueTypeCandidate(String binaryName) {
         int dot = binaryName.lastIndexOf('.');
         if (dot <= 0 || dot == binaryName.length() - 1) {
             return null;

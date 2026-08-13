@@ -589,8 +589,8 @@ final class NeutralForm {
         if (live == null) {
             return null;
         }
-        TypeName named = SoutherJvmAbi.declaredTypeOf(live.getClass().getName());
-        return named != null && symbols.contains(named) ? named : null;
+        TypeName candidate = SoutherJvmAbi.valueTypeCandidate(live.getClass().getName());
+        return candidate != null && symbols.contains(candidate) ? candidate : null;
     }
 
     /** What a report quotes a live value's class as. Its own name, and not the type's identity —
