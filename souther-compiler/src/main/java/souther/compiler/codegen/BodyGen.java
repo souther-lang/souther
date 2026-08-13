@@ -5,7 +5,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CheckContext;
@@ -21,6 +20,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
+import souther.compiler.jvm.GeneratedClass;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
@@ -1471,7 +1471,7 @@ final class BodyGen {
         private void invokeRecursiveHelper(Core.Call call) {
             ClassDesc[] params = new ClassDesc[call.args().size()];
             java.util.Arrays.fill(params, CD_Object);
-            code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.helperMethod(call.name()),
+            code.invokestatic(ctx.cd(new GeneratedClass.Helpers(pkg)), CodegenContext.helperMethod(call.name()),
                     MethodTypeDesc.of(CD_Object, params));
         }
 
@@ -1905,9 +1905,9 @@ final class BodyGen {
                                 Type resultType, Reaches free) {
             List<Core.Read> captures = free.bindings();
             List<String> injectedNames = free.injected();
-            String className = pkg + ".$Fn" + ctx.nextLambdaId();
-            ClassDesc cd = ClassDesc.of(className);
-            ctx.addSynth(className, generateLambdaClass(cd, params, body, paramTypes, resultType,
+            GeneratedClass.Lambda lambda = new GeneratedClass.Lambda(pkg, ctx.nextLambdaId());
+            ClassDesc cd = ctx.cd(lambda);
+            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes, resultType,
                     captures, injectedNames, reqSuccess, reqParams));
 
             // the same condition generateLambdaClass interned on — it must stay the same one

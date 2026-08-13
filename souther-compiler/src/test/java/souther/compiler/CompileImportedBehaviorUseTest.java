@@ -61,7 +61,7 @@ class CompileImportedBehaviorUseTest {
                 behavior allocateAndShip = allocate >-> instruct
                 """;
         Map<String, byte[]> classes = Compiler.compileModules(List.of(INVENTORY, shipping));
-        assertTrue(classes.containsKey("probe.shipping.AllocateAndShip$Impl"),
+        assertTrue(classes.containsKey(Emitted.impl("probe.shipping", "allocateAndShip")),
                 "the pipeline is generated: " + classes.keySet());
     }
 
@@ -159,7 +159,7 @@ class CompileImportedBehaviorUseTest {
                 }
                 """;
         Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
-        assertTrue(classes.containsKey("probe.ship1.Ship$Impl"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.impl("probe.ship1", "ship")), classes.keySet().toString());
     }
 
     @Test

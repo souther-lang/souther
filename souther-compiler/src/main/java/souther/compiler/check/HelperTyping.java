@@ -7,7 +7,6 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.InvariantMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;

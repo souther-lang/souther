@@ -42,6 +42,25 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Not called from here. This module is the last the reactor builds, and one of its tests
+             reads every module's compiled classes to check that a generated class's name is
+             assembled in one place only. Saying so as dependencies is what makes `-am` build them,
+             so the check covers what it claims to whichever way the tree was built. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-fmt</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-lsp</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-cli</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

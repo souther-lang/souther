@@ -6,7 +6,6 @@ import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
-import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.Arrays;

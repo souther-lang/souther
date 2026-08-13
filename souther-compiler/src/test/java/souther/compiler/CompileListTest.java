@@ -49,7 +49,7 @@ class CompileListTest {
                 "reasons", List.of("high", "late")));
         assertTrue(r instanceof Ok);
         Object request = ((Ok<?>) r).value();
-        Object count = loader.loadClass("demo.CountReasons" + "$Impl").getConstructor().newInstance();
+        Object count = Emitted.behavior(loader, "demo", "countReasons").getConstructor().newInstance();
         Object out = Codecs.apply(count, request);
 
         assertEquals(2L, Codecs.encode(loader, "demo.Count", out));

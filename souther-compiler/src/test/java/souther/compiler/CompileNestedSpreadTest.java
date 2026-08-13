@@ -28,7 +28,7 @@ class CompileNestedSpreadTest {
 
         Object in = Codecs.decoded(loader, "demo.Customer", Map.of(
                 "name", "A", "address", Map.of("city", "Tokyo", "street", "1-2-3")));
-        Class<?> impl = loader.loadClass("demo.Move$Impl");
+        Class<?> impl = Emitted.behavior(loader, "demo", "move");
         Object out = impl.getMethod("apply", Object.class, Object.class)
                 .invoke(impl.getConstructor().newInstance(), in, "Osaka");
 
@@ -56,7 +56,7 @@ class CompileNestedSpreadTest {
         Object in = Codecs.decoded(loader, "demo.Customer", Map.of(
                 "name", "A",
                 "address", Map.of("city", "Tokyo", "geo", Map.of("lat", "1", "lon", "2"))));
-        Class<?> impl = loader.loadClass("demo.MovePin$Impl");
+        Class<?> impl = Emitted.behavior(loader, "demo", "movePin");
         Object out = impl.getMethod("apply", Object.class, Object.class)
                 .invoke(impl.getConstructor().newInstance(), in, "9");
 

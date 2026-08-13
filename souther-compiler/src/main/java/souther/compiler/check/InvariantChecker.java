@@ -9,13 +9,11 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.InvariantMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;

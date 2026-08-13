@@ -26,7 +26,7 @@ class CompileFoldSelfHostTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", xs));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, bag);
         return (long) Codecs.encode(loader, "demo.Out", out);
     }
@@ -59,7 +59,7 @@ class CompileFoldSelfHostTest {
         Map<String, byte[]> classes = Compiler.compileModules(List.of(a, b));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "m.b.Bag", Map.of("xs", List.of(1L, 2L, 3L, 4L)));
-        Object behavior = loader.loadClass("m.b.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "m.b", "run").getConstructor().newInstance();
         assertEquals(10L, (long) Codecs.encode(loader, "m.b.Out", Codecs.apply(behavior, bag)));
     }
 }

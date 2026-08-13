@@ -95,7 +95,7 @@ class CompileSumParamMatchTest {
     @Test
     void aFoldSeededWithACaseAcceptsAnEmptyList() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(PRICING), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.PriceLines" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "priceLines").getConstructor().newInstance();
         // no lines -> the seed is returned unchanged, an empty PricedCart, typed at the union
         Object emptyIn = Codecs.decoded(loader, "demo.In", Map.of("lines", List.of()));
         Map<?, ?> empty = (Map<?, ?>) Codecs.encode(loader, "demo.PricedCart", Codecs.apply(behavior, emptyIn));
@@ -139,7 +139,7 @@ class CompileSumParamMatchTest {
     @Test
     void perLineFailingLoadAggregatesWithFoldAndMatch() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(PRICING), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.PriceLines" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "priceLines").getConstructor().newInstance();
 
         // all quantities > 0 -> a PricedCart carrying every priced line
         Object okIn = Codecs.decoded(loader, "demo.In",
@@ -171,7 +171,7 @@ class CompileSumParamMatchTest {
                 let total (i) = fold((acc, x) -> Cart { total = acc.total + x }, Cart { total = 0 }, i.xs)
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Total" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "total").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("xs", List.of(1L, 2L, 3L, 4L)));
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Cart", Codecs.apply(behavior, in));
         assertEquals(10L, out.get("total"));

@@ -8,7 +8,6 @@ import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;

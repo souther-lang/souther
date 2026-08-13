@@ -2,10 +2,11 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.frontend.CstFrontend;
 
 import java.util.ArrayList;
@@ -58,7 +59,7 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
      * declarations.
      */
     public static PublishedModule read(String moduleName, Classes classes) {
-        Declarations found = classes.of(Backend.moduleClassName(moduleName));
+        Declarations found = classes.of(SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(moduleName)).binaryName());
         if (found == null || found.module() == null) {
             return null;
         }
@@ -77,7 +78,7 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
                     Declarations::data)).append('\n');
         }
         for (String behavior : m.behaviors()) {
-            String binaryName = moduleName + "." + Backend.behaviorClass(behavior);
+            String binaryName = SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorInterface(moduleName, behavior)).binaryName();
             declarations.append('\n')
                     .append(declaration(classes, m, behavior, binaryName,
                             Declarations::behaviorSignature))

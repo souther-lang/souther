@@ -17,7 +17,6 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;

@@ -80,7 +80,7 @@ class CompileValueEqualityMatrixTest {
         raw.put("a", new BigDecimal("1.0"));
         raw.put("b", new BigDecimal("1"));
         Object in = Codecs.decoded(loader, "demo.Req", raw);
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 
@@ -116,7 +116,7 @@ class CompileValueEqualityMatrixTest {
                 new BytesClassLoader(Compiler.compile(BOUNDARY), getClass().getClassLoader());
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("rates", java.util.List.of(new BigDecimal("1.0"), new BigDecimal("1")));
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, Codecs.decoded(loader, "demo.Req", raw)));
         assertEquals(1L, ((Number) out.get("n")).longValue());

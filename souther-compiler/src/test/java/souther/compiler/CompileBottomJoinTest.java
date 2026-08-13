@@ -22,7 +22,7 @@ class CompileBottomJoinTest {
 
     private Map<?, ?> run(BytesClassLoader loader, Map<String, Object> fields) throws Exception {
         Object in = Codecs.decoded(loader, "demo.In", fields);
-        Object behavior = loader.loadClass("demo.Work" + "$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "work").getDeclaredConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 

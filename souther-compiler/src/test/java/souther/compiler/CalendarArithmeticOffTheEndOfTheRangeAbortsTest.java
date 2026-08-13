@@ -116,11 +116,11 @@ class CalendarArithmeticOffTheEndOfTheRangeAbortsTest {
     }
 
     private static Map<?, ?> run(BytesClassLoader loader, String behavior, long n) throws Exception {
-        String impl = "demo." + Character.toUpperCase(behavior.charAt(0)) + behavior.substring(1) + "$Impl";
         String out = List.of("minutes", "hours", "momentDays").contains(behavior)
                 ? "demo.OutMoment" : "demo.OutDate";
         Object in = Codecs.decoded(loader, "demo.In", Map.of("n", n));
-        Object answered = Codecs.apply(loader.loadClass(impl).getConstructor().newInstance(), in);
+        Object answered = Codecs.apply(
+                Emitted.behavior(loader, "demo", behavior).getConstructor().newInstance(), in);
         return assertInstanceOf(Map.class, Codecs.encode(loader, out, answered));
     }
 

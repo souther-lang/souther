@@ -32,7 +32,7 @@ class CompileDecimalMathTest {
         Object a = Codecs.decoded(loader, "demo.Price", new BigDecimal("1.5"));
         Object b = Codecs.decoded(loader, "demo.Price", new BigDecimal("2.25"));
 
-        Object behavior = loader.loadClass("demo.MakeQuote" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "makeQuote").getConstructor().newInstance();
         Object quote = behavior.getClass()
                 .getMethod("apply", Object.class, Object.class).invoke(behavior, a, b);
 
@@ -91,7 +91,7 @@ class CompileDecimalMathTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object negOut = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In",
                 java.util.Map.of("n", -3L, "d", new BigDecimal("-2.50"))));
         java.util.Map<?, ?> neg = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", negOut);

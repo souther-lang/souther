@@ -43,7 +43,7 @@ class CompileRecursiveHelperTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(ORG), getClass().getClassLoader());
         Object e = Codecs.decoded(loader, "demo.Employee", employee);
 
-        Object behavior = loader.loadClass("demo.MeasureDepth" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "measureDepth").getConstructor().newInstance();
         Object depth = Codecs.apply(behavior, e);
 
         return (long) Codecs.encode(loader, "demo.Depth", depth);
@@ -80,7 +80,7 @@ class CompileRecursiveHelperTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object n = Codecs.decoded(loader, "demo.N", 1_000_000L);
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, n);
 
         assertEquals(500000500000L, (long) Codecs.encode(loader, "demo.Out", out));
@@ -109,7 +109,7 @@ class CompileRecursiveHelperTest {
         }
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", xs));
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, bag);
 
         assertEquals(20000100000L, (long) Codecs.encode(loader, "demo.Out", out));
@@ -145,7 +145,7 @@ class CompileRecursiveHelperTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MUTUAL), getClass().getClassLoader());
         Object n = Codecs.decoded(loader, "demo.N", 5L);
 
-        Object behavior = loader.loadClass("demo.CountHops" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "countHops").getConstructor().newInstance();
         Object steps = Codecs.apply(behavior, n);
 
         assertEquals(5L, (long) Codecs.encode(loader, "demo.Steps", steps));
@@ -207,7 +207,7 @@ class CompileRecursiveHelperTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object n = Codecs.decoded(loader, "demo.N", 5L);
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, n);
 
         assertEquals(15L, (long) Codecs.encode(loader, "demo.Out", out));
@@ -258,7 +258,7 @@ class CompileRecursiveHelperTest {
                 throw new AssertionError(e);
             }
         };
-        Object run = loader.loadClass("demo.Run" + "$Impl").getConstructor(Behavior.class).newInstance(twice);
+        Object run = Emitted.behavior(loader, "demo", "run").getConstructor(Behavior.class).newInstance(twice);
 
         Object out = Codecs.apply(run, Codecs.decoded(loader, "demo.N", 1L));
 
@@ -366,7 +366,7 @@ class CompileRecursiveHelperTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object e = Codecs.decoded(loader, "demo.E", Map.of("name", "root"));
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object tag = Codecs.apply(behavior, e);
 
         assertEquals("root", Codecs.encode(loader, "demo.Tag", tag));
@@ -419,7 +419,7 @@ class CompileRecursiveHelperTest {
                         Map.of("n", 2L, "kids", java.util.List.of(Map.of("n", 4L, "kids", java.util.List.of()))),
                         Map.of("n", 3L, "kids", java.util.List.of()))));
 
-        Object behavior = loader.loadClass("demo.Go" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, tree);
 
         @SuppressWarnings("unchecked")

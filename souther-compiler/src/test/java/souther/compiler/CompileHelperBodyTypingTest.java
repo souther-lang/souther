@@ -41,7 +41,7 @@ class CompileHelperBodyTypingTest {
     /** Applies {@code demo.F} to {@code in} decoded as {@code dataType}, and encodes the result back. */
     private long applyToInt(String src, String dataType, long in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "f").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, dataType, in));
         return (long) Codecs.encode(loader, dataType, out);
     }
@@ -176,7 +176,7 @@ class CompileHelperBodyTypingTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object m = Codecs.decoded(loader, "demo.Money", java.util.Map.of("amount", 4L));
 
-        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "f").getConstructor().newInstance();
 
         java.util.Map<?, ?> out = (java.util.Map<?, ?>) Codecs.encode(
                 loader, "demo.Money", Codecs.apply(behavior, m));
@@ -652,7 +652,7 @@ class CompileHelperBodyTypingTest {
                 let f (a) = X(describe(a))
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "f").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.A", java.util.Map.of("x", 7L));
         assertEquals(7L, Codecs.encode(loader, "demo.X", Codecs.apply(behavior, in)));
     }

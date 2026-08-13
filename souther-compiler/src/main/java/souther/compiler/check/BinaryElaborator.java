@@ -6,7 +6,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import java.util.List;

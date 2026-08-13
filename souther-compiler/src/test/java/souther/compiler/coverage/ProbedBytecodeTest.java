@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
@@ -235,7 +236,7 @@ class ProbedBytecodeTest {
                     ProbedBytecodeTest.class.getClassLoader());
             try {
                 // The public name is an interface; the constructor and the erased apply are on $Impl.
-                Class<?> impl = loader.loadClass("example.trip.Submit$Impl");
+                Class<?> impl = Emitted.behavior(loader, "example.trip", "submit");
                 Constructor<?> ctor = impl.getDeclaredConstructor();
                 ctor.setAccessible(true);
                 this.instance = ctor.newInstance();

@@ -55,7 +55,7 @@ class CompileNestedCollectionCodecTest {
                 "tags", Map.of("bug", List.of("urgent", "ui")),
                 "stocks", List.of(Map.of("P-01", 3L), Map.of("P-02", 5L)),
                 "grid", List.of(List.of(1L, 2L), List.of(3L))));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);

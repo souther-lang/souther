@@ -8,7 +8,6 @@ import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;

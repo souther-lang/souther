@@ -3,7 +3,6 @@ package souther.compiler.examples;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CallElaborator;
-import souther.compiler.check.Elaborator;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Prelude;
 import souther.compiler.check.Symbols;

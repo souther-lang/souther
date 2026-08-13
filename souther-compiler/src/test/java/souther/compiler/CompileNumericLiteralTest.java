@@ -17,8 +17,7 @@ class CompileNumericLiteralTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo." + type, input);
         // the generated behavior class capitalizes the behavior's first letter (spec §jvm-behavior)
-        String behaviorClass = Character.toUpperCase(behavior.charAt(0)) + behavior.substring(1);
-        Object b = loader.loadClass("demo." + behaviorClass + "$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", behavior).getDeclaredConstructor().newInstance();
         Object out = Codecs.apply(b, in);
         return Codecs.encode(loader, "demo." + type, out);
     }

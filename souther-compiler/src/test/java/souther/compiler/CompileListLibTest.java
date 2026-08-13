@@ -39,7 +39,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, decodeIn(loader, List.of(1L, 2L, 3L)));
 
         Map<?, ?> m = encode(loader, out);
@@ -67,7 +67,7 @@ class CompileListLibTest {
                 let run (i) = Out { xs = sort([]) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, decodeIn(loader, List.of()));
         assertEquals(List.of(), ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("xs"));
     }
@@ -96,7 +96,7 @@ class CompileListLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("tags", List.of("gamma", "alpha", "beta")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = encode(loader, out);
@@ -122,7 +122,7 @@ class CompileListLibTest {
                 let run (i) = Out { ys = distinct(i.ns) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, decodeIn(loader, List.of(3L, 1L, 3L, 2L, 1L)));
         assertEquals(List.of(3L, 1L, 2L), encode(loader, out).get("ys"));
     }
@@ -147,7 +147,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, decodeIn(loader, List.of(50L, 200L, 10L, 300L, 100L)));
         Map<?, ?> m = encode(loader, out);
         assertEquals(List.of(200L, 300L, 100L), m.get("big"));
@@ -178,7 +178,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, decodeIn(loader, List.of(3L, -1L, 5L, -2L, 8L)));
         Map<?, ?> m = encode(loader, out);
         assertEquals(2L, m.get("groups"), "two buckets: pos and neg");
@@ -215,7 +215,7 @@ class CompileListLibTest {
                 Map.of("品番", "apple", "数量", 3L),
                 Map.of("品番", "orange", "数量", 5L),
                 Map.of("品番", "apple", "数量", 9L))));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = encode(loader, Codecs.apply(behavior, in));
         assertEquals(2L, m.get("entries"), "the repeated key holds one entry");
         assertEquals(9L, m.get("apple"), "the later row wins, as Map.fromList does");
@@ -243,7 +243,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object run = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object run = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = encode(loader, Codecs.apply(run, decodeIn(loader, List.of(3L, 9L, 1L, 7L))));
         assertEquals(9L, m.get("hi"));
         assertEquals(1L, m.get("lo"));
@@ -274,7 +274,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object run = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object run = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> hit = encode(loader, Codecs.apply(run, decodeIn(loader, List.of(3L, 50L, 200L, 400L))));
         assertEquals(200L, hit.get("firstBig"), "the first element >= 100, in order");
         assertEquals(true, hit.get("found"));
@@ -301,7 +301,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, decodeIn(loader, List.of(3L, 1L, 4L, 1L, 5L)));
         assertEquals(List.of(5L, 4L, 3L, 1L, 1L), encode(loader, out).get("byNegation"));
     }
@@ -327,7 +327,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, decodeIn(loader, List.of(9L, 7L, 8L, 4L)));
         Map<?, ?> m = encode(loader, out);
         // indices 0..3 -> weights 1,3,1,3 -> 9, 21, 8, 12
@@ -362,7 +362,7 @@ class CompileListLibTest {
                 let run (i) = Out { unique = allDistinctBy(r -> r.sku, i.rows) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         Object uniqueIn = Codecs.decoded(loader, "demo.In", Map.of("rows",
                 List.of(Map.of("sku", "apple", "qty", 1L), Map.of("sku", "pear", "qty", 2L))));
@@ -415,7 +415,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of(1L, 2L, 3L, 4L))));
 
         assertEquals(List.of(1L, 2L), m.get("firstTwo"));
@@ -454,7 +454,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of())));
 
         assertEquals(List.of(1L, 2L, 3L, 4L), m.get("upTo"));
@@ -480,7 +480,7 @@ class CompileListLibTest {
                 let run (i) = Out { n = length(rangeInclusive(1, i.to)) }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object tooWide = Codecs.decoded(loader, "demo.In", Map.of("to", 3_000_000_000L));
         assertThrows(souther.runtime.ConstraintViolation.class, () -> Codecs.apply(behavior, tooWide));
     }
@@ -510,7 +510,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of(1L, 2L, 3L))));
 
         assertEquals(List.of(1L, 10L, 2L, 20L, 3L, 30L), m.get("spread"));
@@ -549,7 +549,7 @@ class CompileListLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("ns", List.of(1L, 2L, 3L), "ss", List.of("a", "b")));
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));

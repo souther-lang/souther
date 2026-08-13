@@ -4,7 +4,6 @@ import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Messages;
 
 import java.util.List;

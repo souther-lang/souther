@@ -41,7 +41,7 @@ class CompileOptionalFieldConstructionTest {
         input.put("n", "hello");
         input.put("keep", true);
         Object in = Codecs.decoded(loader, "demo.In", input);
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 
@@ -66,7 +66,7 @@ class CompileOptionalFieldConstructionTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("id", "x-1"));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals("fresh", out.get("note"));
     }
@@ -93,7 +93,7 @@ class CompileOptionalFieldConstructionTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("id", "x-1", "note", "kept"));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals("kept", out.get("note"));
     }
@@ -125,7 +125,7 @@ class CompileOptionalFieldConstructionTest {
                                                          | Absent        -> None }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         Object present = Codecs.decoded(loader, "demo.In", Map.of("id", "x-1",
                 "which", Map.of("type", "Present", "n", "here")));

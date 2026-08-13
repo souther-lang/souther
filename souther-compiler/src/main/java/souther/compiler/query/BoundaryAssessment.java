@@ -1,12 +1,10 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Generator;
 
-import java.math.BigDecimal;
 
 /**
  * Everything known about one boundary a rule drew.

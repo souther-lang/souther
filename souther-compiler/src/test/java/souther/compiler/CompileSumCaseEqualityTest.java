@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompileSumCaseEqualityTest {
 
     private Object behavior(BytesClassLoader loader) throws Exception {
-        return loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        return Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
     }
 
     @Test

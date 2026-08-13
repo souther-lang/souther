@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.partition.TermPath;
-import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;

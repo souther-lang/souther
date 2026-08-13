@@ -77,7 +77,7 @@ class CompileComposedPatternTest {
                 let check (i) = Out(String.matches(%s, i.s))
                 """.formatted(decls, pattern);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Check$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
         assertEquals(true, runs(loader, behavior, MATCHING), "the composed pattern matches NNN-NNNN");
         assertEquals(false, runs(loader, behavior, NOT_MATCHING), "and rejects what it does not");
     }

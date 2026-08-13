@@ -3,7 +3,8 @@ package souther.compiler.generated;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.check.BoundaryOutput;
-import souther.compiler.codegen.Backend;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
@@ -276,7 +277,7 @@ public final class JsonBoundary {
             // encoder is (spec §jvm-anonymous-union). It is the only output with no name in the source, so it is the
             // behavior that says which class to reach for.
             case BoundaryOutput.Cases c -> encodeThrough(loader,
-                    pkg + "." + Backend.behaviorResultClass(behavior), result);
+                    SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorResult(pkg, behavior)).binaryName(), result);
         };
     }
 

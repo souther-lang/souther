@@ -53,7 +53,7 @@ class CompileMapLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("base", Map.of("a", 1L, "c", 3L)));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -100,7 +100,7 @@ class CompileMapLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("stock", Map.of("a", 10L, "b", 20L)));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -143,7 +143,7 @@ class CompileMapLibTest {
 
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("left", Map.of("a", 10L, "b", 20L), "right", Map.of("b", 99L, "c", 30L)));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
 
         assertEquals(Map.of("b", 20L), m.get("big"), "filter keeps the entries the predicate holds for");
@@ -183,7 +183,7 @@ class CompileMapLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("stock", Map.of()));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -212,7 +212,7 @@ class CompileMapLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("counts", Map.of("a", 2L)));
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(java.util.List.of("a=2"), m.get("lines"));
@@ -237,7 +237,7 @@ class CompileMapLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", Map.of("counts", Map.of("a", 2L)));
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
         assertEquals(java.util.List.of("a"), m.get("keys"));
@@ -269,7 +269,7 @@ class CompileMapLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("counts", Map.of("a", 10L, "b", 20L)));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -296,7 +296,7 @@ class CompileMapLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.Req", Map.of("n", 1L));
-        Object go = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object go = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(go, in));
 
         assertEquals(Map.of(), out.get("m"));

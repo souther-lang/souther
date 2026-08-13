@@ -58,7 +58,7 @@ class CompileImplicitUnitDataTest {
                 """);
 
         Object cart = Codecs.decoded(loader, "demo.Cart", Map.of("n", 0L));
-        Object behavior = loader.loadClass("demo.Quote$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "quote").getConstructor().newInstance();
         Object out = behavior.getClass().getMethod("apply", Object.class).invoke(behavior, cart);
 
         assertInstanceOf(loader.loadClass("demo.EmptyCart"), out);
@@ -78,7 +78,7 @@ class CompileImplicitUnitDataTest {
                 """);
 
         Object cart = Codecs.decoded(loader, "demo.Cart", Map.of("n", 1L));
-        Object behavior = loader.loadClass("demo.Close$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "close").getConstructor().newInstance();
         Object out = behavior.getClass().getMethod("apply", Object.class).invoke(behavior, cart);
 
         assertInstanceOf(loader.loadClass("demo.Closed"), out);
@@ -180,7 +180,7 @@ class CompileImplicitUnitDataTest {
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Object cart = Codecs.decoded(loader, "down.Cart", Map.of("n", 1L));
-        Object behavior = loader.loadClass("down.Finish$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "down", "finish").getConstructor().newInstance();
         Object out = behavior.getClass().getMethod("apply", Object.class).invoke(behavior, cart);
 
         assertEquals("up.Done", out.getClass().getName());

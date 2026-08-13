@@ -13,8 +13,10 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.GeneratedClasses;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.msg.ExampleMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
@@ -782,7 +784,7 @@ public final class ExampleVerifier {
             if (!member.isPrimitive() && member.module().equals(module.name())) {
                 continue;
             }
-            if (result.getClass().getName().equals(module.name() + "." + member.name() + "Case")) {
+            if (SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member)).is(result.getClass())) {
                 try {
                     return result.getClass().getMethod("value").invoke(result);
                 } catch (ReflectiveOperationException e) {
@@ -930,9 +932,10 @@ public final class ExampleVerifier {
     private Object standaloneFakeInstance(Ast.SpecBehavior dep,
                                           java.util.function.Function<Object[], Object> body,
                                           List<Diagnostic> out) {
+        GeneratedClass.BehaviorInterface baseClass =
+                new GeneratedClass.BehaviorInterface(module.name(), dep.name());
         try {
-            String baseName = module.name() + "." + behaviorClass(dep.name());
-            Class<?> base = loader.loadClass(baseName);
+            Class<?> base = GeneratedClasses.load(loader, baseClass);
             java.lang.reflect.Method apply = null;
             for (java.lang.reflect.Method m : base.getDeclaredMethods()) {
                 if (m.getName().equals("apply") && java.lang.reflect.Modifier.isAbstract(m.getModifiers())) {
@@ -940,9 +943,9 @@ public final class ExampleVerifier {
                 }
             }
             if (apply == null) {
-                throw new NoSuchMethodException("abstract apply on " + baseName);
+                throw new NoSuchMethodException("abstract apply on " + base.getName());
             }
-            String fakeName = baseName + "$Fake";
+            String fakeName = SoutherJvmAbi.nameOf(new GeneratedClass.ExampleFake(baseClass)).binaryName();
             java.lang.reflect.Method applyM = apply;
             Class<?> fakeClass = loader.define(fakeName, () -> fakeSubclassBytes(fakeName, base, applyM));
             return fakeClass.getConstructor(java.util.function.Function.class).newInstance(body);
@@ -1080,9 +1083,9 @@ public final class ExampleVerifier {
     private Object invokeNow(ExampleTarget target, Object[] args, Object[] fakes) {
         // The public name is now an interface; the fields, constructor and erased apply live on its
         // $Impl (spec §jvm-anonymous-union). Instantiate and call apply on the $Impl.
-        String className = module.name() + "." + behaviorClass(target.name()) + "$Impl";
+        GeneratedClass impl = new GeneratedClass.BehaviorImpl(module.name(), target.name());
         try {
-            Class<?> c = loader.loadClass(className);
+            Class<?> c = GeneratedClasses.load(loader, impl);
             Object instance;
             if (target.requirements().isEmpty()) {
                 instance = openCtor(c).newInstance();
@@ -1131,10 +1134,6 @@ public final class ExampleVerifier {
         } catch (ReflectiveOperationException e) {
             throw new AbortException(String.valueOf(e.getMessage()));
         }
-    }
-
-    private static String behaviorClass(String name) {
-        return Character.toUpperCase(name.charAt(0)) + name.substring(1);
     }
 
     /** The behavior aborted while evaluating a row (e.g. an invariant violation) — a failed example. */

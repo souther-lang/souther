@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Resolve;
-import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;

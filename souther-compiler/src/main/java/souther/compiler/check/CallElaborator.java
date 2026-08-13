@@ -10,7 +10,6 @@ import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ReachName;

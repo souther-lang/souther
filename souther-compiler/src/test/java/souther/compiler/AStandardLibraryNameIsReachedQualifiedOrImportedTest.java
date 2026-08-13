@@ -181,7 +181,7 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         List<String> differing = qualified.keySet().stream()
                 .filter(name -> !java.util.Arrays.equals(qualified.get(name), imported.get(name)))
                 .toList();
-        assertEquals(List.of("demo.$Module"), differing,
+        assertEquals(List.of(Emitted.declarations("demo")), differing,
                 "only the class that records what was written differs");
     }
 

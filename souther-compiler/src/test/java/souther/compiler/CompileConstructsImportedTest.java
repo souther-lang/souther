@@ -97,7 +97,7 @@ class CompileConstructsImportedTest {
                         let mint (r) = Amount(r.n)
                         """)), getClass().getClassLoader());
 
-        Object impl = loader.loadClass("down.Mint$Impl").getDeclaredConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "down", "mint").getDeclaredConstructor().newInstance();
         Object ok = Codecs.apply(impl, Codecs.decoded(loader, "down.Req", Map.of("n", 5L)));
         assertEquals(5L, ok.getClass().getMethod("value").invoke(ok));
 

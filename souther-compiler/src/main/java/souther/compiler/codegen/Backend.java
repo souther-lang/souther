@@ -5,7 +5,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
@@ -20,6 +19,9 @@ import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.JvmClassName;
+import souther.compiler.jvm.SoutherJvmAbi;
 import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -114,7 +116,7 @@ public final class Backend {
      * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
      * is what a derived decoder's constraint mapping reads (spec §decoder-error). */
-    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
@@ -140,7 +142,7 @@ public final class Backend {
      * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
      * the arm that ran as one nothing reaches.
      */
-    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
@@ -161,7 +163,7 @@ public final class Backend {
         }
     }
 
-    private static Map<String, byte[]> generating(Ast.Module module, Symbols symbols,
+    private static Emissions generating(Ast.Module module, Symbols symbols,
                                                   Map<String, String> typePackage,
                                                   Map<String, Sig> sigs,
                                                   Map<String, Sig> importedSigs,
@@ -171,12 +173,12 @@ public final class Backend {
                                                   TypeChecker.Checked checked,
                                                   Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
                                                   Instrumentation instrumentation) {
-        Map<String, List<String>> caseToSums = new HashMap<>();
+        Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
                 for (Ast.Name caseName : sum.cases()) {
                     caseToSums.computeIfAbsent(caseName.denotes().name(), k -> new ArrayList<>())
-                            .add(sum.name());
+                            .add(new GeneratedClass.Value(symbols.own(sum)));
                 }
             }
         }
@@ -209,28 +211,35 @@ public final class Backend {
         // A behavior's class capitalizes its first letter (spec §jvm-behavior). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
         // `Quote`. Reject the collision here rather than let one silently overwrite the other.
-        Set<String> localTypes = new HashSet<>();
+        // Every one of these checks asks the same question — does the ABI spell two of this module's
+        // identities the same — so each compares what the ABI answers rather than a spelling worked
+        // out here. What collides is decided on the JVM name; what the report names is the Souther
+        // declarations that landed on it.
+        Map<JvmClassName, Ast.Def> localTypes = new LinkedHashMap<>();
         for (Ast.Def d : module.defs()) {
-            localTypes.add(d.name());
+            localTypes.put(SoutherJvmAbi.nameOf(new GeneratedClass.Value(symbols.own(d))), d);
         }
-        Map<String, String> behaviorClassOwner = new HashMap<>();
+        Map<JvmClassName, String> behaviorClassOwner = new LinkedHashMap<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {
-            String cls = behaviorClass(bd.name());
-            if (localTypes.contains(cls)) {
+            JvmClassName cls = SoutherJvmAbi.nameOf(
+                    new GeneratedClass.BehaviorInterface(module.name(), bd.name()));
+            Ast.Def data = localTypes.get(cls);
+            if (data != null) {
                 throw CompileException.of(Diagnostic
-                                .at(bd.pos()).say(new BehaviorMessage.ABehaviorCapitalizesOntoAData(bd.name(), cls)).build());
+                                .at(bd.pos()).say(new BehaviorMessage.ABehaviorCapitalizesOntoAData(bd.name(), data.name())).build());
             }
             String prev = behaviorClassOwner.put(cls, bd.name());
             if (prev != null) {
                 throw CompileException.of(Diagnostic
-                                .at(bd.pos()).say(new BehaviorMessage.TwoBehaviorsCapitalizeToOneClass(prev, bd.name(), cls)).build());
+                                .at(bd.pos()).say(new BehaviorMessage.TwoBehaviorsCapitalizeToOneClass(prev, bd.name(), cls.classDesc().displayName())).build());
             }
         }
         // A behavior whose output is an anonymous union gets a generated sealed interface
         // <behavior名>Result that its cases implement (spec §jvm-anonymous-union). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
-        Map<String, List<TypeName>> behaviorResults = b.behaviorResultInterfaces(module, sigs);
+        Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResults =
+                b.behaviorResultInterfaces(module, sigs);
         b.rejectResultUnionCollisions(module, behaviorResults, localTypes, behaviorClassOwner);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
         // list is settled when its own module is generated. A member this module declared takes the
@@ -238,38 +247,33 @@ public final class Backend {
         // is the JDK's, and giving an imported class an interface from here would make a module's
         // bytecode depend on which modules import it — the mirror of what ADR-0024 refuses. Such a
         // member reaches the union through a bridge case this module emits instead (ADR-0057).
-        Map<TypeName, List<String>> bridgeCases = new LinkedHashMap<>();
-        behaviorResults.forEach((resultName, members) -> {
+        Map<TypeName, List<GeneratedClass.BehaviorResult>> bridgeCases = new LinkedHashMap<>();
+        behaviorResults.forEach((union, members) -> {
             for (TypeName member : members) {
                 if (b.ctx.isLocalMember(member)) {
-                    caseToSums.computeIfAbsent(member.name(), k -> new ArrayList<>()).add(resultName);
+                    caseToSums.computeIfAbsent(member.name(), k -> new ArrayList<>()).add(union);
                 } else {
-                    bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(resultName);
+                    bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(union);
                 }
             }
         });
-        b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
-        Map<String, byte[]> out = new OneClassPerName();
-        behaviorResults.forEach((resultName, members) -> {
+        b.rejectBridgeCaseCollisions(module, bridgeCases, localTypes, behaviorClassOwner);
+        Emissions out = new Emissions();
+        behaviorResults.forEach((union, members) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
-            Ast.BehaviorDef owner = b.behaviorOf(module, resultName);
-            // A module's own name is the one name the tree does not carry an occurrence for, so
-            // where a result belongs to no behavior the report is anchored at the module and is as
-            // wide as its name rather than as the characters that spell it.
-            emitting(owner == null
-                    ? WrittenName.synthetic(module.name(), module.pos()) : owner.written(), () -> {
-                        out.put(module.name() + "." + resultName,
-                                b.generateBehaviorResult(resultName, members));
-                        out.put(module.name() + "." + resultName + "$Enc",
-                                b.codec.generateResultUnionEncoder(resultName, members));
-                    });
+            Ast.BehaviorDef owner = b.behaviorNamed(module, union.behavior());
+            emitting(owner.written(), () -> {
+                out.put(union, b.generateBehaviorResult(union, members));
+                out.put(new GeneratedClass.Encoder(union),
+                        b.codec.generateResultUnionEncoder(union, members));
+            });
         });
         // A bridge case is shared by every union that reaches its member, so no one behavior owns it;
         // it is left to the module, which the outermost boundary answers for.
         bridgeCases.forEach((member, unions) ->
-                out.put(module.name() + "." + CodegenContext.bridgeCaseName(member),
-                        b.value.generateBridgeCase(member, unions, out)));
+                out.put(new GeneratedClass.BridgeCase(module.name(), member),
+                        b.value.generateBridgeCase(member, unions)));
         for (Ast.Def def : module.defs()) {
             emitting(def.written(), () -> {
                 switch (def) {
@@ -325,7 +329,7 @@ public final class Backend {
                     }
                 }
                 emitting(spec.written(), () ->
-                        out.put(module.name() + "." + behaviorClass(spec.name()),
+                        out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                 b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
                                         reqParams, b.successType(spec.ret()))));
             }
@@ -399,23 +403,23 @@ public final class Backend {
                         if (fn != null) {
                             // a fn-implemented behavior: the $Impl holds the logic, the public interface
                             // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
-                            out.put(module.name() + "." + CodegenContext.behaviorImplClass(spec.name()),
+                            out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
                                     b.generateSpecFn(spec, fn, requiredNames, requiredSuccess, requiredParam));
                             List<Type> pts = new ArrayList<>();
                             for (Ast.Param p : spec.params()) {
                                 pts.add(b.successType(p.type()));
                             }
-                            out.put(module.name() + "." + behaviorClass(spec.name()),
+                            out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
                                     b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
                                             requiredBy(spec)));
                         }
                         // else: injection target — its abstract base was generated above (spec §java-base-class)
                     }
                     case Ast.PipeBehavior pipe -> {
-                        out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
+                        out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
                                 b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
                         Sig sig = declaredSig(pipe, sigs);
-                        out.put(module.name() + "." + behaviorClass(pipe.name()),
+                        out.put(new GeneratedClass.BehaviorInterface(module.name(), pipe.name()),
                                 b.generateBehaviorInterface(pipe.name(), sig.inputTypes(), sig.outputType(),
                                         behaviorDeps.getOrDefault(pipe.name(), List.of())));
                     }
@@ -427,7 +431,7 @@ public final class Backend {
             // method it would not write is the helper whose name it is, and a pool it would not hold
             // belongs to all of them and so to the module.
             try {
-                out.put(module.name() + ".$Fns", b.generateRecursiveHelpers(recHelpers));
+                out.put(new GeneratedClass.Helpers(module.name()), b.generateRecursiveHelpers(recHelpers));
             } catch (IllegalArgumentException e) {
                 JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
                 Ast.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
@@ -449,36 +453,6 @@ public final class Backend {
                     + "; a body was walked without counting what it holds");
         }
         return out;
-    }
-
-    /**
-     * What a module emits, holding one class under one binary name.
-     *
-     * <p>The names a module declares and the names the compiler generates beside them are spelled
-     * into one namespace, and a map takes the second write of a name as the value of it — so two
-     * classes wanting one name left the artifact set short of a class, with the compile reporting
-     * nothing and the loss arriving as a linkage error against whichever class went missing. The
-     * language keeps the two apart by refusing {@code $} in a name (spec §identifier), and a
-     * declaration that would emit a class another declaration already has is refused where it is
-     * declared (spec §no-two-declarations-become-one-class). This says the same thing at the one
-     * place both are true of, so a naming scheme changed later cannot bring the silence back.
-     */
-    static final class OneClassPerName extends LinkedHashMap<String, byte[]> {
-
-        @Override
-        public byte[] put(String name, byte[] bytes) {
-            if (containsKey(name)) {
-                throw new IllegalStateException("two classes were emitted as " + name
-                        + "; a module's declared and generated names are one namespace and this one"
-                        + " is written twice");
-            }
-            return super.put(name, bytes);
-        }
-
-        @Override
-        public void putAll(Map<? extends String, ? extends byte[]> classes) {
-            classes.forEach(this::put);
-        }
     }
 
     /**
@@ -541,7 +515,7 @@ public final class Backend {
      * the same {@code emitBodyTail} path a behavior uses; a helper is pure, so it has no injected fields.
      */
     private byte[] generateRecursiveHelpers(Map<String, Ast.FnDef> helpers) {
-        ClassDesc cdFns = ClassDesc.of(pkg + ".$Fns");
+        ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
         return build(cdFns, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);   // package-private, not exposed
             for (Ast.FnDef h : helpers.values()) {
@@ -905,28 +879,30 @@ public final class Backend {
      * spelling from two modules — refused within a union by the member-name rule, and reaching here
      * when they are members of two different unions of this module.
      */
-    private void rejectBridgeCaseCollisions(Ast.Module module, Map<TypeName, List<String>> bridgeCases,
-                                            Map<String, List<TypeName>> behaviorResults,
-                                            Set<String> localTypes, Map<String, String> behaviorClassOwner) {
-        Map<String, TypeName> byBridgeName = new LinkedHashMap<>();
-        for (Map.Entry<TypeName, List<String>> e : bridgeCases.entrySet()) {
+    private void rejectBridgeCaseCollisions(Ast.Module module,
+                                            Map<TypeName, List<GeneratedClass.BehaviorResult>> bridgeCases,
+                                            Map<JvmClassName, Ast.Def> localTypes,
+                                            Map<JvmClassName, String> behaviorClassOwner) {
+        Map<JvmClassName, TypeName> byBridgeName = new LinkedHashMap<>();
+        for (Map.Entry<TypeName, List<GeneratedClass.BehaviorResult>> e : bridgeCases.entrySet()) {
             TypeName member = e.getKey();
-            String bridge = CodegenContext.bridgeCaseName(member);
-            Ast.BehaviorDef owner = behaviorOf(module, e.getValue().get(0));
-            SourcePos pos = owner != null ? owner.pos() : module.pos();
-            String what = owner != null ? owner.name() : e.getValue().get(0);
-            TypeName sameName = byBridgeName.put(bridge, member);
+            JvmClassName cls = SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member));
+            String bridge = cls.classDesc().displayName();
+            Ast.BehaviorDef owner = behaviorNamed(module, e.getValue().get(0).behavior());
+            SourcePos pos = owner.pos();
+            String what = owner.name();
+            TypeName sameName = byBridgeName.put(cls, member);
             if (sameName != null) {
                 throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(sameName.qualified(), member.qualified(), bridge))
                                 .at(pos)
                                 .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
             }
-            boolean aData = localTypes.contains(bridge);
-            boolean aBehavior = behaviorClassOwner.containsKey(bridge);
-            if (aData || aBehavior) {
-                String other = aData ? bridge : behaviorClassOwner.get(bridge);
+            Ast.Def aData = localTypes.get(cls);
+            String aBehavior = behaviorClassOwner.get(cls);
+            if (aData != null || aBehavior != null) {
+                String other = aData != null ? aData.name() : aBehavior;
                 throw CompileException.of(Diagnostic.at(pos)
-                                .say(aData
+                                .say(aData != null
                                         ? new ModuleMessage.AMemberReachesTheUnionThroughAData(what,
                                                 member.name(), bridge, other)
                                         : new ModuleMessage
@@ -944,18 +920,22 @@ public final class Backend {
      * behavior capitalizes into. Two result unions cannot collide with each other, their behaviors
      * having already been rejected for capitalizing into one class.
      */
-    private void rejectResultUnionCollisions(Ast.Module module, Map<String, List<TypeName>> behaviorResults,
-                                             Set<String> localTypes, Map<String, String> behaviorClassOwner) {
-        for (String resultName : behaviorResults.keySet()) {
-            Ast.BehaviorDef owner = behaviorOf(module, resultName);
-            SourcePos pos = owner != null ? owner.pos() : module.pos();
-            String what = owner != null ? owner.name() : resultName;
-            if (localTypes.contains(resultName)) {
+    private void rejectResultUnionCollisions(Ast.Module module,
+                                             Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResults,
+                                             Map<JvmClassName, Ast.Def> localTypes,
+                                             Map<JvmClassName, String> behaviorClassOwner) {
+        for (GeneratedClass.BehaviorResult union : behaviorResults.keySet()) {
+            JvmClassName cls = SoutherJvmAbi.nameOf(union);
+            String resultName = cls.classDesc().displayName();
+            Ast.BehaviorDef owner = behaviorNamed(module, union.behavior());
+            SourcePos pos = owner.pos();
+            String what = owner.name();
+            if (localTypes.containsKey(cls)) {
                 throw CompileException.of(Diagnostic
                                 .at(pos)
                                 .hint(new BehaviorMessage.AUnionOutputReachesJavaThroughThatName(resultName)).say(new BehaviorMessage.AUnionOutputsInterfaceCollidesWithAData(what, resultName)).build());
             }
-            String behavior = behaviorClassOwner.get(resultName);
+            String behavior = behaviorClassOwner.get(cls);
             if (behavior != null) {
                 throw CompileException.of(Diagnostic
                                 .at(pos)
@@ -964,19 +944,23 @@ public final class Backend {
         }
     }
 
-    /** The behavior whose generated result union is {@code resultName}, or null when none is. */
-    private Ast.BehaviorDef behaviorOf(Ast.Module module, String resultName) {
+    /** The behavior of this module written under {@code name}. Every result union and every bridge
+     *  case reaching here was built from one of these, so there is always one. */
+    private Ast.BehaviorDef behaviorNamed(Ast.Module module, String name) {
         for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (CodegenContext.behaviorResultClass(bd.name()).equals(resultName)) {
+            if (bd.name().equals(name)) {
                 return bd;
             }
         }
-        return null;
+        throw new IllegalStateException("no behavior named " + name + " in " + module.name());
     }
 
-    private Map<String, List<TypeName>> behaviorResultInterfaces(Ast.Module module,
+    /** The result union of each behavior that has one, keyed by the behavior — which is what a result
+     *  union is identified by. Keying by what the union is called would mean reading the behavior back
+     *  out of the spelling to find whose it is. */
+    private Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResultInterfaces(Ast.Module module,
                                                                  Map<String, Sig> sigs) {
-        Map<String, List<TypeName>> results = new LinkedHashMap<>();
+        Map<GeneratedClass.BehaviorResult, List<TypeName>> results = new LinkedHashMap<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {
             Sig sig = sigs.get(bd.name());
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
@@ -984,7 +968,7 @@ public final class Backend {
             }
             List<TypeName> members = new ArrayList<>(TypeOps.leafCases(sig.outputType(), symbols));
             Collections.sort(members);
-            results.put(CodegenContext.behaviorResultClass(bd.name()), members);
+            results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()), members);
         }
         return results;
     }
@@ -996,8 +980,8 @@ public final class Backend {
      * and uses that case's own codec, and one that wants the answer as it crosses a boundary asks
      * the union, which writes the discriminator no member writes on itself.
      */
-    private byte[] generateBehaviorResult(String resultName, List<TypeName> members) {
-        ClassDesc cdR = generated(resultName);
+    private byte[] generateBehaviorResult(GeneratedClass.BehaviorResult union, List<TypeName> members) {
+        ClassDesc cdR = ctx.cd(union);
         List<ClassDesc> caseCds = new ArrayList<>();
         for (TypeName member : members) {
             caseCds.add(ctx.resultMemberClass(member));
@@ -1005,37 +989,13 @@ public final class Backend {
         return build(cdR, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
-            codec.emitResultUnionEncoderFactory(cb, resultName, members);
+            codec.emitResultUnionEncoderFactory(cb, union, members);
         });
     }
 
 
     private Type successType(Ast.RetType ret) {
         return ctx.successType(ret);
-    }
-
-    private ClassDesc generated(String simpleName) {
-        return ctx.generated(simpleName);
-    }
-
-    /** The class a behavior is emitted under (spec §jvm-behavior). Anything that has to name that class from
-     * outside codegen — publishing a module's declarations onto it, say — asks here rather than
-     * repeating the rule, so the name a reader is sent to is the name that was emitted. */
-    public static String behaviorClass(String name) {
-        return CodegenContext.behaviorClass(name);
-    }
-
-    /** The class carrying a behavior's no-argument constructor and its erased {@code apply} — what a
-     * caller entering a compiled behavior loads (spec §jvm-behavior). Public for the same reason
-     * {@link #behaviorClass} is: the name is decided here. */
-    public static String behaviorImplClass(String name) {
-        return CodegenContext.behaviorImplClass(name);
-    }
-
-    /** The class a behavior's anonymous union output is emitted under (spec §jvm-anonymous-union), for the same
-     * reason {@link #behaviorClass} is public: the name is decided here. */
-    public static String behaviorResultClass(String name) {
-        return CodegenContext.behaviorResultClass(name);
     }
 
     /**
@@ -1129,16 +1089,12 @@ public final class Backend {
      */
     public static final int BOUNDARY_VERSION = 15;
 
-    /** The class a module's own declarations are published on. It carries nothing but them. */
-    public static String moduleClassName(String moduleName) {
-        return moduleName + ".$Module";
-    }
-
-    /** Emits {@link #moduleClassName}, carrying {@code declarations}. What it says is the caller's;
-     * that it is built like every other generated class — the same Java floor, the same
-     * {@code SourceFile} — is this package's. */
+    /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
+     * What it says is the caller's; that it is built like every other generated class — the same Java
+     * floor, the same {@code SourceFile} — is this package's. */
     public static byte[] moduleClass(String moduleName, Annotation declarations) {
-        return Descriptors.build(ClassDesc.of(moduleClassName(moduleName)), cb -> cb
+        return Descriptors.build(SoutherJvmAbi.nameOf(
+                new GeneratedClass.ModuleDeclarations(moduleName)).classDesc(), cb -> cb
                 .withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SYNTHETIC)
                 .with(RuntimeInvisibleAnnotationsAttribute.of(declarations)));
     }

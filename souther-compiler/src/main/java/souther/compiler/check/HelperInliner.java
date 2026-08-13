@@ -13,7 +13,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.HelperMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 

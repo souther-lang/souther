@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.types.TypeName;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -32,13 +33,13 @@ class CompileOutputUnionMemberTest {
                 let half (n) = if n >= 0 then n / 2 else NoAnswer
                 """);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> union = loader.loadClass("m.HalfResult");
-        assertEquals(List.of(loader.loadClass("m.IntCase"), loader.loadClass("m.NoAnswer")),
+        Class<?> union = loader.loadClass(Emitted.result("m", "half"));
+        assertEquals(List.of(loader.loadClass(Emitted.bridgeCase("m", TypeName.primitive("Int"))), loader.loadClass("m.NoAnswer")),
                 Arrays.asList(union.getPermittedSubclasses()),
                 "the primitive joins the union as a wrapper, the local case as itself");
 
         Object answered = Codecs.apply(loader.loadClass("m.Half").getMethod("of").invoke(null), 7L);
-        assertEquals("m.IntCase", answered.getClass().getName());
+        assertEquals(Emitted.bridgeCase("m", TypeName.primitive("Int")), answered.getClass().getName());
         assertEquals(3L, answered.getClass().getMethod("value").invoke(answered));
     }
 
@@ -57,10 +58,10 @@ class CompileOutputUnionMemberTest {
                 let owed (a, b) = if a.value >= b.value then Yen(a.value - b.value) else NothingOwed
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> union = loader.loadClass("down.OwedResult");
-        assertEquals(List.of(loader.loadClass("down.NothingOwed"), loader.loadClass("down.YenCase")),
+        Class<?> union = loader.loadClass(Emitted.result("down", "owed"));
+        assertEquals(List.of(loader.loadClass("down.NothingOwed"), loader.loadClass(Emitted.bridgeCase("down", new TypeName("up", "Yen")))),
                 Arrays.asList(union.getPermittedSubclasses()));
-        assertTrue(union.isAssignableFrom(loader.loadClass("down.YenCase")));
+        assertTrue(union.isAssignableFrom(loader.loadClass(Emitted.bridgeCase("down", new TypeName("up", "Yen")))));
     }
 
     @Test
@@ -167,7 +168,7 @@ class CompileOutputUnionMemberTest {
         Object bill = loader.loadClass("down.Bill").getMethod("of").invoke(null);
 
         Object answered = Codecs.apply(bill, yen);
-        assertEquals("down.YenCase", answered.getClass().getName(),
+        assertEquals(Emitted.bridgeCase("down", new TypeName("up", "Yen")), answered.getClass().getName(),
                 "the answer is a member of this behavior's union, not of the one it called");
         Object held = answered.getClass().getMethod("value").invoke(answered);
         assertEquals("money.Yen", held.getClass().getName(),
@@ -199,8 +200,8 @@ class CompileOutputUnionMemberTest {
                 let refund (a) = if a.value > 0 then a else NoRefund
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> bridge = loader.loadClass("down.YenCase");
-        assertEquals(List.of(loader.loadClass("down.OwedResult"), loader.loadClass("down.RefundResult")),
+        Class<?> bridge = loader.loadClass(Emitted.bridgeCase("down", new TypeName("up", "Yen")));
+        assertEquals(List.of(loader.loadClass(Emitted.result("down", "owed")), loader.loadClass(Emitted.result("down", "refund"))),
                 Arrays.asList(bridge.getInterfaces()),
                 "one bridge case, carrying both unions it is a member of");
     }
@@ -263,7 +264,7 @@ class CompileOutputUnionMemberTest {
                 let owed (a) = if a.value > 0 then a else NothingOwed
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Class<?> bridge = loader.loadClass("down.YenCase");
+        Class<?> bridge = loader.loadClass(Emitted.bridgeCase("down", new TypeName("up", "Yen")));
         for (String factory : List.of("encoder", "decoder")) {
             assertThrows(NoSuchMethodException.class, () -> bridge.getMethod(factory),
                     "a bridge case is a JVM form, not a type with an external representation");
@@ -310,7 +311,7 @@ class CompileOutputUnionMemberTest {
         BytesClassLoader loader = new BytesClassLoader(all, getClass().getClassLoader());
         Object behavior = loader.loadClass("consumer.HalfOwed").getConstructor().newInstance();
         Object answered = Codecs.apply(behavior, Codecs.decoded(loader, "up.Yen", 500L));
-        assertEquals("down.YenCase", answered.getClass().getName());
+        assertEquals(Emitted.bridgeCase("down", new TypeName("up", "Yen")), answered.getClass().getName());
         Object held = answered.getClass().getMethod("value").invoke(answered);
         assertEquals(250L, held.getClass().getMethod("value").invoke(held));
     }

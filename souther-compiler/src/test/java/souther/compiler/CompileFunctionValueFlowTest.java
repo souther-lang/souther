@@ -45,7 +45,7 @@ class CompileFunctionValueFlowTest {
     void anAnnotatedFunctionValueIsPassedToACombinator() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(ANNOTATED), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
 
         assertEquals(List.of(110L, 120L), run(loader, check, List.of(10L, 20L), true));
         assertEquals(List.of(11L, 21L), run(loader, check, List.of(10L, 20L), false));
@@ -74,7 +74,7 @@ class CompileFunctionValueFlowTest {
     void aHelperNamedAsAValueIsTheFunctionItNames() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(BY_NAME), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
         Object order = Codecs.decoded(loader, "demo.Order", Map.of("xs", List.of(10L, 20L)));
         Object r = Codecs.apply(check, order);
         assertEquals(List.of(11L, 21L),
@@ -108,7 +108,7 @@ class CompileFunctionValueFlowTest {
     void aFunctionTakenOutOfAListIsApplied() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(OUT_OF_A_LIST), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
 
         assertEquals(true, ok(loader, check, List.of(-1L, -2L)));   // all negative
         assertEquals(false, ok(loader, check, List.of(-1L, 2L)));
@@ -186,7 +186,7 @@ class CompileFunctionValueFlowTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getDeclaredConstructor().newInstance();
         Object order = Codecs.decoded(loader, "demo.Order",
                 Map.of("xs", List.of(1L, 2L), "v", 5L, "spring", true));
         assertEquals(List.of(106L, 107L),

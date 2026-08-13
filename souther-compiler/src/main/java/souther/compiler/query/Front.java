@@ -6,7 +6,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ExampleMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.frontend.CstFrontend;

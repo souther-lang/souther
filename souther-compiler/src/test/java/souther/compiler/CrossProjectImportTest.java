@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.types.TypeName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 
@@ -97,9 +98,9 @@ class CrossProjectImportTest {
 
         Map<String, byte[]> both = new LinkedHashMap<>(app);
         both.put("shared.money.Amount", path.bytes("shared.money.Amount"));
-        both.put("shared.money.Amount$Ctfe", path.bytes("shared.money.Amount$Ctfe"));
+        both.put(Emitted.ctfe("shared.money", "Amount"), path.bytes(Emitted.ctfe("shared.money", "Amount")));
         BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
-        Object impl = loader.loadClass("app.order.Place$Impl").getDeclaredConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "app.order", "place").getDeclaredConstructor().newInstance();
 
         Object ok = Codecs.apply(impl, Codecs.decoded(loader, "app.order.Req", Map.of("n", 5L)));
         assertEquals(5L, ok.getClass().getMethod("value").invoke(ok));
@@ -331,7 +332,7 @@ class CrossProjectImportTest {
         both.put("shared.terms.Terms", path.bytes("shared.terms.Terms"));
         both.put("shared.terms.Net30", path.bytes("shared.terms.Net30"));
         BytesClassLoader loader = new BytesClassLoader(both, getClass().getClassLoader());
-        Object impl = loader.loadClass("app.billing.Pick$Impl").getDeclaredConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "app.billing", "pick").getDeclaredConstructor().newInstance();
 
         Object out = Codecs.apply(impl, Codecs.decoded(loader, "app.billing.Req", Map.of("n", 1L)));
         assertEquals("shared.terms.Net30", out.getClass().getName());
@@ -353,7 +354,7 @@ class CrossProjectImportTest {
                 let owed (a, b) = if a.value >= b.value then Amount(a.value - b.value) else NothingOwed
                 """), published(LIBRARY));
 
-        assertTrue(app.containsKey("app.billing.AmountCase"),
+        assertTrue(app.containsKey(Emitted.bridgeCase("app.billing", new TypeName("shared.money", "Amount"))),
                 "the bridge case is this project's own class");
         assertFalse(app.containsKey("shared.money.Amount"),
                 "and the library is not emitted again to carry the interface");

@@ -19,14 +19,14 @@ class CompileOutputUnionEncoderTest {
     void aProductMemberLaysItsFieldsFlatUnderTheTypeTag() throws Exception {
         BytesClassLoader loader = compileBill();
         Object ok = Codecs.apply(loader.loadClass("m.Bill").getMethod("of").invoke(null), 5L);
-        assertEquals(Map.of("v", 5L, "type", "Ok"), Codecs.encode(loader, "m.BillResult", ok));
+        assertEquals(Map.of("v", 5L, "type", "Ok"), Codecs.encode(loader, Emitted.result("m", "bill"), ok));
     }
 
     @Test
     void aUnitMemberWritesTheTypeTagAlone() throws Exception {
         BytesClassLoader loader = compileBill();
         Object none = Codecs.apply(loader.loadClass("m.Bill").getMethod("of").invoke(null), 0L);
-        assertEquals(Map.of("type", "NotFound"), Codecs.encode(loader, "m.BillResult", none));
+        assertEquals(Map.of("type", "NotFound"), Codecs.encode(loader, Emitted.result("m", "bill"), none));
     }
 
     @Test
@@ -40,7 +40,7 @@ class CompileOutputUnionEncoderTest {
                 """), getClass().getClassLoader());
         Object answered = Codecs.apply(loader.loadClass("m.Half").getMethod("of").invoke(null), 7L);
         assertEquals(Map.of("type", "Int", "value", 3L),
-                Codecs.encode(loader, "m.HalfResult", answered));
+                Codecs.encode(loader, Emitted.result("m", "half"), answered));
     }
 
     @Test
@@ -60,7 +60,7 @@ class CompileOutputUnionEncoderTest {
         Object owed = loader.loadClass("down.Owed").getMethod("of").invoke(null);
         Object answered = Codecs.apply(owed, Codecs.decoded(loader, "up.Yen", 5L));
         assertEquals(Map.of("type", "Yen", "value", 5L),
-                Codecs.encode(loader, "down.OwedResult", answered));
+                Codecs.encode(loader, Emitted.result("down", "owed"), answered));
     }
 
     @Test
@@ -74,8 +74,8 @@ class CompileOutputUnionEncoderTest {
                 let decide (n) = if n > 0 then Approved else Rejected
                 """), getClass().getClassLoader());
         Object decide = loader.loadClass("m.Decide").getMethod("of").invoke(null);
-        assertEquals("Approved", Codecs.encode(loader, "m.DecideResult", Codecs.apply(decide, 1L)));
-        assertEquals("Rejected", Codecs.encode(loader, "m.DecideResult", Codecs.apply(decide, 0L)));
+        assertEquals("Approved", Codecs.encode(loader, Emitted.result("m", "decide"), Codecs.apply(decide, 1L)));
+        assertEquals("Rejected", Codecs.encode(loader, Emitted.result("m", "decide"), Codecs.apply(decide, 0L)));
     }
 
     @Test
@@ -95,7 +95,7 @@ class CompileOutputUnionEncoderTest {
                 """), getClass().getClassLoader());
         Object ask = loader.loadClass("m.Ask").getMethod("of").invoke(null);
         assertEquals(Map.of("type", "Hit", "score", 3L),
-                Codecs.encode(loader, "m.AskResult", Codecs.apply(ask, 3L)));
+                Codecs.encode(loader, Emitted.result("m", "ask"), Codecs.apply(ask, 3L)));
     }
 
     @Test
@@ -116,7 +116,7 @@ class CompileOutputUnionEncoderTest {
                 }
                 """), getClass().getClassLoader());
         Object hit = Codecs.apply(loader.loadClass("m.Ask").getMethod("of").invoke(null), 3L);
-        Object written = Codecs.encode(loader, "m.AskResult", hit);
+        Object written = Codecs.encode(loader, Emitted.result("m", "ask"), hit);
         assertEquals(hit, Codecs.decoded(loader, "m.Answer", written));
     }
 

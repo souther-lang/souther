@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.Emitted;
 import souther.compiler.Compiler;
 
 import org.junit.jupiter.api.Test;
@@ -80,7 +81,7 @@ class ModuleMetadataTest {
     void theModuleClassNamesWhatToRead() {
         Map<String, byte[]> classes = Compiler.compile(UP);
 
-        Annotation module = annotation(classes, "shared.money.$Module", "SoutherModule");
+        Annotation module = annotation(classes, Emitted.declarations("shared.money"), "SoutherModule");
         assertEquals("shared.money", string(module, "name"));
         assertEquals(souther.compiler.codegen.Backend.BOUNDARY_VERSION, integer(module, "compat"));
         assertEquals("module shared.money exposing ( Amount, charge )", string(module, "header"));
@@ -96,7 +97,7 @@ class ModuleMetadataTest {
         Map<String, byte[]> classes = Compiler.compile(UP);
 
         assertEquals(List.of("let withinCap (n: Int) = n <= 1000000"),
-                strings(annotation(classes, "shared.money.$Module", "SoutherModule"),
+                strings(annotation(classes, Emitted.declarations("shared.money"), "SoutherModule"),
                         "invariantHelpers"));
     }
 
