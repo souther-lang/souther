@@ -97,6 +97,43 @@ class SoutherJvmAbiTest {
         assertEquals(kinds.size(), stated.size());
     }
 
+    /** Where a class of a given name is written, which is the JVM's rule and is stated here for the
+     *  same reason the rest is: four readers wanted it and each wrote it out. */
+    @Test
+    void andAClassOfThatNameIsWrittenWhereTheAbiSaysItIs() {
+        assertEquals("shop/Order.class", JvmClassName.classFile("shop.Order"));
+        assertEquals("shop/FindOrder$Impl.class",
+                SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorImpl("shop", "findOrder")).classFile());
+        assertEquals("在庫/引き当てる$Impl.class",
+                SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorImpl("在庫", "引き当てる")).classFile());
+        assertEquals("Loose.class", JvmClassName.classFile("Loose"));
+    }
+
+    /**
+     * The one naming rule that runs backwards, and the half of the question it answers.
+     *
+     * <p>A value class is its type, so the two directions are one rule and it is written once. What
+     * comes back is the type whose value class <em>would</em> be spelled that way — nothing more.
+     * Whether such a type is declared is a scope's answer, and so is what was really emitted under
+     * the name: {@code shop.FindOrder$Impl} is not a declaration any source could write, and
+     * {@code souther.Int} is a primitive, which reaches codegen as a boxed class and never as a value
+     * class of its own. Both read back here all the same, because reading back is all this does.
+     */
+    @Test
+    void andAValueClassNameSaysWhichTypeItWouldBe() {
+        for (TypeName type : List.of(ORDER, new TypeName("在庫", "金額"),
+                new TypeName("a.b.c", "Deep"), TypeName.primitive("Int"))) {
+            assertEquals(type, SoutherJvmAbi.valueTypeCandidate(
+                    SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
+        }
+        assertEquals(new TypeName("shop", "FindOrder$Impl"),
+                SoutherJvmAbi.valueTypeCandidate("shop.FindOrder$Impl"),
+                "a candidate for the name, and no claim about what is under it");
+        assertEquals(null, SoutherJvmAbi.valueTypeCandidate("Loose"), "a name with no module names no type");
+        assertEquals(null, SoutherJvmAbi.valueTypeCandidate(".Foo"));
+        assertEquals(null, SoutherJvmAbi.valueTypeCandidate("demo."));
+    }
+
     /** And every decoder does, which is the one branch that is a value rather than a kind. */
     @Test
     void andEveryDecoderHasARow() {

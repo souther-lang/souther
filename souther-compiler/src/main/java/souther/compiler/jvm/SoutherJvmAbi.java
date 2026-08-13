@@ -1,5 +1,7 @@
 package souther.compiler.jvm;
 
+import souther.compiler.types.TypeName;
+
 /**
  * How a {@link GeneratedClass} is spelled on the JVM. The one place that maps a Souther identity to a
  * physical one, and the one place the suffixes and the capitalization exist.
@@ -38,6 +40,31 @@ public final class SoutherJvmAbi {
             case GeneratedClass.Helpers h -> h.module() + ".$Fns";
             case GeneratedClass.Lambda l -> l.module() + ".$Fn" + l.id();
         });
+    }
+
+    /**
+     * The {@link TypeName} whose {@code Value} identity would have this binary name, or null where no
+     * type's would. It says nothing about whether such a type is declared, or about what was really
+     * emitted under the name.
+     *
+     * <p>The naming rule for a value class run backwards, and the only rule here that can be: a value
+     * class is its type, so the two directions are one rule. Every other kind either adds something
+     * to a name or shares one with a kind that does — {@code demo.Quote} is a data {@code Quote} and
+     * it is also the interface of a behavior {@code quote} — so a name alone does not say which, and
+     * asking is the only way.
+     *
+     * <p>Which is why this answers half a question and is named for its half. Whether a type is
+     * there is a module's scope to answer, and the caller that has one asks it:
+     * {@code candidate != null && symbols.contains(candidate)}. An ABI that answered both would be
+     * claiming a declaration it has no way to see — the same shape as an authority that hands out
+     * half an answer, pointed the other way.
+     */
+    public static TypeName valueTypeCandidate(String binaryName) {
+        int dot = binaryName.lastIndexOf('.');
+        if (dot <= 0 || dot == binaryName.length() - 1) {
+            return null;
+        }
+        return new TypeName(binaryName.substring(0, dot), binaryName.substring(dot + 1));
     }
 
     /**

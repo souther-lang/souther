@@ -1,5 +1,6 @@
 package souther.cli;
 
+import souther.compiler.jvm.JvmClassName;
 import souther.compiler.Compiler;
 import souther.compiler.Reserved;
 import souther.compiler.cst.CstError;
@@ -1041,7 +1042,7 @@ public final class Main {
     static List<Path> writeClasses(Map<String, byte[]> classes, Path outDir) throws IOException {
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
-            Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");
+            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
             Files.write(file, entry.getValue());
             written.add(file);
