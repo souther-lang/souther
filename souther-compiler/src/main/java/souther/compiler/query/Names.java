@@ -669,6 +669,141 @@ public final class Names {
     }
 
     /**
+     * What resolution worked out about the names a module writes.
+     *
+     * <p>This is what a reader outside the compiler is answered from, and it is asked for on its
+     * own so that such a reader never holds the tree. The two are not the same artifact and do not
+     * come and go together: a module the compiler will not build on is still a module an editor has
+     * to say things about, and every name that did resolve in it is a name it can be told about.
+     */
+    public record Facts(String name) implements Key<Resolve.ResolutionIndex> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Resolve.ResolutionIndex> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            return resolution.present() ? Answer.of(resolution.value().index()) : Answer.absent();
+        }
+    }
+
+    /**
+     * One declaration as its meaning was settled, or absent where it was not settled.
+     *
+     * <p>The unit a name is answered for is the declaration. A definition is here when every name
+     * written in it was answered and every declaration it reaches has one of these too; otherwise
+     * there is nothing to hand a later pass, and it is not built rather than built around what is
+     * missing.
+     */
+    public record Definition(TypeName named) implements Key<Ast.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Ast.Def> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(named.module()));
+            Answer<Set<String>> unbuilt = db.ask(new Unbuilt(named.module()));
+            if (!resolution.present() || !unbuilt.present()
+                    || unbuilt.value().contains(named.name())) {
+                return Answer.absent();
+            }
+            for (Ast.Def def : resolution.value().module().defs()) {
+                if (def.name().equals(named.name())) {
+                    return Answer.of(def);
+                }
+            }
+            return Answer.absent();
+        }
+    }
+
+    /**
+     * The declarations of a module that have no meaning to give.
+     *
+     * <p>Two ways in, and both are about what a declaration is made of rather than about what was
+     * reported. A name written in it was not answered, so what it is made of is not there; or what
+     * it reaches is one of these, so what that is made of is not there either. A module that will
+     * not be emitted for some other reason has declarations that mean what they say, and they are
+     * not in here.
+     *
+     * <p>Asked of a whole module at once because the reaching is a relation among its own
+     * declarations, and following it one declaration at a time would ask a question of itself where
+     * two of them are made of each other. Across modules there is no such loop to close: an import
+     * cycle is settled before this, so a module's declarations reach another's and stop.
+     *
+     * <p>Not part of what a reader outside this file asks. Whether a declaration has a meaning is
+     * {@link Definition}'s to answer and is answered by handing one over or not; a reader that could
+     * ask which ones have none would be a reader deciding for itself what to do about it, which is
+     * how the question of what a name means came to be answered in several places at once.
+     */
+    record Unbuilt(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            if (cyclic(db, name)) {
+                return Answer.absent();
+            }
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.absent();
+            }
+            Map<String, Resolve.OfDeclaration> declarations = resolution.value().declarations();
+            Set<String> unbuilt = new LinkedHashSet<>();
+            Map<String, Set<String>> elsewhere = new LinkedHashMap<>();
+            for (Map.Entry<String, Resolve.OfDeclaration> declared : declarations.entrySet()) {
+                if (!declared.getValue().answered()) {
+                    unbuilt.add(declared.getKey());
+                    continue;
+                }
+                for (TypeName reached : declared.getValue().reaches()) {
+                    if (reached.module().equals(name)) {
+                        continue;
+                    }
+                    Set<String> there = elsewhere.computeIfAbsent(reached.module(),
+                            m -> unbuiltIn(db, m));
+                    if (there.contains(reached.name())) {
+                        unbuilt.add(declared.getKey());
+                        break;
+                    }
+                }
+            }
+            // What reaches one of these has nothing to stand on either, and so has what reaches
+            // that. Held to the declarations of this module, which is where the relation is.
+            boolean more = true;
+            while (more) {
+                more = false;
+                for (Map.Entry<String, Resolve.OfDeclaration> declared : declarations.entrySet()) {
+                    if (unbuilt.contains(declared.getKey())) {
+                        continue;
+                    }
+                    for (TypeName reached : declared.getValue().reaches()) {
+                        if (reached.module().equals(name) && unbuilt.contains(reached.name())) {
+                            unbuilt.add(declared.getKey());
+                            more = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            return Answer.of(Set.copyOf(unbuilt));
+        }
+
+        /** What another module could not build, or nothing where it could not be read — what is
+         * wrong there is reported there, and a name reaching into it is answered by its absence. */
+        private static Set<String> unbuiltIn(Db db, String module) {
+            Answer<Set<String>> there = db.ask(new Unbuilt(module));
+            return there.present() ? there.value() : Set.of();
+        }
+    }
+
+    /**
      * Whether everything the compiler worked out about a module's names came out.
      *
      * <p>One question, asked in one place, so that whether a module may be emitted does not become a
@@ -861,19 +996,16 @@ public final class Names {
     /** Every name {@code module} writes, paired with what it denotes, or null when the module could
      * not be read. */
     private static Set<Use> usesIn(Db db, String module) {
-        Answer<Resolve.Resolved> resolution = db.ask(new Resolution(module));
+        Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(module));
         Ast.Module bound = db.ask(new Bound(module)).value();
-        if (!resolution.present() || bound == null) {
+        if (!facts.present() || bound == null) {
             return null;
         }
         Set<Use> used = new HashSet<>();
-        for (Resolve.Denotation d : resolution.value().denotations()) {
-            if (!d.denotes().isUnresolved()) {
-                used.add(new Use(d.written().canonical(), d.denotes().module(),
-                        d.denotes().name()));
-            }
+        for (Resolve.Denotation d : facts.value().types()) {
+            used.add(new Use(d.written().canonical(), d.denotes().module(), d.denotes().name()));
         }
-        for (Resolve.ValueUse v : resolution.value().values()) {
+        for (Resolve.ValueUse v : facts.value().values()) {
             switch (v.denotes()) {
                 case ValueName.Behavior b ->
                         used.add(new Use(v.written().canonical(), b.module(), b.name()));
@@ -984,12 +1116,12 @@ public final class Names {
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.absent();
             }
             Resolve.Denotation innermost = null;
-            for (Resolve.Denotation d : resolution.value().denotations()) {
+            for (Resolve.Denotation d : facts.value().types()) {
                 if (!spans(d.written(), at)) {
                     continue;
                 }
@@ -1044,12 +1176,12 @@ public final class Names {
 
         @Override
         public Answer<List<Resolve.Denotation>> compute(Db db) {
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.of(List.of());
             }
             List<Resolve.Denotation> uses = new ArrayList<>();
-            for (Resolve.Denotation d : resolution.value().denotations()) {
+            for (Resolve.Denotation d : facts.value().types()) {
                 if (denoted.equals(d.denotes())) {
                     uses.add(d);
                 }
@@ -1077,11 +1209,11 @@ public final class Names {
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.absent();
             }
-            for (Resolve.ValueUse use : resolution.value().values()) {
+            for (Resolve.ValueUse use : facts.value().values()) {
                 if (spans(use.written(), at)) {
                     return Answer.of(use);
                 }
@@ -1105,12 +1237,12 @@ public final class Names {
 
         @Override
         public Answer<List<Resolve.ValueUse>> compute(Db db) {
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.of(List.of());
             }
             List<Resolve.ValueUse> uses = new ArrayList<>();
-            for (Resolve.ValueUse use : resolution.value().values()) {
+            for (Resolve.ValueUse use : facts.value().values()) {
                 if (denoted.equals(use.denotes())) {
                     uses.add(use);
                 }
@@ -1140,11 +1272,11 @@ public final class Names {
             if (name == null) {
                 return Answer.absent();
             }
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
+            Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
+            if (!facts.present()) {
                 return Answer.absent();
             }
-            Map<BindingId, Resolve.BoundName> binders = resolution.value().binders();
+            Map<BindingId, Resolve.BoundName> binders = facts.value().binders();
             for (Map.Entry<BindingId, Resolve.BoundName> bound : binders.entrySet()) {
                 Resolve.BoundName written = bound.getValue();
                 if (answerable(bound.getKey(), binders)
@@ -1206,12 +1338,12 @@ public final class Names {
             // a binding is not a position, so where it was written is asked of the pass that
             // answered it rather than read off the name
             if (denoted instanceof ValueName.Local local) {
-                Answer<Resolve.Resolved> resolution =
-                        db.ask(new Resolution(local.id().owner().module()));
-                if (!resolution.present()) {
+                Answer<Resolve.ResolutionIndex> facts =
+                        db.ask(new Facts(local.id().owner().module()));
+                if (!facts.present()) {
                     return Answer.absent();
                 }
-                Resolve.BoundName binder = resolution.value().binders().get(local.id());
+                Resolve.BoundName binder = facts.value().binders().get(local.id());
                 return binder == null ? Answer.absent() : Answer.of(List.of(binder.written()));
             }
             String in = module();

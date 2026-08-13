@@ -1153,10 +1153,21 @@ public final class Bodies {
             }
             TypeChecker.Reported reported;
             try {
+                // The declarations that have a meaning to check, asked for one at a time. What has
+                // none is not here and nothing here asks why: a reader of a declaration knows there
+                // is one or there is not, and the reasons belong to the pass that settles them.
+                Set<String> settled = new LinkedHashSet<>();
+                for (Ast.Def def : lowering.value().settled().defs()) {
+                    if (db.ask(new Names.Definition(
+                            new TypeName(name, def.name()))).present()) {
+                        settled.add(def.name());
+                    }
+                }
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), lowering.value().lowered(),
-                        reqSigs.value(), calleeSigs.value(), sigs.value(), published.value());
+                        reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
+                        settled);
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

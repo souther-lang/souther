@@ -20,8 +20,10 @@ import souther.compiler.Reserved;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Says once, for a whole module, what every written type name denotes.
@@ -49,8 +51,21 @@ public final class Resolve {
     private final List<Denotation> denotations = new ArrayList<>();
     /** The same, for the names used as values. */
     private final List<ValueUse> values0 = new ArrayList<>();
-    /** Every name it could not answer, as the error it would once have thrown. */
+    /** What it has to say about the names it could not answer, as the errors it would once have
+     * thrown. Not every one of them is in here: some are already reported elsewhere. */
     private final List<CompileException> unresolved = new ArrayList<>();
+    /**
+     * How many names it could not answer, by every route there is.
+     *
+     * <p>Counted apart from what was said about them, because they are two things. A name is left
+     * unanswered and said nothing about where the reason is somewhere else and already reported
+     * there — a module this compilation has and cannot use has its exported names put in an
+     * importer's scope as identities nothing declares, so the importer is not told a second time
+     * about a file that is fine. That is the same absence as a misspelling; only the report differs.
+     * Whether a declaration's names came out is this, and never how many diagnostics were added
+     * while it was being read.
+     */
+    private int failed;
     /** What each binding this pass gave an identity to is called, and where that is written. */
     private final Map<BindingId, BoundName> binders = new LinkedHashMap<>();
     /** How many bindings each definition has been given, so the next one gets the next number. */
@@ -171,12 +186,14 @@ public final class Resolve {
     }
 
     /**
-     * A resolved module, every name the pass answered in it, and the names it could not answer.
+     * What the pass worked out about the names a module writes, and nothing else.
      *
-     * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
-     * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
-     * resolved as if the mistake were not there — so an author is told about every unknown name at
-     * once instead of one per compile, and an editor can still say what the names around it mean.
+     * <p>Every entry is an answer it reached. A name it could not answer is in none of them, so a
+     * reader asking about one is told there is nothing there rather than handed a declaration that
+     * was never written — the identity the traversal carries past a mistake stands for the absence
+     * and is not an identity anything declares. This is what a reader outside the compiler is
+     * offered, which is why it is a partial record rather than a total one: an incomplete module has
+     * incomplete answers about it, and the answers it does have are as good as any other module's.
      *
      * <p>{@code binders} says what each binding is called and where the author wrote that name. A
      * binding is not its position — a pass that expands a helper stamps the call site over the
@@ -191,8 +208,31 @@ public final class Resolve {
      * something else, so a reader answered with one of these would be answered about a name that is
      * not there, at a width that is not its.
      */
-    public record Resolved(Ast.Module module, List<Denotation> denotations, List<ValueUse> values,
-                           List<CompileException> unresolved, Map<BindingId, BoundName> binders) {}
+    public record ResolutionIndex(List<Denotation> types, List<ValueUse> values,
+                                  Map<BindingId, BoundName> binders) {}
+
+    /**
+     * A resolved module, what the pass worked out about the names in it, and the names it could not
+     * answer.
+     *
+     * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
+     * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
+     * resolved as if the mistake were not there — so an author is told about every unknown name at
+     * once instead of one per compile, and an editor can still say what the names around it mean.
+     */
+    public record Resolved(Ast.Module module, ResolutionIndex index,
+                           List<CompileException> unresolved,
+                           Map<String, OfDeclaration> declarations) {}
+
+    /**
+     * What resolving one declaration came to.
+     *
+     * <p>{@code answered} is whether every name written in it was answered — the names met while it
+     * was being read, and no others, so a mistake in the declaration beside it is not one of these.
+     * {@code reaches} is what those names turned out to denote, which is what says whether this
+     * declaration stands on one that has no meaning.
+     */
+    public record OfDeclaration(boolean answered, Set<TypeName> reaches) {}
 
     /** What a binding is called, and the occurrence of that name the author wrote. */
     public record BoundName(WrittenName written) {
@@ -231,8 +271,25 @@ public final class Resolve {
     public static Resolved resolving(Ast.Module m, Symbols symbols, Values values) {
         Resolve r = new Resolve(symbols, values);
         List<Ast.Def> defs = new ArrayList<>();
+        // Which names were answered is settled per declaration: what one of them writes is nothing
+        // the one beside it wrote, and the names met while it was being read are its own.
+        Map<String, OfDeclaration> declarations = new LinkedHashMap<>();
         for (Ast.Def def : m.defs()) {
-            defs.add(r.def(def));
+            int failedBefore = r.failed;
+            int denotedBefore = r.denotations.size();
+            Ast.Def resolved = r.def(def);
+            defs.add(resolved);
+            Set<TypeName> reaches = new LinkedHashSet<>();
+            for (Denotation d : r.denotations.subList(denotedBefore, r.denotations.size())) {
+                reaches.add(d.denotes());
+            }
+            // The first of a name is what the module declares and the second is reported and left
+            // out, which `TypeChecker.declared` settles and every stage reads from there. Whether a
+            // declaration came out is about the same one: read off the second, it answers about a
+            // declaration nothing else is holding, and the one the module has is told it has no
+            // meaning because of a mistake in the copy below it.
+            declarations.putIfAbsent(resolved.name(),
+                    new OfDeclaration(r.failed == failedBefore, Set.copyOf(reaches)));
         }
         List<Ast.BehaviorDef> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
@@ -279,8 +336,9 @@ public final class Resolve {
                 new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
                         behaviors, fns, m.takenOn(), examples, fakes, m.exampleFileTarget(),
                         m.pos()),
-                List.copyOf(r.denotations), List.copyOf(r.values0), List.copyOf(r.unresolved),
-                Map.copyOf(r.binders));
+                new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
+                        Map.copyOf(r.binders)),
+                List.copyOf(r.unresolved), Map.copyOf(declarations));
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {
@@ -366,7 +424,9 @@ public final class Resolve {
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
             TypeName names = symbols.resolve(denoted.written());
-            if (names != null) {
+            if (names != null && names.isUnresolved()) {
+                failed++;
+            } else if (names != null) {
                 denotations.add(new Denotation(denoted.written(), names));
             }
         }
@@ -919,8 +979,17 @@ public final class Resolve {
      * wraps — is a use of that type as much as one written in a field's type is, and is recorded as
      * one too. Otherwise renaming the type would rewrite every other mention of it and leave these,
      * which is a rename that stops the workspace compiling.
+     *
+     * <p>A name nothing answered to is recorded nowhere. What this collects is what the pass worked
+     * out, and it did not work that one out: the name it carries stands for the absence so that the
+     * traversal can go on past it, and a reader handed that name back would be told a binding is
+     * there under a spelling nothing binds.
      */
     private ValueName answered(WrittenName written, ValueName denotes) {
+        if (denotes instanceof ValueName.Unresolved) {
+            failed++;
+            return denotes;
+        }
         if (written.pos() == null) {
             return denotes;
         }
@@ -1072,6 +1141,7 @@ public final class Resolve {
         try {
             return TypeOps.denoted(ref, symbols);
         } catch (CompileException e) {
+            failed++;
             unresolved.add(e);
             return Type.ERRONEOUS;
         }
@@ -1084,9 +1154,12 @@ public final class Resolve {
     }
 
     /** Records what a name was answered with, and hands it back. A name with no position was
-     * synthesized by an earlier pass rather than written, so there is nothing to point at. */
+     * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
+     * name nothing answered is an absence rather than a declaration to record. */
     private Ast.Name answered(Ast.Name n) {
-        if (n.pos() != null) {
+        if (n.denotes().isUnresolved()) {
+            failed++;
+        } else if (n.pos() != null) {
             denotations.add(new Denotation(n.name(), n.denotes()));
         }
         return n;

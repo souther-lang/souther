@@ -993,7 +993,7 @@ public final class Analyzer {
      */
     private boolean resolves(Compilation compilation, String uri) {
         String module = compilation.moduleOf(uri);
-        return module != null && compilation.db().ask(new Names.Resolution(module)).present();
+        return module != null && compilation.db().ask(new Names.Facts(module)).present();
     }
 
     /** Where a type is declared, as the compiler answers it. */

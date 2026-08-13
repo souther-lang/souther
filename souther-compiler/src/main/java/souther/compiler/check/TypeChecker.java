@@ -85,14 +85,14 @@ public final class TypeChecker {
                                        Ast.Module lowered, Map<String, ReqSig> reqSigs,
                                        Map<String, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
-                                       Map<String, Ast.FnDef> imported) {
+                                       Map<String, Ast.FnDef> imported, Set<String> settled) {
         Elaborated elaborated = new Elaborated();
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
             checkRecovering(module, symbols, sigs, importedInjected, lowered, calleeSigs, errors,
-                    elaborated, abandoned, reqSigs, recursiveHelperFns, imported);
+                    elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled);
         } catch (Unanswerable e) {
             abandoned.add(e);
             stopped = true;
@@ -188,7 +188,8 @@ public final class TypeChecker {
                                         Elaborated elaborated, List<Unanswerable> abandoned,
                                         Map<String, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
-                                        Map<String, Ast.FnDef> publishedToHere) {
+                                        Map<String, Ast.FnDef> publishedToHere,
+                                        Set<String> settled) {
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
         // it does not have.
@@ -227,6 +228,9 @@ public final class TypeChecker {
         // clauses says so about both. Within one clause the first construction is the answer: naming
         // every one of them tells the author nothing the first does not.
         for (Ast.Def def : module.defs()) {
+            if (!settled.contains(def.name())) {
+                continue;
+            }
             if (def instanceof Ast.Data data) {
                 for (Ast.InvariantClause clause : data.invariants()) {
                     collect(errors, abandoned, () -> {
@@ -238,7 +242,16 @@ public final class TypeChecker {
                 }
             }
         }
+        // Only a declaration whose meaning was settled is checked, and `settled` is what says which
+        // those are. What a check over one of the others would find is the mistake that stopped it
+        // being settled, said again from further down — that the type it is made of has no decoder,
+        // or no fields, or no value — against a line the author has no reason to look at. The caller
+        // holds the declarations that have a meaning and hands them over; there is nothing here that
+        // asks why one of the others has none.
         for (Ast.Def def : module.defs()) {
+            if (!settled.contains(def.name())) {
+                continue;
+            }
             collect(errors, abandoned, () -> {
                 switch (def) {
                     case Ast.Data data ->
