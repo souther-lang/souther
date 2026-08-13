@@ -726,46 +726,46 @@ public interface Ast {
      * reuses {@code tupleElems} to carry its key type (a single element) while {@code name} is
      * {@code "Map"} and {@code arg} is the value type (ADR-0040).
      *
-     * <p>{@code denotes} is the type the reference stands for, decided once by {@code Resolve}
-     * (issue #177). Every reference the pass let through carries one, so nothing downstream resolves
-     * a written type a second time — nor has to know which module the reference was written in, which
-     * is what a second resolution needed to get right.
+     * <p>The two forms are the two states a reference is in, as {@link Binder}'s are. The parser
+     * writes {@link Written}, which is the spelling and the shape around it; {@code Resolve} answers
+     * it with {@link Denoting}, which carries the type it stands for. There is no third state and no
+     * absent type: a reference that stands for a type and one that has not been read are different
+     * types, so nothing downstream tests for a missing one.
+     *
+     * <p>The type is decided once (issue #177), which is what keeps a later reader from resolving a
+     * written type a second time — and from having to know which module the reference was written
+     * in, which is what a second resolution needed to get right.
      */
-    record TypeRef(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems, Type denotes,
-                   SourcePos anchor) implements TypeTerm {
+    sealed interface TypeRef extends TypeTerm permits TypeRef.Written, TypeRef.Denoting {
+
+        /** The name as it is spelled, or null where the reference names none — a tuple, or a type a
+         * pass settled and left no surface for. */
+        WrittenName written();
+
+        /** The single type argument, as {@code List<T>} has. */
+        TypeTerm arg();
+
+        /** A tuple's elements, or the single key type a {@code Map} carries (ADR-0040). */
+        List<TypeTerm> tupleElems();
+
+        /** Where a reference with no name to start at begins. */
+        SourcePos anchor();
 
         /** A reference the source wrote, read off the characters that spell it. */
-        public TypeRef(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems) {
-            this(written, arg, tupleElems, null, null);
+        static TypeRef written(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems) {
+            return new Written(written, arg, tupleElems, null);
         }
 
-        /** A reference a pass wrote, named but written nowhere — {@code T?} becoming
-         * {@code Option<T>}, a {@code Map} carrying its key. */
-        public TypeRef(String name, TypeTerm arg, List<TypeTerm> tupleElems, SourcePos pos) {
-            this(name == null ? null : WrittenName.synthetic(name, pos), arg, tupleElems, null, pos);
+        /** A reference a pass wrote before resolution runs, named but written nowhere — {@code T?}
+         * becoming {@code Option<T>}, a {@code Map} carrying its key. */
+        static TypeRef written(String name, TypeTerm arg, List<TypeTerm> tupleElems, SourcePos pos) {
+            return new Written(name == null ? null : WrittenName.synthetic(name, pos), arg,
+                    tupleElems, pos);
         }
 
-        /** An ordinary (non-tuple) reference a pass wrote. */
-        public TypeRef(String name, TypeTerm arg, SourcePos pos) {
-            this(name, arg, null, pos);
-        }
-
-        /** The name this reference stands for, or null where it names none — a tuple, or a type a
-         * pass settled and left no surface for. */
-        public String name() {
-            return written == null ? null : written.canonical();
-        }
-
-        /** Where the reference starts. A named one starts where its name does; {@code anchor} is
-         * for the ones that have no name to start at, which is why it is not asked otherwise: two
-         * places for one reference is two places that can disagree. */
-        public SourcePos pos() {
-            return written == null ? anchor : written.pos();
-        }
-
-        /** The same reference, resolved. */
-        public TypeRef denoting(Type type) {
-            return new TypeRef(written, arg, tupleElems, type, anchor);
+        /** An ordinary (non-tuple) reference a pass wrote before resolution runs. */
+        static TypeRef written(String name, TypeTerm arg, SourcePos pos) {
+            return written(name, arg, null, pos);
         }
 
         /**
@@ -774,14 +774,73 @@ public interface Ast {
          * decided, and there is no source it stands for. Everything downstream of {@code Resolve}
          * reads {@link #denotes()}, so a reference with a decided type is as good as a written one.
          */
-        public static TypeRef of(Type type, SourcePos pos) {
-            return new TypeRef((WrittenName) null, null, null, type, pos);
+        static TypeRef of(Type type, SourcePos pos) {
+            return new Denoting(null, null, null, type, pos);
+        }
+
+        /** The name this reference stands for, or null where it names none. */
+        default String name() {
+            return written() == null ? null : written().canonical();
+        }
+
+        /** Where the reference starts. A named one starts where its name does; {@code anchor} is
+         * for the ones that have no name to start at, which is why it is not asked otherwise: two
+         * places for one reference is two places that can disagree. */
+        default SourcePos pos() {
+            return written() == null ? anchor() : written().pos();
         }
 
         /** A tuple type is the nameless form; a named ref that also carries {@code tupleElems}
          *  (a {@code Map} carrying its key) is not a tuple. */
-        public boolean isTuple() {
-            return written == null && tupleElems != null;
+        default boolean isTuple() {
+            return written() == null && tupleElems() != null;
+        }
+
+        /**
+         * The type this stands for, for a reader that is asking what it is.
+         *
+         * <p>A reference still {@link Written} here is a pass reading a type it was handed before
+         * resolution answered it, which is a fault in the compiler rather than in the source, so it
+         * is refused outright. This is the one place that says so.
+         */
+        default Type denotes() {
+            if (this instanceof Denoting denoting) {
+                return denoting.type();
+            }
+            throw new IllegalStateException("`" + name() + "` at " + pos()
+                    + " was read as a type before it was resolved");
+        }
+
+        /** The same reference, resolved. */
+        default TypeRef denoting(Type type) {
+            return new Denoting(written(), arg(), tupleElems(), type, anchor());
+        }
+
+        /** A reference as the parser read it. */
+        record Written(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems,
+                       SourcePos anchor) implements TypeRef {
+
+            @Override
+            public String toString() {
+                return name() == null ? "(tuple)" : name();
+            }
+        }
+
+        /** A reference resolution answered, and the type it stands for. */
+        record Denoting(WrittenName written, TypeTerm arg, List<TypeTerm> tupleElems, Type type,
+                        SourcePos anchor) implements TypeRef {
+
+            public Denoting {
+                if (type == null) {
+                    throw new IllegalArgumentException(
+                            "a reference that denotes is a type: " + written);
+                }
+            }
+
+            @Override
+            public String toString() {
+                return name() == null ? String.valueOf(type) : name();
+            }
         }
     }
 

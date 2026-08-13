@@ -408,7 +408,7 @@ public final class Resolve {
     /** A written type reference, with what it denotes decided here — once, and in the module that
      * wrote it, so no later reader has to know where it was written. */
     private Ast.TypeRef typeRef(Ast.TypeRef ref) {
-        if (ref == null || ref.denotes() != null) {
+        if (ref == null || ref instanceof Ast.TypeRef.Denoting) {
             return ref;
         }
         Ast.TypeTerm arg = typeTerm(ref.arg());
@@ -419,7 +419,7 @@ public final class Resolve {
                 elems.add(typeTerm(e));
             }
         }
-        Ast.TypeRef resolved = new Ast.TypeRef(ref.written(), arg, elems, null, ref.anchor());
+        Ast.TypeRef resolved = new Ast.TypeRef.Written(ref.written(), arg, elems, ref.anchor());
         Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {

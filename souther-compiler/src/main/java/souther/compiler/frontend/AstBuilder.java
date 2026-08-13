@@ -320,7 +320,7 @@ public final class AstBuilder {
             SyntaxNode inner = typeChild(newtype.get());
             Ast.TypeRef innerType = typeRef(inner);
             if (newtype.get().token(SyntaxKind.QUESTION).isPresent()) {
-                innerType = new Ast.TypeRef("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
+                innerType = Ast.TypeRef.written("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
             }
             List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
             return new Ast.Data(declared, true, List.of(), fields, clauses,
@@ -374,7 +374,7 @@ public final class AstBuilder {
     private Ast.Field field(SyntaxNode n) {
         Ast.TypeTerm type = typeTerm(typeChild(n));
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
-            type = new Ast.TypeRef("Option", type, type.pos());   // `T?` → Option<T>
+            type = Ast.TypeRef.written("Option", type, type.pos());   // `T?` → Option<T>
         }
         return new Ast.Field(nameOf(firstIdentToken(n)), type);
     }
@@ -521,7 +521,7 @@ public final class AstBuilder {
             // only repeat what the pattern already named
             SourcePos at = pos(pat);
             type = new Ast.RetType(
-                    List.of(new Ast.TypeRef(qualifiedNameOf(pat), null, null)), at);
+                    List.of(Ast.TypeRef.written(qualifiedNameOf(pat), null, null)), at);
             return new Ast.FnParam(bound, type, true);
         }
         return new Ast.FnParam(bound, type, false);
@@ -611,7 +611,7 @@ public final class AstBuilder {
         }
         // `T?` is `Option<T>` for whatever T is: the two spellings are one type, and what may
         // stand in a position is decided by what the position requires of that type, not here
-        return new Ast.TypeRef("Option", cases.get(0), cases.get(0).pos());
+        return Ast.TypeRef.written("Option", cases.get(0), cases.get(0).pos());
     }
 
     private Ast.TypeRef typeRef(SyntaxNode n) {
@@ -625,7 +625,7 @@ public final class AstBuilder {
             if (elems.size() == 1 && elems.get(0) instanceof Ast.TypeRef only) {
                 return only;   // `(T)` reads as grouping
             }
-            return new Ast.TypeRef(null, null, elems, pos(n));
+            return Ast.TypeRef.written(null, null, elems, pos(n));
         }
         Optional<SyntaxToken> typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
@@ -633,13 +633,13 @@ public final class AstBuilder {
             if (!isReservedNamespace(moduleName)) {
                 throw error(pos(n), new ParseMessage.ATypeVariableIsOnlyAllowedInTheCore(v));
             }
-            return new Ast.TypeRef(v, null, pos(n));   // name begins with `'` → Type.Var
+            return Ast.TypeRef.written(v, null, pos(n));   // name begins with `'` → Type.Var
         }
         WrittenName written = qualifiedNameOf(n);   // `Amount`, `example.billing.Amount`, `B.Amount`
         String name = written.canonical();
         Optional<SyntaxNode> args = n.child(SyntaxKind.TYPE_ARGS);
         if (args.isEmpty()) {
-            return new Ast.TypeRef(written, null, null);
+            return Ast.TypeRef.written(written, null, null);
         }
         List<Ast.TypeTerm> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
@@ -648,16 +648,16 @@ public final class AstBuilder {
             }
         }
         if (typeArgs.isEmpty()) {
-            return new Ast.TypeRef(written, null, null);   // the missing argument is reported by name
+            return Ast.TypeRef.written(written, null, null);   // the missing argument is reported by name
         }
         if (name.equals("Map")) {
             // carry the value in `arg` and the key in `tupleElems` (ADR-0040)
             Ast.TypeTerm key = typeArgs.get(0);
             Ast.TypeTerm value = typeArgs.get(typeArgs.size() - 1);
-            return new Ast.TypeRef(written, value, List.of(key));
+            return Ast.TypeRef.written(written, value, List.of(key));
         }
         // List<T> / Set<T> / Option<T>
-        return new Ast.TypeRef(written, typeArgs.get(0), null);
+        return Ast.TypeRef.written(written, typeArgs.get(0), null);
     }
 
     // --- expressions ---

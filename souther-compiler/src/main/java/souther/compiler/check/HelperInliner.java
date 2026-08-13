@@ -775,6 +775,11 @@ public final class HelperInliner {
      * Asked of what the reference denotes, not of how it was spelled. A reference a
      * helper's own settling wrote carries its type and no surface text at all
      * ({@link Ast.TypeRef#of}), so reading the spelling answers no about every one of them.
+     *
+     * <p>The whole reference is in what it denotes: {@code List<'a>} resolves to a type that holds
+     * the variable, so the argument and a tuple's elements are not walked again here. This runs
+     * after resolution, and a reference that has not been read is refused by {@link
+     * Ast.TypeRef#denotes()} rather than answered off its spelling.
      */
     static boolean mentionsTypeVar(Ast.TypeTerm term) {
         if (term instanceof Ast.FnType fn) {
@@ -784,23 +789,7 @@ public final class HelperInliner {
         if (!(term instanceof Ast.TypeRef ref)) {
             return false;
         }
-        if (ref.denotes() != null) {
-            return Type.mentions(ref.denotes(), t -> t instanceof Type.Var);
-        }
-        if (ref.name() != null && ref.name().startsWith("'")) {
-            return true;
-        }
-        if (mentionsTypeVar(ref.arg())) {
-            return true;
-        }
-        if (ref.tupleElems() != null) {
-            for (Ast.TypeTerm e : ref.tupleElems()) {
-                if (mentionsTypeVar(e)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return Type.mentions(ref.denotes(), t -> t instanceof Type.Var);
     }
 
     /**
