@@ -157,9 +157,10 @@ public final class Shapes {
      * One declaration with its codecs derived and its spreads settled — what every later stage
      * resolves a type to.
      *
-     * <p>Its own question, so a reader depends on the declaration it named and not on everything
-     * declared beside it. A module still derives its declarations together; that is how the answer
-     * is worked out, not what the answer is about, and moving that apart changes nothing here.
+     * <p>Its own question, so its failure is the named declaration's and not the ones beside it: a
+     * clause that cannot be read costs the declaration that wrote it this answer and costs the rest
+     * nothing. A module still derives its declarations together, and this is read through that, so
+     * what it depends on is still the module — what it is about is the one declaration.
      */
     public record DerivedDef(TypeName named) implements Key<Ast.Def> {
         @Override
@@ -324,8 +325,10 @@ public final class Shapes {
     }
 
     /**
-     * One definition with the newtype constructions in its body rewritten — its own question, so a
-     * reader depends on the definition it named and not on everything defined beside it.
+     * One definition with the newtype constructions in its body rewritten — its own question, so
+     * its failure is the named definition's and not the ones beside it. It is read through
+     * {@link DesugaredFns}, which works every definition out, so what it depends on is still the
+     * module; what it is about is the one definition.
      */
     public record DesugaredFn(String module, String fn) implements Key<Ast.FnDef> {
         @Override

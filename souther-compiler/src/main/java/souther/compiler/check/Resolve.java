@@ -53,6 +53,17 @@ public final class Resolve {
     private final List<ValueUse> values0 = new ArrayList<>();
     /** Every name it could not answer, as the error it would once have thrown. */
     private final List<CompileException> unresolved = new ArrayList<>();
+    /**
+     * How many names it did not answer, which is not the same as how many it reported.
+     *
+     * <p>A name is left unanswered and said nothing about where the reason is somewhere else and
+     * already reported there — a module this compilation has and cannot use exports names that
+     * stand in an importer's scope as identities nothing declares, so the importer is not told a
+     * second time about a file that is fine. That is the same absence as a misspelling and only the
+     * report differs, so whether a declaration's names came out is counted here rather than read off
+     * what was reported while it was being read.
+     */
+    private int unanswered;
     /** What each binding this pass gave an identity to is called, and where that is written. */
     private final Map<BindingId, BoundName> binders = new LinkedHashMap<>();
     /** How many bindings each definition has been given, so the next one gets the next number. */
@@ -262,7 +273,8 @@ public final class Resolve {
         // the one beside it wrote, and the names met while it was being read are its own.
         Map<String, OfDeclaration> declarations = new LinkedHashMap<>();
         for (Ast.Def def : m.defs()) {
-            int unansweredBefore = r.unresolved.size();
+            int reportedBefore = r.unresolved.size();
+            int unansweredBefore = r.unanswered;
             int denotedBefore = r.denotations.size();
             Ast.Def resolved = r.def(def);
             defs.add(resolved);
@@ -270,8 +282,14 @@ public final class Resolve {
             for (Denotation d : r.denotations.subList(denotedBefore, r.denotations.size())) {
                 reaches.add(d.denotes());
             }
-            declarations.put(resolved.name(),
-                    new OfDeclaration(r.unresolved.size() == unansweredBefore, Set.copyOf(reaches)));
+            // The first of a name is what the module declares and the second is reported and left
+            // out, which `TypeChecker.declared` settles and every stage reads from there. Whether a
+            // declaration came out is about the same one: read off the second, it answers about a
+            // declaration nothing else is holding, and the one the module has is told it has no
+            // meaning because of a mistake in the copy below it.
+            declarations.putIfAbsent(resolved.name(),
+                    new OfDeclaration(r.unresolved.size() == reportedBefore
+                            && r.unanswered == unansweredBefore, Set.copyOf(reaches)));
         }
         List<Ast.BehaviorDef> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
@@ -406,7 +424,9 @@ public final class Resolve {
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
             TypeName names = symbols.resolve(denoted.written());
-            if (names != null) {
+            if (names != null && names.isUnresolved()) {
+                unanswered++;
+            } else if (names != null) {
                 denotations.add(new Denotation(denoted.written(), names));
             }
         }
@@ -966,7 +986,11 @@ public final class Resolve {
      * there under a spelling nothing binds.
      */
     private ValueName answered(WrittenName written, ValueName denotes) {
-        if (written.pos() == null || denotes instanceof ValueName.Unresolved) {
+        if (denotes instanceof ValueName.Unresolved) {
+            unanswered++;
+            return denotes;
+        }
+        if (written.pos() == null) {
             return denotes;
         }
         values0.add(new ValueUse(written, denotes));
@@ -1132,7 +1156,9 @@ public final class Resolve {
      * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
      * name nothing answered is an absence rather than a declaration to record. */
     private Ast.Name answered(Ast.Name n) {
-        if (n.pos() != null && !n.denotes().isUnresolved()) {
+        if (n.denotes().isUnresolved()) {
+            unanswered++;
+        } else if (n.pos() != null) {
             denotations.add(new Denotation(n.name(), n.denotes()));
         }
         return n;
