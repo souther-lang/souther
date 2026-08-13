@@ -35,7 +35,7 @@ class CompileBehaviorResultTest {
     @Test
     void anonymousUnionOutputGeneratesASealedResultInterface() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
-        Class<?> result = loader.loadClass("demo.ClassifyResult");
+        Class<?> result = loader.loadClass(Emitted.result("demo", "classify"));
         assertTrue(result.isInterface(), "Result must be an interface");
         assertTrue(result.isSealed(), "Result must be sealed");
         Set<String> permitted = Arrays.stream(result.getPermittedSubclasses())
@@ -46,7 +46,7 @@ class CompileBehaviorResultTest {
     @Test
     void eachCaseImplementsTheResultInterface() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
-        Class<?> result = loader.loadClass("demo.ClassifyResult");
+        Class<?> result = loader.loadClass(Emitted.result("demo", "classify"));
         assertTrue(result.isAssignableFrom(loader.loadClass("demo.Cheap")));
         assertTrue(result.isAssignableFrom(loader.loadClass("demo.Pricey")));
     }
@@ -54,7 +54,7 @@ class CompileBehaviorResultTest {
     @Test
     void implementedBehaviorDeclaresItsGenericInputAndOutcomeTypes() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
-        assertBehaviorSignature(loader.loadClass("demo.Classify"), "demo.Draft", "demo.ClassifyResult");
+        assertBehaviorSignature(loader.loadClass("demo.Classify"), "demo.Draft", Emitted.result("demo", "classify"));
     }
 
     private static final String INJECTED = """
@@ -75,7 +75,7 @@ class CompileBehaviorResultTest {
     @Test
     void injectedBaseDeclaresTheResultInterfaceAsItsGenericReturnType() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(INJECTED), getClass().getClassLoader());
-        assertBehaviorSignature(loader.loadClass("demo.FindMember"), "demo.Id", "demo.FindMemberResult");
+        assertBehaviorSignature(loader.loadClass("demo.FindMember"), "demo.Id", Emitted.result("demo", "findMember"));
     }
 
     private static void assertBehaviorSignature(Class<?> behavior, String inputName, String outputName) {

@@ -29,7 +29,7 @@ class CompileGrowingMapFoldTest {
                 """.formatted(body);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", xs));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, bag);
         return (Map<?, ?>) ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("m");
     }
@@ -164,7 +164,7 @@ class CompileGrowingMapFoldTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object bag = Codecs.decoded(loader, "demo.Bag", Map.of("xs", List.of("a", "b", "a")));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, bag);
         assertEquals(Map.of("a", List.of("a", "a"), "b", List.of("b")),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("m"));

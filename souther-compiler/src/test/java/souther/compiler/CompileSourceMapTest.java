@@ -29,7 +29,7 @@ class CompileSourceMapTest {
                 let make (x) = 金額(x - 100)
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Make$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "make").getConstructor().newInstance();
 
         ConstraintViolation v = assertThrows(ConstraintViolation.class, () -> Codecs.apply(impl, 50L));
 
@@ -57,7 +57,7 @@ class CompileSourceMapTest {
                     )
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Make$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "make").getConstructor().newInstance();
 
         ConstraintViolation v = assertThrows(ConstraintViolation.class, () -> Codecs.apply(impl, 50L));
 

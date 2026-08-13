@@ -200,7 +200,7 @@ class ImportChangesNoMeaningTest {
      */
     private static String shrinkage(Compiler.Compiled qualified, Compiler.Compiled imported) {
         return qualified.classes().entrySet().stream()
-                .filter(e -> !e.getKey().endsWith(".$Module"))
+                .filter(e -> !e.getKey().equals(Emitted.declarations("demo")))
                 .sorted(java.util.Map.Entry.comparingByKey())
                 .filter(e -> e.getValue().length != imported.classes().get(e.getKey()).length)
                 .map(e -> e.getKey() + "="

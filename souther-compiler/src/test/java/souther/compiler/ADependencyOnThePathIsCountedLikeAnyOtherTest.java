@@ -153,7 +153,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
 
         assertFalse(compilation.db()
                         .ask(new Output.EvaluationLinked("app.calls", Output.CoverageMode.NONE))
-                        .value().containsKey("lib.svc.Spin$Impl"),
+                        .value().containsKey(Emitted.impl("lib.svc", "spin")),
                 "the body is not regenerated here — it is taken from the jar and counted there");
 
         String sourceId = compilation.exampleSourcesOf("app.calls").get(0);

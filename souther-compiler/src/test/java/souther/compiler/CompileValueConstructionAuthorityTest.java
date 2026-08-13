@@ -358,7 +358,7 @@ class CompileValueConstructionAuthorityTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("m.Judge$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "m", "judge").getConstructor().newInstance();
 
         Object kept = Codecs.apply(behavior, Codecs.decoded(loader, "m.Hours", new java.math.BigDecimal("40.0")));
         assertEquals(new java.math.BigDecimal("40"), Codecs.encode(loader, "m.Hours", kept),

@@ -58,7 +58,7 @@ class CompileNamedInvariantClauseTest {
                         | unique   -> DuplicateItem""";
 
     private static Object build(BytesClassLoader loader, List<Long> xs) throws Exception {
-        Object impl = loader.loadClass("demo.Build$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "build").getConstructor().newInstance();
         return Codecs.apply(impl, xs);
     }
 
@@ -209,7 +209,7 @@ class CompileNamedInvariantClauseTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src),
                 getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Judge$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "judge").getConstructor().newInstance();
         assertEquals(Map.of("code", 2L),
                 Codecs.encode(loader, "demo.Verdict", Codecs.apply(impl, List.of(1L, 2L))));
         assertEquals(Map.of("code", 0L),
@@ -297,7 +297,7 @@ class CompileNamedInvariantClauseTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src),
                 getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Make$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "make").getConstructor().newInstance();
         assertEquals("demo.Fine", make(loader, impl, 5L, 1L), "neither clause is broken");
         assertEquals("demo.NoTotal", make(loader, impl, 0L, 1L),
                 "the clause the spread brought in decides, under the name its declaration gave it");

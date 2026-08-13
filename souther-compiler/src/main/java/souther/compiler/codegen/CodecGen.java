@@ -13,6 +13,8 @@ import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
+import souther.compiler.jvm.DecoderKind;
+import souther.compiler.jvm.GeneratedClass;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
@@ -26,7 +28,6 @@ import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,24 +53,40 @@ final class CodecGen {
      * newtype-keyed map decoder references. Set per {@link #generateDecoderClass}. */
     private ClassDesc decoderClass;
 
+    /** The value class the decoder being generated builds. Its {@code $Ctfe} carries the clause
+     *  predicates a refined constraint reaches for, and asking for that class by the type it belongs
+     *  to is what keeps the two from being named apart. Set beside {@link #decoderClass}. */
+    private GeneratedClass.Value decodedValue;
+
     CodecGen(CodegenContext ctx) {
         this.ctx = ctx;
         this.symbols = ctx.symbols;
     }
 
     /** The three boundary input sources a decoder can read from (spec §external-representation, §codec-generation). */
-    enum Src { NEUTRAL, JSON, JOOQ }
+    enum Src {
+        NEUTRAL, JSON, JOOQ;
 
-    private ClassDesc generated(String simpleName) { return ctx.generated(simpleName); }
+        /** Which of a type's decoders reads this source. What that decoder is called is the ABI's,
+         *  and everything else this enum drives — the accessors, the leaf decoders, the object
+         *  guard — is this package's. */
+        DecoderKind kind() {
+            return switch (this) {
+                case NEUTRAL -> DecoderKind.VALUE;
+                case JSON -> DecoderKind.JSON;
+                case JOOQ -> DecoderKind.RECORD;
+            };
+        }
+    }
+
+    private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
+    private GeneratedClass.Value valueOf(Ast.Def def) { return new GeneratedClass.Value(symbols.own(def)); }
+    private GeneratedClass decoderOf(Ast.Def def, Src src) { return new GeneratedClass.Decoder(valueOf(def), src.kind()); }
     private ClassDesc cd(Ast.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
     private void unbox(CodeBuilder code, Type type, int slot) { JvmTypes.unbox(code, type, slot, ctx); }
-
-    private static String srcSuffix(Src s) {
-        return switch (s) { case NEUTRAL -> "$Dec"; case JSON -> "$DecJson"; case JOOQ -> "$DecRecord"; };
-    }
 
     private static String srcFactory(Src s) {
         return switch (s) { case NEUTRAL -> "decoder"; case JSON -> "jsonDecoder"; case JOOQ -> "recordDecoder"; };
@@ -227,7 +244,7 @@ final class CodecGen {
     }
 
     byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
-        ClassDesc cdEnc = generated(sum.name() + "$Enc");
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(sum)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -259,7 +276,7 @@ final class CodecGen {
     }
 
     byte[] generateSumDecoder(Ast.SumData sum, Ast.Discriminate disc, Src src) {
-        ClassDesc cdDec = generated(sum.name() + srcSuffix(src));
+        ClassDesc cdDec = cd(decoderOf(sum, src));
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -317,7 +334,7 @@ final class CodecGen {
      * the value's path, the way a newtype's invariant does, rather than being read as some other case.
      */
     byte[] generateEnumSumDecoder(Ast.SumData sum, Src src) {
-        ClassDesc cdDec = generated(sum.name() + srcSuffix(src));
+        ClassDesc cdDec = cd(decoderOf(sum, src));
         List<TypeName> cases = TypeOps.leafCases(sum, symbols);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -377,7 +394,7 @@ final class CodecGen {
 
     /** Encodes an enumeration to its case's name — the same string its decoder reads. */
     byte[] generateEnumSumEncoder(Ast.SumData sum) {
-        ClassDesc cdEnc = generated(sum.name() + "$Enc");
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(sum)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -423,8 +440,8 @@ final class CodecGen {
     }
 
     void emitFactory(ClassBuilder cb, String name, ClassDesc returnIface, Ast.Data data,
-                             String suffix) {
-        ClassDesc impl = generated(data.name() + suffix);
+                             GeneratedClass codec) {
+        ClassDesc impl = cd(codec);
         ClassDesc self = cd(data);
         MethodSignature sig = name.equals("decoder")
                 ? decoderSig(self, isMapInput(data))
@@ -503,7 +520,7 @@ final class CodecGen {
 
     /** Emits a source's decoder factory ({@code jsonDecoder()} / {@code recordDecoder()}). */
     void emitSourceFactory(ClassBuilder cb, Ast.Def def, Src src, boolean mapInput) {
-        emitCodecFactory(cb, srcFactory(src), CD_RDecoder, generated(def.name() + srcSuffix(src)),
+        emitCodecFactory(cb, srcFactory(src), CD_RDecoder, cd(decoderOf(def, src)),
                 decoderSigFor(src, cd(def), mapInput));
     }
 
@@ -555,8 +572,9 @@ final class CodecGen {
 
     byte[] generateDecoderClass(ClassDesc cdName, Ast.Data data, Ast.DecoderDef dec,
                                         Map<String, Type> fields, Src src) {
-        ClassDesc cdDec = generated(data.name() + srcSuffix(src));
+        ClassDesc cdDec = cd(decoderOf(data, src));
         decoderClass = cdDec;
+        decodedValue = valueOf(data);
         Invariants invariants = invariantsOf(data, fields);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -1396,7 +1414,7 @@ final class CodecGen {
      * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
      * compile-time construction checking uses (ADR-0032). */
     private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
-        ClassDesc cdCtfe = generated(typeName(cdName) + "$Ctfe");
+        ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(decodedValue));
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
         // A Predicate's argument is a reference, so the instantiated type takes the decoded value's
         // boxed form and the metafactory unboxes it into `check`'s primitive parameter.
@@ -1502,11 +1520,6 @@ final class CodecGen {
     }
 
 
-    /** The Souther type name behind a generated class descriptor. */
-    private static String typeName(ClassDesc cdName) {
-        return cdName.displayName();
-    }
-
     /**
      * Emits the {@code __construct} call for a decoded value and maps an invariant failure to a Raoh
      * failure at the value's path. Must be emitted inside a {@code decode(Object, RPath)} body: it
@@ -1565,7 +1578,7 @@ final class CodecGen {
     }
 
     byte[] generateEncoderClass(ClassDesc cdName, Ast.Data data, Ast.EncoderDef enc) {
-        ClassDesc cdEnc = generated(data.name() + "$Enc");
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(data)));
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -1874,8 +1887,8 @@ final class CodecGen {
      * codec of its own — belonging to a union does not change a member's external representation,
      * only what wraps it here.
      */
-    byte[] generateResultUnionEncoder(String resultName, List<TypeName> members) {
-        ClassDesc cdEnc = generated(resultName + "$Enc");
+    byte[] generateResultUnionEncoder(GeneratedClass.BehaviorResult union, List<TypeName> members) {
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(union));
         boolean enumeration = isEnumeration(members);
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -1992,9 +2005,10 @@ final class CodecGen {
     }
 
     /** The static {@code encoder()} factory on the union's sealed interface. */
-    void emitResultUnionEncoderFactory(ClassBuilder cb, String resultName, List<TypeName> members) {
-        emitCodecFactory(cb, "encoder", CD_REncoder, generated(resultName + "$Enc"),
-                encoderSig(generated(resultName), isEnumeration(members) ? CD_String : CD_Map));
+    void emitResultUnionEncoderFactory(ClassBuilder cb, GeneratedClass.BehaviorResult union,
+                                       List<TypeName> members) {
+        emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(union)),
+                encoderSig(cd(union), isEnumeration(members) ? CD_String : CD_Map));
     }
 
     /**

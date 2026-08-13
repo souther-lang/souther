@@ -60,7 +60,7 @@ class AStringIsCanonicalAtTheBoundaryTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE.formatted(expr)),
                 AStringIsCanonicalAtTheBoundaryTest.class.getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("s", input));
-        Object behavior = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return (long) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 
@@ -150,7 +150,7 @@ class AStringIsCanonicalAtTheBoundaryTest {
                 """.formatted(GA_NFC);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src),
                 AStringIsCanonicalAtTheBoundaryTest.class.getClassLoader());
-        Object behavior = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
 
         for (String key : new String[] {GA_NFC, GA_NFD}) {
             Object in = Codecs.decoded(loader, "demo.In", Map.of("m", Map.of(key, 7L)));

@@ -29,7 +29,7 @@ class CompileStringCharsTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", input);
         String cls = Character.toUpperCase(behavior.charAt(0)) + behavior.substring(1);
-        Object b = loader.loadClass("demo." + cls + "$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", cls).getDeclaredConstructor().newInstance();
         return (long) Codecs.encode(loader, "demo.Out", Codecs.apply(b, in));
     }
 
@@ -150,7 +150,7 @@ class CompileStringCharsTest {
     @Test
     void checksumValidatesInABehaviorWithNoBoilerplate() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(CHECKSUM), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.検証$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "検証").getDeclaredConstructor().newInstance();
         // "12340" digit-sum 10 ≡ 0 mod 10 → 妥当; "12345" sum 15 → 不正.
         Object ok = Codecs.apply(behavior, Codecs.decoded(loader, "demo.符号", "12340"));
         Object bad = Codecs.apply(behavior, Codecs.decoded(loader, "demo.符号", "12345"));

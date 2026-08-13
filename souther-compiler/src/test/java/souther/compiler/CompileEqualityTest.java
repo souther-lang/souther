@@ -65,7 +65,7 @@ class CompileEqualityTest {
     }
 
     private boolean run(BytesClassLoader loader, String name, Object... args) throws Exception {
-        Class<?> c = loader.loadClass("demo." + name + "$Impl");
+        Class<?> c = Emitted.behavior(loader, "demo", name);
         Class<?>[] ps = new Class<?>[args.length];
         java.util.Arrays.fill(ps, Object.class);
         Object r = c.getMethod("apply", ps).invoke(c.getConstructor().newInstance(), args);

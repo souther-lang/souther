@@ -38,7 +38,7 @@ class CompileMatchNewtypeUnwrapTest {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(HEAD + matchBody), getClass().getClassLoader());
         Object mail = Codecs.decoded(loader, "demo.メール", input);
-        Object behavior = loader.loadClass("demo.Addr$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "addr").getConstructor().newInstance();
         return Codecs.apply(behavior, mail);
     }
 

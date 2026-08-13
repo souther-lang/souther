@@ -46,7 +46,7 @@ class CompileShadowingTest {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", java.util.Map.of("v", 21L));
-        Object check = loader.loadClass("demo.Check$Impl").getConstructor().newInstance();
+        Object check = Emitted.behavior(loader, "demo", "check").getConstructor().newInstance();
         java.util.Map<?, ?> out =
                 (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(check, in));
         org.junit.jupiter.api.Assertions.assertEquals(42L, out.get("v"));

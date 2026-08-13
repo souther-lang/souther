@@ -64,7 +64,7 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
      */
     private static ModulePath leftOverClassFiles() {
         Map<String, byte[]> built = new LinkedHashMap<>(Compiler.compile(EARLIER));
-        built.keySet().removeIf(name -> name.endsWith(".$Module"));
+        built.keySet().remove(Emitted.declarations("example.stale"));
         return built::get;
     }
 

@@ -33,7 +33,7 @@ class CompileBehaviorByNameTest {
     private static Object run(String source, Map<String, Object> in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(classes(source),
                 CompileBehaviorByNameTest.class.getClassLoader());
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         return Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", in)));
     }
@@ -142,7 +142,7 @@ class CompileBehaviorByNameTest {
                 }
                 """));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         assertEquals(List.of(2L, 4L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out",
                         Codecs.apply(behavior, Codecs.decoded(loader, "demo.In",
@@ -162,7 +162,7 @@ class CompileBehaviorByNameTest {
                     let f = twice
                     Out { ys = List.map(f, i.xs) }
                 }
-                """).get("demo.Go$Impl"), java.nio.charset.StandardCharsets.ISO_8859_1);
+                """).get(Emitted.impl("demo", "go")), java.nio.charset.StandardCharsets.ISO_8859_1);
 
         assertTrue(bound.contains("demo/Twice"), "the expansion does not reach `demo.Twice`");
     }
@@ -274,7 +274,7 @@ class CompileBehaviorByNameTest {
 
     /** Which behavior classes the emitted body of {@code demo.go} references. */
     private static List<String> reached(String up, String demo) {
-        String impl = new String(Compiler.compileModules(List.of(up, demo)).get("demo.Go$Impl"),
+        String impl = new String(Compiler.compileModules(List.of(up, demo)).get(Emitted.impl("demo", "go")),
                 java.nio.charset.StandardCharsets.ISO_8859_1);
         return Stream.of("demo/Twice", "up/Twice").filter(impl::contains).toList();
     }

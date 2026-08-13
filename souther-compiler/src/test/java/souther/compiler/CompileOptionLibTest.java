@@ -47,7 +47,7 @@ class CompileOptionLibTest {
                 "xs", List.of(1L, 2L, 5L),
                 "empty", List.of(),
                 "m", Map.of("a", 10L, "b", 20L)));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> r = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -86,7 +86,7 @@ class CompileOptionLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("names", Map.of("x", "hi")));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> r = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -117,7 +117,7 @@ class CompileOptionLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("xs", List.of(3L), "empty", List.of()));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> r = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);

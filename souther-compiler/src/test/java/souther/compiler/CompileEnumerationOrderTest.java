@@ -27,7 +27,7 @@ class CompileEnumerationOrderTest {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", Map.of("n", 1L));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return Codecs.encode(loader, outType, Codecs.apply(behavior, in));
     }
 

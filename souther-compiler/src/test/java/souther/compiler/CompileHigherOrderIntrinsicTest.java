@@ -28,7 +28,7 @@ class CompileHigherOrderIntrinsicTest {
     private static Object run(String source, String data, Map<String, Object> in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
                 CompileHigherOrderIntrinsicTest.class.getClassLoader());
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return Codecs.encode(loader, data, Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", in)));
     }
 

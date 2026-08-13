@@ -25,7 +25,7 @@ class CompileHelperShadowingTest {
     private static Object run(String source, Map<String, Object> input) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
                 CompileHelperShadowingTest.class.getClassLoader());
-        Object go = loader.loadClass("demo.Go" + "$Impl").getDeclaredConstructor().newInstance();
+        Object go = Emitted.behavior(loader, "demo", "go").getDeclaredConstructor().newInstance();
         Object in = Codecs.decoded(loader, "demo.In", input);
         return ((Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(go, in))).get("ys");
     }

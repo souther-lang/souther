@@ -27,7 +27,7 @@ class CompileArithmeticOperatorTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo." + type, input);
         String behaviorClass = Character.toUpperCase(behavior.charAt(0)) + behavior.substring(1);
-        Object b = loader.loadClass("demo." + behaviorClass + "$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", behaviorClass).getDeclaredConstructor().newInstance();
         Object out = Codecs.apply(b, in);
         return Codecs.encode(loader, "demo." + type, out);
     }

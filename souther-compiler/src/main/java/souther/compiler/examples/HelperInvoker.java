@@ -2,6 +2,8 @@ package souther.compiler.examples;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.codegen.Backend;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.GeneratedClasses;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -50,7 +52,7 @@ final class HelperInvoker {
     Object invoke(String helper, String emittedAs, Object[] args) {
         Method method;
         try {
-            Class<?> fns = loader.loadClass(module + ".$Fns");
+            Class<?> fns = GeneratedClasses.load(loader, new GeneratedClass.Helpers(module));
             Class<?>[] params = new Class<?>[args.length];
             Arrays.fill(params, Object.class);
             // Every emitted helper boxes its parameters and its result across the method boundary, so

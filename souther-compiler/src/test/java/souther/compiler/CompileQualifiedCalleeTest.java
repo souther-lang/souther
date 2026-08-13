@@ -111,7 +111,7 @@ class CompileQualifiedCalleeTest {
                 """);
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Object b = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Object out = Codecs.apply(b, Codecs.decoded(loader, "demo.In", Map.of("n", 5L)));
         assertEquals(5L, out.getClass().getMethod("m").invoke(out));
     }
@@ -208,7 +208,7 @@ class CompileQualifiedCalleeTest {
                 """);
 
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        Object b = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "go").getConstructor().newInstance();
         Object out = Codecs.apply(b, Codecs.decoded(loader, "demo.In", Map.of("s", "  a  ")));
         assertEquals("a", out.getClass().getMethod("t").invoke(out));
         assertEquals("a", out.getClass().getMethod("u").invoke(out));

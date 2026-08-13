@@ -89,7 +89,7 @@ class AWrittenTemporalSaysNoMoreThanItsTypeHoldsTest {
                 Map.of("at", LocalDateTime.parse("2026-07-01T09:30:45"),
                         "of", LocalTime.parse("09:30:45")));
         Map<?, ?> out = assertInstanceOf(Map.class, Codecs.encode(loader, "demo.Out",
-                Codecs.apply(loader.loadClass("demo.Pass$Impl").getConstructor().newInstance(), in)));
+                Codecs.apply(Emitted.behavior(loader, "demo", "pass").getConstructor().newInstance(), in)));
         assertEquals("2026-07-01T09:30:45", String.valueOf(out.get("at")));
 
         // finer than a second: refused, at the field that carried it
@@ -124,7 +124,7 @@ class AWrittenTemporalSaysNoMoreThanItsTypeHoldsTest {
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("at", Instant.parse("2026-07-01T09:30:45.123456789Z")));
         Map<?, ?> out = assertInstanceOf(Map.class, Codecs.encode(loader, "demo.Out",
-                Codecs.apply(loader.loadClass("demo.Pass$Impl").getConstructor().newInstance(), in)));
+                Codecs.apply(Emitted.behavior(loader, "demo", "pass").getConstructor().newInstance(), in)));
         assertEquals("2026-07-01T09:30:45.123456789Z", String.valueOf(out.get("at")));
     }
 

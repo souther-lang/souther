@@ -305,7 +305,7 @@ class CompilePublishedHelperTest {
                 """));
 
         Class<?> fns = new BytesClassLoader(classes, getClass().getClassLoader())
-                .loadClass("top.$Fns");
+                .loadClass(Emitted.helpers("top"));
         assertEquals(List.of("low$summed"), java.util.Arrays.stream(fns.getDeclaredMethods())
                 .map(java.lang.reflect.Method::getName).sorted().toList());
     }
@@ -361,9 +361,9 @@ class CompilePublishedHelperTest {
                 let bill (n) = Out { v = step(n) + viaStep(n) }
                 """));
 
-        assertTrue(classes.containsKey("order.$Fns"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
         Class<?> fns = new BytesClassLoader(classes, getClass().getClassLoader())
-                .loadClass("order.$Fns");
+                .loadClass(Emitted.helpers("order"));
         List<String> methods = java.util.Arrays.stream(fns.getDeclaredMethods())
                 .map(java.lang.reflect.Method::getName).sorted().toList();
         assertEquals(List.of("up$a$step", "up$b$step"), methods);
@@ -391,9 +391,9 @@ class CompilePublishedHelperTest {
                 let bill (n) = Out { v = loop(n).value }
                 """));
 
-        assertTrue(classes.containsKey("order.$Fns"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
         Class<?> fns = new BytesClassLoader(classes, getClass().getClassLoader())
-                .loadClass("order.$Fns");
+                .loadClass(Emitted.helpers("order"));
         assertFalse(Modifier.isPublic(fns.getModifiers()), "$Fns is package-private");
         for (java.lang.reflect.Method m : fns.getDeclaredMethods()) {
             assertFalse(Modifier.isPublic(m.getModifiers()),
@@ -545,9 +545,7 @@ class CompilePublishedHelperTest {
                 let bill (a) = Receipt { total = taxed(a) }
                 """));
 
-        assertFalse(classes.containsKey("order.$Fns"), classes.keySet().toString());
-        assertEquals(0, classes.keySet().stream().filter(n -> n.endsWith("$Fns")).count(),
-                classes.keySet().toString());
+        assertFalse(classes.containsKey(Emitted.helpers("order")), classes.keySet().toString());
     }
 
     // --- a helper whose element its body left open ---

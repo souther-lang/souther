@@ -56,7 +56,7 @@ class CompileQualifiedBehaviorRefTest {
                 behavior flow = up.twice >-> plus
                 """));
 
-        assertTrue(classes.containsKey("d.Flow$Impl"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.impl("d", "flow")), classes.keySet().toString());
     }
 
     @Test
@@ -84,7 +84,7 @@ class CompileQualifiedBehaviorRefTest {
                 }
                 """));
 
-        assertTrue(classes.containsKey("d.Run$Impl"), classes.keySet().toString());
+        assertTrue(classes.containsKey(Emitted.impl("d", "run")), classes.keySet().toString());
     }
 
     @Test

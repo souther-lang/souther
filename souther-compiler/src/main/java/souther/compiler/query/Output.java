@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
@@ -17,8 +19,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
-import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.Region;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
@@ -510,8 +510,8 @@ public final class Output {
                 boolean holds;
                 Class<?> ctfe;
                 try {
-                    ctfe = Class.forName(
-                            check.type().module() + "." + check.type().name() + "$Ctfe", true, loader);
+                    ctfe = Class.forName(SoutherJvmAbi.nameOf(new GeneratedClass.Ctfe(
+                            new GeneratedClass.Value(check.type()))).binaryName(), true, loader);
                     holds = (boolean) ctfe.getMethod("check", paramClass(check.value()))
                             .invoke(null, check.value());
                 } catch (ReflectiveOperationException | LinkageError _) {

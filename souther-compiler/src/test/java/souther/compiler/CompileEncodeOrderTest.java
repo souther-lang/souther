@@ -3,7 +3,6 @@ package souther.compiler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.math.BigDecimal;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -117,7 +116,7 @@ class CompileEncodeOrderTest {
                 behavior echo : (i: In) -> Out constructs Out
                 let echo (i) = Out { amounts = i.amounts }
                 """), getClass().getClassLoader());
-        Object behavior = loader.loadClass("demo.Echo" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "echo").getConstructor().newInstance();
 
         assertEquals(written(loader, behavior, new BigDecimal("1.0"), new BigDecimal("1.00")),
                 written(loader, behavior, new BigDecimal("1.00"), new BigDecimal("1.0")),

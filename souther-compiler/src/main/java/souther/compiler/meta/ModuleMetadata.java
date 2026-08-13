@@ -5,6 +5,9 @@ import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.codegen.Backend;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.types.TypeName;
 import souther.compiler.frontend.CstFrontend;
 
 import java.lang.classfile.Annotation;
@@ -70,7 +73,7 @@ public final class ModuleMetadata {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
-            add(out, module.name() + "." + def.name(),
+            add(out, SoutherJvmAbi.nameOf(new GeneratedClass.Value(new TypeName(module.name(), def.name()))).binaryName(),
                     Annotation.of(DATA_ANN,
                             AnnotationElement.ofString("value", slices.defs().get(def.name()))));
         }
@@ -81,12 +84,12 @@ public final class ModuleMetadata {
                 continue;
             }
             behaviors.add(b.name());
-            add(out, module.name() + "." + Backend.behaviorClass(b.name()),
+            add(out, SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorInterface(module.name(), b.name())).binaryName(),
                     Annotation.of(BEHAVIOR_ANN,
                             AnnotationElement.ofString("signature", signature),
                             AnnotationElement.ofBoolean("injected", injected.contains(b.name()))));
         }
-        out.put(Backend.moduleClassName(module.name()),
+        out.put(SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(module.name())).binaryName(),
                 Backend.moduleClass(module.name(), moduleAnnotation(module, slices, types, behaviors)));
     }
 

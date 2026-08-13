@@ -45,7 +45,7 @@ class ADecoderCanonicalizesEveryShapeTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module),
                 ADecoderCanonicalizesEveryShapeTest.class.getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", input);
-        Object behavior = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return (long) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 
@@ -139,7 +139,7 @@ class ADecoderCanonicalizesEveryShapeTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module),
                 ADecoderCanonicalizesEveryShapeTest.class.getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In", input);
-        Object behavior = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return Codecs.encode(loader, "demo." + out, Codecs.apply(behavior, in));
     }
 

@@ -60,7 +60,7 @@ class CompileNumericListFoldTest {
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("xs", List.of(2L, 3L, 4L)));
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
-                Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in));
+                Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in));
         assertEquals(9L, m.get("total"));
         assertEquals(24L, m.get("prod"));
     }
@@ -245,7 +245,7 @@ class CompileNumericListFoldTest {
         Object in = Codecs.decoded(loader, "demo.In",
                 Map.of("xs", List.of(new BigDecimal("7.5"), new BigDecimal("8.0"))));
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
-                Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in));
+                Codecs.apply(Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in));
         assertEquals(0, new BigDecimal("15.5").compareTo((BigDecimal) m.get("total")));
     }
 
@@ -299,7 +299,7 @@ class CompileNumericListFoldTest {
 
     private static Map<?, ?> run(BytesClassLoader loader, List<BigDecimal> xs) throws Exception {
         Object in = Codecs.decoded(loader, "demo.In", Map.of("xs", xs));
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 }

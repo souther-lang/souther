@@ -37,7 +37,7 @@ class CompileUnitOnlySumBoundaryTest {
     private static Object run(BytesClassLoader loader, String in, String out, Object raw)
             throws Exception {
         Object decoded = Codecs.decoded(loader, in, raw);
-        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         return Codecs.encode(loader, out, Codecs.apply(behavior, decoded));
     }
 

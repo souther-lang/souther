@@ -7,7 +7,6 @@ import souther.compiler.diag.CompileException;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,13 +55,14 @@ class AModuleIsNamedByOneRuleWhicheverWayItIsNamedTest {
     /** The control: a name is still a name, in one part or several. */
     @Test
     void aNameThatIsOneIsTakenAsBefore() {
-        assertEquals("demo.Calc$Impl", oneClassOf(Compiler.compile(HEADERLESS, "demo")));
-        assertEquals("a.b.Calc$Impl", oneClassOf(Compiler.compile(HEADERLESS, "a.b")));
-        assertEquals("在庫.Calc$Impl", oneClassOf(Compiler.compile(HEADERLESS, "在庫")));
+        emitsCalcUnder("demo");
+        emitsCalcUnder("a.b");
+        emitsCalcUnder("在庫");
     }
 
-    private static String oneClassOf(Map<String, byte[]> classes) {
-        return classes.keySet().stream().filter(n -> n.endsWith("Calc$Impl")).findFirst()
-                .orElseThrow(() -> new AssertionError("no behavior class in " + classes.keySet()));
+    /** The behavior lands in the package the module was named, whichever way it was named. */
+    private static void emitsCalcUnder(String module) {
+        Map<String, byte[]> classes = Compiler.compile(HEADERLESS, module);
+        assertTrue(classes.containsKey(Emitted.impl(module, "calc")), classes.keySet().toString());
     }
 }

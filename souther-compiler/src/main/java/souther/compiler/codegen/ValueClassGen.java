@@ -8,6 +8,8 @@ import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.MatchElaborator;
 
+import souther.compiler.jvm.DecoderKind;
+import souther.compiler.jvm.GeneratedClass;
 import java.lang.classfile.Attribute;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -55,7 +57,8 @@ final class ValueClassGen {
         this.codec = codec;
     }
 
-    private ClassDesc generated(String simpleName) { return ctx.generated(simpleName); }
+    private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
+    private GeneratedClass.Value valueOf(Ast.Def def) { return new GeneratedClass.Value(symbols.own(def)); }
     private ClassDesc cd(Ast.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
@@ -64,11 +67,11 @@ final class ValueClassGen {
     private ClassDesc jvmType(Type type) { return JvmTypes.jvmType(type, ctx); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
 
-    void generateData(Ast.Data data, Map<String, byte[]> out) {
+    void generateData(Ast.Data data, Emissions out) {
         ClassDesc cdName = cd(data);
         Map<String, Type> fields = fieldTypes(data);
 
-        out.put(pkg + "." + data.name(), build(cdName, cb -> {
+        out.put(valueOf(data), build(cdName, cb -> {
             cb.withFlags(pub(data.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withSuperclass(CD_Record);
             cb.with(recordComponents(fields));
@@ -96,25 +99,25 @@ final class ValueClassGen {
             emitAccessors(cb, cdName, fields);
             data.decoder().ifPresent(d -> {
                 boolean mapInput = codec.isMapInput(data);
-                codec.emitFactory(cb, "decoder", CD_RDecoder, data, "$Dec");
+                codec.emitFactory(cb, "decoder", CD_RDecoder, data, new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE));
                 codec.emitSourceFactory(cb, data, CodecGen.Src.JSON, mapInput);
                 if (codec.recordCompatible(data)) codec.emitSourceFactory(cb, data, CodecGen.Src.JOOQ, mapInput);
             });
-            data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, "$Enc"));
+            data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, new GeneratedClass.Encoder(valueOf(data))));
         }));
 
         data.decoder().ifPresent(dec -> {
-            out.put(pkg + "." + data.name() + "$Dec",
+            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE),
                     codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
-            out.put(pkg + "." + data.name() + "$DecJson",
+            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.JSON),
                     codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
             if (codec.recordCompatible(data)) {
-                out.put(pkg + "." + data.name() + "$DecRecord",
+                out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.RECORD),
                         codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
             }
         });
         data.encoder().ifPresent(enc ->
-                out.put(pkg + "." + data.name() + "$Enc", codec.generateEncoderClass(cdName, data, enc)));
+                out.put(new GeneratedClass.Encoder(valueOf(data)), codec.generateEncoderClass(cdName, data, enc)));
 
         // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
         // same invariant bytecode as __construct (via gen.expr). Two callers: a constant construction
@@ -136,11 +139,11 @@ final class ValueClassGen {
      * predicate, so a rule no Raoh constraint states exactly is still reported as the rule it is
      * rather than as the whole invariant (issue #83, spec §decoder-error).
      */
-    private void emitCtfeCheck(Ast.Data data, Map<String, Type> fields, Map<String, byte[]> out) {
+    private void emitCtfeCheck(Ast.Data data, Map<String, Type> fields, Emissions out) {
         ClassDesc cdName = cd(data);
-        ClassDesc cdCtfe = generated(data.name() + "$Ctfe");
+        ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(valueOf(data)));
         List<Ast.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
-        out.put(pkg + "." + data.name() + "$Ctfe", build(cdCtfe, cb -> {
+        out.put(new GeneratedClass.Ctfe(valueOf(data)), build(cdCtfe, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             emitClauseCheck(cb, "check", cdName, data, fields, clauses);
             for (int i = 0; i < clauses.size(); i++) {
@@ -180,7 +183,7 @@ final class ValueClassGen {
                 });
     }
 
-    void generateSum(Ast.SumData sum, Map<String, byte[]> out) {
+    void generateSum(Ast.SumData sum, Emissions out) {
         ClassDesc cdX = cd(sum);
         List<ClassDesc> caseCds = new ArrayList<>();
         for (Ast.Name caseName : sum.cases()) {
@@ -188,7 +191,7 @@ final class ValueClassGen {
         }
         boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
         List<TypeName> cases = TypeOps.leafCases(sum, symbols);
-        out.put(pkg + "." + sum.name(), build(cdX, cb -> {
+        out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             // A sum may itself be a case of another sum (spec §sum-data), and then it carries that sum's
             // interface as a product or unit case does. Only the direct link is recorded, which is
@@ -212,27 +215,27 @@ final class ValueClassGen {
                 emitOrderMethods(cb, cdX, cases);
             }
             sum.decoder().ifPresent(disc -> {
-                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, generated(sum.name() + "$Dec"),
+                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE)),
                         CodecGen.decoderSig(cdX, !enumeration));
                 codec.emitSourceFactory(cb, sum, CodecGen.Src.JSON, !enumeration);
                 if (codec.recordCompatible(sum)) codec.emitSourceFactory(cb, sum, CodecGen.Src.JOOQ, true);
             });
             sum.encoder().ifPresent(enc ->
-                    codec.emitCodecFactory(cb, "encoder", CD_REncoder, generated(sum.name() + "$Enc"),
+                    codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(valueOf(sum))),
                             CodecGen.encoderSig(cdX, enumeration ? CD_String : CD_Map)));
         }));
         sum.decoder().ifPresent(disc -> {
-            out.put(pkg + "." + sum.name() + "$Dec", enumeration
+            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.VALUE), enumeration
                     ? codec.generateEnumSumDecoder(sum, CodecGen.Src.NEUTRAL)
                     : codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
-            out.put(pkg + "." + sum.name() + "$DecJson", enumeration
+            out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.JSON), enumeration
                     ? codec.generateEnumSumDecoder(sum, CodecGen.Src.JSON)
                     : codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
             if (codec.recordCompatible(sum)) {
-                out.put(pkg + "." + sum.name() + "$DecRecord", codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
+                out.put(new GeneratedClass.Decoder(valueOf(sum), DecoderKind.RECORD), codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
             }
         });
-        sum.encoder().ifPresent(enc -> out.put(pkg + "." + sum.name() + "$Enc", enumeration
+        sum.encoder().ifPresent(enc -> out.put(new GeneratedClass.Encoder(valueOf(sum)), enumeration
                 ? codec.generateEnumSumEncoder(sum)
                 : codec.generateSumEncoder(sum, enc)));
     }
@@ -307,12 +310,12 @@ final class ValueClassGen {
      * <p>It has no codec. Belonging to a union does not change a member's external representation, so
      * a consumer that has switched to this case takes the value out and uses the member's own codec.
      */
-    byte[] generateBridgeCase(TypeName member, List<String> unions, Map<String, byte[]> out) {
+    byte[] generateBridgeCase(TypeName member, List<GeneratedClass.BehaviorResult> unions) {
         ClassDesc cdB = ctx.bridgeCaseClass(member);
         Map<String, Type> held = Map.of("value", MatchElaborator.caseBindType(member));
         List<ClassDesc> ifaces = new ArrayList<>();
-        for (String union : unions) {
-            ifaces.add(generated(union));
+        for (GeneratedClass.BehaviorResult union : unions) {
+            ifaces.add(cd(union));
         }
         return build(cdB, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -326,16 +329,16 @@ final class ValueClassGen {
             // injected behavior has to be able to answer with this member.
             emitCtor(cb, cdB, held, ClassFile.ACC_PUBLIC);
             emitValueEquality(cb, cdB, held);
-            emitToString(cb, cdB, CodegenContext.bridgeCaseName(member), held);
+            emitToString(cb, cdB, cdB.displayName(), held);
             emitAccessors(cb, cdB, held);
         });
     }
 
-    void generateUnit(Ast.UnitData unit, Map<String, byte[]> out) {
+    void generateUnit(Ast.UnitData unit, Emissions out) {
         ClassDesc cdU = cd(unit);
-        ClassDesc cdDec = generated(unit.name() + "$Dec");
-        ClassDesc cdEnc = generated(unit.name() + "$Enc");
-        out.put(pkg + "." + unit.name(), build(cdU, cb -> {
+        ClassDesc cdDec = cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.VALUE));
+        ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(unit)));
+        out.put(valueOf(unit), build(cdU, cb -> {
             cb.withFlags(pub(unit.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // a unit is a field-less data, so it is a record with no components: `case 承認済み()`
             // deconstructs it in a Java switch as its sibling product cases do (spec §jvm-product)
@@ -358,16 +361,16 @@ final class ValueClassGen {
             // A unit ignores its input, so it decodes from every source. Generate all three so
             // unit cases of a JSON/record sum have a matching decoder to dispatch to.
             codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cdDec, CodecGen.decoderSig(cdU, false));
-            codec.emitCodecFactory(cb, "jsonDecoder", CD_RDecoder, generated(unit.name() + "$DecJson"),
+            codec.emitCodecFactory(cb, "jsonDecoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON)),
                     CodecGen.decoderSigFor(CodecGen.Src.JSON, cdU, false));
-            codec.emitCodecFactory(cb, "recordDecoder", CD_RDecoder, generated(unit.name() + "$DecRecord"),
+            codec.emitCodecFactory(cb, "recordDecoder", CD_RDecoder, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD)),
                     CodecGen.decoderSigFor(CodecGen.Src.JOOQ, cdU, false));
             codec.emitCodecFactory(cb, "encoder", CD_REncoder, cdEnc, CodecGen.encoderSig(cdU, CD_Map));
         }));
-        out.put(pkg + "." + unit.name() + "$Dec", codec.generateUnitDecoder(cdU, cdDec));
-        out.put(pkg + "." + unit.name() + "$DecJson", codec.generateUnitDecoder(cdU, generated(unit.name() + "$DecJson")));
-        out.put(pkg + "." + unit.name() + "$DecRecord", codec.generateUnitDecoder(cdU, generated(unit.name() + "$DecRecord")));
-        out.put(pkg + "." + unit.name() + "$Enc", codec.generateUnitEncoder(cdEnc));
+        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.VALUE), codec.generateUnitDecoder(cdU, cdDec));
+        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON), codec.generateUnitDecoder(cdU, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.JSON))));
+        out.put(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD), codec.generateUnitDecoder(cdU, cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.RECORD))));
+        out.put(new GeneratedClass.Encoder(valueOf(unit)), codec.generateUnitEncoder(cdEnc));
     }
 
     /**

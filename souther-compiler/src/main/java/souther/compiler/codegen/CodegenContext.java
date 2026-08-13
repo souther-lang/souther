@@ -6,6 +6,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
+import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.jvm.SoutherJvmAbi;
 
 import java.lang.classfile.ClassFile;
 import java.lang.constant.ClassDesc;
@@ -30,7 +32,7 @@ final class CodegenContext {
 
     final String pkg;
     final Symbols symbols;
-    final Map<String, List<String>> caseToSums;
+    final Map<String, List<GeneratedClass>> caseToSums;
     final Map<String, String> typePackage;
     /** True when the module has no {@code exposing} clause: everything stays public. */
     final boolean exposeAll;
@@ -42,7 +44,7 @@ final class CodegenContext {
 
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
      * module output once every behavior is generated. */
-    private final Map<String, byte[]> synthClasses = new LinkedHashMap<>();
+    private final Map<GeneratedClass, byte[]> synthClasses = new LinkedHashMap<>();
     private int lambdaCounter = 0;
 
     /** Per-injected-behavior input/success types, set once the module's required behaviors are known
@@ -284,7 +286,7 @@ final class CodegenContext {
         return r != null ? r.descriptorString() : null;
     }
 
-    CodegenContext(String pkg, Symbols symbols, Map<String, List<String>> caseToSums,
+    CodegenContext(String pkg, Symbols symbols, Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
                    Map<String, Ast.FnDef> emittedHelpers) {
         this.pkg = pkg;
@@ -301,30 +303,21 @@ final class CodegenContext {
         return (exposeAll || exposed.contains(name)) ? ClassFile.ACC_PUBLIC : 0;
     }
 
-    // The same handful of names is turned into a descriptor again at every emission site, and
-    // ClassDesc.of re-validates the name on each call, so each map keeps what it has already built.
-    // They live on the context, so they are per module generated and never outlive it.
-    private final Map<String, ClassDesc> typeDescs = new HashMap<>();
-    private final Map<String, ClassDesc> behaviorDescs = new HashMap<>();
-    private final Map<String, ClassDesc> behaviorImplDescs = new HashMap<>();
-    private final Map<String, ClassDesc> behaviorResultDescs = new HashMap<>();
+    // The same handful of classes is turned into a descriptor again at every emission site, and
+    // ClassDesc.of re-validates the name on each call, so this keeps what it has already built. It
+    // lives on the context, so it is per module generated and never outlives it.
+    private final Map<GeneratedClass, ClassDesc> descs = new HashMap<>();
+
+    /** The descriptor of a generated class. What it is called is {@link SoutherJvmAbi}'s to say; this
+     * only remembers the answer. */
+    ClassDesc cd(GeneratedClass generated) {
+        return descs.computeIfAbsent(generated, g -> SoutherJvmAbi.nameOf(g).classDesc());
+    }
 
     /** The class of a type, from the module that declares it — nothing to look up, since a
      * {@link TypeName} already says where it lives. */
     ClassDesc cd(TypeName name) {
-        return typeDescs.computeIfAbsent(name.qualified(), ClassDesc::of);
-    }
-
-    /**
-     * The class of a name this backend made up, in the module being generated — a {@code $Enc}, a
-     * {@code $Dec}, a {@code $Ctfe}. Nothing declares these, so there is nothing to look up and no
-     * other module they could belong to.
-     *
-     * <p>Not for a type. Which module declares a type is what its {@link TypeName} says, and reading
-     * it back off a spelling here answers for whatever this module has under that spelling.
-     */
-    ClassDesc generated(String simpleName) {
-        return typeDescs.computeIfAbsent(simpleName, n -> ClassDesc.of(pkg + "." + n));
+        return cd(new GeneratedClass.Value(name));
     }
 
     /** The class of a declaration of the module being generated. */
@@ -333,28 +326,25 @@ final class CodegenContext {
     }
 
     ClassDesc cdBehavior(String name) {
-        return behaviorDescs.computeIfAbsent(name,
-                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorClass(n)));
+        return cd(new GeneratedClass.BehaviorInterface(moduleOf(name), name));
     }
 
-    /** The implementation class behind a fn/pipe behavior's public interface: {@code <名>$Impl}.
-     * The interface (named {@link #behaviorClass}) is what Java code declares; the {@code $Impl}
-     * holds the fields, constructor and {@code apply}, and is what a pipeline instantiates. Injected
-     * behaviors have no {@code $Impl} (their abstract base is the named class). */
+    /** The implementation class behind a fn/pipe behavior's public interface. The interface is what
+     * Java code declares; the implementation holds the fields, constructor and {@code apply}, and is
+     * what a pipeline instantiates. Injected behaviors have none (their abstract base is the named
+     * class). */
     ClassDesc cdBehaviorImpl(String name) {
-        return behaviorImplDescs.computeIfAbsent(name,
-                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorImplClass(n)));
+        return cd(new GeneratedClass.BehaviorImpl(moduleOf(name), name));
     }
 
     /**
      * The result-union class of a behavior, in the module that declared the behavior. Nothing declares
-     * the name {@code <名>Result} — this backend makes it up — so {@link #cd(String)} would place it in
-     * the module being generated, which is right only for a behavior declared here. An imported one is
-     * called on a typed {@code apply} naming this class, and the class lives where the behavior does.
+     * this class — the backend makes it up — so placing it in the module being generated would be
+     * right only for a behavior declared here. An imported one is called on a typed {@code apply}
+     * naming this class, and the class lives where the behavior does.
      */
     ClassDesc cdBehaviorResult(String name) {
-        return behaviorResultDescs.computeIfAbsent(name,
-                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorResultClass(n)));
+        return cd(new GeneratedClass.BehaviorResult(moduleOf(name), name));
     }
 
     /**
@@ -366,12 +356,7 @@ final class CodegenContext {
      * class already follows (spec §jvm-anonymous-union).
      */
     ClassDesc bridgeCaseClass(TypeName member) {
-        return ClassDesc.of(pkg + "." + bridgeCaseName(member));
-    }
-
-    /** @see #bridgeCaseClass */
-    static String bridgeCaseName(TypeName member) {
-        return member.name() + "Case";
+        return cd(new GeneratedClass.BridgeCase(pkg, member));
     }
 
     /** The class a union member occupies in the union: itself when this module declared it, its
@@ -416,31 +401,12 @@ final class CodegenContext {
 
     /** The bridge case of {@code member} in the module that declares {@code behavior}. */
     ClassDesc bridgeCaseClassOf(String behavior, TypeName member) {
-        return ClassDesc.of(moduleOf(behavior) + "." + bridgeCaseName(member));
+        return cd(new GeneratedClass.BridgeCase(moduleOf(behavior), member));
     }
 
     /** The module a behavior is declared in: another module for an imported one, this one otherwise. */
     private String moduleOf(String behavior) {
         return typePackage.getOrDefault(behavior, pkg);
-    }
-
-    /**
-     * The generated class simple-name for a behavior: its name with the first letter capitalized
-     * (spec §jvm-behavior). A Japanese leading character has no upper-case form, so a Japanese-named behavior
-     * is emitted unchanged. The behavior's name stays lower-case wherever it is an identity — an
-     * injected field name, a requirement-set entry, a signature-map key — and only the emitted class
-     * name is capitalized.
-     */
-    static String behaviorClass(String name) {
-        if (name.isEmpty()) {
-            return name;
-        }
-        return Character.toUpperCase(name.charAt(0)) + name.substring(1);
-    }
-
-    /** The {@code $Impl} simple-name for a fn/pipe behavior (see {@link #cdBehaviorImpl}). */
-    static String behaviorImplClass(String name) {
-        return behaviorClass(name) + "$Impl";
     }
 
     /** The {@code $Fns} method name for a helper the module emits. A module-own helper keeps its bare
@@ -449,13 +415,6 @@ final class CodegenContext {
      * applies a helper looks the method up by this name (ADR-0077), and the name is decided here. */
     public static String helperMethod(String name) {
         return name.replace('.', '$');
-    }
-
-    /** The generated result-union simple-name for a behavior with an anonymous-union output
-     * (spec §jvm-anonymous-union): {@code <名>Result}. Only the union case gets one; a named-sum or single-case
-     * output uses that type directly. */
-    static String behaviorResultClass(String name) {
-        return behaviorClass(name) + "Result";
     }
 
     /** The JVM class of an output case. The built-in {@code DivisionByZero}/{@code NotANumber} need
@@ -487,8 +446,8 @@ final class CodegenContext {
 
     ClassDesc[] caseInterfaces(String name) {
         List<ClassDesc> ifaces = new ArrayList<>();
-        for (String sum : caseToSums.getOrDefault(name, List.of())) {
-            ifaces.add(generated(sum));
+        for (GeneratedClass sum : caseToSums.getOrDefault(name, List.of())) {
+            ifaces.add(cd(sum));
         }
         return ifaces.toArray(new ClassDesc[0]);
     }
@@ -529,12 +488,12 @@ final class CodegenContext {
         return lambdaCounter++;
     }
 
-    void addSynth(String className, byte[] bytes) {
-        synthClasses.put(className, bytes);
+    void addSynth(GeneratedClass.Lambda lambda, byte[] bytes) {
+        synthClasses.put(lambda, bytes);
     }
 
     /** The synthetic classes accumulated so far, for merging into the module output. */
-    Map<String, byte[]> synthClasses() {
+    Map<GeneratedClass, byte[]> synthClasses() {
         return synthClasses;
     }
 }

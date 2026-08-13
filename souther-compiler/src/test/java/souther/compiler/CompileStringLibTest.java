@@ -30,7 +30,7 @@ class CompileStringLibTest {
                 """), getClass().getClassLoader());
 
         Object name = Codecs.decoded(loader, "demo.Name", "robert");
-        Object behavior = loader.loadClass("demo.Greet" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "greet").getConstructor().newInstance();
         Object greeting = Codecs.apply(behavior, name);
 
         // Greeting has a single String field, so it is a newtype: encodes as bare Text
@@ -60,7 +60,7 @@ class CompileStringLibTest {
 
         Object in = Codecs.decoded(loader, "demo.In",
                 java.util.Map.of("name", "world", "parts", java.util.List.of("a", "b", "c")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -85,7 +85,7 @@ class CompileStringLibTest {
 
         Object in = Codecs.decoded(loader, "demo.In",
                 java.util.Map.of("parts", java.util.List.of()));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         // Out has a single String field, so it is a newtype: encodes as bare Text
@@ -133,7 +133,7 @@ class CompileStringLibTest {
                 """), getClass().getClassLoader());
 
         Object raw = Codecs.decoded(loader, "demo.Raw", "a,b,,c");
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, raw);
 
         java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -167,7 +167,7 @@ class CompileStringLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", java.util.Map.of("text", "  the  quick fox ", "n", 42L));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -214,7 +214,7 @@ class CompileStringLibTest {
 
         Object in = Codecs.decoded(loader, "demo.In",
                 java.util.Map.of("pieces", java.util.List.of("bug", " ", "", " ui ")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         java.util.Map<?, ?> m =
                 (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
 
@@ -257,7 +257,7 @@ class CompileStringLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", java.util.Map.of("text", "a\r\nb\nc", "n", 7L));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         java.util.Map<?, ?> m =
                 (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
 
@@ -289,8 +289,8 @@ class CompileStringLibTest {
                 let pad (i) = Out { wide = padLeft(i.n, "0", "1") }
                 """), getClass().getClassLoader());
 
-        Object grow = loader.loadClass("demo.Grow" + "$Impl").getConstructor().newInstance();
-        Object pad = loader.loadClass("demo.Pad" + "$Impl").getConstructor().newInstance();
+        Object grow = Emitted.behavior(loader, "demo", "grow").getConstructor().newInstance();
+        Object pad = Emitted.behavior(loader, "demo", "pad").getConstructor().newInstance();
         Object tooMany = Codecs.decoded(loader, "demo.In", java.util.Map.of("n", 3_000_000_000L));
 
         assertThrows(souther.runtime.ConstraintViolation.class, () -> Codecs.apply(grow, tooMany));
@@ -309,7 +309,7 @@ class CompileStringLibTest {
 
                 let grow (i) = Out { wide = repeat(i.n, "") }
                 """), getClass().getClassLoader());
-        Object growEmpty = empty.loadClass("demo.Grow" + "$Impl").getConstructor().newInstance();
+        Object growEmpty = Emitted.behavior(empty, "demo", "grow").getConstructor().newInstance();
         java.util.Map<?, ?> out = (java.util.Map<?, ?>) Codecs.encode(empty, "demo.Out",
                 Codecs.apply(growEmpty, Codecs.decoded(empty, "demo.In",
                         java.util.Map.of("n", 3_000_000_000L))));
@@ -347,7 +347,7 @@ class CompileStringLibTest {
                 }
                 """), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         java.util.Map<?, ?> m = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, Codecs.decoded(loader, "demo.In",
                         java.util.Map.of("amount", new java.math.BigDecimal("1000.25"), "text", "12.50"))));

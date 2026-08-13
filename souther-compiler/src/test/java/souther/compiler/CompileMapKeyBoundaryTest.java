@@ -80,7 +80,7 @@ class CompileMapKeyBoundaryTest {
 
         Object in = Codecs.decoded(loader, "demo.Daily",
                 Map.of("totals", Map.of("2026-01-01", 300L, "2026-01-02", 50L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "echo").getConstructor().newInstance(), in);
 
         assertEquals(Map.of("2026-01-01", 300L, "2026-01-02", 50L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("totals"));
@@ -102,7 +102,7 @@ class CompileMapKeyBoundaryTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.Daily", Map.of("totals", Map.of("2026-01-01", 300L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Days$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "days").getConstructor().newInstance(), in);
 
         assertEquals(List.of("2026-01-01"),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("on"));
@@ -123,7 +123,7 @@ class CompileMapKeyBoundaryTest {
 
         Object in = Codecs.decoded(loader, "demo.Readings",
                 Map.of("at", Map.of("2026-01-01T09:00", 7L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "echo").getConstructor().newInstance(), in);
 
         assertEquals(Map.of("2026-01-01T09:00", 7L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("at"));
@@ -159,7 +159,7 @@ class CompileMapKeyBoundaryTest {
 
         Object in = Codecs.decoded(loader, "demo.Book",
                 Map.of("pages", List.of(Map.of("2026-01-01", 1L))));
-        Object out = Codecs.apply(loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "echo").getConstructor().newInstance(), in);
 
         assertEquals(List.of(Map.of("2026-01-01", 1L)),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("pages"));
@@ -246,7 +246,7 @@ class CompileMapKeyBoundaryTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.Stock", Map.of("onHand", Map.of("P-01", 4L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "echo").getConstructor().newInstance(), in);
 
         assertEquals(Map.of("P-01", 4L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("onHand"));
@@ -282,7 +282,7 @@ class CompileMapKeyBoundaryTest {
                 Compiler.compile("module demo\n\n" + body), getClass().getClassLoader());
         Object decoded = Codecs.decoded(loader, "demo.In", Map.of("m", in));
         Object out = Codecs.apply(
-                loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), decoded);
+                Emitted.behavior(loader, "demo", "echo").getConstructor().newInstance(), decoded);
         return ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("m");
     }
 
@@ -397,7 +397,7 @@ class CompileMapKeyBoundaryTest {
 
         Object in = Codecs.decoded(loader, "demo.Book",
                 Map.of("pages", List.of(Map.of("2026-01-01", 1L))));
-        Object out = Codecs.apply(loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "echo").getConstructor().newInstance(), in);
 
         assertEquals(List.of(Map.of("2026-01-01", 1L)),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("pages"));
@@ -460,7 +460,7 @@ class CompileMapKeyBoundaryTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.Daily", Map.of("totals", Map.of("2026-01-31", 1L)));
-        Object out = Codecs.apply(loader.loadClass("demo.Shift$Impl").getConstructor().newInstance(), in);
+        Object out = Codecs.apply(Emitted.behavior(loader, "demo", "shift").getConstructor().newInstance(), in);
 
         assertEquals(List.of(LocalDate.parse("2026-02-01").toString()),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("next"));

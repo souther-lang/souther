@@ -51,7 +51,7 @@ class CompileUnreachableTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
         Object ageBand = Codecs.decoded(loader, "demo.AgeBand", age);
         Object serviceBand = Codecs.decoded(loader, "demo.ServiceBand", service);
-        Object impl = loader.loadClass("demo.DaysFor$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "daysFor").getConstructor().newInstance();
         Object out;
         try {
             out = impl.getClass()
@@ -116,7 +116,7 @@ class CompileUnreachableTest {
                 )
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         assertEquals(1L, Codecs.encode(loader, "demo.Out",
                 Codecs.apply(impl, Codecs.decoded(loader, "demo.AB", "A"))));
@@ -140,7 +140,7 @@ class CompileUnreachableTest {
                 let run (v) = unreachable "this rule is never called"
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         UnreachableReached aborted = assertThrows(UnreachableReached.class,
                 () -> Codecs.apply(impl, Codecs.decoded(loader, "demo.A", "A")));
@@ -162,7 +162,7 @@ class CompileUnreachableTest {
                     else unreachable "the count is never negative"
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         assertEquals(7L, Codecs.encode(loader, "demo.Out",
                 Codecs.apply(impl, Codecs.decoded(loader, "demo.N", 7L))));
@@ -190,7 +190,7 @@ class CompileUnreachableTest {
                 let run (i) = Out(depth(i))
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         assertEquals(1L, Codecs.encode(loader, "demo.Out", Codecs.apply(impl,
                 Codecs.decoded(loader, "demo.Item", java.util.Map.of(
@@ -218,7 +218,7 @@ class CompileUnreachableTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         assertEquals(1L, Codecs.encode(loader, "demo.Out",
                 Codecs.apply(impl, Codecs.decoded(loader, "demo.AB", "A"))));

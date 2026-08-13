@@ -168,7 +168,7 @@ class CompileExposedValueTest {
                 let bill (i) = Out { v = standard.value }
                 """)), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("order.Bill$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "order", "bill").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "order.In", Map.of("n", 1L)));
 
         assertEquals(10L, ((Map<?, ?>) Codecs.encode(loader, "order.Out", out)).get("v"));
@@ -200,7 +200,7 @@ class CompileExposedValueTest {
                 let bill (i) = Out { v = one.value + two.value }
                 """)), getClass().getClassLoader());
 
-        Object behavior = loader.loadClass("app.Bill$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "app", "bill").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, Codecs.decoded(loader, "app.In", Map.of("n", 1L)));
 
         assertEquals(3L, ((Map<?, ?>) Codecs.encode(loader, "app.Out", out)).get("v"));

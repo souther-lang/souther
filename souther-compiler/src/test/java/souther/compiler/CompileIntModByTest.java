@@ -35,7 +35,7 @@ class CompileIntModByTest {
                 """.formatted(expr);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.N", input);
-        Object b = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return (long) Codecs.encode(loader, "demo.N", Codecs.apply(b, in));
     }
 
@@ -80,7 +80,7 @@ class CompileIntModByTest {
                 """.formatted(expr);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.Money", new BigDecimal(input));
-        Object b = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return (BigDecimal) Codecs.encode(loader, "demo.Money", Codecs.apply(b, in));
     }
 
@@ -95,7 +95,7 @@ class CompileIntModByTest {
                 """.formatted(against);
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.Money", new BigDecimal(input));
-        Object b = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", "calc").getDeclaredConstructor().newInstance();
         return (long) Codecs.encode(loader, "demo.Cmp", Codecs.apply(b, in));
     }
 

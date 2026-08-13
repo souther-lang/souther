@@ -51,7 +51,7 @@ class CompileSetLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("xs", List.of("b", "d")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
@@ -102,7 +102,7 @@ class CompileSetLibTest {
                 """), getClass().getClassLoader());
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("xs", List.of("ab", "ac", "bd")));
-        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object behavior = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
                 Codecs.apply(behavior, in));
 

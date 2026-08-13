@@ -80,7 +80,7 @@ class CompileIncludeTest {
         assertTrue(r instanceof Ok);
         Object draft = ((Ok<?>) r).value();
 
-        Object submit = loader.loadClass("demo.Submit" + "$Impl").getConstructor().newInstance();
+        Object submit = Emitted.behavior(loader, "demo", "submit").getConstructor().newInstance();
         Object submitted = submit.getClass()
                 .getMethod("apply", Object.class, Object.class)
                 .invoke(submit, draft, "2026");

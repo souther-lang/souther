@@ -41,7 +41,7 @@ class CompileAttemptedConstructionTest {
             """;
 
     private Object take(BytesClassLoader loader, String raw) throws Exception {
-        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "take").getConstructor().newInstance();
         return Codecs.apply(impl, raw);
     }
 
@@ -86,7 +86,7 @@ class CompileAttemptedConstructionTest {
                 let collect (raw) = Codes { kept = accept(raw) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Collect" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "collect").getConstructor().newInstance();
 
         assertEquals(Map.of("kept", List.of("AB")),
                 Codecs.encode(loader, "demo.Codes", Codecs.apply(impl, "AB")),
@@ -127,7 +127,7 @@ class CompileAttemptedConstructionTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of(m1, m2)),
                 getClass().getClassLoader());
-        Object impl = loader.loadClass("m2.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "m2", "take").getConstructor().newInstance();
 
         assertEquals(Map.of("codes", List.of("AB")),
                 Codecs.encode(loader, "m2.Kept", Codecs.apply(impl, "AB")));
@@ -347,7 +347,7 @@ class CompileAttemptedConstructionTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "take").getConstructor().newInstance();
 
         assertEquals(Map.of("n", 7L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "zzz")),
                 "the else branch's `c` is the outer 7, not the value the attempt tried to build");
@@ -379,7 +379,7 @@ class CompileAttemptedConstructionTest {
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "take").getConstructor().newInstance();
 
         assertEquals(Map.of("n", 8L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "AB")),
                 "after the attempt `c` is the outer 7 again, so 7 + 1");
@@ -411,7 +411,7 @@ class CompileAttemptedConstructionTest {
                 let run (n) = Out { n = walk(n, 0) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
         assertEquals(Map.of("n", 200000L),
                 Codecs.encode(loader, "demo.Out", Codecs.apply(impl, 200000L)),
@@ -455,7 +455,7 @@ class CompileAttemptedConstructionTest {
                     else Converted { id = n }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Convert" + "$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "convert").getConstructor().newInstance();
 
         assertEquals("demo.Converted", Codecs.apply(impl, 25L).getClass().getName(),
                 "no reason applies, so the invariant fails and the attempt takes its else branch");

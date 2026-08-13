@@ -39,7 +39,7 @@ class CompileDateLiteralTest {
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("n", 1L));
         Object out = Codecs.apply(
-                loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+                Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals("2026-07-01", m.get("start"));
@@ -164,7 +164,7 @@ class CompileDateLiteralTest {
 
         Object in = Codecs.decoded(loader, "demo.In", Map.of("d", LocalDate.parse("2026-07-11")));
         Object out = Codecs.apply(
-                loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
+                Emitted.behavior(loader, "demo", "run").getConstructor().newInstance(), in);
         assertEquals(10L, ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("gap"));
     }
 }

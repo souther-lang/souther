@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class CompileCallResultFieldAccessTest {
 
     private static Object apply(BytesClassLoader loader, String cls, Object in) throws Exception {
-        Object b = loader.loadClass("demo." + cls + "$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "demo", cls).getConstructor().newInstance();
         return Codecs.apply(b, in);
     }
 
@@ -80,7 +80,7 @@ class CompileCallResultFieldAccessTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(
                 Compiler.compileModules(java.util.List.of(up, down)), getClass().getClassLoader());
-        Object b = loader.loadClass("down.Run$Impl").getConstructor().newInstance();
+        Object b = Emitted.behavior(loader, "down", "run").getConstructor().newInstance();
         Object out = Codecs.apply(b, Codecs.decoded(loader, "down.In", java.util.Map.of("n", 3L)));
 
         assertEquals(3L, out.getClass().getMethod("m").invoke(out));

@@ -175,7 +175,7 @@ class CompileBranchCollectionWideningTest {
                 let decide (t) = Reasons { reasons = reasons(t.total) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Decide$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "decide").getConstructor().newInstance();
 
         assertEquals(Map.of("type", "Costly", "threshold", 100L), reasons(loader, impl, 100).get(0));
         assertEquals(Map.of("type", "NoAuthority"), reasons(loader, impl, 1).get(0));
@@ -198,7 +198,7 @@ class CompileBranchCollectionWideningTest {
                 let decide (t) = Reasons { reasons = reasons(t.total) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        Object impl = loader.loadClass("demo.Decide$Impl").getConstructor().newInstance();
+        Object impl = Emitted.behavior(loader, "demo", "decide").getConstructor().newInstance();
 
         assertEquals(Map.of("type", "Costly", "threshold", 100L), reasons(loader, impl, 100).get(0));
         assertEquals(List.of(), reasons(loader, impl, 1));
