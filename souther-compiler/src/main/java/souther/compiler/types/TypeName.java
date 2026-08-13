@@ -74,20 +74,6 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
         };
     }
 
-    /** The module of a name that denotes nothing. Not a real module, and no source may name it:
-     * a name of this shape stands for a name the compiler could not resolve. */
-    public static final String UNRESOLVED = "souther.unresolved";
-
-    /** A name nothing denotes, keeping the spelling that was written so a later reader can quote it.
-     * {@link TypeOps#denoted} turns it into {@link Type#ERRONEOUS}. */
-    public static TypeName unresolved(String written) {
-        return new TypeName(UNRESOLVED, written);
-    }
-
-    public boolean isUnresolved() {
-        return module.equals(UNRESOLVED);
-    }
-
     /** Another name declared in the same module — a sum's case, given the sum. */
     public TypeName sibling(String other) {
         return new TypeName(module, other);

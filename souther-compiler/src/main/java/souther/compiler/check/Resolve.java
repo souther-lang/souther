@@ -13,6 +13,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
+import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
@@ -50,7 +51,7 @@ public final class Resolve {
     private final Symbols symbols;
     private final Values values;
     /** Every name this pass answered, in the order it met them. */
-    private final List<Denotation> denotations = new ArrayList<>();
+    private final List<TypeUse> denotations = new ArrayList<>();
     /** The same, for the names used as values. */
     private final List<ValueUse> values0 = new ArrayList<>();
     /** What it has to say about the names it could not answer, as the errors it would once have
@@ -166,7 +167,7 @@ public final class Resolve {
      *                it there, and where they are
      * @param denotes what it names
      */
-    public record Denotation(WrittenName written, TypeName denotes) {
+    public record TypeUse(WrittenName written, TypeName denotes) {
 
         /** Where the name is written. */
         public SourcePos pos() {
@@ -176,7 +177,7 @@ public final class Resolve {
 
     /**
      * One written name in the value namespace and what it turned out to denote, where it was
-     * written. What {@link Denotation} is for a type, and collected for the same reason: an editor
+     * written. What {@link TypeUse} is for a type, and collected for the same reason: an editor
      * asking what is under the cursor is asking about the answer this traversal already gave.
      */
     public record ValueUse(WrittenName written, ValueName denotes) {
@@ -210,7 +211,7 @@ public final class Resolve {
      * something else, so a reader answered with one of these would be answered about a name that is
      * not there, at a width that is not its.
      */
-    public record ResolutionIndex(List<Denotation> types, List<ValueUse> values,
+    public record ResolutionIndex(List<TypeUse> types, List<ValueUse> values,
                                   Map<BindingId, BoundName> binders) {}
 
     /**
@@ -283,7 +284,7 @@ public final class Resolve {
             Ast.Def resolved = r.def(def);
             defs.add(resolved);
             Set<TypeName> reaches = new LinkedHashSet<>();
-            for (Denotation d : r.denotations.subList(denotedBefore, r.denotations.size())) {
+            for (TypeUse d : r.denotations.subList(denotedBefore, r.denotations.size())) {
                 reaches.add(d.denotes());
             }
             // The first of a name is what the module declares and the second is reported and left
@@ -426,11 +427,11 @@ public final class Resolve {
         Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
-            TypeName names = symbols.resolve(denoted.written());
-            if (names != null && names.isUnresolved()) {
-                failed++;
-            } else if (names != null) {
-                denotations.add(new Denotation(denoted.written(), names));
+            switch (symbols.resolve(denoted.written())) {
+                case Denotation.Denotes d ->
+                        denotations.add(new TypeUse(denoted.written(), d.type()));
+                case Denotation.Nothing ignored -> failed++;
+                case Denotation.Unknown ignored -> { }
             }
         }
         return denoted;
@@ -467,15 +468,16 @@ public final class Resolve {
                 out.add(c);
                 continue;
             }
-            TypeName denoted = symbols.resolve(c.name());
-            if (denoted == null) {
+            Denotation answer = symbols.resolve(c.name());
+            if (answer instanceof Denotation.Unknown) {
                 throw CompileException.of(Diagnostic
                                 .at(s.pos()).say(new BehaviorMessage.UnknownCaseInASum(c.written(), s.name())).build());
             }
-            if (denoted.isUnresolved()) {
+            if (answer instanceof Denotation.Nothing) {
                 out.add(answered(c.unanswered()));
                 continue;
             }
+            TypeName denoted = answer.type();
             // Recorded like any other written name. A case is a name this module wrote and this pass
             // answered, so leaving it out made it a use nothing could see — an editor asked about it
             // had no answer, and a reader asking which imports are written found the name missing.
@@ -848,9 +850,9 @@ public final class Resolve {
             }
             return null;
         }
-        TypeName type = symbols.resolve(name);
-        if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type, applied ? null : ConstructionOrigin.own());
+        if (symbols.resolve(name) instanceof Denotation.Denotes d) {
+            return new ValueName.OfType(written, d.type(),
+                    applied ? null : ConstructionOrigin.own());
         }
         // a helper or a behavior, applied or handed over by name — which the inliner expands into a
         // block that applies it
@@ -1006,7 +1008,7 @@ public final class Resolve {
         }
         values0.add(new ValueUse(written, denotes));
         if (denotes instanceof ValueName.OfType named) {
-            denotations.add(new Denotation(written, named.type()));
+            denotations.add(new TypeUse(written, named.type()));
         }
         return denotes;
     }
@@ -1116,11 +1118,14 @@ public final class Resolve {
         if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
-        TypeName denoted = symbols.resolve(n.name());
-        if (denoted == null) {
-            return answered(nothingDenotes(n));
-        }
-        return answered(standingFor(n, denoted));
+        return answered(switch (symbols.resolve(n.name())) {
+            case Denotation.Denotes d -> n.denoting(d.type());
+            // In scope standing for nothing: a name an import line could not bring in takes the
+            // error type rather than being reported as an unknown name at every use. The import
+            // line is where that was reported, so nothing more is said here.
+            case Denotation.Nothing ignored -> n.unanswered();
+            case Denotation.Unknown ignored -> nothingDenotes(n);
+        });
     }
 
     /** The names a {@code match} arm may write: a declared case, a primitive heading a union
@@ -1138,14 +1143,14 @@ public final class Resolve {
         if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
-        TypeName denoted = symbols.resolveCase(n.name());
-        if (denoted == null) {
-            denoted = TypeName.optionCase(n.written());
-        }
-        if (denoted == null) {
-            return answered(nothingDenotes(n));
-        }
-        return answered(standingFor(n, denoted));
+        return answered(switch (symbols.resolveCase(n.name())) {
+            case Denotation.Denotes d -> n.denoting(d.type());
+            case Denotation.Nothing ignored -> n.unanswered();
+            case Denotation.Unknown ignored -> {
+                TypeName option = TypeName.optionCase(n.written());
+                yield option != null ? n.denoting(option) : nothingDenotes(n);
+            }
+        });
     }
 
     /**
@@ -1171,16 +1176,6 @@ public final class Resolve {
         return n.unanswered();
     }
 
-    /**
-     * {@code n} against what the scope answered with, which is not always a declaration: a name an
-     * import line could not bring in is in scope standing for nothing, so that a use of it takes the
-     * error type rather than being reported as an unknown name at every use. The import line is
-     * where that was reported, so nothing more is said here.
-     */
-    private Ast.Name standingFor(Ast.Name n, TypeName denoted) {
-        return denoted.isUnresolved() ? n.unanswered() : n.denoting(denoted);
-    }
-
     /** Records what a name was answered with, and hands it back. A name with no position was
      * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
      * name nothing answered is an absence rather than a declaration to record. */
@@ -1188,7 +1183,7 @@ public final class Resolve {
         if (n instanceof Ast.Name.Unanswered) {
             failed++;
         } else if (n.pos() != null) {
-            denotations.add(new Denotation(n.name(), n.denotes()));
+            denotations.add(new TypeUse(n.name(), n.denotes()));
         }
         return n;
     }

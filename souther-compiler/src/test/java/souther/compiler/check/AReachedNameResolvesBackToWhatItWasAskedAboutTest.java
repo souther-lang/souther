@@ -6,6 +6,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeReachName;
 
@@ -92,9 +93,9 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         List<String> broken = new ArrayList<>();
         for (TypeName type : everyDeclaration()) {
             if (symbols.reach(type) instanceof TypeReachName.Written written) {
-                if (!type.equals(symbols.resolve(spelled(written.rendered())))) {
+                if (!type.equals(symbols.resolve(spelled(written.rendered())).type())) {
                     broken.add(written.rendered() + " is written for " + type + " and resolves to "
-                            + symbols.resolve(spelled(written.rendered())));
+                            + symbols.resolve(spelled(written.rendered())).type());
                 }
             }
         }
@@ -119,7 +120,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         for (TypeName type : unnameable) {
             for (String spelling : List.of(type.name(), type.qualified(),
                     "up." + type.name(), "lib." + type.name())) {
-                assertFalse(type.equals(symbols.resolve(spelled(spelling))),
+                assertFalse(type.equals(symbols.resolve(spelled(spelling)).type()),
                         "`" + spelling + "` reaches " + type + " after all");
             }
         }
@@ -136,7 +137,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
 
         assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).reach(language));
         assertEquals(new TypeName("app", "RoundingMode"),
-                scopeOf("app", LIB, APP).resolve(spelled("RoundingMode")));
+                scopeOf("app", LIB, APP).resolve(spelled("RoundingMode")).type());
     }
 
     /** And where nothing here took it, it is written as itself. */
@@ -147,7 +148,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
 
         assertEquals("RoundingMode", assertInstanceOf(TypeReachName.Written.class,
                 symbols.reach(language)).rendered());
-        assertEquals(language, symbols.resolve(spelled("RoundingMode")));
+        assertEquals(language, symbols.resolve(spelled("RoundingMode")).type());
     }
 
     /**
@@ -169,9 +170,9 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
                     symbols.reach(vocabulary), vocabulary.toString());
 
             assertEquals(vocabulary.name(), written.rendered());
-            assertEquals(vocabulary, symbols.resolveCase(spelled(written.rendered())),
+            assertEquals(vocabulary, symbols.resolveCase(spelled(written.rendered())).type(),
                     "the reader of the position a case name stands at");
-            assertEquals(null, symbols.resolve(spelled(written.rendered())),
+            assertEquals(Denotation.UNKNOWN, symbols.resolve(spelled(written.rendered())),
                     "and not this one, which answers for declarations");
         }
     }

@@ -276,10 +276,6 @@ public interface Ast {
                     throw new IllegalArgumentException("a name that denotes names a declaration: "
                             + name);
                 }
-                if (type.isUnresolved()) {
-                    throw new IllegalArgumentException("`" + name.canonical()
-                            + "` denotes nothing, and a name that denotes nothing is Unanswered");
-                }
             }
 
             @Override

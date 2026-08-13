@@ -54,19 +54,6 @@ class ANameNothingDeclaresIsNotAResolvedNameTest {
         assertTrue(e.getMessage().contains("denotes nothing"), e.getMessage());
     }
 
-    /**
-     * And a resolved name holds a declaration that is there. The stand-in cannot be put in one, so
-     * there is no value that says it has been resolved and names nothing — which is the state every
-     * reader below the pass was left to notice for itself.
-     */
-    @Test
-    void aResolvedNameCannotCarryAStandIn() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> Ast.Name.written("Invoice", POS).denoting(TypeName.unresolved("Invoice")));
-
-        assertTrue(e.getMessage().contains("Unanswered"), e.getMessage());
-    }
-
     /** Answered, it says which declaration. */
     @Test
     void aResolvedNameSaysWhatItDenotes() {

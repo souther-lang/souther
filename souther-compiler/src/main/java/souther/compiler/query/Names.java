@@ -22,6 +22,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -492,7 +493,7 @@ public final class Names {
      */
     public record Imports(String name) implements Key<Imports.Of> {
 
-        public record Of(Map<String, TypeName> scope, Map<String, String> aliases) {}
+        public record Of(Map<String, Denotation> scope, Map<String, String> aliases) {}
 
         @Override
         public String module() {
@@ -507,9 +508,9 @@ public final class Names {
             }
             Ast.Module m = module.value();
             Registry registry = registry(db, Stage.AVAILABLE);
-            Map<String, TypeName> scope = new HashMap<>();
+            Map<String, Denotation> scope = new HashMap<>();
             for (String own : registry.declaredIn(name).keySet()) {
-                scope.put(own, new TypeName(name, own));
+                scope.put(own, new Denotation.Denotes(new TypeName(name, own)));
             }
             Set<String> ownNames = Ordered.set(scope.keySet());
             // Which import brought each name in, so a second one naming it is reported against that
@@ -569,15 +570,15 @@ public final class Names {
                         nameless(scope, List.of(imported));
                         continue;
                     }
-                    TypeName standingIn = scope.get(imported);
-                    if (standingIn != null && !standingIn.isUnresolved()) {
+                    Denotation standingIn = scope.get(imported);
+                    if (standingIn instanceof Denotation.Denotes) {
                         reports.add(importCollision(imported, imp,
                                 ownNames.contains(imported) ? null : from.get(imported)));
                         continue;   // the first claim on the name keeps it
                     }
                     // A name a failed import line only stood in for is not a claim on it: an import
                     // that can do the job takes it, and says nothing about the line that could not.
-                    scope.put(imported, new TypeName(imp.module(), imported));
+                    scope.put(imported, new Denotation.Denotes(new TypeName(imp.module(), imported)));
                     from.put(imported, imp);
                 }
             }
@@ -596,9 +597,9 @@ public final class Names {
      * nothing more. Leaving it out of scope instead would report an unknown type at every use, which
      * sends the author to a field when what is wrong is the import.
      */
-    private static void nameless(Map<String, TypeName> scope, List<String> names) {
+    private static void nameless(Map<String, Denotation> scope, List<String> names) {
         for (String written : names) {
-            scope.putIfAbsent(written, TypeName.unresolved(written));
+            scope.putIfAbsent(written, Denotation.NOTHING);
         }
     }
 
@@ -1003,7 +1004,7 @@ public final class Names {
             return null;
         }
         Set<Use> used = new HashSet<>();
-        for (Resolve.Denotation d : facts.value().types()) {
+        for (Resolve.TypeUse d : facts.value().types()) {
             used.add(new Use(d.written().canonical(), d.denotes().module(), d.denotes().name()));
         }
         for (Resolve.ValueUse v : facts.value().values()) {
@@ -1105,14 +1106,14 @@ public final class Names {
      * settle — an attached {@code examples for} file declares none and is part of one all the same,
      * and a caller that had to name the module first was a caller that could name the wrong one.
      */
-    public record DenotedAt(SourcePos at) implements Key<Resolve.Denotation> {
+    public record DenotedAt(SourcePos at) implements Key<Resolve.TypeUse> {
         @Override
         public String sourceId() {
             return at == null ? null : at.sourceId();
         }
 
         @Override
-        public Answer<Resolve.Denotation> compute(Db db) {
+        public Answer<Resolve.TypeUse> compute(Db db) {
             String name = moduleAt(db, at);
             if (name == null) {
                 return Answer.absent();
@@ -1121,8 +1122,8 @@ public final class Names {
             if (!facts.present()) {
                 return Answer.absent();
             }
-            Resolve.Denotation innermost = null;
-            for (Resolve.Denotation d : facts.value().types()) {
+            Resolve.TypeUse innermost = null;
+            for (Resolve.TypeUse d : facts.value().types()) {
                 if (!spans(d.written(), at)) {
                     continue;
                 }
@@ -1163,26 +1164,26 @@ public final class Names {
                     }
                 }
             }
-            Resolve.Denotation denoted = db.ask(new DenotedAt(at)).value();
+            Resolve.TypeUse denoted = db.ask(new DenotedAt(at)).value();
             return denoted == null ? Answer.absent() : Answer.of(denoted.denotes());
         }
     }
 
     /** Every place a module names {@code denoted}, wherever it was declared. */
-    public record UsesOf(String name, TypeName denoted) implements Key<List<Resolve.Denotation>> {
+    public record UsesOf(String name, TypeName denoted) implements Key<List<Resolve.TypeUse>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<List<Resolve.Denotation>> compute(Db db) {
+        public Answer<List<Resolve.TypeUse>> compute(Db db) {
             Answer<Resolve.ResolutionIndex> facts = db.ask(new Facts(name));
             if (!facts.present()) {
                 return Answer.of(List.of());
             }
-            List<Resolve.Denotation> uses = new ArrayList<>();
-            for (Resolve.Denotation d : facts.value().types()) {
+            List<Resolve.TypeUse> uses = new ArrayList<>();
+            for (Resolve.TypeUse d : facts.value().types()) {
                 if (denoted.equals(d.denotes())) {
                     uses.add(d);
                 }

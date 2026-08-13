@@ -1022,7 +1022,7 @@ public final class Analyzer {
         }
         for (String module : compilation.modules()) {
             String moduleUri = compilation.sourceIdOf(module);
-            for (Resolve.Denotation use
+            for (Resolve.TypeUse use
                     : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
                 if (at != null) {

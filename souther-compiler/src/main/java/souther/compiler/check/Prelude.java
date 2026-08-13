@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
+import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.frontend.CstFrontend;
@@ -369,13 +370,13 @@ public final class Prelude {
                 }
             }
         }
-        Map<String, TypeName> scope = new HashMap<>();
+        Map<String, Denotation> scope = new HashMap<>();
         for (String name : declared.keySet()) {
             if (!covered.contains(name)) {
                 throw new IllegalStateException("prelude resource " + resource + " declares `"
                         + name + "`, which is not registered as runtime-backed data");
             }
-            scope.put(name, TypeName.runtime(name));
+            scope.put(name, new Denotation.Denotes(TypeName.runtime(name)));
         }
         return Symbols.of(TypeName.RUNTIME,
                 Registry.of(Map.of(TypeName.RUNTIME, m)), scope, Map.of());

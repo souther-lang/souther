@@ -331,10 +331,10 @@ class ResolvedValueNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
 
-        List<souther.compiler.check.Resolve.Denotation> amount = c.db()
+        List<souther.compiler.check.Resolve.TypeUse> amount = c.db()
                 .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Amount")))
                 .value();
-        List<souther.compiler.check.Resolve.Denotation> approved = c.db()
+        List<souther.compiler.check.Resolve.TypeUse> approved = c.db()
                 .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Approved")))
                 .value();
 

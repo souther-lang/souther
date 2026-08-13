@@ -14,6 +14,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
+import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -959,7 +960,7 @@ public final class TypeOps {
                         throw new IllegalStateException("the include `" + include.written()
                                 + "` of `" + declared + "` has not been resolved");
                     }
-                    yield symbols.resolve(written.name());
+                    yield symbols.resolve(written.name()).type();
                 }
             };
             if (source != null && seen.add(source)
@@ -1614,17 +1615,24 @@ public final class TypeOps {
                 if (ref.name().startsWith("'")) {
                     yield Type.var(ref.name());   // a type variable, admitted only in the core
                 }
-                TypeName resolved = symbols.resolve(ref.written());
-                if (resolved != null) {
-                    yield resolved.isUnresolved() ? Type.ERRONEOUS : Type.ref(resolved);
+                switch (symbols.resolve(ref.written())) {
+                    case Denotation.Denotes d -> {
+                        yield Type.ref(d.type());
+                    }
+                    // In scope denoting nothing: the import line that could not bring it in was
+                    // reported there, and a use of it takes the error type rather than being
+                    // reported again here.
+                    case Denotation.Nothing ignored -> {
+                        yield Type.ERRONEOUS;
+                    }
+                    case Denotation.Unknown ignored -> { }
                 }
                 // A union's case names a type where a type goes. A `match` arm has always read it
                 // that way; a declaration reads it the same, which is what lets `Int |
                 // DivisionByZero` be written rather than only met. Asked after the module's own
                 // declarations, so a name a model declares keeps its meaning.
-                TypeName asCase = symbols.resolveCase(ref.written());
-                if (asCase != null && !asCase.isUnresolved()) {
-                    yield Type.ref(asCase);
+                if (symbols.resolveCase(ref.written()) instanceof Denotation.Denotes asCase) {
+                    yield Type.ref(asCase.type());
                 }
                 throw unknownType(ref, symbols);
             }

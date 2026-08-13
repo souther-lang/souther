@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeReachName;
 
@@ -35,14 +36,14 @@ public final class Symbols {
     /** Where the declarations of this compilation are read from. */
     private final Registry registry;
     /** What a bare name means here: this module's own definitions plus the imported ones. */
-    private final Map<String, TypeName> scope;
+    private final Map<String, Denotation> scope;
     /** Each {@code import ... as} alias → the module it names. A module of the compilation is also
      * a qualifier under its own name, which {@link #moduleOfQualifier} reads off the registry
      * rather than listing here — listing it would mean naming every module up front. */
     private final Map<String, String> aliases;
 
     private Symbols(String module, Registry registry,
-                    Map<String, TypeName> scope, Map<String, String> aliases) {
+                    Map<String, Denotation> scope, Map<String, String> aliases) {
         this.module = module;
         this.registry = registry;
         this.scope = scope;
@@ -56,9 +57,9 @@ public final class Symbols {
 
     /** A lone module, compiled with nothing else in sight: bare names are its own definitions. */
     public static Symbols of(Ast.Module m) {
-        Map<String, TypeName> scope = new HashMap<>();
-        for (String name : TypeChecker.ownDefs(m).keySet()) {
-            scope.put(name, new TypeName(m.name(), name));
+        Map<String, Denotation> scope = new HashMap<>();
+        for (Ast.Def def : TypeChecker.ownDefs(m).values()) {
+            scope.put(def.name(), new Denotation.Denotes(def.declares()));
         }
         return new Symbols(m.name(), Registry.of(Map.of(m.name(), m)), scope, Map.of());
     }
@@ -66,7 +67,7 @@ public final class Symbols {
     /** A module compiled against a registry: {@code scope} is what its bare names mean (own plus
      * imported) and {@code aliases} maps each {@code import ... as} alias to its module. */
     public static Symbols of(Ast.Module m, Map<String, Ast.Module> registry,
-                             Map<String, TypeName> scope, Map<String, String> aliases) {
+                             Map<String, Denotation> scope, Map<String, String> aliases) {
         return of(m.name(), Registry.of(registry), scope, aliases);
     }
 
@@ -74,7 +75,7 @@ public final class Symbols {
      * however it likes — the form a query-backed compilation uses, where a module's definitions are
      * asked for one at a time rather than held in a map. */
     public static Symbols of(String module, Registry registry,
-                             Map<String, TypeName> scope, Map<String, String> aliases) {
+                             Map<String, Denotation> scope, Map<String, String> aliases) {
         return new Symbols(module, registry, scope, Map.copyOf(aliases));
     }
 
@@ -109,11 +110,12 @@ public final class Symbols {
      * DivisionByZero}), or one of the error cases the runtime declares rather than any module. Null
      * when it is none of those.
      */
-    TypeName resolveCase(WrittenName written) {
+    Denotation resolveCase(WrittenName written) {
         return switch (written.canonical()) {
             case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
-                    TypeName.primitive(written.canonical());
-            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" -> TypeName.runtime(written.canonical());
+                    new Denotation.Denotes(TypeName.primitive(written.canonical()));
+            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" ->
+                    new Denotation.Denotes(TypeName.runtime(written.canonical()));
             default -> resolve(written);
         };
     }
@@ -123,33 +125,38 @@ public final class Symbols {
         return !name.module().equals(module);
     }
 
-    /** What the written name {@code written} denotes here, or null when nothing does. Accepts a bare
-     * name, a module-qualified one ({@code probe.b.金額}) and an alias-qualified one ({@code B.金額}).
+    /** What the written name {@code written} denotes here. Accepts a bare name, a
+     * module-qualified one ({@code probe.b.金額}) and an alias-qualified one ({@code B.金額}).
      * Visibility is enforced: a qualified name must be exposed by the module that declares it.
      *
      * <p>"Here" is the whole story: a name is resolved in the module that wrote it, by that module's
      * own {@link Resolve} pass, so this never has to answer for a spelling written somewhere else.
      */
-    TypeName resolve(WrittenName written) {
+    Denotation resolve(WrittenName written) {
         return resolveSpelling(written.canonical());
     }
 
     /** As above, of the spelling itself. Private: a spelling reaches this only from a name of this
      *  module's own text, which is what a {@link WrittenName} is and a bare string is not. */
-    private TypeName resolveSpelling(String written) {
+    private Denotation resolveSpelling(String written) {
         int dot = written.lastIndexOf('.');
         if (dot < 0) {
-            TypeName name = scope.get(written);
+            Denotation name = scope.get(written);
+            if (name != null) {
+                return name;
+            }
             // The prelude's runtime-backed data is nameable everywhere, on the lowest rung: a
             // module's own declaration or import of the same name is what the name means there.
-            return name != null ? name : Prelude.runtimeBackedType(written);
+            TypeName runtime = Prelude.runtimeBackedType(written);
+            return runtime != null ? new Denotation.Denotes(runtime) : Denotation.UNKNOWN;
         }
         String target = moduleOfQualifier(written.substring(0, dot));
         if (target == null) {
-            return null;
+            return Denotation.UNKNOWN;
         }
         TypeName candidate = new TypeName(target, written.substring(dot + 1));
-        return contains(candidate) && exposes(target, candidate.name()) ? candidate : null;
+        return contains(candidate) && exposes(target, candidate.name())
+                ? new Denotation.Denotes(candidate) : Denotation.UNKNOWN;
     }
 
     /**
@@ -192,7 +199,8 @@ public final class Symbols {
      * nothing wherever it was put.
      */
     public TypeReachName reach(TypeName type) {
-        if (type.isPrimitive() || type.equals(scope.get(type.name()))) {
+        if (type.isPrimitive() || type.equals(scope.get(type.name()) instanceof Denotation.Denotes d
+                ? d.type() : null)) {
             return new TypeReachName.Bare(type);
         }
         if (TypeName.RUNTIME.equals(type.module())) {
@@ -272,7 +280,7 @@ public final class Symbols {
     /** The definitions reachable here by a bare name: this module's own plus the imported ones. */
     public Collection<Ast.Def> visible() {
         List<Ast.Def> defs = new ArrayList<>();
-        for (TypeName name : new LinkedHashSet<>(scope.values())) {
+        for (TypeName name : visibleNames()) {
             Ast.Def def = get(name);
             if (def != null) {
                 defs.add(def);
@@ -281,9 +289,16 @@ public final class Symbols {
         return defs;
     }
 
-    /** The names reachable here, canonical. */
+    /** The names reachable here, canonical. A name in scope standing for nothing names no
+     * declaration, so it is reachable and not among these. */
     public Collection<TypeName> visibleNames() {
-        return new LinkedHashSet<>(scope.values());
+        Set<TypeName> named = new LinkedHashSet<>();
+        for (Denotation denotation : scope.values()) {
+            if (denotation instanceof Denotation.Denotes d) {
+                named.add(d.type());
+            }
+        }
+        return named;
     }
 
     /** Every definition of one module, keyed by the name written there. The runtime namespace
