@@ -66,6 +66,47 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
                 "the refusal names both members: " + refused.getMessage());
     }
 
+    /**
+     * And the same pair through the other door. Writing a declaration onto a class asks for it by
+     * identity, and finding something under that name is not finding that identity — the two spell
+     * the same. Without this the behavior's declaration would go onto the data's class and the
+     * registry would then say the class had been emitted for the behavior.
+     */
+    @Test
+    void oneIdentityCannotRewriteAnotherThatHasTheSameName() {
+        Emissions out = new Emissions();
+        out.put(QUOTE_DATA, new byte[] {1});
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> out.rewrite(QUOTE_BEHAVIOR, bytes -> new byte[] {2}));
+        assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
+                "the refusal names what was emitted and what asked: " + refused.getMessage());
+        assertEquals(1, out.byBinaryName().get(Emitted.value("demo", "Quote"))[0],
+                "and the class is not rewritten");
+    }
+
+    /** The control: the identity that was emitted may rewrite what it holds, and stays what it is. */
+    @Test
+    void andTheIdentityThatWasEmittedMayRewriteIt() {
+        Emissions out = new Emissions();
+        out.put(QUOTE_DATA, new byte[] {1});
+        out.rewrite(QUOTE_DATA, bytes -> new byte[] {(byte) (bytes[0] + 1)});
+        assertEquals(2, out.byBinaryName().get(Emitted.value("demo", "Quote"))[0]);
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> out.put(QUOTE_DATA, new byte[] {3}));
+        assertTrue(refused.getMessage().contains("written twice"),
+                "and a rewrite is not a second emission: " + refused.getMessage());
+    }
+
+    /** A rewrite of something nothing emitted is refused rather than becoming the emission of it. */
+    @Test
+    void andNothingCanBeRewrittenThatWasNeverEmitted() {
+        Emissions out = new Emissions();
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> out.rewrite(QUOTE_DATA, bytes -> new byte[] {1}));
+        assertTrue(refused.getMessage().contains("demo.Quote"), refused.getMessage());
+        assertEquals(List.of(), List.copyOf(out.byBinaryName().keySet()));
+    }
+
     /** And through the door a whole set of classes arrives by, which is how the classes compiled for
      *  escaping lambdas are added. */
     @Test

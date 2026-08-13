@@ -54,6 +54,15 @@ public final class Emissions {
      * The class held for {@code generated}, rewritten. What is written onto a class after it is built
      * — a declaration, say — arrives this way rather than as a second write of its name, so a rewrite
      * of something nothing emitted is refused instead of quietly becoming the emission of it.
+     *
+     * <p>Held to the identity as well as to the name, for the reason the key is the name in the first
+     * place: the two are not the same question. A data {@code Quote} and a behavior {@code quote} are
+     * one class here, so finding a class under the name a behavior's interface has is no evidence
+     * that it is that interface, and writing the behavior's declaration onto the data would leave the
+     * registry saying the class had been emitted for something it was not.
+     *
+     * <p>What comes back keeps the identity it was emitted for. A rewrite changes what a class holds,
+     * never what it is.
      */
     public void rewrite(GeneratedClass generated, java.util.function.UnaryOperator<byte[]> rewriting) {
         JvmClassName name = SoutherJvmAbi.nameOf(generated);
@@ -62,7 +71,11 @@ public final class Emissions {
             throw new IllegalStateException("no class was emitted as " + name
                     + " for " + generated + " to carry anything");
         }
-        byName.put(name, new Emission(generated, rewriting.apply(held.bytes())));
+        if (!held.generated().equals(generated)) {
+            throw new IllegalStateException(name + " was emitted for " + held.generated()
+                    + ", not " + generated + "; one name, and not the same thing under it");
+        }
+        byName.put(name, new Emission(held.generated(), rewriting.apply(held.bytes())));
     }
 
     /** What the compilation hands on: a class loader and a file path want the binary name, and by
