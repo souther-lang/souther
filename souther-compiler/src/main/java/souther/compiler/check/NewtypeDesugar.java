@@ -52,17 +52,29 @@ public final class NewtypeDesugar {
     public static Ast.Module rewriteInvariants(Ast.Module m, Symbols symbols) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
-            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                defs.add(new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
-                        Ast.mapClauses(d.invariants(), inv -> go(inv, symbols)),
-                        d.decoder(), d.encoder(), d.pos()));
-            } else {
-                defs.add(def);
-            }
+            defs.add(rewriteInvariantsOf(def, symbols));
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
                 m.exampleFileTarget(), m.pos());
+    }
+
+    /**
+     * One declaration's invariants, with each newtype construction written in them rewritten to the
+     * construction it is.
+     *
+     * <p>A declaration at a time, because what is wrong with one clause is wrong with the
+     * declaration that wrote it and with nothing else. Rewriting them together would answer for a
+     * whole module, and one bad application would leave every other declaration without the form
+     * every later stage reads.
+     */
+    public static Ast.Def rewriteInvariantsOf(Ast.Def def, Symbols symbols) {
+        if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
+            return new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
+                    Ast.mapClauses(d.invariants(), inv -> go(inv, symbols)),
+                    d.decoder(), d.encoder(), d.pos());
+        }
+        return def;
     }
 
     private static Ast.Expr go(Ast.Expr e, Symbols symbols) {

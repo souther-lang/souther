@@ -38,7 +38,12 @@ public final class Shapes {
 
     /**
      * A module with its codecs derived and the invariants of every type it spreads settled into the
-     * spreading declaration.
+     * spreading declaration — the form each declaration is read from, before what one of them wrote
+     * is normalized.
+     *
+     * <p>Not what a later stage reads. This is how {@link DerivedDeclarations} works its answers
+     * out, and a mistake reached here is a mistake in the module rather than in any one
+     * declaration: the derive and the settling read every declaration to answer about each.
      *
      * <p>The two go together because settling reads the spread source through the same symbols the
      * derive produced: an invariant that arrives by spread is part of the declaration from here on,
@@ -49,7 +54,7 @@ public final class Shapes {
      * bodies — and it is the imported module's bodies it reaches, never this one's: what a module
      * imports is read off its resolved form, so nothing here is asked through itself.
      */
-    public record Derived(String name) implements Key<Ast.Module> {
+    record Settling(String name) implements Key<Ast.Module> {
         @Override
         public String module() {
             return name;
@@ -75,15 +80,8 @@ public final class Shapes {
             try {
                 Ast.Module declared = onlyWhatItDeclares(resolved.value());
                 Ast.Module derived = Deriver.derive(declared, scope.value());
-                // The invariants are whole here — spread in, imports substituted, helpers expanded —
-                // and this is where a newtype construction written `金額(500)` becomes the
-                // construction it is. A construction reaching an invariant through a helper is
-                // written in that helper's body, which this module has not desugared yet, so
-                // normalizing here rather than with the bodies is what leaves one spelling for every
-                // check over an invariant to read.
-                return Answer.of(NewtypeDesugar.rewriteInvariants(
-                        HelperInvariants.withSettledInvariants(derived, scope.value(), published),
-                        scope.value()));
+                return Answer.of(
+                        HelperInvariants.withSettledInvariants(derived, scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -180,7 +178,20 @@ public final class Shapes {
         }
     }
 
-    /** A derived module's declarations by name — what every later stage resolves a type against. */
+    /**
+     * A module's declarations by name, each in the form every later stage resolves a type against,
+     * and only the ones that came out.
+     *
+     * <p>This is where a newtype construction written {@code 金額(500)} becomes the construction it
+     * is. A construction reaching an invariant through a helper is written in that helper's body,
+     * which this module has not desugared yet, so normalizing here rather than with the bodies is
+     * what leaves one spelling for every check over an invariant to read.
+     *
+     * <p>A declaration at a time, so what is wrong with one clause is wrong with the declaration
+     * that wrote it. Every declaration is worked out whether or not the one before it came out —
+     * stopping at the first would leave the declarations after it without an answer, and each of
+     * them owns what it has to say.
+     */
     public record DerivedDeclarations(String name) implements Key<Map<String, Ast.Def>> {
         @Override
         public String module() {
@@ -189,8 +200,58 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, Ast.Def>> compute(Db db) {
-            Answer<Ast.Module> m = db.ask(new Derived(name));
-            return m.present() ? Answer.of(Names.defsOf(m.value())) : Answer.absent();
+            Answer<Ast.Module> settling = db.ask(new Settling(name));
+            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
+            if (!settling.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            Map<String, Ast.Def> out = new LinkedHashMap<>();
+            List<Report> reports = new ArrayList<>();
+            for (Ast.Def def : settling.value().defs()) {
+                try {
+                    out.put(def.name(), NewtypeDesugar.rewriteInvariantsOf(def, scope.value()));
+                } catch (CompileException e) {
+                    reports.addAll(Report.of(e));
+                }
+            }
+            return Answer.of(Map.copyOf(out), reports);
+        }
+    }
+
+    /**
+     * The module every later stage reads, where every declaration in it came out.
+     *
+     * <p>An assembly and not a stage of its own: each declaration is answered on its own and says
+     * what it has to say there, and this is the conjunction of those answers. One that did not come
+     * out leaves no module to hand over — a module missing a declaration it writes would be read as
+     * one that does not declare it, which is a different thing to say and not a true one — while the
+     * declarations beside it keep the answers they have.
+     */
+    public record Derived(String name) implements Key<Ast.Module> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Ast.Module> compute(Db db) {
+            Answer<Ast.Module> settling = db.ask(new Settling(name));
+            Answer<Map<String, Ast.Def>> declarations = db.ask(new DerivedDeclarations(name));
+            if (!settling.present() || !declarations.present()) {
+                return Answer.absent();
+            }
+            List<Ast.Def> defs = new ArrayList<>();
+            for (Ast.Def def : settling.value().defs()) {
+                Ast.Def came = declarations.value().get(def.name());
+                if (came == null) {
+                    return Answer.absent();
+                }
+                defs.add(came);
+            }
+            Ast.Module m = settling.value();
+            return Answer.of(new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+                    defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
+                    m.exampleFileTarget(), m.pos()));
         }
     }
 
