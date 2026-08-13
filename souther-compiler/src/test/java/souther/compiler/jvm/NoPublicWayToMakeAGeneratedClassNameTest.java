@@ -55,16 +55,21 @@ class NoPublicWayToMakeAGeneratedClassNameTest {
         assertEquals(List.of(GeneratedClass.class), List.of(nameOf.getParameterTypes()));
     }
 
-    /** And a name it hands back cannot be taken apart into the pieces it was built from — those are
-     *  what a caller finishes by hand, and finishing by hand is the defect. */
+    /**
+     * And a name it hands back cannot be taken apart into the pieces it was built from — those are
+     * what a caller finishes by hand, and finishing by hand is the defect.
+     *
+     * <p>A whole answer to another question is not a piece of one: where a class of this name is
+     * written is complete on its own, and a caller holding it has nothing left to finish.
+     */
     @Test
     void andANameHandsBackNoPieceOfItself() {
         for (Method m : JvmClassName.class.getMethods()) {
             if (m.getDeclaringClass() != JvmClassName.class) {
                 continue;
             }
-            assertTrue(List.of("binaryName", "classDesc", "is", "equals", "hashCode", "toString")
-                            .contains(m.getName()),
+            assertTrue(List.of("binaryName", "classDesc", "classFile", "is",
+                            "equals", "hashCode", "toString").contains(m.getName()),
                     "a public member of a name that is not the whole name: " + m.getName());
         }
     }

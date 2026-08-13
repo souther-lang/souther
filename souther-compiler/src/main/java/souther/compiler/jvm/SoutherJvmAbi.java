@@ -1,5 +1,7 @@
 package souther.compiler.jvm;
 
+import souther.compiler.types.TypeName;
+
 /**
  * How a {@link GeneratedClass} is spelled on the JVM. The one place that maps a Souther identity to a
  * physical one, and the one place the suffixes and the capitalization exist.
@@ -38,6 +40,28 @@ public final class SoutherJvmAbi {
             case GeneratedClass.Helpers h -> h.module() + ".$Fns";
             case GeneratedClass.Lambda l -> l.module() + ".$Fn" + l.id();
         });
+    }
+
+    /**
+     * The declared type a class of this binary name would be the value class of, or null where the
+     * name is not one a declaration could have produced.
+     *
+     * <p>The inverse of {@code nameOf(new GeneratedClass.Value(type))}, and the only inverse there
+     * can be: a value class is the one kind whose name is its identity, so it is the one kind that
+     * reads back. Every other kind either adds something to a name or is spelled the same as a kind
+     * that does — {@code demo.Quote} is a data {@code Quote} and it is also the interface of a
+     * behavior {@code quote} — so a name alone does not say which, and asking is the only way.
+     *
+     * <p>An answer is a type this ABI <em>would</em> name that way, not evidence that anything
+     * declared it. A caller that needs the declaration checks its own scope, which is where that
+     * question is answered.
+     */
+    public static TypeName declaredTypeOf(String binaryName) {
+        int dot = binaryName.lastIndexOf('.');
+        if (dot <= 0 || dot == binaryName.length() - 1) {
+            return null;
+        }
+        return new TypeName(binaryName.substring(0, dot), binaryName.substring(dot + 1));
     }
 
     /**

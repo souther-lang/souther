@@ -97,6 +97,41 @@ class SoutherJvmAbiTest {
         assertEquals(kinds.size(), stated.size());
     }
 
+    /** Where a class of a given name is written, which is the JVM's rule and is stated here for the
+     *  same reason the rest is: four readers wanted it and each wrote it out. */
+    @Test
+    void andAClassOfThatNameIsWrittenWhereTheAbiSaysItIs() {
+        assertEquals("shop/Order.class", JvmClassName.classFile("shop.Order"));
+        assertEquals("shop/FindOrder$Impl.class",
+                SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorImpl("shop", "findOrder")).classFile());
+        assertEquals("在庫/引き当てる$Impl.class",
+                SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorImpl("在庫", "引き当てる")).classFile());
+        assertEquals("Loose.class", JvmClassName.classFile("Loose"));
+    }
+
+    /**
+     * The one kind that reads back out of a name, and what it does not claim.
+     *
+     * <p>A value class is its type, so the two directions are the same rule and it is written once.
+     * The answer is a type this ABI would name that way — {@code demo.Quote} reads as the data
+     * {@code Quote} whether or not anything declared it, and whether or not what is really there is
+     * the interface of a behavior {@code quote}. That is the whole of what a name can say.
+     */
+    @Test
+    void andAValueClassReadsBackAsTheTypeItIs() {
+        for (TypeName type : List.of(ORDER, new TypeName("在庫", "金額"),
+                new TypeName("a.b.c", "Deep"), TypeName.primitive("Int"))) {
+            assertEquals(type, SoutherJvmAbi.declaredTypeOf(
+                    SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
+        }
+        assertEquals(new TypeName("shop", "FindOrder$Impl"),
+                SoutherJvmAbi.declaredTypeOf("shop.FindOrder$Impl"),
+                "it answers for the name, not for what was emitted under it");
+        assertEquals(null, SoutherJvmAbi.declaredTypeOf("Loose"), "a name with no module names no type");
+        assertEquals(null, SoutherJvmAbi.declaredTypeOf(".Foo"));
+        assertEquals(null, SoutherJvmAbi.declaredTypeOf("demo."));
+    }
+
     /** And every decoder does, which is the one branch that is a value rather than a kind. */
     @Test
     void andEveryDecoderHasARow() {

@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -588,13 +589,8 @@ final class NeutralForm {
         if (live == null) {
             return null;
         }
-        String binary = live.getClass().getName();
-        int dot = binary.lastIndexOf('.');
-        if (dot < 0) {
-            return null;
-        }
-        TypeName named = new TypeName(binary.substring(0, dot), binary.substring(dot + 1));
-        return symbols.contains(named) ? named : null;
+        TypeName named = SoutherJvmAbi.declaredTypeOf(live.getClass().getName());
+        return named != null && symbols.contains(named) ? named : null;
     }
 
     /** What a report quotes a live value's class as. Its own name, and not the type's identity —

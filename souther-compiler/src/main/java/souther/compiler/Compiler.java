@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.jvm.JvmClassName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -528,7 +529,7 @@ public final class Compiler {
     /** Compiles source and writes each generated class under {@code outDir}. */
     public static void compileToDir(String source, Path outDir) throws IOException {
         for (Map.Entry<String, byte[]> entry : compile(source).entrySet()) {
-            Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");
+            Path file = outDir.resolve(JvmClassName.classFile(entry.getKey()));
             Files.createDirectories(file.getParent());
             Files.write(file, entry.getValue());
         }

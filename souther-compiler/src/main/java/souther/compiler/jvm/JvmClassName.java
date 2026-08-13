@@ -40,6 +40,25 @@ public final class JvmClassName {
         return ClassDesc.of(binaryName);
     }
 
+    /**
+     * Where a class of this name is written, and read back: {@code demo/Foo.class}, relative to
+     * whatever holds it — an output directory, a jar, a class path root.
+     *
+     * <p>A path is not an identity and the rule is the JVM's rather than this compiler's, which is
+     * why it is a function of a name here rather than a kind of {@link GeneratedClass}. It is still a
+     * rule with one place to live: written out at each of the four readers that wanted it, a compiler
+     * that ever needs to write a class somewhere else has four places to look and no way to know it
+     * found them all.
+     */
+    public static String classFile(String binaryName) {
+        return binaryName.replace('.', '/') + ".class";
+    }
+
+    /** @see #classFile(String) */
+    public String classFile() {
+        return classFile(binaryName);
+    }
+
     /** Whether {@code c} is the class of this name. The question a reader of a run asks — which is
      *  asked of the name the ABI decided, not of a spelling the reader assembled. */
     public boolean is(Class<?> c) {
