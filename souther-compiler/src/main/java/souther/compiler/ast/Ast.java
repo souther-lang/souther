@@ -175,21 +175,29 @@ public interface Ast {
      * one name too, so neither says what the author typed. A report asks {@link WrittenName#quoted()}
      * and underlines {@link WrittenName#region()}.
      */
-    record Name(WrittenName name, TypeName denotes) implements Ast {
+    sealed interface Name extends Ast permits Name.Written, Name.Denoting, Name.Unanswered {
+
+        /** The name, and the occurrence of it that was read. */
+        WrittenName name();
 
         /** A name as the parser read it, before the resolve pass has said what it denotes. Only the
          * parser writes one: every other producer knows what it means and says so. The spelling is
          * the source's, not one a caller canonicalized on the way in — {@link WrittenName} is what
          * canonicalizes, so the name and the characters it was written with stay one value. */
-        public static Name written(String spelling, SourcePos pos) {
-            return new Name(WrittenName.of(spelling, pos), null);
+        static Name written(String spelling, SourcePos pos) {
+            return new Written(WrittenName.of(spelling, pos));
+        }
+
+        /** The same, off an occurrence the parser has already read. */
+        static Name written(WrittenName name) {
+            return new Written(name);
         }
 
         /** A name a pass synthesized, already knowing what it denotes. It is written nowhere;
          * {@code pos} is what a complaint about it points at. The spelling is the declaration's own,
          * which is what a reference internal to a module reaches it by. */
-        public static Name resolved(TypeName denotes, SourcePos pos) {
-            return new Name(WrittenName.synthetic(denotes.name(), pos), denotes);
+        static Name resolved(TypeName denotes, SourcePos pos) {
+            return new Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
         }
 
         /**
@@ -199,28 +207,98 @@ public interface Ast {
          * every module writes, so a name synthesized with it quotes a spelling the reader cannot
          * write. What it denotes is the same either way.
          */
-        public static Name reached(TypeReachName.Written type, SourcePos pos) {
-            return new Name(WrittenName.synthetic(type.rendered(), pos), type.denotes());
+        static Name reached(TypeReachName.Written type, SourcePos pos) {
+            return new Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
-        public String written() {
-            return name.canonical();
+        default String written() {
+            return name().canonical();
         }
 
         /** Where the name is written, or where a synthesized one is anchored. */
-        public SourcePos pos() {
-            return name.pos();
+        default SourcePos pos() {
+            return name().pos();
+        }
+
+        /**
+         * The declaration this names, for a reader that is asking which one it is.
+         *
+         * <p>A name still {@link Written} here is a pass reading it before resolution answered it,
+         * and an {@link Unanswered} one is a name resolution read and found nothing for — whose
+         * declaration {@code Names.Unbuilt} settles, so nothing downstream of that is handed one.
+         * Either is a fault in the compiler rather than in the source, so both are refused. This is
+         * the one place that says so.
+         */
+        default TypeName denotes() {
+            if (this instanceof Denoting denoting) {
+                return denoting.type();
+            }
+            throw new IllegalStateException("`" + written() + "` at " + pos()
+                    + (this instanceof Unanswered
+                            ? " denotes nothing and was read as though it did"
+                            : " was read as a declaration before it was resolved"));
         }
 
         /** The same name, resolved to what it denotes. */
-        public Name denoting(TypeName resolved) {
-            return new Name(name, resolved);
+        default Name denoting(TypeName resolved) {
+            return new Denoting(name(), resolved);
         }
 
-        @Override
-        public String toString() {
-            return written();
+        /** The same name, read and found to name nothing. */
+        default Name unanswered() {
+            return new Unanswered(name());
+        }
+
+        /** A name as the parser read it. */
+        record Written(WrittenName name) implements Name {
+
+            @Override
+            public String toString() {
+                return written();
+            }
+        }
+
+        /**
+         * A name resolution answered, and the declaration it names.
+         *
+         * <p>The declaration is one that is there. A name nothing declares is {@link Unanswered},
+         * which is a different type — so "this has been resolved" and "this names something" are
+         * not two readings of one value, which is what a stand-in identity made them.
+         */
+        record Denoting(WrittenName name, TypeName type) implements Name {
+
+            public Denoting {
+                if (type == null) {
+                    throw new IllegalArgumentException("a name that denotes names a declaration: "
+                            + name);
+                }
+                if (type.isUnresolved()) {
+                    throw new IllegalArgumentException("`" + name.canonical()
+                            + "` denotes nothing, and a name that denotes nothing is Unanswered");
+                }
+            }
+
+            @Override
+            public String toString() {
+                return written();
+            }
+        }
+
+        /**
+         * A name resolution read and found no declaration for.
+         *
+         * <p>Reported where it is written, and the declaration it is in has no meaning to work out
+         * — which {@code Names.Unbuilt} is what settles, so the rest of the module goes on being
+         * answered. Not {@link Written}: that one is a name nothing has looked at yet, and the two
+         * were one value for as long as a missing identity stood for both.
+         */
+        record Unanswered(WrittenName name) implements Name {
+
+            @Override
+            public String toString() {
+                return written();
+            }
         }
     }
 

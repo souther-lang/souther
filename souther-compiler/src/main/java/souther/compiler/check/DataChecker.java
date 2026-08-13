@@ -63,7 +63,8 @@ public final class DataChecker {
     }
 
     private static void collectConstChecks(Ast.Expr e, Symbols symbols, List<ConstCheck> out) {
-        if (e instanceof Ast.NewData nd && symbols.get(nd.typeName().denotes()) instanceof Ast.Data nt
+        if (e instanceof Ast.NewData nd && !(nd.typeName() instanceof Ast.Name.Unanswered)
+                && symbols.get(nd.typeName().denotes()) instanceof Ast.Data nt
                 && nt.newtype() && isInvariantBearing(nd.typeName().denotes(), symbols)) {
             CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
                     out.add(new ConstCheck(nd.typeName().written(), nd.typeName().denotes(), v, nd.pos())));
@@ -290,6 +291,12 @@ public final class DataChecker {
     static void rejectDuplicateTypes(List<Ast.Name> names, String where, SourcePos pos) {
         Set<TypeName> seen = new HashSet<>();
         for (Ast.Name n : names) {
+            // A name nothing declares denotes no type, so there is no type here for another to be
+            // the same as. It was reported where it is written; calling it a duplicate as well
+            // would be a second report about the one mistake.
+            if (n instanceof Ast.Name.Unanswered) {
+                continue;
+            }
             if (!seen.add(n.denotes())) {
                 throw duplicate(n.written(), where, pos);
             }

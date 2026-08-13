@@ -238,7 +238,7 @@ public final class Elaborator {
             case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Ast.NewData nd -> {
                 Ast.Name built = nd.typeName();
-                if (built.denotes().isUnresolved()) {
+                if (built instanceof Ast.Name.Unanswered) {
                     throw new Unanswerable(nd.pos());
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {

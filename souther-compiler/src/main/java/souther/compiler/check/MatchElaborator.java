@@ -85,7 +85,7 @@ public final class MatchElaborator {
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
             for (Ast.Name written : c.caseTypes()) {
-                TypeName caseName = written.denotes();
+                TypeName caseName = names(written);
                 if (!cases.contains(caseName)) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
@@ -96,7 +96,7 @@ public final class MatchElaborator {
                 }
             }
             Type bindType = c.caseTypes().size() == 1
-                    ? caseBindType(c.caseTypes().get(0).denotes()) : scrutinee;
+                    ? caseBindType(names(c.caseTypes().get(0))) : scrutinee;
             if (c.unwrapAsserts() != null) {
                 if (c.caseTypes().size() != 1) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOrPatternOpensNothing()).build());
@@ -138,21 +138,22 @@ public final class MatchElaborator {
             }
             Ast.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
+            TypeName armName = names(arm);
             Type bind;
-            if (TypeName.SOME.equals(arm.denotes())) {
+            if (TypeName.SOME.equals(armName)) {
                 bind = element;
-            } else if (TypeName.NONE.equals(arm.denotes())) {
+            } else if (TypeName.NONE.equals(armName)) {
                 bind = null;
             } else {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
             if (c.unwrapAsserts() != null) {
-                if (!TypeName.SOME.equals(arm.denotes())) {
+                if (!TypeName.SOME.equals(armName)) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.TheCaseHasNoValueToOpen(caseType)).build());
                 }
                 checkOptionUnwrapAsserts(c, element, ctx.symbols());
             }
-            if (!covered.add(arm.denotes())) {
+            if (!covered.add(armName)) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.MatchedByMoreThanOneCase(caseType)).build());
             }
             Core body = Elaborator.liftIntoOption(
@@ -177,9 +178,25 @@ public final class MatchElaborator {
     static List<TypeName> denoted(List<Ast.Name> names) {
         List<TypeName> out = new ArrayList<>();
         for (Ast.Name n : names) {
-            out.add(n.denotes());
+            out.add(names(n));
         }
         return out;
+    }
+
+    /**
+     * The case an arm names, or the abandonment of the definition it is written in where nothing
+     * declares it.
+     *
+     * <p>Reported where it is written. What follows from it — that the arm is not a case of what is
+     * matched, that it opens a type other than the one under it, that the match does not cover its
+     * cases — is that one mistake seen from another angle, which is what {@link Unanswerable} is
+     * for.
+     */
+    private static TypeName names(Ast.Name arm) {
+        if (arm instanceof Ast.Name.Unanswered) {
+            throw new Unanswerable(arm.pos());
+        }
+        return arm.denotes();
     }
 
     /** The type a match case binds. A primitive-named case (e.g. {@code Int} in {@code Int |
@@ -219,7 +236,7 @@ public final class MatchElaborator {
         Ast.Name first = layers.get(0);
         // the layer is compared as a type: `Some(billing.金額(v))` opens the same newtype an
         // imported bare `金額` names
-        if (!(element instanceof Type.Ref r) || !r.name().equals(first.denotes())) {
+        if (!(element instanceof Type.Ref r) || !r.name().equals(names(first))) {
             String elementName = element instanceof Type.Ref r2 ? r2.name().name() : Type.show(element);
             throw CompileException.of(Diagnostic.at(c.pos())
                     .say(new MatchMessage.TheNewtypeWrapsAnotherType("Some", elementName,
@@ -236,7 +253,7 @@ public final class MatchElaborator {
                                   boolean firstOpensTheCase) {
         for (int i = 0; i < opened.size(); i++) {
             String name = opened.get(i).written();
-            TypeName layer = opened.get(i).denotes();
+            TypeName layer = names(opened.get(i));
             Type inner = TypeOps.newtypeInner(layer, symbols);
             if (inner == null) {
                 Diagnostic.Builder d = Diagnostic.at(c.pos())
@@ -250,7 +267,7 @@ public final class MatchElaborator {
                 Ast.Name next = opened.get(i + 1);
                 // the layer a pattern claims is compared as a type, so an inner newtype named
                 // through its module opens the same one an imported bare name does
-                if (!(inner instanceof Type.Ref ir) || !ir.name().equals(next.denotes())) {
+                if (!(inner instanceof Type.Ref ir) || !ir.name().equals(names(next))) {
                     String innerName = inner instanceof Type.Ref r ? r.name().name() : Type.show(inner);
                     throw CompileException.of(Diagnostic.at(c.pos())
                             .say(new MatchMessage.TheNewtypeWrapsAnotherType(name, innerName,

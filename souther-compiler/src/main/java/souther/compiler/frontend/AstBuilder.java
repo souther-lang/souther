@@ -291,7 +291,7 @@ public final class AstBuilder {
             for (SyntaxNode member : product.get().childNodes()) {
                 if (member.kind() == SyntaxKind.SPREAD_MEMBER) {
                     SyntaxToken included = identTokens(member).get(0);
-                    includes.add(new Ast.Name(nameOf(included), null));
+                    includes.add(Ast.Name.written(nameOf(included)));
                 } else if (member.kind() == SyntaxKind.FIELD) {
                     fields.add(field(member));
                 }
@@ -311,7 +311,7 @@ public final class AstBuilder {
         if (sum.isPresent()) {
             List<Ast.Name> cases = new ArrayList<>();
             for (SyntaxToken t : identTokens(sum.get())) {
-                cases.add(new Ast.Name(nameOf(t), null));
+                cases.add(Ast.Name.written(nameOf(t)));
             }
             return new Ast.SumData(declared, cases, Optional.empty(), Optional.empty(), pos);
         }
@@ -919,7 +919,7 @@ public final class AstBuilder {
 
     private Ast.Expr newData(SyntaxNode n) {
         SyntaxToken head = identTokens(n).get(0);
-        Ast.Name typeName = new Ast.Name(nameOf(head), null);
+        Ast.Name typeName = Ast.Name.written(nameOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
         List<Ast.Var> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
@@ -984,7 +984,7 @@ public final class AstBuilder {
             at[0]++;                              // .
             parts.add((SyntaxToken) es.get(at[0]++));
         }
-        return new Ast.Name(joined(parts), null);
+        return Ast.Name.written(joined(parts));
     }
 
     /** The comma-separated names of a {@code constructs}/{@code depends on} clause, each possibly
@@ -1363,7 +1363,7 @@ public final class AstBuilder {
                 Ast.Expr inner = new Ast.FieldAccess(Ast.Var.desugared(whole, pos), "value", pos);
                 Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos, held);
                 yield Ast.LetIn.opening(whole, value,
-                        new Ast.Name(qualifiedNameOf(pat), null), body, pos, held);
+                        Ast.Name.written(qualifiedNameOf(pat)), body, pos, held);
             }
             case PATTERN_RECORD -> {
                 String whole = "$r" + (patternCounter++);
@@ -1708,7 +1708,7 @@ public final class AstBuilder {
      * binding out of something the author wrote: the token carries both halves, so they cannot be
      * paired wrongly. */
     private Ast.Binder binderOf(SyntaxToken token) {
-        return Ast.Binder.of(new Ast.Name(nameOf(token), null));
+        return Ast.Binder.of(Ast.Name.written(nameOf(token)));
     }
 
 

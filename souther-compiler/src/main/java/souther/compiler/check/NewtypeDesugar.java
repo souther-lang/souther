@@ -108,7 +108,7 @@ public final class NewtypeDesugar {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
                     yield new Ast.NewData(
-                            new Ast.Name(call.name(), built),
+                            new Ast.Name.Denoting(call.name(), built),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), ConstructionOrigin.own(), call.pos(), call.region());
                 }

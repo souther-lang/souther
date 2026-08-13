@@ -458,7 +458,7 @@ public final class Resolve {
     private List<Ast.Name> sumCases(Ast.SumData s) {
         List<Ast.Name> out = new ArrayList<>();
         for (Ast.Name c : s.cases()) {
-            if (c.denotes() != null) {
+            if (!(c instanceof Ast.Name.Written)) {
                 out.add(c);
                 continue;
             }
@@ -466,6 +466,10 @@ public final class Resolve {
             if (denoted == null) {
                 throw CompileException.of(Diagnostic
                                 .at(s.pos()).say(new BehaviorMessage.UnknownCaseInASum(c.written(), s.name())).build());
+            }
+            if (denoted.isUnresolved()) {
+                out.add(answered(c.unanswered()));
+                continue;
             }
             // Recorded like any other written name. A case is a name this module wrote and this pass
             // answered, so leaving it out made it a use nothing could see — an editor asked about it
@@ -1095,14 +1099,14 @@ public final class Resolve {
 
     /** A name that must denote a declared type. */
     private Ast.Name type(Ast.Name n) {
-        if (n.denotes() != null) {
+        if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
         TypeName denoted = symbols.resolve(n.name());
         if (denoted == null) {
-            return answered(n.denoting(nothingDenotes(n)));
+            return answered(nothingDenotes(n));
         }
-        return answered(n.denoting(denoted));
+        return answered(standingFor(n, denoted));
     }
 
     /** The names a {@code match} arm may write: a declared case, a primitive heading a union
@@ -1117,7 +1121,7 @@ public final class Resolve {
     }
 
     private Ast.Name caseName(Ast.Name n) {
-        if (n.denotes() != null) {
+        if (!(n instanceof Ast.Name.Written)) {
             return n;
         }
         TypeName denoted = symbols.resolveCase(n.name());
@@ -1125,9 +1129,9 @@ public final class Resolve {
             denoted = TypeName.optionCase(n.written());
         }
         if (denoted == null) {
-            return answered(n.denoting(nothingDenotes(n)));
+            return answered(nothingDenotes(n));
         }
-        return answered(n.denoting(denoted));
+        return answered(standingFor(n, denoted));
     }
 
     /**
@@ -1147,17 +1151,27 @@ public final class Resolve {
         }
     }
 
-    /** Records that {@code n} denotes nothing, and gives it the name that says so. */
-    private TypeName nothingDenotes(Ast.Name n) {
+    /** Reports that nothing declares {@code n}, and hands back the name that says so. */
+    private Ast.Name nothingDenotes(Ast.Name n) {
         unresolved.add(TypeOps.unknownType(n.name(), symbols));
-        return TypeName.unresolved(n.written());
+        return n.unanswered();
+    }
+
+    /**
+     * {@code n} against what the scope answered with, which is not always a declaration: a name an
+     * import line could not bring in is in scope standing for nothing, so that a use of it takes the
+     * error type rather than being reported as an unknown name at every use. The import line is
+     * where that was reported, so nothing more is said here.
+     */
+    private Ast.Name standingFor(Ast.Name n, TypeName denoted) {
+        return denoted.isUnresolved() ? n.unanswered() : n.denoting(denoted);
     }
 
     /** Records what a name was answered with, and hands it back. A name with no position was
      * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
      * name nothing answered is an absence rather than a declaration to record. */
     private Ast.Name answered(Ast.Name n) {
-        if (n.denotes().isUnresolved()) {
+        if (n instanceof Ast.Name.Unanswered) {
             failed++;
         } else if (n.pos() != null) {
             denotations.add(new Denotation(n.name(), n.denotes()));
