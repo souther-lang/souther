@@ -64,6 +64,11 @@ class ANameGoesBackOnTheWayItCameOffTest {
         return symbols.own(name);
     }
 
+    /** The same name as this module writes it, which is what a row is written with. */
+    private souther.compiler.types.TypeReachName.Written reached(String name) {
+        return (souther.compiler.types.TypeReachName.Written) symbols.reach(named(name));
+    }
+
     private PartitionClass classOf(String type, String id) {
         return PartitionClasses.of(Type.ref(named(type)), symbols).stream()
                 .filter(each -> each.id().equals(id)).findFirst().orElseThrow();
@@ -104,9 +109,9 @@ class ANameGoesBackOnTheWayItCameOffTest {
                 classOf("DecisionNN", "Approved").representatives().evaluate());
 
         assertEquals(named("Approved"), compose.through());
-        assertEquals(List.of(named("DecisionNN"), named("DecisionN")), compose.worn());
+        assertEquals(List.of(reached("DecisionNN"), reached("DecisionN")), compose.worn());
         assertEquals("DecisionNN(DecisionN(Approved { id = 1 }))",
-                compose.written(FixtureTemplate.record(named("Approved"),
+                compose.written(FixtureTemplate.record(reached("Approved"),
                         Map.of("id", FixtureTemplate.integer(1)))).text());
     }
 

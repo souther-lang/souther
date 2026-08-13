@@ -126,7 +126,8 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
     /** A row writes the case, which is what naming it builds. */
     @Test
     void aRowAtAnOrdinalCarriesTheCaseAndNotItsPlace() {
-        FixtureTemplate written = FixtureTemplate.on(carrier(), Count.of(1));
+        FixtureTemplate written = FixtureTemplate.on(carrier(), Count.of(1),
+                souther.compiler.types.TypeReachName.Bare::new);
 
         assertEquals("Qualified", written.text());
         assertInstanceOf(souther.compiler.ast.Ast.Var.class, written.value(),

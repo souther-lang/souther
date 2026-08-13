@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeReachName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -397,19 +398,26 @@ final class Witnesses {
             return null;
         }
         return wrapped(type, FixtureTemplate.on(
-                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at), symbols);
+                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, symbols::reach), symbols);
     }
 
-    /** The value under every name the position wears, which is how it is written where the position
-     * declares a newtype rather than what the newtype carries. */
+    /**
+     * The value under every name the position wears, which is how it is written where the position
+     * declares a newtype rather than what the newtype carries.
+     *
+     * <p>Null where {@code bare} is, and where a name the position wears is one this module cannot
+     * write: a value goes under the names as it is written, so a name there is nothing here reaches
+     * leaves no way of writing the value at all.
+     */
     static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
-                || !data.newtype()) {
+        if (bare == null || !(type instanceof Type.Ref ref)
+                || !(symbols.get(ref.name()) instanceof Ast.Data data) || !data.newtype()) {
             return bare;
         }
         TypeName name = ref.name();
-        return FixtureTemplate.newtype(name,
-                wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols));
+        FixtureTemplate inner = wrapped(TypeOps.newtypeInner(name, symbols), bare, symbols);
+        return inner != null && symbols.reach(name) instanceof TypeReachName.Written written
+                ? FixtureTemplate.newtype(written, inner) : null;
     }
 
     private Witnesses() {}
