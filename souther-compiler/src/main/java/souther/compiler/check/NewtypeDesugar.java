@@ -98,7 +98,8 @@ public final class NewtypeDesugar {
                 // were resolved. Asking the type namespace again here would read a binding of the
                 // same spelling as the type it shadows, and rewrite an application of it into a
                 // construction — both of which compile, so the meaning would change in silence.
-                TypeName built = call.denotes() instanceof ValueName.OfType named ? named.type() : null;
+                TypeName built = call.function() instanceof Ast.Var.Denoting
+                        && call.denotes() instanceof ValueName.OfType named ? named.type() : null;
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(Diagnostic

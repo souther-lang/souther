@@ -102,8 +102,7 @@ class CallElaboratorNoCalleeTest {
     void anUnexpandedCallIsAnInternalError() {
         for (ValueName denotes : List.of(
                 new ValueName.Helper("m", "f"),
-                new ValueName.Stdlib("List", "map"),
-                new ValueName.Unresolved("f"))) {
+                new ValueName.Stdlib("List", "map"))) {
             RuntimeException e = answerFor(denotes);
             assertInstanceOf(IllegalStateException.class, e, denotes.toString());
             assertTrue(e.getMessage().contains("7:3"), () -> "says where: " + e.getMessage());

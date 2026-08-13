@@ -736,21 +736,26 @@ public final class Resolve {
      * type name is.
      */
     private Ast.Var name(Ast.Var written, Bindings bound) {
-        return written.denotes() != null ? written
-                : reached(written, bound);
+        return written instanceof Ast.Var.Written ? reached(written, bound) : written;
     }
 
     /** An application of a name, with what the name denotes and how this module reaches it answered
      * here — the same pair, from the same place, as a name standing on its own. */
     private Ast.Expr applied(Ast.Apply call, Bindings bound) {
-        ValueName denotes = answered(call.name(), calledName(call, bound));
+        ValueName denotes = calledName(call, bound);
         // Answered rather than rebuilt: what the callee means is settled here and where it is
         // written is not this pass's to decide. Building one from the name would take its extent
         // from the characters that spell it, which is short of what a parenthesized callee covers.
-        Ast.Var name = call.function() instanceof Ast.Var applied
-                ? applied.denoting(denotes, ReachName.of(denotes, call.written(), values.module()))
-                : new Ast.Var(call.name(), denotes,
-                        ReachName.of(denotes, call.written(), values.module()));
+        Ast.Var written = call.function() instanceof Ast.Var applied ? applied
+                : Ast.Var.written(call.name());
+        Ast.Var name;
+        if (denotes == null) {
+            name = written.unanswered();
+        } else {
+            answered(call.name(), denotes);
+            name = written.denoting(denotes,
+                    ReachName.of(denotes, call.written(), values.module()));
+        }
         return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos(),
                 call.region());
     }
@@ -764,7 +769,11 @@ public final class Resolve {
      * this carries the answer to avoid.
      */
     private Ast.Var reached(Ast.Var v, Bindings bound) {
-        ValueName denotes = answered(v.written(), valueName(v.written(), bound));
+        ValueName denotes = valueName(v.written(), bound);
+        if (denotes == null) {
+            return v.unanswered();
+        }
+        answered(v.written(), denotes);
         return v.denoting(denotes, ReachName.of(denotes, v.name(), values.module()));
     }
 
@@ -892,14 +901,15 @@ public final class Resolve {
      */
     private Ast.Var qualifiedName(Ast.FieldAccess fa, boolean applied, Bindings bound) {
         Ast.Var root = rootName(fa);
-        if (root == null || root.denotes() != null || bound.binderOf(root.name()) != null) {
+        if (root == null || !(root instanceof Ast.Var.Written)
+                || bound.binderOf(root.name()) != null) {
             return null;
         }
         WrittenName written = dottedName(fa);
         ValueName denotes = lookup(written, applied, bound);
         if (denotes != null) {
             ValueName resolved = answered(written, denotes);
-            return new Ast.Var(written, resolved,
+            return Ast.Var.denoting(written, resolved,
                     ReachName.of(resolved, written.canonical(), values.module()));
         }
         return unknownMember(fa, written, applied, bound);
@@ -922,10 +932,8 @@ public final class Resolve {
         if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
         }
-        CompileException why = unknownIdentifier(written, bound);
-        ValueName resolved = answered(written, nothing(written.canonical(), why));
-        return new Ast.Var(written, resolved,
-                ReachName.of(resolved, written.canonical(), values.module()));
+        nothing(unknownIdentifier(written, bound));
+        return new Ast.Var.Unanswered(written, written.region());
     }
 
     /** Whether {@code qualifier} names a namespace a member may be reached through: a
@@ -956,11 +964,10 @@ public final class Resolve {
         };
     }
 
-    /** What a name used as a value denotes, and the report for one that denotes nothing. */
+    /** What a name used as a value denotes, or null where nothing does — reported here. */
     private ValueName valueName(WrittenName written, Bindings bound) {
         ValueName denotes = lookup(written, false, bound);
-        return denotes != null ? denotes
-                : nothing(written.canonical(), unknownIdentifier(written, bound));
+        return denotes != null ? denotes : nothing(unknownIdentifier(written, bound));
     }
 
     /**
@@ -972,8 +979,7 @@ public final class Resolve {
      */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
         ValueName denotes = lookup(call.name(), true, bound);
-        return denotes != null ? denotes
-                : nothing(call.written(), unknownIdentifier(call.name(), bound));
+        return denotes != null ? denotes : nothing(unknownIdentifier(call.name(), bound));
     }
 
     /**
@@ -990,10 +996,6 @@ public final class Resolve {
      * there under a spelling nothing binds.
      */
     private ValueName answered(WrittenName written, ValueName denotes) {
-        if (denotes instanceof ValueName.Unresolved) {
-            failed++;
-            return denotes;
-        }
         if (written.pos() == null) {
             return denotes;
         }
@@ -1004,10 +1006,17 @@ public final class Resolve {
         return denotes;
     }
 
-    /** Records that a name in a body denotes nothing, and gives it the name that says so. */
-    private ValueName nothing(String written, CompileException why) {
+    /**
+     * Records that a name in a body denotes nothing, and answers with nothing.
+     *
+     * <p>The name that carries this is {@link Ast.Var.Unanswered}, built where the reference is:
+     * a stand-in identity handed back here would say a binding is there under a spelling nothing
+     * binds, and every reader below would have to know not to believe it.
+     */
+    private ValueName nothing(CompileException why) {
         unresolved.add(why);
-        return new ValueName.Unresolved(written);
+        failed++;
+        return null;
     }
 
     /** The names a body could have written where it wrote one nothing answers to. */

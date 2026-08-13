@@ -60,6 +60,9 @@ public final class SpecChecker {
             switch (b) {
                 case Ast.SpecBehavior spec -> {
                     for (Ast.Var req : spec.dependsOn()) {
+                        if (req.unresolved()) {
+                            continue;   // it names no behavior, so it is no edge of this graph
+                        }
                         if (names.contains(req.bare()) && !out.contains(req.bare())) {
                             out.add(req.bare());
                         }
@@ -75,6 +78,9 @@ public final class SpecChecker {
                 }
                 case Ast.PipeBehavior pipe -> {
                     for (Ast.Var stage : pipe.stages()) {
+                        if (stage.unresolved()) {
+                            continue;   // it names no behavior, so it is no edge of this graph
+                        }
                         if (names.contains(stage.bare()) && !out.contains(stage.bare())) {
                             out.add(stage.bare());
                         }
@@ -652,6 +658,9 @@ public final class SpecChecker {
             List<Ast.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
                     pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
+                if (stages.get(i).unresolved()) {
+                    continue;   // reported where it is written; it declares no arity to hold it to
+                }
                 String stage = stages.get(i).bare();
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
@@ -671,7 +680,8 @@ public final class SpecChecker {
     }
 
     private static void collectRequiredCalls(Ast.Expr e, Set<String> requiredNames, List<String> out) {
-        if (e instanceof Ast.Apply call && requiredNames.contains(call.reaches())
+        if (e instanceof Ast.Apply call && call.function() instanceof Ast.Var.Denoting
+                && requiredNames.contains(call.reaches())
                 && !out.contains(call.reaches())) {
             out.add(call.written());
         }

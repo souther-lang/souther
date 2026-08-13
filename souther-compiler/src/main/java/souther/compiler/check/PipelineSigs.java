@@ -104,7 +104,10 @@ public final class PipelineSigs {
                                     Map<String, List<Ast.Var>> pipeStages,
                                     List<Ast.Var> out, Set<String> inProgress, SourcePos pos) {
         for (Ast.Var s : stages) {
-            List<Ast.Var> sub = pipeStages.get(s.bare());
+            // A stage that names nothing was reported where it is written. It is no pipeline to
+            // splice in, and the composition it is part of is abandoned where its signature is
+            // asked for rather than here.
+            List<Ast.Var> sub = s.unresolved() ? null : pipeStages.get(s.bare());
             if (sub == null) {
                 out.add(s);
                 continue;

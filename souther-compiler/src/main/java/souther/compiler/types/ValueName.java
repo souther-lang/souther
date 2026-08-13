@@ -163,24 +163,4 @@ public sealed interface ValueName {
             return module + "." + name;
         }
     }
-
-    /**
-     * A name nothing denotes, keeping the spelling that was written.
-     *
-     * <p>Why it denotes nothing was reported where it was written, so a reader that meets one says
-     * nothing further: the definition resting on it is abandoned, and the definitions around it are
-     * checked as they would be without it. This is what {@link TypeName#unresolved} is for a type.
-     */
-    record Unresolved(String written) implements ValueName {
-
-        @Override
-        public String name() {
-            return written;
-        }
-
-        @Override
-        public String toString() {
-            return written;
-        }
-    }
 }

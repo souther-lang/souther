@@ -110,11 +110,10 @@ public sealed interface ReachName {
             case ValueName.Helper helper -> helper.module().equals(self)
                     ? new Bare(helper.name()) : new OfModule(helper.module(), helper.name());
             case ValueName.Stdlib library -> new OfLibrary(library);
-            // Each of these is reached by the name it is written with. A binding is named where it is
-            // bound, a behavior and a type by what this module calls them, and a name that denotes
-            // nothing keeps the spelling so that a report quotes what was written.
-            case ValueName.Local _, ValueName.Behavior _, ValueName.OfType _, ValueName.Builtin _,
-                    ValueName.Unresolved _ -> new Bare(written);
+            // Each of these is reached by the name it is written with: a binding is named where it
+            // is bound, and a behavior and a type by what this module calls them.
+            case ValueName.Local _, ValueName.Behavior _, ValueName.OfType _,
+                    ValueName.Builtin _ -> new Bare(written);
         };
     }
 

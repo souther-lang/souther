@@ -1024,7 +1024,10 @@ public final class Bodies {
         }
         Set<String> names = new HashSet<>();
         for (Ast.Var req : spec.value().dependsOn()) {
-            names.add(req.bare());
+            // Reported where it is written; it names no parameter for a body to be held to.
+            if (!req.unresolved()) {
+                names.add(req.bare());
+            }
         }
         return names;
     }

@@ -38,7 +38,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
      */
     @Test
     void aNameNothingHasAnsweredYetSaysOnlyWhatItIsWrittenAs() {
-        Ast.Var written = new Ast.Var("spin", POS);
+        Ast.Var written = Ast.Var.written("spin", POS);
 
         assertEquals("spin", written.name());
         assertThrows(IllegalStateException.class, written::bare);
@@ -54,9 +54,9 @@ class ANameAnsweredHalfwayIsRefusedTest {
     @Test
     void aNameAnsweredOnOneCountOnlyCannotBeBuilt() {
         IllegalArgumentException noReach = assertThrows(IllegalArgumentException.class,
-                () -> new Ast.Var(WrittenName.of("spin", POS), DECLARED, null));
+                () -> Ast.Var.denoting(WrittenName.of("spin", POS), DECLARED, null));
         IllegalArgumentException noDenotation = assertThrows(IllegalArgumentException.class,
-                () -> new Ast.Var(WrittenName.of("spin", POS), null,
+                () -> Ast.Var.denoting(WrittenName.of("spin", POS), null,
                         new ReachName.OfModule("demo", "spin")));
 
         assertEquals(true, noReach.getMessage().contains("spin"), noReach.getMessage());
@@ -89,7 +89,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
     /** Answered, it says both. */
     @Test
     void aResolvedNameSaysWhatItDenotesAndHowItIsReached() {
-        Ast.Var resolved = new Ast.Var(WrittenName.of("spin", POS), DECLARED,
+        Ast.Var resolved = Ast.Var.denoting(WrittenName.of("spin", POS), DECLARED,
                 new ReachName.OfModule("demo", "spin"));
 
         assertEquals("spin", resolved.bare());

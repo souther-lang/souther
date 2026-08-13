@@ -336,7 +336,8 @@ class CompilePostfixApplicationTest {
         SourcePos at = new SourcePos(1, 1);
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
         Ast.Apply lowered = new Ast.Apply(
-                new Ast.Var("$fn0", new ValueName.Local("$fn0", id), new ReachName.Bare("$fn0"), at),
+                Ast.Var.denoting("$fn0", new ValueName.Local("$fn0", id),
+                        new ReachName.Bare("$fn0"), at),
                 java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at, null);
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");

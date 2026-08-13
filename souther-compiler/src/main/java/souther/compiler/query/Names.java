@@ -300,7 +300,7 @@ public final class Names {
                 // The module is one this compilation has and could not read. What is wrong with it
                 // is reported on its own source; saying anything here sends the author to a file
                 // that is fine.
-                return reached(ref, new ValueName.Unresolved(written));
+                return ref.unanswered();
             }
             if (!declared.value().contains(bare)) {
                 return nothing(ref, unknown.report(ref, declared.value()));
@@ -316,7 +316,7 @@ public final class Names {
         private Ast.Var bare(Ast.Var ref, String written, Unknown unknown) {
             BehaviorsInScope.Of scope = db.ask(new BehaviorsInScope(m.name())).value();
             if (scope == null) {
-                return reached(ref, new ValueName.Unresolved(written));
+                return ref.unanswered();
             }
             ValueName.Behavior named = scope.byName().get(written);
             if (named != null) {
@@ -325,7 +325,7 @@ public final class Names {
             if (!scope.whole()) {
                 // An import that could not be followed may have been where this name came from.
                 // Whatever is wrong with that module is reported there.
-                return reached(ref, new ValueName.Unresolved(written));
+                return ref.unanswered();
             }
             return nothing(ref, unknown.report(ref, scope.byName().keySet()));
         }
@@ -357,7 +357,7 @@ public final class Names {
         /** Records why a name denotes nothing, and gives it the name that says so. */
         private Ast.Var nothing(Ast.Var ref, Report report) {
             reports.add(report);
-            return reached(ref, new ValueName.Unresolved(ref.name()));
+            return ref.unanswered();
         }
     }
 
@@ -1328,8 +1328,7 @@ public final class Names {
                 case ValueName.Helper h -> h.module();
                 case ValueName.Behavior b -> b.module();
                 case ValueName.Local l -> l.id().owner().module();
-                case ValueName.Stdlib _, ValueName.OfType _,
-                        ValueName.Builtin _, ValueName.Unresolved _ -> null;
+                case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _ -> null;
             };
         }
 

@@ -127,7 +127,7 @@ public final class ValueCycles {
         if (e == null) {
             return;
         }
-        if (e instanceof Ast.Var v && v.denotes() instanceof ValueName.Helper) {
+        if (e instanceof Ast.Var.Denoting v && v.denotes() instanceof ValueName.Helper) {
             Ast.FnDef d = reachable.get(v.reaches());
             if (d != null && d.params().isEmpty()) {
                 out.add(v.reaches());

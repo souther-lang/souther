@@ -406,7 +406,7 @@ public final class AstBuilder {
                     // one ident past the keyword is the `on` of `depends on`, which lexes as an
                     // ordinary identifier and is no part of the list
                     for (Ast.Name dep : dottedNames(clause, 1)) {
-                        dependsOn.add(new Ast.Var(dep.name(), null, null));
+                        dependsOn.add(Ast.Var.written(dep.name()));
                     }
                 }
             }
@@ -415,7 +415,7 @@ public final class AstBuilder {
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         List<Ast.Var> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
-            stages.add(new Ast.Var(qualifiedNameOf(st), null, null));
+            stages.add(Ast.Var.written(qualifiedNameOf(st)));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         return new Ast.PipeBehavior(declared, stages, declaredOut, pos);
@@ -665,7 +665,7 @@ public final class AstBuilder {
     private Ast.Expr expr(SyntaxNode n) {
         return switch (n.kind()) {
             case LITERAL_EXPR -> literal(n);
-            case VAR_EXPR -> new Ast.Var(nameOf(firstIdentToken(n)), null, null);
+            case VAR_EXPR -> Ast.Var.written(nameOf(firstIdentToken(n)));
             case FIELD_ACCESS -> fieldAccess(n);
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
@@ -930,10 +930,10 @@ public final class AstBuilder {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
                 List<SyntaxToken> path = identTokens(c);
                 if (path.size() == 1) {
-                    spreads.add(new Ast.Var(nameOf(path.get(0)), null, null));
+                    spreads.add(Ast.Var.written(nameOf(path.get(0))));
                 } else {
                     String bound = "$s" + (spreadCounter++);
-                    Ast.Expr value = new Ast.Var(nameOf(path.get(0)), null, null);
+                    Ast.Expr value = Ast.Var.written(nameOf(path.get(0)));
                     for (int i = 1; i < path.size(); i++) {
                         value = new Ast.FieldAccess(value, nameOf(path.get(i)),
                                 posOf(path.get(i)),
@@ -949,7 +949,7 @@ public final class AstBuilder {
                 WrittenName field = nameOf(firstIdentToken(c));
                 Optional<SyntaxNode> value = firstExprChildOpt(c);
                 // shorthand `field` means `field = field`, and the one name is both
-                Ast.Expr v = value.isPresent() ? expr(value.get()) : new Ast.Var(field, null, null);
+                Ast.Expr v = value.isPresent() ? expr(value.get()) : Ast.Var.written(field);
                 inits.add(new Ast.FieldInit(field, v));
             }
         }

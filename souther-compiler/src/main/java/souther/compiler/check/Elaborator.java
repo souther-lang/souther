@@ -198,9 +198,12 @@ public final class Elaborator {
             // What the name is was answered when the module's names were resolved; what is left here
             // is its type. A binding is looked up, a unit data is its own value (spec §unit-data), and
             // anything else is not a value — reported below under the name that was written.
+            // A name nothing answered has no meaning to work out, and the definition it is in has
+            // none either: reported where it is written, and abandoned here.
+            case Ast.Var.Unanswered v -> throw new Unanswerable(v.pos());
+            case Ast.Var.Written v -> throw new IllegalStateException(
+                    "`" + v.name() + "` reached the check unresolved, at " + v.pos());
             case Ast.Var v -> switch (v.denotes()) {
-                case null -> throw new IllegalStateException(
-                        "`" + v.name() + "` reached the check unresolved, at " + v.pos());
                 // A binding with no type here is not a naming question: an inference probe types a
                 // body before the binding it asks about has one, and reads the report to find out.
                 case ValueName.Local local when env.typeOf(local.id()) != null ->
@@ -1392,7 +1395,7 @@ public final class Elaborator {
      * an optional is made.
      */
     private static RuntimeException notAValue(Ast.Var v, Scope env) {
-        if (v.denotes() instanceof ValueName.Unresolved) {
+        if (v instanceof Ast.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
             return new Unanswerable(v.pos());
         }

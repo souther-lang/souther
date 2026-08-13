@@ -121,6 +121,10 @@ public final class CallElaborator {
 
     static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
+        if (call.function() instanceof Ast.Var.Unanswered) {
+            // reported where the name was written; this definition has no meaning to work out
+            throw new Unanswerable(call.pos());
+        }
         // A call this representation said it keeps standing, asked before anything tries to expand or
         // resolve it: what it names is settled, and the only question left is its signature. Asked of
         // the representation and not of the operation — whether anything downstream has a rule about
@@ -370,8 +374,6 @@ public final class CallElaborator {
             // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
             case ValueName.Builtin b -> CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
-            // thrown out at the top of typeOfCall, before any of the work above
-            case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
             case null -> unelaborated("nothing", call);
         };
     }
@@ -477,13 +479,13 @@ public final class CallElaborator {
 
     static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
         List<Ast.Expr> args = call.args();
-        if (call.denotes() == null) {
-            throw new IllegalStateException(
-                    "`" + call.written() + "` reached the check unresolved, at " + call.pos());
-        }
-        if (call.denotes() instanceof ValueName.Unresolved) {
+        if (call.function() instanceof Ast.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
             throw new Unanswerable(call.pos());
+        }
+        if (call.denotes() == null) {
+            throw new IllegalStateException("`" + call.written()
+                    + "` applies something that is not a name, at " + call.pos());
         }
         boolean library = call.denotes() instanceof ValueName.Stdlib;
         Prelude.PreludeEntry entry = library ? Prelude.entry(call.reaches()) : null;

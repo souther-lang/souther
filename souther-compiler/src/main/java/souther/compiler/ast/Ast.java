@@ -1546,40 +1546,27 @@ public interface Ast {
      * substitute an expression for a name — the inliner — binds it ahead of the construction and
      * spreads the binding.
      *
-     * <p>A name that denotes nothing was reported where it was written and carries
-     * {@link ValueName.Unresolved}, so a reader downstream never has a spelling to match and never
-     * repeats the report.
+     * <p>The three forms are the three states a name is in, as {@link Name}'s are: read by the
+     * parser and nothing more, answered with what it names, or read by resolution and found to name
+     * nothing — which is an answer, and was reported where the name is written.
      */
-    record Var(WrittenName written, ValueName denotes, ReachName reachedAs,
-               Region region) implements Expr {
+    sealed interface Var extends Expr permits Var.Written, Var.Denoting, Var.Unanswered {
+
+        /** The name, and the occurrence of it that was read. */
+        WrittenName written();
+
+        /** The stretch of source the expression was written over. */
+        @Override
+        Region region();
 
         /**
-         * A name that has been resolved has both answers or neither.
-         *
-         * <p>Both, or neither: a name the parser read is unanswered on both counts, and a name
-         * resolution answered is answered on both. Nothing in between is a state — the pair comes
-         * from one pass, which has both or has not run.
-         *
-         * <p>Refused rather than allowed to stand, because what a name reaches is asked of a table
-         * and a table answers a key it has not got with silence. A rewrite that carried the
-         * denotation across and dropped the reach name would leave a reference that resolves to a
-         * declaration and reaches nothing, and the first reader of it would read the spelling
-         * instead — which is what this pair was separated out to stop. The other half is the same
-         * defect facing the other way: a reach name beside no denotation is a key nothing says the
-         * meaning of, and {@link ReachName#of} is where one would have to come from.
-         *
-         * <p>The region is the expression's and the name's is {@code written}'s, and they part
-         * company only where the author wrapped the name in something the tree does not keep:
+         * The region is the expression's and the name's is {@code written}'s, and they part company
+         * only where the author wrapped the name in something the tree does not keep:
          * {@code (price)} is one expression written over nine characters and one name written over
          * five. So the one has to hold the other. A region that did not would be a claim that the
          * name is written somewhere this expression is not, which no source can produce.
          */
-        public Var {
-            if ((denotes == null) != (reachedAs == null)) {
-                throw new IllegalArgumentException("`" + written.canonical() + "` denotes "
-                        + denotes + " and is reached as " + reachedAs
-                        + "; a name has both answers or neither");
-            }
+        private static void heldBy(WrittenName written, Region region) {
             if (written.region() != null && region == null) {
                 throw new IllegalArgumentException("`" + written.canonical()
                         + "` is written somewhere and the expression it is was written nowhere");
@@ -1592,14 +1579,13 @@ public interface Ast {
 
         /** A name as the parser read it, before resolution has said what it denotes or how this
          * module reaches it. */
-        public Var(String spelling, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), null, null);
+        static Var written(String spelling, SourcePos pos) {
+            return written(WrittenName.of(spelling, pos));
         }
 
-        /** A name standing as an expression over exactly the characters that spell it — every one
-         * but a name the author parenthesized. */
-        public Var(WrittenName written, ValueName denotes, ReachName reachedAs) {
-            this(written, denotes, reachedAs, written.region());
+        /** The same, off an occurrence the parser has already read. */
+        static Var written(WrittenName written) {
+            return new Written(written, written.region());
         }
 
         /**
@@ -1607,11 +1593,18 @@ public interface Ast {
          *
          * <p>The reach name is given rather than worked out here. A pass writing a name into a body
          * either has one in hand — it is rewriting a name that already carried it — or knows which
-         * module's body it is writing into, and neither is something this constructor can see. Worked
+         * module's body it is writing into, and neither is something this factory can see. Worked
          * out from the spelling it would be the very derivation the carried value exists to remove.
          */
-        public Var(String spelling, ValueName denotes, ReachName reachedAs, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), denotes, reachedAs);
+        static Var denoting(String spelling, ValueName denotes, ReachName reachedAs,
+                            SourcePos pos) {
+            return denoting(WrittenName.of(spelling, pos), denotes, reachedAs);
+        }
+
+        /** The same, off an occurrence already read: a name standing as an expression over exactly
+         * the characters that spell it — every one but a name the author parenthesized. */
+        static Var denoting(WrittenName written, ValueName denotes, ReachName reachedAs) {
+            return new Denoting(written, denotes, reachedAs, written.region());
         }
 
         /**
@@ -1623,39 +1616,9 @@ public interface Ast {
          * is written nowhere and only the expression has a place: the region is the one the name it
          * replaced was read over.
          */
-        public static Var respelled(String spelling, ValueName denotes, ReachName reachedAs,
-                                    SourcePos pos, Region region) {
-            return new Var(WrittenName.synthetic(spelling, pos), denotes, reachedAs, region);
-        }
-
-        /** The bare name this reaches its declaration by, whatever the source spelled. */
-        public String name() {
-            return written.canonical();
-        }
-
-        /** Where the name is written. */
-        public SourcePos pos() {
-            return written.pos();
-        }
-
-        /**
-         * The bare name this reaches its declaration by, whatever the source spelled.
-         *
-         * <p>Every name here has been through resolution by the time anything reads it, including
-         * one that denotes nothing — that is an answer too. A name with no answer at all means a
-         * tree reached a reader without being resolved, which would put this back to matching
-         * spellings, so it says so rather than falling back to the spelling.
-         */
-        public String bare() {
-            if (denotes == null) {
-                throw new IllegalStateException("`" + name() + "` was never resolved");
-            }
-            return denotes.name();
-        }
-
-        /** Whether this name denotes nothing — reported where it was written. */
-        public boolean unresolved() {
-            return denotes instanceof ValueName.Unresolved;
+        static Var respelled(String spelling, ValueName denotes, ReachName reachedAs,
+                             SourcePos pos, Region region) {
+            return new Denoting(WrittenName.synthetic(spelling, pos), denotes, reachedAs, region);
         }
 
         /**
@@ -1665,37 +1628,76 @@ public interface Ast {
          * a reader to work out, so it is given the binder it is reading and answers with that
          * binding. There is no way to write one of these without having the binding in hand.
          */
-        public static Var local(Binder binder, SourcePos pos) {
+        static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
-            return new Var(WrittenName.synthetic(binder.name(), pos), local,
-                    new ReachName.Bare(binder.name()));
+            WrittenName written = WrittenName.synthetic(binder.name(), pos);
+            return new Denoting(written, local, new ReachName.Bare(binder.name()),
+                    written.region());
         }
 
         /** A read of a name a desugaring minted, at the form it is rewriting. Written nowhere: the
          * characters at {@code anchor} spell whatever the author put there, which is not this. */
-        public static Var desugared(String name, SourcePos anchor) {
-            return new Var(WrittenName.synthetic(name, anchor), null, null);
+        static Var desugared(String name, SourcePos anchor) {
+            return written(WrittenName.synthetic(name, anchor));
+        }
+
+        /** The bare name this reaches its declaration by, whatever the source spelled. */
+        default String name() {
+            return written().canonical();
+        }
+
+        /** Where the name is written. */
+        default SourcePos pos() {
+            return written().pos();
         }
 
         /**
-         * The name of the declaration this reference reaches — what a table keyed by a declaration's
-         * name is looked up with. The reading counterpart of {@link Apply#reaches()}:
-         * {@link #name()} is the name the source writes, which an import may have let go without its
-         * qualifier.
+         * What this name names, for a reader that is asking which declaration it is.
          *
-         * <p>Never the spelling. A name that reached a reader without being resolved has no answer
-         * to this, and it says so rather than handing back the characters — which is the same rule
-         * {@link #bare()} is under, and for the same reason: an import lets a name be written
-         * without its qualifier, so the spelling misses in the very table this is asked for, and a
-         * table answers a key it has not got with silence. Every pass that writes a reference of its
-         * own says what it means (ADR-0067), so there is no tree downstream of resolution for the
-         * fallback to have been for.
+         * <p>A {@link Written} one reached a reader without being resolved, which would put this
+         * back to matching spellings. An {@link Unanswered} one denotes nothing, which is an answer
+         * and not a declaration — a reader that took the spelling instead would answer for whatever
+         * the reading module has under it. Both are refused here, which is the one place that says
+         * so.
          */
-        public String reaches() {
-            if (reachedAs == null) {
-                throw new IllegalStateException("`" + name() + "` was never resolved");
-            }
-            return reachedAs.rendered();
+        default ValueName denotes() {
+            throw new IllegalStateException("`" + name() + "` at " + pos()
+                    + (this instanceof Unanswered
+                            ? " denotes nothing and was read as though it did"
+                            : " was read as a declaration before it was resolved"));
+        }
+
+        /**
+         * How this module reaches what the name names — what a table keyed by a declaration's name
+         * is looked up with. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is
+         * the name the source writes, which an import may have let go without its qualifier.
+         */
+        default ReachName reachedAs() {
+            throw new IllegalStateException("`" + name() + "` at " + pos()
+                    + " reaches nothing this module can name");
+        }
+
+        /** As {@link #denotes()}, by the bare name of what it names. */
+        default String bare() {
+            return denotes().name();
+        }
+
+        /**
+         * As {@link #reachedAs()}, rendered.
+         *
+         * <p>Never the spelling. An import lets a name be written without its qualifier, so the
+         * spelling misses in the very table this is asked for, and a table answers a key it has not
+         * got with silence. Every pass that writes a reference of its own says what it means
+         * (ADR-0067), so there is no tree downstream of resolution for a fallback to have been for.
+         */
+        default String reaches() {
+            return reachedAs().rendered();
+        }
+
+        /** Whether this name denotes nothing — read by resolution, and reported where it was
+         * written. */
+        default boolean unresolved() {
+            return this instanceof Unanswered;
         }
 
         /**
@@ -1703,23 +1705,85 @@ public interface Ast {
          *
          * <p>The two answers together, because resolution gives them together and they are the two
          * halves of one question: which declaration this reaches, and under what name it reaches it
-         * from here. Handed over separately, a caller could pair one name's denotation with another's
-         * reach name, and nothing would say so.
+         * from here. Handed over separately, a caller could pair one name's denotation with
+         * another's reach name, and nothing would say so. There is no state between: a name has both
+         * or is one of the two that has neither.
          */
-        public Var denoting(ValueName resolved, ReachName reachedAs) {
-            return new Var(written, resolved, reachedAs, region);
+        default Var denoting(ValueName resolved, ReachName reachedAs) {
+            return new Denoting(written(), resolved, reachedAs, region());
         }
 
         /** The same name denoting {@code resolved}, reached as it already was — for a pass that
          * changes what a name says about where its construction came from and not which declaration
          * it reaches. */
-        public Var denoting(ValueName resolved) {
-            return new Var(written, resolved, reachedAs, region);
+        default Var denoting(ValueName resolved) {
+            return new Denoting(written(), resolved, reachedAs(), region());
         }
 
-        @Override
-        public String toString() {
-            return name();
+        /** The same name, over {@code region} — whichever of the three it is. */
+        default Var over(Region region) {
+            return switch (this) {
+                case Written w -> new Written(w.written(), region);
+                case Denoting d -> new Denoting(d.written(), d.denotes(), d.reachedAs(), region);
+                case Unanswered u -> new Unanswered(u.written(), region);
+            };
+        }
+
+        /** The same name, read and found to name nothing. */
+        default Var unanswered() {
+            return new Unanswered(written(), region());
+        }
+
+        /** A name as the parser read it. */
+        record Written(WrittenName written, Region region) implements Var {
+
+            public Written {
+                heldBy(written, region);
+            }
+
+            @Override
+            public String toString() {
+                return name();
+            }
+        }
+
+        /** A name resolution answered, with the declaration it names and how this module reaches
+         * it. */
+        record Denoting(WrittenName written, ValueName denotes, ReachName reachedAs, Region region)
+                implements Var {
+
+            public Denoting {
+                if (denotes == null || reachedAs == null) {
+                    throw new IllegalArgumentException("`" + written.canonical() + "` denotes "
+                            + denotes + " and is reached as " + reachedAs
+                            + "; a name that is answered is answered on both counts");
+                }
+                heldBy(written, region);
+            }
+
+            @Override
+            public String toString() {
+                return name();
+            }
+        }
+
+        /**
+         * A name resolution read and found nothing for.
+         *
+         * <p>Reported where it is written, or on the import line or the module that could not be
+         * read — whichever could say what is wrong. It carries neither answer, so a reader below has
+         * no spelling to match and no report to repeat.
+         */
+        record Unanswered(WrittenName written, Region region) implements Var {
+
+            public Unanswered {
+                heldBy(written, region);
+            }
+
+            @Override
+            public String toString() {
+                return name();
+            }
         }
     }
 
@@ -1960,7 +2024,7 @@ public interface Ast {
             case DecimalLit x -> new DecimalLit(x.value(), x.pos(), region);
             case StringLit x -> new StringLit(x.value(), x.pos(), region);
             case BoolLit x -> new BoolLit(x.value(), x.pos(), region);
-            case Var x -> new Var(x.written(), x.denotes(), x.reachedAs(), region);
+            case Var x -> x.over(region);
             case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);

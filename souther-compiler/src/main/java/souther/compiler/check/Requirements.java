@@ -124,11 +124,17 @@ public final class Requirements {
             // requires is what it declared, in that order (spec §depends-on, §requirement-propagation).
             case Ast.SpecBehavior spec -> {
                 for (Ast.Var req : spec.dependsOn()) {
-                    add(acc, req.bare(), name);
+                    // Reported where it is written; it names no requirement to propagate.
+                    if (!req.unresolved()) {
+                        add(acc, req.bare(), name);
+                    }
                 }
             }
             case Ast.PipeBehavior pipe -> {
                 for (Ast.Var stage : pipe.stages()) {
+                    if (stage.unresolved()) {
+                        continue;   // it names no behavior, so it carries no requirement in
+                    }
                     String s = stage.bare();
                     if (injected.contains(s)) {
                         // the stage is the dependency: the composition holds it in a field and

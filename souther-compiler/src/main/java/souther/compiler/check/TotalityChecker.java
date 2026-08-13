@@ -428,7 +428,8 @@ final class TotalityChecker {
     }
 
     private static void collectOwnCalls(Ast.Expr e, Set<String> own, Set<String> out) {
-        if (e instanceof Ast.Apply call && own.contains(call.reaches())) {
+        if (e instanceof Ast.Apply call && call.function() instanceof Ast.Var.Denoting
+                && own.contains(call.reaches())) {
             out.add(call.written());
         }
         forEachChild(e, c -> collectOwnCalls(c, own, out));

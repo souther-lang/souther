@@ -71,7 +71,7 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> declared
             case ValueName.Local local -> typeOf(local.id());
             case ValueName.Helper _, ValueName.Stdlib _, ValueName.Behavior _ ->
                     declared.get(reachedBy);
-            case ValueName.OfType _, ValueName.Builtin _, ValueName.Unresolved _ -> null;
+            case ValueName.OfType _, ValueName.Builtin _ -> null;
             case null -> null;
         };
     }

@@ -1952,8 +1952,8 @@ public final class FixtureReader {
     private String helperKey(Ast.Apply c) {
         return switch (c.denotes()) {
             case ValueName.Helper _, ValueName.Stdlib _ -> c.reaches();
-            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _, ValueName.Behavior _,
-                    ValueName.Unresolved _ -> null;
+            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _,
+                    ValueName.Behavior _ -> null;
             case null -> null;   // what applying something that is not a name leaves
         };
     }

@@ -295,7 +295,11 @@ public final class TypeChecker {
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 List<String> required = new ArrayList<>();
                 for (Ast.Var req : spec.dependsOn()) {
-                    required.add(req.bare());
+                    // A name nothing answered is no name for another to be a duplicate of, and it
+                    // was reported where it is written.
+                    if (!req.unresolved()) {
+                        required.add(req.bare());
+                    }
                 }
                 DataChecker.rejectDuplicateNames(required, "`depends on`", spec.pos());
                 DataChecker.rejectDuplicateTypes(spec.constructs(), "`constructs`", spec.pos());
