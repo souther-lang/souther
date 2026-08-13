@@ -51,19 +51,21 @@ public final class Resolve {
     private final List<Denotation> denotations = new ArrayList<>();
     /** The same, for the names used as values. */
     private final List<ValueUse> values0 = new ArrayList<>();
-    /** Every name it could not answer, as the error it would once have thrown. */
+    /** What it has to say about the names it could not answer, as the errors it would once have
+     * thrown. Not every one of them is in here: some are already reported elsewhere. */
     private final List<CompileException> unresolved = new ArrayList<>();
     /**
-     * How many names it did not answer, which is not the same as how many it reported.
+     * How many names it could not answer, by every route there is.
      *
-     * <p>A name is left unanswered and said nothing about where the reason is somewhere else and
-     * already reported there — a module this compilation has and cannot use exports names that
-     * stand in an importer's scope as identities nothing declares, so the importer is not told a
-     * second time about a file that is fine. That is the same absence as a misspelling and only the
-     * report differs, so whether a declaration's names came out is counted here rather than read off
-     * what was reported while it was being read.
+     * <p>Counted apart from what was said about them, because they are two things. A name is left
+     * unanswered and said nothing about where the reason is somewhere else and already reported
+     * there — a module this compilation has and cannot use has its exported names put in an
+     * importer's scope as identities nothing declares, so the importer is not told a second time
+     * about a file that is fine. That is the same absence as a misspelling; only the report differs.
+     * Whether a declaration's names came out is this, and never how many diagnostics were added
+     * while it was being read.
      */
-    private int unanswered;
+    private int failed;
     /** What each binding this pass gave an identity to is called, and where that is written. */
     private final Map<BindingId, BoundName> binders = new LinkedHashMap<>();
     /** How many bindings each definition has been given, so the next one gets the next number. */
@@ -273,8 +275,7 @@ public final class Resolve {
         // the one beside it wrote, and the names met while it was being read are its own.
         Map<String, OfDeclaration> declarations = new LinkedHashMap<>();
         for (Ast.Def def : m.defs()) {
-            int reportedBefore = r.unresolved.size();
-            int unansweredBefore = r.unanswered;
+            int failedBefore = r.failed;
             int denotedBefore = r.denotations.size();
             Ast.Def resolved = r.def(def);
             defs.add(resolved);
@@ -288,8 +289,7 @@ public final class Resolve {
             // declaration nothing else is holding, and the one the module has is told it has no
             // meaning because of a mistake in the copy below it.
             declarations.putIfAbsent(resolved.name(),
-                    new OfDeclaration(r.unresolved.size() == reportedBefore
-                            && r.unanswered == unansweredBefore, Set.copyOf(reaches)));
+                    new OfDeclaration(r.failed == failedBefore, Set.copyOf(reaches)));
         }
         List<Ast.BehaviorDef> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
@@ -425,7 +425,7 @@ public final class Resolve {
         if (denoted.name() != null && denoted.pos() != null) {
             TypeName names = symbols.resolve(denoted.written());
             if (names != null && names.isUnresolved()) {
-                unanswered++;
+                failed++;
             } else if (names != null) {
                 denotations.add(new Denotation(denoted.written(), names));
             }
@@ -987,7 +987,7 @@ public final class Resolve {
      */
     private ValueName answered(WrittenName written, ValueName denotes) {
         if (denotes instanceof ValueName.Unresolved) {
-            unanswered++;
+            failed++;
             return denotes;
         }
         if (written.pos() == null) {
@@ -1141,6 +1141,7 @@ public final class Resolve {
         try {
             return TypeOps.denoted(ref, symbols);
         } catch (CompileException e) {
+            failed++;
             unresolved.add(e);
             return Type.ERRONEOUS;
         }
@@ -1157,7 +1158,7 @@ public final class Resolve {
      * name nothing answered is an absence rather than a declaration to record. */
     private Ast.Name answered(Ast.Name n) {
         if (n.denotes().isUnresolved()) {
-            unanswered++;
+            failed++;
         } else if (n.pos() != null) {
             denotations.add(new Denotation(n.name(), n.denotes()));
         }
