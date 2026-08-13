@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.Map;
 
@@ -76,7 +77,7 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
     }
 
     private Type at(String type) {
-        return Type.ref(symbols.own(type));
+        return Type.ref(new TypeName(symbols.module(), type));
     }
 
     @Test

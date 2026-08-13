@@ -40,11 +40,11 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         Symbols symbols = compilation.symbols("demo");
         Map<TypeName, Cardinality> solution = new HashMap<>();
         for (int each = 0; each < assumed.length; each += 2) {
-            solution.put(symbols.own((String) assumed[each]), (Cardinality) assumed[each + 1]);
+            solution.put(new TypeName(symbols.module(), (String) assumed[each]), (Cardinality) assumed[each + 1]);
         }
         for (Ast.Def def : compilation.module("demo").defs()) {
             if (def.name().equals(name)) {
-                return CardinalityTransfer.upperOf(symbols.own(name), def, symbols, solution, _ -> false);
+                return CardinalityTransfer.upperOf(new TypeName(symbols.module(), name), def, symbols, solution, _ -> false);
             }
         }
         throw new IllegalArgumentException("no such declaration: " + name);

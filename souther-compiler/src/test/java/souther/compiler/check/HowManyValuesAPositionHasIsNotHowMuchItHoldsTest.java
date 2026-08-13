@@ -38,7 +38,7 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
                         .map(each -> each.diagnostic().code().toString()).toList(),
                 "the model this reads has to be one somebody could write");
         Symbols symbols = compilation.symbols("demo");
-        return OccurrenceValues.of(symbols.own(name), data(compilation, name), symbols)
+        return OccurrenceValues.of(new TypeName(symbols.module(), name), data(compilation, name), symbols)
                 .wholeValuesAt(path);
     }
 

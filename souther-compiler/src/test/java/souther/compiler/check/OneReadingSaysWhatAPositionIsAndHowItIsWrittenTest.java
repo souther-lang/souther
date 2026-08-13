@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.List;
 
@@ -50,7 +51,7 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     }
 
     private TypeView view(String name) {
-        return TypeView.of(Type.ref(symbols.own(name)), symbols);
+        return TypeView.of(Type.ref(new TypeName(symbols.module(), name)), symbols);
     }
 
     private TypeView view(Type type) {
@@ -62,7 +63,7 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     /** The reading issue #631 is about. What the position is, is what the name wraps. */
     @Test
     void aNewtypeOverASumIsThatSum() {
-        assertEquals(new Shape.Sum(symbols.own("Stage")), view("StageN").shape());
+        assertEquals(new Shape.Sum(new TypeName(symbols.module(), "Stage")), view("StageN").shape());
     }
 
     @Test
@@ -74,7 +75,7 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     @Test
     void aNewtypeOverARecordIsThatRecord() {
         Shape.Product product = assertInstanceOf(Shape.Product.class, view("SlotN").shape());
-        assertEquals(symbols.own("Slot"), product.name());
+        assertEquals(new TypeName(symbols.module(), "Slot"), product.name());
         assertEquals(java.util.Set.of("hour", "room"), product.fields().keySet());
     }
 
@@ -118,7 +119,7 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
 
     @Test
     void theDeclaredTypeIsWhatTheSignatureWrote() {
-        assertEquals(Type.ref(symbols.own("StageN")), view("StageN").declared());
+        assertEquals(Type.ref(new TypeName(symbols.module(), "StageN")), view("StageN").declared());
     }
 
     // --- the shapes a position can have ---------------------------------------------------------
@@ -126,8 +127,8 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     @Test
     void eachTypeConstructorReadsAsItsOwnShape() {
         assertEquals(new Shape.Scalar(Type.Prim.STRING), view(Type.STRING).shape());
-        assertEquals(new Shape.Unit(symbols.own("Won")), view("Won").shape());
-        assertEquals(new Shape.Sum(symbols.own("Stage")), view("Stage").shape());
+        assertEquals(new Shape.Unit(new TypeName(symbols.module(), "Won")), view("Won").shape());
+        assertEquals(new Shape.Sum(new TypeName(symbols.module(), "Stage")), view("Stage").shape());
         assertEquals(new Shape.Sequence(Shape.Sequence.Kind.LIST, Type.INT),
                 view(Type.list(Type.INT)).shape());
         assertEquals(new Shape.Sequence(Shape.Sequence.Kind.SET, Type.INT),
@@ -152,13 +153,13 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
         assertEquals(new Shape.Bottom(), view(Type.NOTHING).shape());
         assertEquals(new Shape.Erroneous(), view(Type.ERRONEOUS).shape());
         assertEquals(new Shape.Undecided(), view(Type.var("'a")).shape());
-        assertEquals(new Shape.Unresolved(symbols.own("Cyclic")), view("Cyclic").shape());
+        assertEquals(new Shape.Unresolved(new TypeName(symbols.module(), "Cyclic")), view("Cyclic").shape());
     }
 
     @Test
     void aUnionNobodyNamedIsItsMembers() {
-        Type union = Type.union(java.util.Set.of(symbols.own("Won"), symbols.own("Qualified")));
-        assertEquals(new Shape.Cases(java.util.Set.of(symbols.own("Won"), symbols.own("Qualified"))),
+        Type union = Type.union(java.util.Set.of(new TypeName(symbols.module(), "Won"), new TypeName(symbols.module(), "Qualified")));
+        assertEquals(new Shape.Cases(java.util.Set.of(new TypeName(symbols.module(), "Won"), new TypeName(symbols.module(), "Qualified"))),
                 view(union).shape());
     }
 
@@ -166,6 +167,6 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
      *  name resolved to nothing usable rather than standing in for a value. */
     @Test
     void aNewtypeReachingItselfIsUnresolvedRatherThanAShape() {
-        assertEquals(new Shape.Unresolved(symbols.own("Cyclic")), view("Cyclic").shape());
+        assertEquals(new Shape.Unresolved(new TypeName(symbols.module(), "Cyclic")), view("Cyclic").shape());
     }
 }

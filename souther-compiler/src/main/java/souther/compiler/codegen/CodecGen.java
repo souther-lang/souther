@@ -60,7 +60,8 @@ final class CodecGen {
     /** The three boundary input sources a decoder can read from (spec §external-representation, §codec-generation). */
     enum Src { NEUTRAL, JSON, JOOQ }
 
-    private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
+    private ClassDesc generated(String simpleName) { return ctx.generated(simpleName); }
+    private ClassDesc cd(Ast.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
@@ -226,7 +227,7 @@ final class CodecGen {
     }
 
     byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
-        ClassDesc cdEnc = cd(sum.name() + "$Enc");
+        ClassDesc cdEnc = generated(sum.name() + "$Enc");
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -258,7 +259,7 @@ final class CodecGen {
     }
 
     byte[] generateSumDecoder(Ast.SumData sum, Ast.Discriminate disc, Src src) {
-        ClassDesc cdDec = cd(sum.name() + srcSuffix(src));
+        ClassDesc cdDec = generated(sum.name() + srcSuffix(src));
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -316,7 +317,7 @@ final class CodecGen {
      * the value's path, the way a newtype's invariant does, rather than being read as some other case.
      */
     byte[] generateEnumSumDecoder(Ast.SumData sum, Src src) {
-        ClassDesc cdDec = cd(sum.name() + srcSuffix(src));
+        ClassDesc cdDec = generated(sum.name() + srcSuffix(src));
         List<TypeName> cases = TypeOps.leafCases(sum, symbols);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -376,7 +377,7 @@ final class CodecGen {
 
     /** Encodes an enumeration to its case's name — the same string its decoder reads. */
     byte[] generateEnumSumEncoder(Ast.SumData sum) {
-        ClassDesc cdEnc = cd(sum.name() + "$Enc");
+        ClassDesc cdEnc = generated(sum.name() + "$Enc");
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -384,7 +385,7 @@ final class CodecGen {
             emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 code.aload(1);
-                code.invokestatic(cd(sum.name()), TAG_METHOD, MTD_tag, true);
+                code.invokestatic(cd(sum), TAG_METHOD, MTD_tag, true);
                 code.areturn();
             });
         });
@@ -423,10 +424,10 @@ final class CodecGen {
 
     void emitFactory(ClassBuilder cb, String name, ClassDesc returnIface, Ast.Data data,
                              String suffix) {
-        ClassDesc impl = cd(data.name() + suffix);
-        ClassDesc self = cd(data.name());
+        ClassDesc impl = generated(data.name() + suffix);
+        ClassDesc self = cd(data);
         MethodSignature sig = name.equals("decoder")
-                ? decoderSig(self, isMapInput(data.name()))
+                ? decoderSig(self, isMapInput(data))
                 : encoderSig(self, encoderOutput(data));
         emitCodecFactory(cb, name, returnIface, impl, sig);
     }
@@ -501,16 +502,15 @@ final class CodecGen {
     }
 
     /** Emits a source's decoder factory ({@code jsonDecoder()} / {@code recordDecoder()}). */
-    void emitSourceFactory(ClassBuilder cb, String typeName, Src src, boolean mapInput) {
-        emitCodecFactory(cb, srcFactory(src), CD_RDecoder, cd(typeName + srcSuffix(src)),
-                decoderSigFor(src, cd(typeName), mapInput));
+    void emitSourceFactory(ClassBuilder cb, Ast.Def def, Src src, boolean mapInput) {
+        emitCodecFactory(cb, srcFactory(src), CD_RDecoder, generated(def.name() + srcSuffix(src)),
+                decoderSigFor(src, cd(def), mapInput));
     }
 
     /** jOOQ rows are flat: a type is Record-decodable iff it is an object (or a sum of objects/units)
      * whose every field is a scalar column — a primitive, a newtype, or an optional of those; no
      * nested object, list, map, or sum. */
-    boolean recordCompatible(String typeName) {
-        Ast.Def def = symbols.declaration(typeName);
+    boolean recordCompatible(Ast.Def def) {
         if (def instanceof Ast.SumData sum) {
             if (TypeOps.isUnitOnlySum(sum, symbols)) {
                 return false;   // an enumeration is a bare column, not a whole row (issue #161)
@@ -555,7 +555,7 @@ final class CodecGen {
 
     byte[] generateDecoderClass(ClassDesc cdName, Ast.Data data, Ast.DecoderDef dec,
                                         Map<String, Type> fields, Src src) {
-        ClassDesc cdDec = cd(data.name() + srcSuffix(src));
+        ClassDesc cdDec = generated(data.name() + srcSuffix(src));
         decoderClass = cdDec;
         Invariants invariants = invariantsOf(data, fields);
         return build(cdDec, cb -> {
@@ -825,8 +825,8 @@ final class CodecGen {
 
     /** True when the type's decoder reads from a {@code Map} (object/sum), false for a bare
      * value (newtype/unit). Used to bridge nested field-value decoders with {@code nested()}. */
-    boolean isMapInput(String typeName) {
-        return isMapInputOf(symbols.declaration(typeName));
+    boolean isMapInput(Ast.Def def) {
+        return isMapInputOf(def);
     }
 
     boolean isMapInput(Ast.Name typeName) {
@@ -1396,7 +1396,7 @@ final class CodecGen {
      * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
      * compile-time construction checking uses (ADR-0032). */
     private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
-        ClassDesc cdCtfe = cd(typeName(cdName) + "$Ctfe");
+        ClassDesc cdCtfe = generated(typeName(cdName) + "$Ctfe");
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
         // A Predicate's argument is a reference, so the instantiated type takes the decoded value's
         // boxed form and the metafactory unboxes it into `check`'s primitive parameter.
@@ -1565,7 +1565,7 @@ final class CodecGen {
     }
 
     byte[] generateEncoderClass(ClassDesc cdName, Ast.Data data, Ast.EncoderDef enc) {
-        ClassDesc cdEnc = cd(data.name() + "$Enc");
+        ClassDesc cdEnc = generated(data.name() + "$Enc");
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
@@ -1575,9 +1575,9 @@ final class CodecGen {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 2);
                 code.aload(1);
                 code.checkcast(cdName);
-                int selfSlot = gen.slot(Type.ref(symbols.own(data.name())));
+                int selfSlot = gen.slot(Type.ref(symbols.own(data)));
                 code.astore(selfSlot);
-                gen.bind(enc.self(), selfSlot, Type.ref(symbols.own(data.name())));
+                gen.bind(enc.self(), selfSlot, Type.ref(symbols.own(data)));
                 emitRawExpr(code, gen, enc.result());
                 code.areturn();
             });
@@ -1875,7 +1875,7 @@ final class CodecGen {
      * only what wraps it here.
      */
     byte[] generateResultUnionEncoder(String resultName, List<TypeName> members) {
-        ClassDesc cdEnc = cd(resultName + "$Enc");
+        ClassDesc cdEnc = generated(resultName + "$Enc");
         boolean enumeration = isEnumeration(members);
         return build(cdEnc, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
@@ -1993,8 +1993,8 @@ final class CodecGen {
 
     /** The static {@code encoder()} factory on the union's sealed interface. */
     void emitResultUnionEncoderFactory(ClassBuilder cb, String resultName, List<TypeName> members) {
-        emitCodecFactory(cb, "encoder", CD_REncoder, cd(resultName + "$Enc"),
-                encoderSig(cd(resultName), isEnumeration(members) ? CD_String : CD_Map));
+        emitCodecFactory(cb, "encoder", CD_REncoder, generated(resultName + "$Enc"),
+                encoderSig(generated(resultName), isEnumeration(members) ? CD_String : CD_Map));
     }
 
     /**

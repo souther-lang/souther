@@ -61,7 +61,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     }
 
     private TypeName named(String name) {
-        return symbols.own(name);
+        return new TypeName(symbols.module(), name);
     }
 
     private PartitionClass classOf(String type, String id) {

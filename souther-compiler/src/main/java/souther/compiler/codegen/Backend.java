@@ -305,22 +305,22 @@ public final class Backend {
                 // when the behavior declares it in `constructs` — that declaration is the authority
                 // to build it (spec §asymmetric-interop), and unlike a unit it cannot be told apart from a decoded
                 // pass-through output (会員) by shape alone.
-                List<String> unitCases = new ArrayList<>();
+                List<TypeName> unitCases = new ArrayList<>();
                 for (Ast.TypeTerm term : spec.ret().cases()) {
                     if (term instanceof Ast.TypeRef t && t.denotes() instanceof Type.Ref r
                             && b.symbols.get(r.name()) instanceof Ast.UnitData) {
-                        unitCases.add(r.name().name());
+                        unitCases.add(r.name());
                     }
                 }
-                List<Ast.Data> dataConstructs = new ArrayList<>();
+                List<TypeName> dataConstructs = new ArrayList<>();
                 Set<TypeName> seenConstruct = new HashSet<>();
                 if (spec.constructs() != null) {
                     for (Ast.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.get(tn.denotes()) instanceof Ast.Data data
+                        if (b.symbols.get(tn.denotes()) instanceof Ast.Data
                                 && seenConstruct.add(tn.denotes())) {
-                            dataConstructs.add(data);
+                            dataConstructs.add(tn.denotes());
                         }
                     }
                 }
@@ -708,7 +708,7 @@ public final class Backend {
      * rather than {@code Object}. If either side is a list/option/map (no single reference class), the
      * signature is omitted and the raw interface stands.
      */
-    private byte[] generateRequiredBase(String name, List<String> unitCases, List<Ast.Data> dataConstructs,
+    private byte[] generateRequiredBase(String name, List<TypeName> unitCases, List<TypeName> dataConstructs,
                                         List<Type> paramTypes, Type retType) {
         ClassDesc cdR = cdBehavior(name);
         // Injected-vs-unary is orthogonal to composition: one input is the unary Behavior<In,Out> (so
@@ -731,19 +731,19 @@ public final class Backend {
                 code.invokespecial(CD_Object, "<init>", MTD_void);
                 code.return_();
             });
-            for (String caseName : unitCases) {
+            for (TypeName caseName : unitCases) {
                 emitUnitFactory(cb, caseName);
             }
-            for (Ast.Data data : dataConstructs) {   // a field-bearing data or a newtype
-                emitDataFactory(cb, data);
+            for (TypeName construct : dataConstructs) {   // a field-bearing data or a newtype
+                emitDataFactory(cb, construct);
             }
         });
     }
 
     /** A no-arg factory for a unit case: the type has exactly one value, so it hands that out. */
-    private void emitUnitFactory(ClassBuilder cb, String typeName) {
-        ClassDesc caseCd = cd(typeName);
-        cb.withMethodBody(typeName, MethodTypeDesc.of(caseCd),
+    private void emitUnitFactory(ClassBuilder cb, TypeName typeName) {
+        ClassDesc caseCd = ctx.cd(typeName);
+        cb.withMethodBody(typeName.name(), MethodTypeDesc.of(caseCd),
                 ClassFile.ACC_PROTECTED | ClassFile.ACC_FINAL, code -> {
                     loadSharedInstance(code, caseCd);
                     code.areturn();
@@ -753,8 +753,11 @@ public final class Backend {
     /** A factory taking the data's fields (in declaration order) and building it through
      * {@code __construct}, so the invariant is checked and a violation aborts (spec §algebraic-types) — the same
      * path an in-domain construction takes, not a decode of an external representation. */
-    private void emitDataFactory(ClassBuilder cb, Ast.Data data) {
-        ClassDesc cdType = cd(data.name());
+    private void emitDataFactory(ClassBuilder cb, TypeName construct) {
+        // The type as the `constructs` clause resolved it: an entry there may name a type another
+        // module declares, and the class of one is that module's.
+        Ast.Data data = (Ast.Data) symbols.get(construct);
+        ClassDesc cdType = ctx.cd(construct);
         Map<String, Type> fields = ctx.fieldTypes(data);
         ClassDesc[] fieldDs = fieldDescs(fields, ctx);
         String sig = factorySignature(fields, cdType);
@@ -994,7 +997,7 @@ public final class Backend {
      * the union, which writes the discriminator no member writes on itself.
      */
     private byte[] generateBehaviorResult(String resultName, List<TypeName> members) {
-        ClassDesc cdR = cd(resultName);
+        ClassDesc cdR = generated(resultName);
         List<ClassDesc> caseCds = new ArrayList<>();
         for (TypeName member : members) {
             caseCds.add(ctx.resultMemberClass(member));
@@ -1011,8 +1014,8 @@ public final class Backend {
         return ctx.successType(ret);
     }
 
-    private ClassDesc cd(String typeName) {
-        return ctx.cd(typeName);
+    private ClassDesc generated(String simpleName) {
+        return ctx.generated(simpleName);
     }
 
     /** The class a behavior is emitted under (spec §jvm-behavior). Anything that has to name that class from

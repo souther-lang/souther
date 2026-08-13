@@ -910,8 +910,12 @@ public final class TypeOps {
             out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
         }
         for (Ast.Name include : data.includes()) {
+            // Resolve asks this while it is resolving, so an include here may be a name nothing
+            // has answered for yet. Reading the spelling is the pass doing its own work and not
+            // a second reading of an answer already given — which is why it is asked of the name
+            // and only where there is no denotation to read.
             TypeName source = include.denotes() != null
-                    ? include.denotes() : symbols.resolve(include.written());
+                    ? include.denotes() : symbols.resolve(include.name());
             if (source != null && seen.add(source)
                     && symbols.get(source) instanceof Ast.Data included) {
                 walkFields(included, source, symbols, seen, out);
@@ -1558,7 +1562,7 @@ public final class TypeOps {
                 if (ref.name().startsWith("'")) {
                     yield Type.var(ref.name());   // a type variable, admitted only in the core
                 }
-                TypeName resolved = symbols.resolve(ref.name());
+                TypeName resolved = symbols.resolve(ref.written());
                 if (resolved != null) {
                     yield resolved.isUnresolved() ? Type.ERRONEOUS : Type.ref(resolved);
                 }
@@ -1566,7 +1570,7 @@ public final class TypeOps {
                 // that way; a declaration reads it the same, which is what lets `Int |
                 // DivisionByZero` be written rather than only met. Asked after the module's own
                 // declarations, so a name a model declares keeps its meaning.
-                TypeName asCase = symbols.resolveCase(ref.name());
+                TypeName asCase = symbols.resolveCase(ref.written());
                 if (asCase != null && !asCase.isUnresolved()) {
                     yield Type.ref(asCase);
                 }

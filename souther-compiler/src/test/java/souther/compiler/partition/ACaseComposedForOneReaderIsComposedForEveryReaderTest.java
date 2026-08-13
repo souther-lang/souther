@@ -6,6 +6,7 @@ import souther.compiler.check.Resolve;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.List;
 import java.util.Set;
@@ -55,7 +56,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     }
 
     private Type named(String name) {
-        return Type.ref(symbols.own(name));
+        return Type.ref(new TypeName(symbols.module(), name));
     }
 
     private Type sum() {

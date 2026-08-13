@@ -366,7 +366,7 @@ public final class Resolve {
         Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
-            TypeName names = symbols.resolve(denoted.name());
+            TypeName names = symbols.resolve(denoted.written());
             if (names != null) {
                 denotations.add(new Denotation(denoted.written(), names));
             }
@@ -377,7 +377,7 @@ public final class Resolve {
     // --- definitions ---
 
     private Ast.Def def(Ast.Def def) {
-        owner = new BindingOwner.OfData(symbols.own(def.name()));
+        owner = new BindingOwner.OfData(symbols.own(def));
         return switch (def) {
             case Ast.UnitData u -> u;
             // an invariant reads the fields of the data it belongs to, which are what bind its
@@ -403,7 +403,7 @@ public final class Resolve {
                 out.add(c);
                 continue;
             }
-            TypeName denoted = symbols.resolve(c.written());
+            TypeName denoted = symbols.resolve(c.name());
             if (denoted == null) {
                 throw CompileException.of(Diagnostic
                                 .at(s.pos()).say(new BehaviorMessage.UnknownCaseInASum(c.written(), s.name())).build());
@@ -430,7 +430,7 @@ public final class Resolve {
      * declaring declaration's, so this is where an editor is answered from either way.
      */
     private void declareFields(Ast.Data d) {
-        Map<String, BindingId> bindings = TypeOps.fieldBindings(symbols.own(d.name()), d, symbols);
+        Map<String, BindingId> bindings = TypeOps.fieldBindings(symbols.own(d), d, symbols);
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
             if (binding != null) {
@@ -444,7 +444,7 @@ public final class Resolve {
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again
         for (Map.Entry<String, BindingId> f
-                : TypeOps.fieldBindings(symbols.own(d.name()), d, symbols).entrySet()) {
+                : TypeOps.fieldBindings(symbols.own(d), d, symbols).entrySet()) {
             bound = bound.and(f.getKey(), new ValueName.Local(f.getKey(), f.getValue()));
         }
         return bound;
@@ -740,7 +740,8 @@ public final class Resolve {
      * construction of a unit data and records where it came from; applied, it is a newtype taking
      * what it wraps, and the application is what says that.
      */
-    private ValueName lookup(String written, boolean applied, Bindings bound) {
+    private ValueName lookup(WrittenName name, boolean applied, Bindings bound) {
+        String written = name.canonical();
         // a binding in force wins over everything else: a body may bind a name a module declares,
         // and the binding is what the name means there
         ValueName.Local binding = bound.binderOf(written);
@@ -770,7 +771,7 @@ public final class Resolve {
             }
             return null;
         }
-        TypeName type = symbols.resolve(written);
+        TypeName type = symbols.resolve(name);
         if (type != null && !type.isUnresolved()) {
             return new ValueName.OfType(written, type, applied ? null : ConstructionOrigin.own());
         }
@@ -832,7 +833,7 @@ public final class Resolve {
             return null;
         }
         WrittenName written = dottedName(fa);
-        ValueName denotes = lookup(written.canonical(), applied, bound);
+        ValueName denotes = lookup(written, applied, bound);
         if (denotes != null) {
             ValueName resolved = answered(written, denotes);
             return new Ast.Var(written, resolved,
@@ -894,7 +895,7 @@ public final class Resolve {
 
     /** What a name used as a value denotes, and the report for one that denotes nothing. */
     private ValueName valueName(WrittenName written, Bindings bound) {
-        ValueName denotes = lookup(written.canonical(), false, bound);
+        ValueName denotes = lookup(written, false, bound);
         return denotes != null ? denotes
                 : nothing(written.canonical(), unknownIdentifier(written, bound));
     }
@@ -907,7 +908,7 @@ public final class Resolve {
      * position it was written in is a fact about the source rather than about the name.
      */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
-        ValueName denotes = lookup(call.written(), true, bound);
+        ValueName denotes = lookup(call.name(), true, bound);
         return denotes != null ? denotes
                 : nothing(call.written(), unknownIdentifier(call.name(), bound));
     }
@@ -1029,7 +1030,7 @@ public final class Resolve {
         if (n.denotes() != null) {
             return n;
         }
-        TypeName denoted = symbols.resolve(n.written());
+        TypeName denoted = symbols.resolve(n.name());
         if (denoted == null) {
             return answered(n.denoting(nothingDenotes(n)));
         }
@@ -1051,7 +1052,7 @@ public final class Resolve {
         if (n.denotes() != null) {
             return n;
         }
-        TypeName denoted = symbols.resolveCase(n.written());
+        TypeName denoted = symbols.resolveCase(n.name());
         if (denoted == null) {
             denoted = TypeName.optionCase(n.written());
         }

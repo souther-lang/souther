@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
 
@@ -72,14 +73,14 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
     }
 
     private Type named(String name) {
-        return Type.ref(symbols.own(name));
+        return Type.ref(new TypeName(symbols.module(), name));
     }
 
     /** What a named key must classify as: the outermost name, whatever it wraps. Reaching for the
      *  base's representation would name a type whose codec is not the one the map's keys go
      *  through. */
     private void assertNamedKey(String name) {
-        assertEquals(new MapKeyRepresentation.NamedKey(symbols.own(name)), classify(named(name)));
+        assertEquals(new MapKeyRepresentation.NamedKey(new TypeName(symbols.module(), name)), classify(named(name)));
     }
 
     // --- the leaves ---------------------------------------------------------------------------

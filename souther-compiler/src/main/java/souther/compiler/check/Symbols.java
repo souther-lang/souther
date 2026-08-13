@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -81,9 +82,35 @@ public final class Symbols {
         return module;
     }
 
-    /** A name in the module being compiled. The caller vouches that it is declared here. */
-    public TypeName own(String name) {
-        return new TypeName(module, name);
+    /**
+     * The type a declaration of the module being compiled is.
+     *
+     * <p>Asked with the declaration and not with a name. A spelling says nothing about which module
+     * declares what it spells, so stamping this module onto one answers for a declaration here
+     * whatever the spelling came from — a name read off a class, a name another module wrote. A
+     * caller holding the declaration is a caller that has it from this module's own tree.
+     */
+    public TypeName own(Ast.Def def) {
+        TypeName named = new TypeName(module, def.name());
+        // Held to, and not taken on trust. A declaration is an argument like any other, so a caller
+        // holding one of another module's can hand it over and be answered about a type of this one
+        // — which is the reading a `constructs` entry naming an imported type got, silently, for as
+        // long as the answer was worked out from a spelling.
+        // Held to a name this module declares. Asked only where this module's declarations are
+        // known: a module in an import cycle is compiled with nothing registered for it, and
+        // refusing there would replace the report about the cycle with one about a declaration that
+        // is fine.
+        //
+        // Not held to being the declaration registered under that name. A module that declares a
+        // name twice registers one of them, and the pass that reports it walks both. So a
+        // declaration another module wrote under a name this one also writes is admitted here, and
+        // nothing this holds can tell the two apart — which declaration a definition is stays
+        // something worked out from a name until a declaration carries its own.
+        if (get(named) == null && !declaredIn(module).isEmpty()) {
+            throw new IllegalArgumentException(
+                    "`" + def.name() + "` is not declared in `" + module + "`");
+        }
+        return named;
     }
 
     /** The definition of {@code name}, or null when no module declares it. The runtime namespace
@@ -106,24 +133,17 @@ public final class Symbols {
         return registry.declaration(name) != null;
     }
 
-    /** The definition the written name {@code written} denotes here, or null when nothing does. The
-     * name must have been written in the module being compiled. */
-    public Ast.Def declaration(String written) {
-        TypeName name = resolve(written);
-        return name == null ? null : get(name);
-    }
-
     /**
      * What a written case name denotes. Beside the data cases a module declares or imports, an arm may
      * name a case of a primitive-headed union: the primitive itself ({@code Int} in {@code Int |
      * DivisionByZero}), or one of the error cases the runtime declares rather than any module. Null
      * when it is none of those.
      */
-    public TypeName resolveCase(String written) {
-        return switch (written) {
+    TypeName resolveCase(WrittenName written) {
+        return switch (written.canonical()) {
             case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
-                    TypeName.primitive(written);
-            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" -> TypeName.runtime(written);
+                    TypeName.primitive(written.canonical());
+            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" -> TypeName.runtime(written.canonical());
             default -> resolve(written);
         };
     }
@@ -140,7 +160,13 @@ public final class Symbols {
      * <p>"Here" is the whole story: a name is resolved in the module that wrote it, by that module's
      * own {@link Resolve} pass, so this never has to answer for a spelling written somewhere else.
      */
-    public TypeName resolve(String written) {
+    TypeName resolve(WrittenName written) {
+        return resolveSpelling(written.canonical());
+    }
+
+    /** As above, of the spelling itself. Private: a spelling reaches this only from a name of this
+     *  module's own text, which is what a {@link WrittenName} is and a bare string is not. */
+    private TypeName resolveSpelling(String written) {
         int dot = written.lastIndexOf('.');
         if (dot < 0) {
             TypeName name = scope.get(written);
