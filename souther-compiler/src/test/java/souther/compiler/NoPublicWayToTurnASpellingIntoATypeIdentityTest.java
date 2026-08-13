@@ -84,6 +84,45 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                 "a declaration says what it declares and is told nothing to say it with");
     }
 
+    /**
+     * And nothing public turns a key into one either.
+     *
+     * <p>A {@link souther.compiler.types.TypeKey} is what a class file carries, so it is structural
+     * and public on purpose. What must not follow is a way to hand one back and be given the
+     * identity the compiler reasons with, or the declaration it names: a key read off a class is
+     * exactly what a reader would otherwise assemble, and the whole of the difference is that
+     * nothing accepts it.
+     */
+    @Test
+    void nothingPublicTurnsAKeyIntoAnIdentityOrADeclaration() {
+        List<String> accepting = new ArrayList<>();
+        for (Class<?> c : List.of(TypeName.class, souther.compiler.check.Declarations.class,
+                souther.compiler.check.TypeScope.class, souther.compiler.check.Registry.class,
+                Symbols.class, Ast.Def.class)) {
+            for (Method m : c.getMethods()) {
+                if (List.of(m.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
+                    accepting.add(c.getSimpleName() + "." + m.getName());
+                }
+            }
+            for (java.lang.reflect.Constructor<?> k : c.getConstructors()) {
+                if (List.of(k.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
+                    accepting.add("new " + c.getSimpleName());
+                }
+            }
+        }
+        assertEquals(List.of(), accepting,
+                "a key is written down and read back; nothing here takes one");
+    }
+
+    /** A declaration says which one it is without being told the module. */
+    @Test
+    void aDeclarationSaysItsKey() {
+        assertEquals(new souther.compiler.types.TypeKey("lib", "Amount"),
+                declarationOf(LIB, "Amount").declaredKey());
+        assertNotEquals(declarationOf(APP_WITH_AMOUNT, "Amount").declaredKey(),
+                declarationOf(LIB, "Amount").declaredKey());
+    }
+
     /** And the pass's own way in is not reachable from outside it. */
     @Test
     void resolutionIsNotPartOfTheSurface() {

@@ -10,6 +10,7 @@ import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
@@ -719,12 +720,24 @@ public interface Ast {
         }
 
         /**
-         * The type this declares.
+         * Which declaration this is, written down.
          *
          * <p>Answered by the declaration, so a reader holding one has the name it goes by and no
          * module of its own to pair it with. A spelling says nothing about which module declares
          * what it spells, and a reader that supplies the module it happens to be compiling answers
          * for a declaration here whatever the name came from.
+         */
+        default TypeKey declaredKey() {
+            return new TypeKey(declaredIn(), name());
+        }
+
+        /**
+         * The type this declares, as the compiler's own reasoning names it.
+         *
+         * <p>A temporary view of {@link #declaredKey()}. It goes when a declaration's identity
+         * becomes a symbol an authority issues rather than a pair anything can assemble; a caller
+         * that wants an identity to write down, or to compare across compilations, asks for the key
+         * instead.
          */
         default TypeName declares() {
             return new TypeName(declaredIn(), name());

@@ -8,7 +8,6 @@ import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.types.TypeName;
 import souther.compiler.frontend.CstFrontend;
 
 import java.lang.classfile.Annotation;
@@ -75,7 +74,7 @@ public final class ModuleMetadata {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
-            add(out, new GeneratedClass.Value(new TypeName(module.name(), def.name())),
+            add(out, new GeneratedClass.Value(def.declares()),
                     Annotation.of(DATA_ANN,
                             AnnotationElement.ofString("value", slices.defs().get(def.name()))));
         }

@@ -509,8 +509,8 @@ public final class Names {
             Ast.Module m = module.value();
             Registry registry = registry(db, Stage.AVAILABLE);
             Map<String, Denotation> scope = new HashMap<>();
-            for (String own : registry.declaredIn(name).keySet()) {
-                scope.put(own, new Denotation.Denotes(new TypeName(name, own)));
+            for (Ast.Def own : registry.declaredIn(name).values()) {
+                scope.put(own.name(), new Denotation.Denotes(own.declares()));
             }
             Set<String> ownNames = Ordered.set(scope.keySet());
             // Which import brought each name in, so a second one naming it is reported against that
@@ -1160,7 +1160,7 @@ public final class Names {
             if (defs.present()) {
                 for (Ast.Def def : defs.value().values()) {
                     if (spans(def.written(), at)) {
-                        return Answer.of(new TypeName(name, def.name()));
+                        return Answer.of(def.declares());
                     }
                 }
             }

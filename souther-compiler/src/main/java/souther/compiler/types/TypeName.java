@@ -8,8 +8,15 @@ package souther.compiler.types;
  * been resolved to its declaring module. What the source wrote — a bare {@code 金額}, a qualified
  * {@code probe.b.金額}, or an alias {@code B.金額} — is settled during resolution and does not
  * survive into the type.
+ *
+ * <p>The pair itself is {@link TypeKey}, which is what a class file carries and what a declaration
+ * says of itself. This is that key where it stands for the declaration in the compiler's own
+ * reasoning, and it is still built from two strings by anything that has two strings — which is
+ * what makes it an identity a reader can assemble rather than one it was handed. Closing that is
+ * the work {@code TypeSymbol} is for; until then, what a key is and what an identity is are told
+ * apart by which of the two types a signature names.
  */
-public record TypeName(String module, String name) implements Comparable<TypeName> {
+public final class TypeName implements Comparable<TypeName> {
 
     /** The module a primitive case name belongs to. {@code Int | DivisionByZero} unions a primitive
      * with a data case, so a primitive needs a name of this shape to sit in {@link Type.Union}; it
@@ -20,10 +27,29 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
      * their real runtime package, so they need no special case when a class name is derived. */
     public static final String RUNTIME = "souther.runtime";
 
-    public TypeName {
-        if (module == null || name == null) {
-            throw new IllegalArgumentException("module and name are required: " + module + "." + name);
-        }
+    private final TypeKey key;
+
+    public TypeName(String module, String name) {
+        this.key = new TypeKey(module, name);
+    }
+
+    /** Which declaration this is, written down.
+     *
+     * <p>One direction only. Nothing here builds a name from a key: a key is what a class file
+     * carries, and turning one back into the identity the compiler reasons with is the work of
+     * whatever knows the declarations, which is not this. */
+    public TypeKey key() {
+        return key;
+    }
+
+    /** The module that declares it. */
+    public String module() {
+        return key.module();
+    }
+
+    /** The name written there. */
+    public String name() {
+        return key.name();
     }
 
     /** A primitive case name ({@code Int}) as it appears in a union. */
@@ -76,22 +102,31 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
 
     /** Another name declared in the same module — a sum's case, given the sum. */
     public TypeName sibling(String other) {
-        return new TypeName(module, other);
+        return new TypeName(module(), other);
     }
 
     public boolean isPrimitive() {
-        return module.equals(PRIMITIVE);
+        return module().equals(PRIMITIVE);
     }
 
     /** The fully qualified form, {@code probe.b.金額}. Also the generated class's binary name. */
     public String qualified() {
-        return module + "." + name;
+        return key.qualified();
     }
 
     @Override
     public int compareTo(TypeName other) {
-        int byName = name.compareTo(other.name);
-        return byName != 0 ? byName : module.compareTo(other.module);
+        return key.compareTo(other.key);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof TypeName other && key.equals(other.key);
+    }
+
+    @Override
+    public int hashCode() {
+        return key.hashCode();
     }
 
     @Override
