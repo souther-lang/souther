@@ -152,7 +152,7 @@ public final class HelperNames {
             // The name is this pass's and the place is the callee's: only the spelling changes, so
             // what is underlined for it is the stretch the name it replaced was read over — not the
             // application's, which takes in arguments this pass did not touch.
-            case Ast.Apply call when call.function() instanceof Ast.Var.Denoting
+            case Ast.Apply call when call.answered() != null
                     && foreign(call.denotes(), which) ->
                     new Ast.Apply(
                             Ast.Var.respelled(qualifiedName(call.denotes()), call.denotes(),
@@ -166,7 +166,7 @@ public final class HelperNames {
 
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Ast.Var qualified(Ast.Var name, Predicate<ValueName.Helper> which) {
-        return name instanceof Ast.Var.Denoting && foreign(name.denotes(), which)
+        return name.answered() != null && foreign(name.denotes(), which)
                 ? Ast.Var.respelled(qualifiedName(name.denotes()), name.denotes(),
                         ofModule(name.denotes()), name.pos(), name.region())
                 : name;

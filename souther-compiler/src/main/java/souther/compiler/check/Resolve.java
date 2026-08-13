@@ -35,9 +35,11 @@ import java.util.Set;
  * {@link TypeName} it denotes, and a check that wants to know whether two names are the same type
  * compares what they denote. There is no spelling left to compare.
  *
- * <p>A name that denotes nothing is reported here and denotes {@link TypeName#unresolved} — which
- * becomes {@link souther.compiler.types.Type#ERRONEOUS} — so no later pass sees an unresolved name
- * and none of them needs a null branch. The pass does not stop: the rest of the module is resolved
+ * <p>A name that denotes nothing is reported here and is {@link Ast.Name.Unanswered} from there on
+ * — a state of the name and not a stand-in identity, so nothing below reads it as a declaration and
+ * nothing below has a spelling to fall back to. Where a type reference stands on such a name, what
+ * it denotes is {@link souther.compiler.types.Type#ERRONEOUS}. The pass does not stop: the rest of
+ * the module is resolved
  * as if the mistake were not there, which is what lets an author be told about every unknown name at
  * once and lets an editor still say what the names around one mean. A name a pass synthesized
  * already knowing what it means (a codec {@code Deriver} builds from a field's type) is left as it
@@ -215,10 +217,11 @@ public final class Resolve {
      * A resolved module, what the pass worked out about the names in it, and the names it could not
      * answer.
      *
-     * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
-     * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
-     * resolved as if the mistake were not there — so an author is told about every unknown name at
-     * once instead of one per compile, and an editor can still say what the names around it mean.
+     * <p>A name that denotes nothing does not end the pass. It is {@link Ast.Name.Unanswered}, a
+     * type reference standing on one denotes {@link souther.compiler.types.Type#ERRONEOUS}, and the
+     * rest of the module is resolved as if the mistake were not there — so an author is told about
+     * every unknown name at once instead of one per compile, and an editor can still say what the
+     * names around it mean.
      */
     public record Resolved(ResolvedModule module, ResolutionIndex index,
                            List<CompileException> unresolved,

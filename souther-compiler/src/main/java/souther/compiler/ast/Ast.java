@@ -168,9 +168,11 @@ public interface Ast {
      * runs; every name-bearing position in this tree carries one of these, so no later pass decides
      * for itself what a spelling means or whether a qualified one is allowed here (issue #177).
      *
-     * <p>A check reads {@link #denotes()}, which is set on every name the resolve pass let through —
-     * a name that denotes nothing is reported there and the compile stops, so nothing downstream sees
-     * an unresolved one. {@link #written()} is the name, and is not what a report quotes: a bare and
+     * <p>A check reads {@link #denotes()}, which every name the pass answered carries. A name
+     * nothing declares is reported where it is written and is {@link Unanswered} from there on,
+     * which the check over its declaration is what settles ({@code Names.Unbuilt}): the pass does
+     * not stop, so an author is told about every unknown name at once and the definitions beside it
+     * are still checked. {@link #written()} is the name, and is not what a report quotes: a bare and
      * a qualified spelling of one type are one name, and a decomposed and a composed spelling are
      * one name too, so neither says what the author typed. A report asks {@link WrittenName#quoted()}
      * and underlines {@link WrittenName#region()}.
@@ -224,11 +226,12 @@ public interface Ast {
         /**
          * The declaration this names, for a reader that is asking which one it is.
          *
-         * <p>A name still {@link Written} here is a pass reading it before resolution answered it,
-         * and an {@link Unanswered} one is a name resolution read and found nothing for — whose
-         * declaration {@code Names.Unbuilt} settles, so nothing downstream of that is handed one.
-         * Either is a fault in the compiler rather than in the source, so both are refused. This is
-         * the one place that says so.
+         * <p>Refused two ways, and they are not the same thing. A {@link Written} one is a pass
+         * reading it before resolution answered it, which is a fault in this compiler. An
+         * {@link Unanswered} one is a mistake in the source, reported where the name is written —
+         * refused here because there is no declaration to hand back, and a reader that wants to go
+         * on without one asks which of the two it is rather than taking the spelling. This is the
+         * one place that says so.
          */
         default TypeName denotes() {
             if (this instanceof Denoting denoting) {
@@ -1652,19 +1655,44 @@ public interface Ast {
         }
 
         /**
-         * What this name names, for a reader that is asking which declaration it is.
+         * This reference where it names a declaration, and null where resolution read it and found
+         * none.
          *
-         * <p>A {@link Written} one reached a reader without being resolved, which would put this
-         * back to matching spellings. An {@link Unanswered} one denotes nothing, which is an answer
-         * and not a declaration — a reader that took the spelling instead would answer for whatever
-         * the reading module has under it. Both are refused here, which is the one place that says
-         * so.
+         * <p>What a walk over a body asks. An edge, a substitution, a rewrite is about what a name
+         * stands for; a name nothing declares stands for nothing, so there is no edge to add and
+         * nothing to rewrite, and the mistake was reported where the name is written.
+         *
+         * <p>Which is not what a {@link Written} one is. That is a tree that reached a reader before
+         * resolution answered it — a fault in this compiler — and counting it among the names that
+         * declare nothing would let a pass that failed to answer its own nodes go on quietly, with
+         * every walk below reading the tree as though the author had written an unknown name. So it
+         * is refused, and this is the one place that tells the two apart.
+         */
+        default Denoting answered() {
+            if (this instanceof Denoting denoting) {
+                return denoting;
+            }
+            if (this instanceof Unanswered) {
+                return null;
+            }
+            throw new IllegalStateException("`" + name() + "` at " + pos()
+                    + " was read as a declaration before it was resolved");
+        }
+
+        /**
+         * What this name names, for a reader that is asking which declaration it is and has no
+         * answer to give where there is none.
+         *
+         * <p>{@link #answered()} is for the reader that has: a walk that adds no edge for a name
+         * nothing declares. This one is for a reader that would have to make something up.
          */
         default ValueName denotes() {
-            throw new IllegalStateException("`" + name() + "` at " + pos()
-                    + (this instanceof Unanswered
-                            ? " denotes nothing and was read as though it did"
-                            : " was read as a declaration before it was resolved"));
+            Denoting names = answered();
+            if (names == null) {
+                throw new IllegalStateException("`" + name() + "` at " + pos()
+                        + " denotes nothing and was read as though it did");
+            }
+            return names.denotes();
         }
 
         /**
@@ -1673,8 +1701,12 @@ public interface Ast {
          * the name the source writes, which an import may have let go without its qualifier.
          */
         default ReachName reachedAs() {
-            throw new IllegalStateException("`" + name() + "` at " + pos()
-                    + " reaches nothing this module can name");
+            Denoting names = answered();
+            if (names == null) {
+                throw new IllegalStateException("`" + name() + "` at " + pos()
+                        + " reaches nothing this module can name");
+            }
+            return names.reachedAs();
         }
 
         /** As {@link #denotes()}, by the bare name of what it names. */
@@ -1961,6 +1993,17 @@ public interface Ast {
         /** What the name this applies denotes, or null where what it applies is not a name. */
         public ValueName denotes() {
             return function instanceof Var v ? v.denotes() : null;
+        }
+
+        /**
+         * As {@link Var#answered()}, of the name this applies.
+         *
+         * <p>Null the two ways there is no declaration to look up: what is applied is not a name,
+         * or it is one nothing declares. A callee nothing has read yet is refused there, as it is
+         * of a name standing on its own.
+         */
+        public Var.Denoting answered() {
+            return function instanceof Var v ? v.answered() : null;
         }
 
 

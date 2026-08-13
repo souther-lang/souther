@@ -402,14 +402,14 @@ public final class TypeOps {
                     }
                 }
                 for (Ast.Name include : d.includes()) {
-                    if (include instanceof Ast.Name.Unanswered) {
+                    if (erroneous(include)) {
                         return true;
                     }
                 }
             }
             if (def instanceof Ast.SumData sum) {
                 for (Ast.Name c : sum.cases()) {
-                    if (c instanceof Ast.Name.Unanswered) {
+                    if (erroneous(c)) {
                         return true;
                     }
                 }
@@ -426,7 +426,7 @@ public final class TypeOps {
                     return true;
                 }
                 for (Ast.Name constructs : spec.constructs()) {
-                    if (constructs instanceof Ast.Name.Unanswered) {
+                    if (erroneous(constructs)) {
                         return true;
                     }
                 }
@@ -445,6 +445,24 @@ public final class TypeOps {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether {@code name} is one resolution read and found no declaration for.
+     *
+     * <p>Named as the three states it is one of, so a name nothing has read yet is refused rather
+     * than answered no. A tree reaching here holding one is a pass that did not answer its own
+     * nodes, and calling it "not erroneous" would let that go by while every walk below read the
+     * module as though the author had written it that way.
+     */
+    private static boolean erroneous(Ast.Name name) {
+        return switch (name) {
+            case Ast.Name.Unanswered _ -> true;
+            case Ast.Name.Denoting _ -> false;
+            case Ast.Name.Written written -> throw new IllegalStateException("`"
+                    + written.written() + "` at " + written.pos()
+                    + " was read as a declaration before it was resolved");
+        };
     }
 
     private static boolean erroneous(Ast.RetType ret) {

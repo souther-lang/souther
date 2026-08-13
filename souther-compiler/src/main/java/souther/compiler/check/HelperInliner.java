@@ -432,7 +432,7 @@ public final class HelperInliner {
      * then told it has no method, which is the representation-shaped refusal this removes.
      */
     private static void intrinsicCallsIn(Ast.Expr e, Set<String> out) {
-        if (e instanceof Ast.Apply call && call.function() instanceof Ast.Var.Denoting
+        if (e instanceof Ast.Apply call && call.answered() != null
                 && call.denotes() instanceof ValueName.Stdlib) {
             Prelude.PreludeEntry entry = Prelude.entry(call.reaches());
             if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic
@@ -634,7 +634,7 @@ public final class HelperInliner {
      * before inlining, means the step reaches {@code foldFrom} (the one recursive helper) directly
      * rather than through a wrapper that would pass the function on as a value. */
     private static Ast.Apply desugar(Ast.Apply call) {
-        if (!(call.function() instanceof Ast.Var.Denoting)) {
+        if (call.answered() == null) {
             return call;   // it reaches no library name, so there is no sugar to write out
         }
         Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
@@ -718,7 +718,7 @@ public final class HelperInliner {
      * boundary is read in is what answers for it.
      */
     private Ast.RetType arrivesAs(Ast.Expr arg) {
-        if (!(arg instanceof Ast.Var.Denoting v)) {
+        if (!(arg instanceof Ast.Var v) || v.answered() == null) {
             return null;
         }
         Ast.FnDef is = expands(v.denotes(), v.reaches());
@@ -802,7 +802,7 @@ public final class HelperInliner {
      * Null when the name is not a helper (a builtin, an injected behavior, or unknown).
      */
     private List<Ast.FnParam> declaredParams(Ast.Apply call) {
-        if (!(call.function() instanceof Ast.Var.Denoting)) {
+        if (call.answered() == null) {
             return null;   // it reaches no declaration, so none of them declares anything
         }
         Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
@@ -871,7 +871,7 @@ public final class HelperInliner {
      * module declares is the lambda — with nothing to tell the two apart by.
      */
     private Ast.FnDef appliedHelper(Ast.Apply call) {
-        if (call.function() instanceof Ast.Var.Unanswered) {
+        if (call.appliesAName() && call.answered() == null) {
             return null;   // it names nothing, so no body stands behind it
         }
         return expands(call.denotes(), call.reaches());
@@ -1016,7 +1016,7 @@ public final class HelperInliner {
     /** The body {@code name} would put here, or null where the name stands for itself — asked as
      *  {@link #valueOf} and {@link #expandCall} ask it, so what is counted is what is spliced. */
     private Ast.Expr substitutedAt(Ast.Var name) {
-        if (!(name instanceof Ast.Var.Denoting)
+        if (name.answered() == null
                 || !(name.denotes() instanceof ValueName.Helper)
                 || graph.recurses(name.reaches())) {
             return null;
@@ -1176,7 +1176,7 @@ public final class HelperInliner {
      * callee's signature is one statement and this call decides its variables once.
      */
     private Ast.Expr expandCall(Ast.Apply rawCall) {
-        if (rawCall.function() instanceof Ast.Var.Unanswered) {
+        if (rawCall.answered() == null && rawCall.appliesAName()) {
             // The callee names nothing, which was reported where it is written. No body stands
             // behind it, no library sugar reaches for it, and no parameter list holds its arguments
             // against anything — so the call stays as it is and only its arguments are expanded.
@@ -1321,7 +1321,7 @@ public final class HelperInliner {
                 given.add(new Ast.Given(instantiated(p.type(), applied), arg,
                         references(helper.writtenBody(), p.binder().id()), arrivesAs(arg)));
                 Ast.FnType declares = declaredFn(p.type(), applied);
-                if (arg instanceof Ast.Var.Denoting fnName) {
+                if (arg instanceof Ast.Var fnName && fnName.answered() != null) {
                     // A name handed to a function parameter is substituted through: what
                     // applies it applies what it stands for. What it stands for is declared
                     // somewhere — a helper's own parameter, a binding, a function an
@@ -1432,7 +1432,7 @@ public final class HelperInliner {
      * {@code ()}, and there is no block taking no parameter to expand it to.
      */
     private OptionalInt declarationArity(Ast.Var v) {
-        if (!(v instanceof Ast.Var.Denoting)) {
+        if (v.answered() == null) {
             return OptionalInt.empty();   // it stands for no declaration to take anything
         }
         int arity = switch (v.denotes()) {
@@ -1478,7 +1478,7 @@ public final class HelperInliner {
             int k = next();
             return inline(etaExpand(v, arity.getAsInt(), i -> "$v" + k + "_" + i));
         }
-        if (!(v instanceof Ast.Var.Denoting) || !(v.denotes() instanceof ValueName.Helper)) {
+        if (v.answered() == null || !(v.denotes() instanceof ValueName.Helper)) {
             return v;
         }
         Ast.FnDef value = table.reached(v.reaches());
@@ -1627,12 +1627,12 @@ public final class HelperInliner {
      * parameter the inliner binds directly (see {@link #inline}).
      */
     private Ast.Apply desugarNamedBlock(Ast.Apply call) {
-        if (!(call.function() instanceof Ast.Var.Denoting)) {
+        if (call.answered() == null) {
             return call;   // it reaches nothing, so it is no named block to desugar
         }
         Integer idx = BLOCK_ARG.get(call.reaches());
         if (idx == null || idx >= call.args().size()
-                || !(call.args().get(idx) instanceof Ast.Var.Denoting v)) {
+                || !(call.args().get(idx) instanceof Ast.Var v) || v.answered() == null) {
             return call;
         }
         Ast.FnDef helper = expands(v.denotes(), v.reaches());
@@ -1982,7 +1982,7 @@ public final class HelperInliner {
      * comes out as far as its spelling is long.
      */
     private Ast.Var renameVar(Ast.Var v, Renaming renaming) {
-        if (!(v instanceof Ast.Var.Denoting)) {
+        if (v.answered() == null) {
             return v;   // it names nothing, so there is nothing to rename it to
         }
         Substituted stands = renaming.substituted(v.denotes());
@@ -2015,7 +2015,7 @@ public final class HelperInliner {
      * no exception.
      */
     private Ast.FnDef valueSpread(Ast.Var spread) {
-        if (!(spread instanceof Ast.Var.Denoting)
+        if (spread.answered() == null
                 || !(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }
@@ -2038,8 +2038,8 @@ public final class HelperInliner {
      */
     private static boolean references(Ast.Expr e, BindingId binding) {
         ValueName denotes = switch (e) {
-            case Ast.Var.Denoting v -> v.denotes();
-            case Ast.Apply c when c.function() instanceof Ast.Var.Denoting -> c.denotes();
+            case Ast.Var v when v.answered() != null -> v.denotes();
+            case Ast.Apply c when c.answered() != null -> c.denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Local local && local.id().equals(binding)) {
@@ -2093,15 +2093,16 @@ public final class HelperInliner {
         switch (e) {
             // `List.fold` desugars to `List.foldFrom` before inlining, so a body that folds reaches
             // the recursive `foldFrom` and not the wrapper it wrote.
-            case Ast.Apply call when call.function() instanceof Ast.Var.Denoting callee
+            case Ast.Apply call when call.answered() instanceof Ast.Var.Denoting callee
                     && !(callee.denotes() instanceof ValueName.Local) -> {
                 String fn = "List.fold".equals(call.reaches()) ? "List.foldFrom" : call.reaches();
                 if (table.containsKey(fn)) {
                     out.add(fn);
                 }
             }
-            case Ast.Var.Denoting v when v.denotes() instanceof ValueName.Helper
-                    || v.denotes() instanceof ValueName.Stdlib -> {
+            case Ast.Var v when v.answered() != null
+                    && (v.denotes() instanceof ValueName.Helper
+                            || v.denotes() instanceof ValueName.Stdlib) -> {
                 if (table.containsKey(v.reaches())) {
                     out.add(v.reaches());
                 }
@@ -2123,7 +2124,7 @@ public final class HelperInliner {
         // whatever else bears that name. The call carries what it resolved to, so it is asked rather
         // than matched against the helper table — a parameter named like a helper was reaching the
         // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive.
-        if (e instanceof Ast.Apply call && call.function() instanceof Ast.Var.Denoting callee
+        if (e instanceof Ast.Apply call && call.answered() instanceof Ast.Var.Denoting callee
                 && !(callee.denotes() instanceof ValueName.Local)) {
             // `List.fold` desugars to `List.foldFrom` before inlining, so a body that folds reaches the
             // recursive `foldFrom` — recursion classification and prelude-injection must see that.

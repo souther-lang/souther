@@ -680,7 +680,7 @@ public final class SpecChecker {
     }
 
     private static void collectRequiredCalls(Ast.Expr e, Set<String> requiredNames, List<String> out) {
-        if (e instanceof Ast.Apply call && call.function() instanceof Ast.Var.Denoting
+        if (e instanceof Ast.Apply call && call.answered() != null
                 && requiredNames.contains(call.reaches())
                 && !out.contains(call.reaches())) {
             out.add(call.written());

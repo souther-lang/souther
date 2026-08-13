@@ -10,12 +10,17 @@ import souther.compiler.ast.Ast;
  * {@link Ast.Var.Unanswered} are for — a name nothing declares was read, was reported where it is
  * written, and is as answered as the pass can make it. What this says is the other one: the pass has
  * been over this tree, so nothing in it is {@link Ast.Name.Written}, {@link Ast.Var.Written} or
- * {@link Ast.TypeRef.Written}, and a reader below has no such state to have a branch for.
+ * {@link Ast.TypeRef.Written}.
  *
  * <p>The three node types say it for themselves at each occurrence; this says it of the whole, which
  * is what a signature can carry. {@code Resolve} states the invariant in prose and every consumer
  * kept it by looking (issues #464, #696, #700); a consumer that is handed one of these cannot ask
  * for a resolution, because it holds nothing to resolve.
+ *
+ * <p>It does not make the unread state unrepresentable at each occurrence. A switch over
+ * {@link Ast.Var} is total over three records whatever module the value came out of, so a reader
+ * still writes an arm for the one that cannot be there and refuses it. What this removes is the
+ * question being asked again at every consumer, not the arm.
  *
  * <p>Minted in this package and nowhere else — the constructor is package-private, and
  * {@link Resolve} is what calls it. A pass that rewrites a resolved tree goes through
