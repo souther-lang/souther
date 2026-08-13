@@ -733,8 +733,13 @@ public final class Names {
      * declarations, and following it one declaration at a time would ask a question of itself where
      * two of them are made of each other. Across modules there is no such loop to close: an import
      * cycle is settled before this, so a module's declarations reach another's and stop.
+     *
+     * <p>Not part of what a reader outside this file asks. Whether a declaration has a meaning is
+     * {@link Definition}'s to answer and is answered by handing one over or not; a reader that could
+     * ask which ones have none would be a reader deciding for itself what to do about it, which is
+     * how the question of what a name means came to be answered in several places at once.
      */
-    public record Unbuilt(String name) implements Key<Set<String>> {
+    record Unbuilt(String name) implements Key<Set<String>> {
         @Override
         public String module() {
             return name;
