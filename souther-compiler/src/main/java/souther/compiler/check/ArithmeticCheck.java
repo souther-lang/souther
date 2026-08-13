@@ -5,7 +5,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.msg.ArithmeticMessage;
 import souther.compiler.types.Type;
 
-import java.util.List;
 
 /**
  * What arithmetic makes of two operand types: the type the operator answers with, or the rule that

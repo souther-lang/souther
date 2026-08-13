@@ -4,7 +4,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
-import souther.compiler.diag.DiagnosticCode;
 
 import java.util.List;
 import java.util.Optional;

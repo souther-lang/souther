@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxKind;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;

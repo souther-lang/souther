@@ -3,10 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.types.TypeName;
-import souther.compiler.types.ValueName;
-import souther.compiler.types.Type;
 
 import souther.compiler.numeric.Count;
 import java.util.ArrayList;

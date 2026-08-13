@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;

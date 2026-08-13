@@ -3,7 +3,6 @@ package souther.compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Located;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;

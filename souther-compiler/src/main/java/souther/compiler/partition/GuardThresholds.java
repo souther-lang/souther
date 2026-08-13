@@ -7,14 +7,12 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 

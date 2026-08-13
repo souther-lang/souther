@@ -13,7 +13,6 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.OriginRef;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.types.TypeName;
 import souther.compiler.query.PartitionEvidence;

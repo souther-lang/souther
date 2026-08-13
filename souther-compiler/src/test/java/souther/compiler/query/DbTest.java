@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.DiagnosticCode;
 
 
 import souther.compiler.diag.CompileException;

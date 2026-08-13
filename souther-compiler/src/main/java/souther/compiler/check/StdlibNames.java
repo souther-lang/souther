@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 
 import java.util.List;

@@ -9,7 +9,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeReachName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;

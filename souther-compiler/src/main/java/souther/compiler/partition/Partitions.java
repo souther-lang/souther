@@ -10,12 +10,9 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.InvariantBound;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
-import souther.compiler.diag.SourceRef;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -24,15 +21,12 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeReachName;
-import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * The equivalence classes a model already states, read off the types a behavior takes.

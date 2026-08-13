@@ -1,17 +1,10 @@
 package souther.compiler.derive;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.DataMessage;
-import souther.compiler.diag.msg.NameMessage;
-import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
-import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
