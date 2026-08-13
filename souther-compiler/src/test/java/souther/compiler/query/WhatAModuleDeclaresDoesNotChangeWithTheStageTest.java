@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.meta.ModulePath;
 
@@ -59,12 +60,16 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     /** Every stage that hands a module over, by the name of the stage. */
     private static Map<String, Ast.Module> stagesOf(Db db, String name) {
         Map<String, Key<Ast.Module>> keys = new LinkedHashMap<>();
-        keys.put("resolved", new Names.Resolved(name));
+        // Resolution answers with the tree and the claim that it has been read, which the stages
+        // below it hand on as an ordinary module.
+        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+        assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
         keys.put("derived", new Shapes.Derived(name));
         keys.put("desugared", new Shapes.Desugared(name));
         keys.put("prepared", new Shapes.Prepared(name));
         keys.put("settled", new Bodies.Settled(name));
         Map<String, Ast.Module> out = new LinkedHashMap<>();
+        out.put("resolved", resolved.value().module());
         keys.forEach((stage, key) -> {
             Answer<Ast.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());

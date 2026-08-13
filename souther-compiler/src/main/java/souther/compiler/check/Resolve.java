@@ -220,7 +220,7 @@ public final class Resolve {
      * resolved as if the mistake were not there — so an author is told about every unknown name at
      * once instead of one per compile, and an editor can still say what the names around it mean.
      */
-    public record Resolved(Ast.Module module, ResolutionIndex index,
+    public record Resolved(ResolvedModule module, ResolutionIndex index,
                            List<CompileException> unresolved,
                            Map<String, OfDeclaration> declarations) {}
 
@@ -258,7 +258,7 @@ public final class Resolve {
             // the compiler, not something an author can be told about and carry on past.
             throw resolved.unresolved().get(0);
         }
-        return resolved.module();
+        return resolved.module().module();
     }
 
     /** As {@link #module(Ast.Module, Symbols)}, keeping what each name was answered with. */
@@ -333,9 +333,9 @@ public final class Resolve {
             exposedOutputs.put(e.getKey(), r.retType(e.getValue()));
         }
         return new Resolved(
-                new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
-                        behaviors, fns, m.takenOn(), examples, fakes, m.exampleFileTarget(),
-                        m.pos()),
+                new ResolvedModule(new Ast.Module(m.name(), m.exposing(), exposedOutputs,
+                        m.imports(), defs, behaviors, fns, m.takenOn(), examples, fakes,
+                        m.exampleFileTarget(), m.pos())),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
                         Map.copyOf(r.binders)),
                 List.copyOf(r.unresolved), Map.copyOf(declarations));

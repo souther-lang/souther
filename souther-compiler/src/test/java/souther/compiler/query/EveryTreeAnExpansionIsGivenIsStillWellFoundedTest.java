@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.ValueCycles;
 import souther.compiler.diag.CompileException;
@@ -89,12 +90,16 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
     /** Each tree a compile of {@code name} makes, by the stage that makes it. */
     private static Map<String, Ast.Module> treesOf(Db db, String name) {
         Map<String, Key<Ast.Module>> stages = new LinkedHashMap<>();
-        stages.put("resolved", new Names.Resolved(name));
+        // Resolution answers with the tree and the claim that it has been read, which the stages
+        // below it hand on as an ordinary module.
+        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+        assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
         stages.put("derived", new Shapes.Derived(name));
         stages.put("desugared", new Shapes.Desugared(name));
         stages.put("prepared", new Shapes.Prepared(name));
         stages.put("settled", new Bodies.Settled(name));
         Map<String, Ast.Module> out = new LinkedHashMap<>();
+        out.put("resolved", resolved.value().module());
         stages.forEach((stage, key) -> {
             Answer<Ast.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());
@@ -153,9 +158,10 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                     constructs Out
                 let go (i) = Out { n = i.n + step }
                 """), Set.of(), ModulePath.EMPTY).db();
-        Answer<Ast.Module> resolved = db.ask(new Names.Resolved("m.a"));
+        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved("m.a"));
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 
-        assertThrows(CompileException.class, () -> ValueCycles.rejectIn(resolved.value(), Map.of()));
+        assertThrows(CompileException.class,
+                () -> ValueCycles.rejectIn(resolved.value().module(), Map.of()));
     }
 }

@@ -42,7 +42,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
         if (!answered.unresolved().isEmpty()) {
             throw answered.unresolved().get(0);
         }
-        return answered.module();
+        return answered.module().module();
     }
 
     /** The value {@code up} publishes, under the name a reader reaches it by — which is how it

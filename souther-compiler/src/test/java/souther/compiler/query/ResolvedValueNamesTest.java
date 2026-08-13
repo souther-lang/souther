@@ -38,7 +38,7 @@ class ResolvedValueNamesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        return c.db().ask(new Names.Resolved("m.a")).value();
+        return c.db().ask(new Names.Resolved("m.a")).value().module();
     }
 
     /** Every name used as a value in the module's bodies, in the order it is written. */

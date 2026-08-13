@@ -6,6 +6,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.Suggest;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -468,8 +469,8 @@ public final class Names {
 
         @Override
         public Answer<Map<String, Ast.Def>> compute(Db db) {
-            Answer<Ast.Module> m = db.ask(new Resolved(name));
-            return m.present() ? Answer.of(defsOf(m.value())) : Answer.absent();
+            Answer<ResolvedModule> m = db.ask(new Resolved(name));
+            return m.present() ? Answer.of(defsOf(m.value().module())) : Answer.absent();
         }
     }
 
@@ -711,7 +712,7 @@ public final class Names {
                     || unbuilt.value().contains(named.name())) {
                 return Answer.absent();
             }
-            for (Ast.Def def : resolution.value().module().defs()) {
+            for (Ast.Def def : resolution.value().module().module().defs()) {
                 if (def.name().equals(named.name())) {
                     return Answer.of(def);
                 }
@@ -1069,14 +1070,14 @@ public final class Names {
     }
 
     /** The resolved module — {@link Resolution} without the record of how it got there. */
-    public record Resolved(String name) implements Key<Ast.Module> {
+    public record Resolved(String name) implements Key<ResolvedModule> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
+        public Answer<ResolvedModule> compute(Db db) {
             Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
             return resolution.present() ? Answer.of(resolution.value().module()) : Answer.absent();
         }
