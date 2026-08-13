@@ -20,8 +20,10 @@ import souther.compiler.Reserved;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Says once, for a whole module, what every written type name denotes.
@@ -206,7 +208,18 @@ public final class Resolve {
      * once instead of one per compile, and an editor can still say what the names around it mean.
      */
     public record Resolved(Ast.Module module, ResolutionIndex index,
-                           List<CompileException> unresolved) {}
+                           List<CompileException> unresolved,
+                           Map<String, OfDeclaration> declarations) {}
+
+    /**
+     * What resolving one declaration came to.
+     *
+     * <p>{@code answered} is whether every name written in it was answered — the names met while it
+     * was being read, and no others, so a mistake in the declaration beside it is not one of these.
+     * {@code reaches} is what those names turned out to denote, which is what says whether this
+     * declaration stands on one that has no meaning.
+     */
+    public record OfDeclaration(boolean answered, Set<TypeName> reaches) {}
 
     /** What a binding is called, and the occurrence of that name the author wrote. */
     public record BoundName(WrittenName written) {
@@ -245,8 +258,20 @@ public final class Resolve {
     public static Resolved resolving(Ast.Module m, Symbols symbols, Values values) {
         Resolve r = new Resolve(symbols, values);
         List<Ast.Def> defs = new ArrayList<>();
+        // Which names were answered is settled per declaration: what one of them writes is nothing
+        // the one beside it wrote, and the names met while it was being read are its own.
+        Map<String, OfDeclaration> declarations = new LinkedHashMap<>();
         for (Ast.Def def : m.defs()) {
-            defs.add(r.def(def));
+            int unansweredBefore = r.unresolved.size();
+            int denotedBefore = r.denotations.size();
+            Ast.Def resolved = r.def(def);
+            defs.add(resolved);
+            Set<TypeName> reaches = new LinkedHashSet<>();
+            for (Denotation d : r.denotations.subList(denotedBefore, r.denotations.size())) {
+                reaches.add(d.denotes());
+            }
+            declarations.put(resolved.name(),
+                    new OfDeclaration(r.unresolved.size() == unansweredBefore, Set.copyOf(reaches)));
         }
         List<Ast.BehaviorDef> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
@@ -295,7 +320,7 @@ public final class Resolve {
                         m.pos()),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
                         Map.copyOf(r.binders)),
-                List.copyOf(r.unresolved));
+                List.copyOf(r.unresolved), Map.copyOf(declarations));
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {

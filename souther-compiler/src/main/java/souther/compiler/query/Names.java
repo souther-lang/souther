@@ -690,6 +690,115 @@ public final class Names {
     }
 
     /**
+     * One declaration as its meaning was settled, or absent where it was not settled.
+     *
+     * <p>The unit a name is answered for is the declaration. A definition is here when every name
+     * written in it was answered and every declaration it reaches has one of these too; otherwise
+     * there is nothing to hand a later pass, and it is not built rather than built around what is
+     * missing.
+     */
+    public record Definition(TypeName named) implements Key<Ast.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Ast.Def> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(named.module()));
+            Answer<Set<String>> unbuilt = db.ask(new Unbuilt(named.module()));
+            if (!resolution.present() || !unbuilt.present()
+                    || unbuilt.value().contains(named.name())) {
+                return Answer.absent();
+            }
+            for (Ast.Def def : resolution.value().module().defs()) {
+                if (def.name().equals(named.name())) {
+                    return Answer.of(def);
+                }
+            }
+            return Answer.absent();
+        }
+    }
+
+    /**
+     * The declarations of a module that have no meaning to give.
+     *
+     * <p>Two ways in, and both are about what a declaration is made of rather than about what was
+     * reported. A name written in it was not answered, so what it is made of is not there; or what
+     * it reaches is one of these, so what that is made of is not there either. A module that will
+     * not be emitted for some other reason has declarations that mean what they say, and they are
+     * not in here.
+     *
+     * <p>Asked of a whole module at once because the reaching is a relation among its own
+     * declarations, and following it one declaration at a time would ask a question of itself where
+     * two of them are made of each other. Across modules there is no such loop to close: an import
+     * cycle is settled before this, so a module's declarations reach another's and stop.
+     */
+    public record Unbuilt(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            if (cyclic(db, name)) {
+                return Answer.absent();
+            }
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.absent();
+            }
+            Map<String, Resolve.OfDeclaration> declarations = resolution.value().declarations();
+            Set<String> unbuilt = new LinkedHashSet<>();
+            Map<String, Set<String>> elsewhere = new LinkedHashMap<>();
+            for (Map.Entry<String, Resolve.OfDeclaration> declared : declarations.entrySet()) {
+                if (!declared.getValue().answered()) {
+                    unbuilt.add(declared.getKey());
+                    continue;
+                }
+                for (TypeName reached : declared.getValue().reaches()) {
+                    if (reached.module().equals(name)) {
+                        continue;
+                    }
+                    Set<String> there = elsewhere.computeIfAbsent(reached.module(),
+                            m -> unbuiltIn(db, m));
+                    if (there.contains(reached.name())) {
+                        unbuilt.add(declared.getKey());
+                        break;
+                    }
+                }
+            }
+            // What reaches one of these has nothing to stand on either, and so has what reaches
+            // that. Held to the declarations of this module, which is where the relation is.
+            boolean more = true;
+            while (more) {
+                more = false;
+                for (Map.Entry<String, Resolve.OfDeclaration> declared : declarations.entrySet()) {
+                    if (unbuilt.contains(declared.getKey())) {
+                        continue;
+                    }
+                    for (TypeName reached : declared.getValue().reaches()) {
+                        if (reached.module().equals(name) && unbuilt.contains(reached.name())) {
+                            unbuilt.add(declared.getKey());
+                            more = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            return Answer.of(Set.copyOf(unbuilt));
+        }
+
+        /** What another module could not build, or nothing where it could not be read — what is
+         * wrong there is reported there, and a name reaching into it is answered by its absence. */
+        private static Set<String> unbuiltIn(Db db, String module) {
+            Answer<Set<String>> there = db.ask(new Unbuilt(module));
+            return there.present() ? there.value() : Set.of();
+        }
+    }
+
+    /**
      * Whether everything the compiler worked out about a module's names came out.
      *
      * <p>One question, asked in one place, so that whether a module may be emitted does not become a
