@@ -51,6 +51,10 @@
         <maven.compiler.release>25</maven.compiler.release>
         <raoh.version>0.7.2</raoh.version>
         <jspecify.version>1.0.0</jspecify.version>
+        <!-- Where compiled classes go, named so the `m2e` profile below can send the editor's
+             somewhere else. A build outside the editor uses the Maven defaults. -->
+        <build.classes>${project.basedir}/target/classes</build.classes>
+        <build.test.classes>${project.basedir}/target/test-classes</build.test.classes>
         <errorprone.version>2.50.0</errorprone.version>
         <nullaway.version>0.13.8</nullaway.version>
         <!-- Which Error Prone checks a build runs. Measured on `clean test-compile`, whole
@@ -133,6 +137,8 @@
     </dependencyManagement>
 
     <build>
+        <outputDirectory>${build.classes}</outputDirectory>
+        <testOutputDirectory>${build.test.classes}</testOutputDirectory>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -255,6 +261,30 @@
             </activation>
             <properties>
                 <errorprone.checks/>
+            </properties>
+        </profile>
+        <!-- An editor's Java support builds these modules through m2e, and m2e points an Eclipse
+             project's output at whatever the pom names: ECJ then writes into target/classes, which
+             is where maven-compiler-plugin reads staleness from. A class file newer than its source
+             is indistinguishable from an up-to-date build, so javac is skipped and whatever ECJ
+             left is what runs — including the classes it writes under proceedOnError, whose bodies
+             throw `Unresolved compilation problem` at run time. Sending the editor's output
+             somewhere else leaves target/classes with one writer.
+
+             m2e sets the `m2e.version` property while it resolves a pom and a command-line build
+             never does, so this profile is on in the editor and off everywhere else. The editor
+             settings that would otherwise carry this are in `.vscode/`, which is not in the
+             repository: a rule that has to hold for every checkout belongs here. -->
+        <profile>
+            <id>m2e</id>
+            <activation>
+                <property>
+                    <name>m2e.version</name>
+                </property>
+            </activation>
+            <properties>
+                <build.classes>${project.basedir}/target/jdt-classes</build.classes>
+                <build.test.classes>${project.basedir}/target/jdt-test-classes</build.test.classes>
             </properties>
         </profile>
         <!-- Activate for a Central release: `mvn -Prelease deploy`. Attaches sources and
