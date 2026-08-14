@@ -49,7 +49,8 @@ import java.util.Set;
  * <p>Whether the behavior was applied is the {@link Stage} column: everything at {@code INVOKED} or
  * past it says what applied it ({@link Run#applied()}), and everything before it says nothing did.
  * What the row counted is a different question and is not read off this table — a row that stopped
- * at {@code NONE} spent whatever its fixtures spent.
+ * at {@code NONE} spent whatever its fixtures spent, and a row given up on was never read at all
+ * ({@link Counting}).
  *
  * @param at             where the row is written
  * @param target         the behavior the row is about
@@ -70,9 +71,9 @@ import java.util.Set;
  *                       A row that reached {@link Stage#INVOKED} says what applied it and a row that
  *                       did not says nothing did, which is held to at construction: the two are
  *                       different cuts of one evaluation and cannot be recorded disagreeing. What
- *                       was counted is not held to the stage, because a row's evaluation is not only
- *                       its application — a fixture applies the helpers it names first, so a row
- *                       that applied nothing can still have spent counted points
+ *                       the counting says is not held to the stage, because a row's evaluation is
+ *                       not only its application — a fixture applies the helpers it names first, so
+ *                       a row that applied nothing can still have spent counted points
  */
 public record RowOutcome(SourceRef at,
                          String target,

@@ -17,19 +17,19 @@ import java.util.Objects;
  * did eleven points of counted work. Reading the count off the application would have thrown that
  * away, and reading the application off the count would say a row that spent nothing applied nothing.
  *
- * @param applied what applied the behavior, if anything did
- * @param counted what this compile counted of the row's evaluation, application and fixtures alike
+ * @param applied  what applied the behavior, if anything did
+ * @param counting what this compile counted of the row's evaluation — application and fixtures
+ *                 alike — or that it was never read
  */
-public record Run(Applied applied, Counted counted) {
+public record Run(Applied applied, Counting counting) {
 
     public Run {
         Objects.requireNonNull(applied, "a row says what applied the behavior, or that nothing did");
-        Objects.requireNonNull(counted, "a row says what this compile counted of it");
+        Objects.requireNonNull(counting, "a row says what this compile counted of it, or that it did not");
     }
 
-    /** A row that applied nothing and spent nothing — what a row that could not be evaluated at all
-     * leaves behind. */
+    /** A row that applied nothing and was read to have spent nothing. */
     public static Run nothing() {
-        return new Run(new Applied.Nothing(), new Counted(0L, java.util.Set.of()));
+        return new Run(new Applied.Nothing(), new Counting.Read(0L, java.util.Set.of()));
     }
 }

@@ -17,6 +17,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.OutputCaseEvidence;
+import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
@@ -310,7 +311,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : rowsOf(db, name).values()) {
                 for (RowOutcome row : observed.rows()) {
-                    lit.addAll(row.run().counted().hits());
+                    lit.addAll(litBy(row));
                 }
             }
             Map<String, Effective> out = new LinkedHashMap<>();
@@ -782,7 +783,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : byTarget.values()) {
                 for (RowOutcome row : observed.rows()) {
-                    lit.addAll(row.run().counted().hits());
+                    lit.addAll(litBy(row));
                 }
             }
 
@@ -1882,4 +1883,20 @@ public final class Adequacy {
     }
 
     private Adequacy() {}
+
+    /**
+     * The sites a row is known to have gone through.
+     *
+     * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
+     * here rather than a row silently counted as having lit nothing. A row whose counting was never
+     * read lights none that anything here can name, and that it was left undecided is said where the
+     * row is reported.
+     */
+    private static java.util.Set<Integer> litBy(RowOutcome row) {
+        return switch (row.run().counting()) {
+            case Counting.Read read -> read.hits();
+            case Counting.Unread _ -> java.util.Set.of();
+        };
+    }
+
 }

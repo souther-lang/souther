@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Applied;
-import souther.compiler.observe.Counted;
+import souther.compiler.observe.Counting;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Run;
@@ -149,7 +149,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
                 .filter(row -> row.disposition() == Disposition.HELD)
                 .findFirst().orElseThrow(() -> new AssertionError("a row holds in this model"));
 
-        Counted counted = held.run().counted();
+        Counting.Read counted = assertInstanceOf(Counting.Read.class, held.run().counting());
         assertTrue(counted.steps() >= 0, "the count is this compile's own reading");
         assertFalse(counted.hits().isEmpty(),
                 "and so are the arms it went through, this compile having emitted what counts them");
@@ -168,8 +168,8 @@ class ARowSaysWhatAppliedTheBehaviorTest {
 
         assertEquals(Stage.NONE, broke.stage(), "it did not get as far as applying anything");
         assertEquals(new Applied.Nothing(), broke.run().applied());
-        assertTrue(broke.run().counted().steps() > 0,
-                "and the helper its fixture applied cost counted points: " + broke.run().counted());
+        assertTrue(assertInstanceOf(Counting.Read.class, broke.run().counting()).steps() > 0,
+                "and the helper its fixture applied cost counted points: " + broke.run().counting());
     }
 
     @Test
@@ -187,7 +187,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), Stage.FIXTURES_VALIDATED,
                         ran.disposition(), ran.failurePhase(), ran.expectedArm(), ran.resultArm(),
                         ran.inputCases(), ran.inputs(),
-                        new Run(new Applied.GeneratedHere(), new Counted(1L, Set.of()))),
+                        new Run(new Applied.GeneratedHere(), new Counting.Read(1L, Set.of()))),
                 "and one that did not has nothing to say applied it");
         assertThrows(NullPointerException.class,
                 () -> new RowOutcome(ran.at(), ran.target(), ran.identity(), ran.stage(),
