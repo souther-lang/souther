@@ -82,14 +82,11 @@ public final class GeneratedRows {
      */
     public static String of(String module, Map<String, Adequacy.Filling> generated,
                             boolean boundaries, SourceNameResolver names) {
-        List<Map.Entry<String, List<Generator.GeneratedRow>>> asked = new ArrayList<>();
+        List<Map.Entry<String, Composed>> asked = new ArrayList<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
-            List<Generator.GeneratedRow> here =
-                    new ArrayList<>(behavior.getValue().pairs().rows());
-            if (boundaries) {
-                here.addAll(behavior.getValue().boundaries().rows());
-            }
-            asked.add(Map.entry(behavior.getKey(), here));
+            asked.add(Map.entry(behavior.getKey(),
+                    new Composed(behavior.getValue().pairs().rows(),
+                            boundaries ? behavior.getValue().boundaries().rows() : List.of())));
         }
         // Written once and then read three times — printed, counted, and asked whether there is
         // anything to answer. Counting the candidates instead gives a number about work a reader
@@ -136,18 +133,18 @@ public final class GeneratedRows {
      *
      * <p>A candidate is composed once per obligation, and the positions an obligation does not name
      * are filled without reference to the others, so two obligations can be answered by one row. What
-     * is offered is the row: a reader is handed one piece of work and told everything it settles.
+     * is offered is the row: a reader is handed one piece of work rather than the same values twice.
+     * What that one row settles is a fact about this run and is not what it is named for
+     * ({@link #offered}).
      *
-     * @param inputs  the row's values, in the form they are written in
-     * @param stands  what the row meets, in the order the obligations were composed
+     * @param inputs the row's values, in the form they are written in
+     * @param name   what the row is offered under
      */
-    private record Offered(String inputs, List<String> stands) {
+    private record Offered(String inputs, String name) {}
 
-        /** What the row is about, in the form a row's description is written in. */
-        String description() {
-            return String.join(" x ", stands);
-        }
-    }
+    /** What one behavior's rows were composed for: the cells of its partition, and the lines a rule
+     * draws. Kept apart because a row's name comes from what it was composed for. */
+    private record Composed(List<Generator.GeneratedRow> cells, List<Generator.GeneratedRow> lines) {}
 
     /**
      * The candidates as rows, one per row rather than one per obligation.
@@ -157,29 +154,43 @@ public final class GeneratedRows {
      * each naming its own obligation, and that is the direction to be wrong in. A grouping on values
      * would need an identity for them that nothing here has — a fixture carries the position it was
      * parsed at and the path it was constructed through — and the row a person reads is the row.
+     *
+     * <p>A row is named for what it was composed for and not for everything it turned out to settle.
+     * The two are different questions: which row this is, and what this run of the generator is
+     * handing it. The second changes with the rest of the model — a row written elsewhere can meet a
+     * line this row also sits on, and the line stops being offered — and a name that moved with it
+     * would be a name for the state of the generation rather than for the row. So a row composed for
+     * a cell is named by the cell, and one composed only for a line by the line: what it is offered
+     * under is the same on the next run whatever else was written meanwhile.
+     *
+     * <p>Where one written row is composed for a cell and for a line at once, the cell names it: it
+     * says where every divided position of that row sits, and the line says where one of them does.
+     * Two lines met by one row and no cell is the one case with a choice left in it, and the first by
+     * name is taken so that the same two make the same choice.
      */
-    private static Map<String, List<Offered>> offered(
-            List<Map.Entry<String, List<Generator.GeneratedRow>>> asked) {
+    private static Map<String, List<Offered>> offered(List<Map.Entry<String, Composed>> asked) {
         // One block per behavior, however many kinds of row it holds. Rows of one behavior written
         // under two headings are legal and read as two lists of something, which they are not.
-        Map<String, Map<String, List<String>>> byBehavior = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Generator.GeneratedRow>> behavior : asked) {
-            Map<String, List<String>> here =
-                    byBehavior.computeIfAbsent(behavior.getKey(), _ -> new LinkedHashMap<>());
-            for (Generator.GeneratedRow row : behavior.getValue()) {
-                List<String> stands = here.computeIfAbsent(String.join(", ", textsOf(row.inputs())),
-                        _ -> new ArrayList<>());
-                for (String each : row.classes()) {
-                    if (!stands.contains(each)) {
-                        stands.add(each);
-                    }
-                }
+        Map<String, Map<String, String>> byBehavior = new LinkedHashMap<>();
+        for (Map.Entry<String, Composed> behavior : asked) {
+            Map<String, String> cells = new LinkedHashMap<>();
+            Map<String, String> lines = new LinkedHashMap<>();
+            for (Generator.GeneratedRow row : behavior.getValue().cells()) {
+                cells.putIfAbsent(String.join(", ", textsOf(row.inputs())), row.description());
             }
+            for (Generator.GeneratedRow row : behavior.getValue().lines()) {
+                lines.merge(String.join(", ", textsOf(row.inputs())), row.description(),
+                        (first, next) -> first.compareTo(next) <= 0 ? first : next);
+            }
+            Map<String, String> here =
+                    byBehavior.computeIfAbsent(behavior.getKey(), _ -> new LinkedHashMap<>());
+            here.putAll(cells);
+            lines.forEach(here::putIfAbsent);
         }
         Map<String, List<Offered>> out = new LinkedHashMap<>();
         byBehavior.forEach((behavior, rows) -> {
             List<Offered> here = new ArrayList<>();
-            rows.forEach((inputs, stands) -> here.add(new Offered(inputs, stands)));
+            rows.forEach((inputs, name) -> here.add(new Offered(inputs, name)));
             out.put(behavior, here);
         });
         return out;
@@ -201,7 +212,7 @@ public final class GeneratedRows {
             }
             source.append("\n").append("example ").append(behavior.getKey()).append("\n");
             for (Offered row : behavior.getValue()) {
-                source.append("    | \"").append(row.description()).append("\" : (")
+                source.append("    | \"").append(row.name()).append("\" : (")
                         .append(row.inputs())
                         .append(") -> ").append(PLACEHOLDER).append("\n");
             }
