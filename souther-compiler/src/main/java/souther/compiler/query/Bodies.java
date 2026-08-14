@@ -1223,14 +1223,53 @@ public final class Bodies {
      * found. What is left here is the decision they and the module's own check come to together:
      * whether there is a module to emit.
      */
-    public record Checked(String name) implements Key<TypeChecker.Checked> {
+    /**
+     * What a successful check produced for the backend (issue #81): the Core of every body it typed,
+     * carrying the type decided for each node. The backend emits from these rather than translating
+     * the AST and inferring the same types a second time.
+     *
+     * <p>Held here, where the check that produces one is asked. What makes a module's bodies these
+     * is a conjunction {@link Checked} evaluates — every name came out, every body was typed, the
+     * module is sound, and no type nobody could name is left in it — so this is minted there and
+     * nowhere else. Somewhere a caller could build one is somewhere the conjunction is not what makes
+     * it true.
+     *
+     * <p>Whether the check established that is the answer being there. {@code Answer} says it
+     * already: absent is a check that did not, present is one that did, and this is what the one
+     * that did produced. A reader wanting only the fact asks whether the answer is present.
+     *
+     * <p>What the check found is not in here. A warning belongs to the question that raised it, which
+     * is one body, and a caller that wants them reads them from there.
+     */
+    public static final class Elaborated {
+
+        private final Map<String, Core> behaviorBodies;
+        private final Map<String, Core> emittedHelpers;
+
+        private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers) {
+            this.behaviorBodies = behaviorBodies;
+            this.emittedHelpers = emittedHelpers;
+        }
+
+        /** The Core of each behavior body, by the behavior's name. */
+        public Map<String, Core> behaviorBodies() {
+            return behaviorBodies;
+        }
+
+        /** The Core of each helper the module emits as a method of its own. */
+        public Map<String, Core> emittedHelpers() {
+            return emittedHelpers;
+        }
+    }
+
+    public record Checked(String name) implements Key<Elaborated> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<TypeChecker.Checked> compute(Db db) {
+        public Answer<Elaborated> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             // Asked before any body, so a module told about its own mistakes is told about them
             // first: an author reads the file from the top, and the check of a body it declares
@@ -1281,7 +1320,7 @@ public final class Bodies {
                     && module.value().sound()
                     && !TypeOps.holdsAnErroneousType(settled.value());
             return sound
-                    ? Answer.of(new TypeChecker.Checked(bodies, module.value().emittedHelpers()))
+                    ? Answer.of(new Elaborated(bodies, module.value().emittedHelpers()))
                     : Answer.absent();
         }
     }

@@ -187,7 +187,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
-            souther.compiler.check.TypeChecker.Checked checked =
+            souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
@@ -230,7 +230,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            souther.compiler.check.TypeChecker.Checked checked =
+            souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
@@ -350,7 +350,7 @@ public final class Adequacy {
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             // What each body can answer with, so that a case only an unreachable arm produces is not
             // counted. Read from the same reachability the arms are counted by.
-            souther.compiler.check.TypeChecker.Checked checkedBodies =
+            souther.compiler.query.Bodies.Elaborated checkedBodies =
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
@@ -400,7 +400,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            souther.compiler.check.TypeChecker.Checked checked =
+            souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
@@ -470,7 +470,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            souther.compiler.check.TypeChecker.Checked checked =
+            souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
@@ -774,7 +774,7 @@ public final class Adequacy {
             // A behavior with no `let` has no arms, which is not the same as a body whose arms nothing
             // reaches. The bodies say which is which; the arm count cannot, since a body with no fork
             // in it also has none.
-            souther.compiler.check.TypeChecker.Checked checked =
+            souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Set<String> withBodies = checked == null ? Set.of() : checked.behaviorBodies().keySet();
             Map<String, Observed> byTarget = rowsOf(db, name);
@@ -1050,7 +1050,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            souther.compiler.check.TypeChecker.Checked checked =
+            souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();

@@ -89,6 +89,27 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     }
 
     /**
+     * The bodies a check produced are minted where the check is, and nowhere a caller could reach.
+     *
+     * <p>It is not a state of the module and does not belong to this family: whether the check
+     * established anything is the answer being present, which is what {@code Answer} says already.
+     * What is here is the other half — the value that only a check which did establish it produces —
+     * and the conjunction that makes it true is evaluated in the query that answers with it.
+     */
+    @Test
+    void whatACheckProducedIsMintedWhereTheCheckIs() {
+        Class<?> elaborated = souther.compiler.query.Bodies.Elaborated.class;
+
+        assertEquals(0, elaborated.getConstructors().length,
+                "a caller that could build one would be a caller the conjunction does not hold for");
+        for (Method m : elaborated.getMethods()) {
+            assertFalse(Modifier.isStatic(m.getModifiers())
+                            && m.getReturnType() == elaborated,
+                    "Bodies.Elaborated." + signature(m) + " is a way in that is not the check");
+        }
+    }
+
+    /**
      * What a module prepares is not asked per output file.
      *
      * <p>The classes are emitted once per module, and every example row attached to it runs against

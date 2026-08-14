@@ -27,16 +27,6 @@ public final class TypeChecker {
 
     private TypeChecker() {}
 
-    /**
-     * What a successful check produced for the backend (issue #81): the Core of every body it typed,
-     * carrying the type decided for each node. The backend emits from these rather than translating
-     * the AST and inferring the same types a second time.
-     *
-     * <p>What the check found is not in here. A warning belongs to the question that raised it, which
-     * is one body, and a caller that wants them reads them from there.
-     */
-    public record Checked(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers) {}
-
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
         final Map<String, Core> helpers = new LinkedHashMap<>();

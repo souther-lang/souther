@@ -1,5 +1,7 @@
 package souther.compiler.codegen;
 
+import souther.compiler.query.Bodies;
+
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -63,7 +65,7 @@ public final class Backend {
     private final CodecGen codec;
     private final ValueClassGen value;
     /** The checker's elaborated bodies: what this emits from (issue #81). */
-    private final TypeChecker.Checked checked;
+    private final Bodies.Elaborated checked;
 
     /**
      * Every fn {@code module} emits a method for: what its source declared, and what it took on to
@@ -80,7 +82,7 @@ public final class Backend {
         return all;
     }
 
-    private Backend(CodegenContext ctx, TypeChecker.Checked checked) {
+    private Backend(CodegenContext ctx, Bodies.Elaborated checked) {
         this.ctx = ctx;
         this.pkg = ctx.pkg;
         this.symbols = ctx.symbols;
@@ -123,7 +125,7 @@ public final class Backend {
                                                Set<String> importedInjected,
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
-                                               TypeChecker.Checked checked,
+                                               Bodies.Elaborated checked,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
                 requirements, checked, dischargeInvariants, Instrumentation.NONE);
@@ -149,7 +151,7 @@ public final class Backend {
                                                Set<String> importedInjected,
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
-                                               TypeChecker.Checked checked,
+                                               Bodies.Elaborated checked,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                Instrumentation instrumentation) {
         try {
@@ -170,7 +172,7 @@ public final class Backend {
                                                   Set<String> importedInjected,
                                                   Map<String, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
-                                                  TypeChecker.Checked checked,
+                                                  Bodies.Elaborated checked,
                                                   Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();

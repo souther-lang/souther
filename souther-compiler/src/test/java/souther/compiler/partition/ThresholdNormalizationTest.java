@@ -47,7 +47,7 @@ class ThresholdNormalizationTest {
         Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()

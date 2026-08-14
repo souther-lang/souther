@@ -88,11 +88,11 @@ public final class Output {
                       Map<String, Sig> sigs, Map<String, Sig> imported, Set<String> injected,
                       Map<String, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
-                      TypeChecker.Checked checked,
+                      Bodies.Elaborated checked,
                       Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses) {}
 
         static Inputs inputs(Db db, String name) {
-            Answer<TypeChecker.Checked> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             // The same answer the check read. The backend replays the composition walk and emits
@@ -326,7 +326,7 @@ public final class Output {
         /** The plan of the same module, for a caller that needs to read what a hit set means. Made
          * from the same answer the classes were generated from, so the numbers agree. */
         public static CoverageSites.Plan planOf(Db db, String module) {
-            TypeChecker.Checked checked = db.ask(new Bodies.Checked(module)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
             return checked == null ? CoverageSites.Plan.NONE
                     : CoverageSites.of(sourceIdOf(db, module), checked.behaviorBodies());
         }
@@ -611,7 +611,7 @@ public final class Output {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            if (db.ask(new Bodies.Checked(name)).value() == null) {
+            if (!db.ask(new Bodies.Checked(name)).present()) {
                 // a module that did not check states nothing yet
                 return Answer.of(souther.compiler.examples.ExampleStatements.Readings.NONE);
             }
@@ -839,7 +839,7 @@ public final class Output {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return List.of();
             }
-            if (db.ask(new Bodies.Checked(name)).value() == null) {
+            if (!db.ask(new Bodies.Checked(name)).present()) {
                 return List.of();   // a module that did not check has nothing to build a value with
             }
             Map<String, byte[]> classes =
@@ -874,7 +874,7 @@ public final class Output {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            if (db.ask(new Bodies.Checked(name)).value() == null) {
+            if (!db.ask(new Bodies.Checked(name)).present()) {
                 return Answer.absent();   // a module that did not check has nothing to run
             }
             if (classes == null) {
