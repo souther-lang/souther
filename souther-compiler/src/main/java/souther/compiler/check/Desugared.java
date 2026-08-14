@@ -49,14 +49,45 @@ public final class Desugared {
             return new Fn(NewtypeDesugar.rewriteOf(fn, scope));
         }
 
+        /**
+         * This state, of a definition a rung above rewrote after it was desugared.
+         *
+         * <p>Not the rewrite run again for its effect. What is asked is whether the proposition
+         * still holds of the node that came out, and the answer is this state or a refusal — a rung
+         * that carried the old value's state across its own rewrite would be saying of the new node
+         * what was established of the old one.
+         *
+         * <p>So the rewrite is run and its result is compared, rather than taken. Today the two are
+         * the same for every definition a compile prepares, and if the desugaring ever came to do
+         * more than decide a form — mint a name, move a position — the difference would be a
+         * re-transformation wearing a re-proof's name, and this is where it stops.
+         *
+         * @throws IllegalArgumentException where the definition is not one this state holds of
+         * @throws CompileException where a construction written in the body cannot be read as one
+         */
+        public static Fn reestablish(Hir.FnDef rewritten, Symbols scope) {
+            Hir.FnDef again = NewtypeDesugar.rewriteOf(rewritten, scope);
+            if (!again.equals(rewritten)) {
+                throw new IllegalArgumentException("`" + rewritten.name()
+                        + "` is not a definition whose constructions are constructions");
+            }
+            return new Fn(rewritten);
+        }
+
         /** What the definition is called. */
         public String name() {
             return fn.name();
         }
 
-        /** The node, for the module this one is assembled into. Nothing outside asks for a
-         * definition on its own: what reads one is below the module the assembly answers with. */
-        Hir.FnDef fn() {
+        /**
+         * The node.
+         *
+         * <p>For a reader that holds this state and walks what is in it. Handing it over does not
+         * let the claim go: a reader arrives here having been given one of these, which is what its
+         * own signature had to ask for, and there is no way to make one out of a definition nothing
+         * desugared.
+         */
+        public Hir.FnDef read() {
             return fn;
         }
 
@@ -74,10 +105,14 @@ public final class Desugared {
     /** The module where every definition it writes came out, over the declarations that came out. */
     public static final class Module {
 
-        private final Hir.Module module;
+        private final Derived.Module derived;
+        private final List<Fn> fns;
+        /** Worked out once, as {@link Derived.Module#module()} is. */
+        private volatile Hir.Module projected;
 
-        private Module(Hir.Module module) {
-            this.module = module;
+        private Module(Derived.Module derived, List<Fn> fns) {
+            this.derived = derived;
+            this.fns = List.copyOf(fns);
         }
 
         /**
@@ -85,7 +120,10 @@ public final class Desugared {
          * null where one of them has no answer.
          *
          * <p>What it declares is what {@link Derived.Module} answered for, so both conjunctions are
-         * in this one value: every declaration came out, and every definition did.
+         * in this one value: every declaration came out, and every definition did. It holds the
+         * state below rather than that state's tree, which is what keeps the first of them
+         * reachable from here — a module assembled out of nodes can answer a route with nothing else
+         * (#714).
          *
          * <p>Which definition each answer is for is checked and not taken from the key it arrived
          * under, for the reason {@link Derived.Module#assemble} states of declarations: a module
@@ -96,7 +134,7 @@ public final class Desugared {
          *     stands in for
          */
         public static Module assemble(Derived.Module derived, Map<String, Fn> desugared) {
-            List<Hir.FnDef> fns = new ArrayList<>();
+            List<Fn> fns = new ArrayList<>();
             for (Hir.FnDef fn : derived.fns()) {
                 Fn came = desugared.get(fn.name());
                 if (came == null) {
@@ -108,52 +146,69 @@ public final class Desugared {
                             + "` is `" + came.fn.name() + "` of " + came.fn.declaredIn()
                             + ", not `" + fn.name() + "` of " + fn.declaredIn());
                 }
-                fns.add(came.fn);
+                fns.add(came);
             }
-            return new Module(derived.withEachFnDesugared(fns));
+            return new Module(derived, fns);
         }
 
         /** What the module is called. */
         public String name() {
-            return module.name();
+            return derived.name();
         }
 
-        /** The tree, for the state above this one, which is what qualifies its imports. */
-        Hir.Module module() {
-            return module;
+        /** Its declarations, which the rung below answered for and this one does not touch. */
+        public List<Derived.Def> defs() {
+            return derived.defs();
+        }
+
+        /** Its definitions, each of them the desugared definition and not the node. */
+        public List<Fn> fns() {
+            return fns;
         }
 
         /**
          * The behaviors this module declares.
          *
-         * <p>What the signatures are made from, and the whole of what that reader wanted. It read
-         * the module before, which handed it everything this state says about the definitions as
-         * well — a claim it does not use and could drop without anything saying so.
+         * <p>What the signatures are made from, and the whole of what that reader wanted. Nothing
+         * at or below this rung rewrites a behavior — measured over a compile of the suite, where
+         * what a module prepares carries the behaviors resolution left, every time.
          */
         public List<Hir.BehaviorDef> behaviors() {
-            return module.behaviors();
+            return derived.behaviors();
+        }
+
+        /** The parts written back into the shape a pass over a whole module takes, as
+         *  {@link Derived.Module#module()} is, and in the same one direction. */
+        Hir.Module module() {
+            Hir.Module built = projected;
+            if (built == null) {
+                List<Hir.FnDef> nodes = new ArrayList<>();
+                for (Fn fn : fns) {
+                    nodes.add(fn.read());
+                }
+                projected = built = derived.module().withFns(nodes);
+            }
+            return built;
         }
 
         /**
-         * The tree at this stage.
-         *
-         * <p>No reader in the compiler asks for this. What is left is the two tests that audit the
-         * payload at each stage — whether every tree a compile makes is still well founded, and
-         * whether what a module declares changes as the stages rewrite it — and neither leans on
-         * what this state claims; they ask about the tree, which is what they are for.
+         * The same, for the tests that audit the payload at each stage — whether every tree a
+         * compile makes is still well founded, and whether what a module declares changes as the
+         * stages rewrite it. Neither leans on what this state claims; they ask about the tree,
+         * which is what this is for.
          */
         public Hir.Module tree() {
-            return module;
+            return module();
         }
 
         @Override
         public boolean equals(Object o) {
-            return o instanceof Module other && module.equals(other.module);
+            return o instanceof Module other && module().equals(other.module());
         }
 
         @Override
         public int hashCode() {
-            return module.hashCode();
+            return module().hashCode();
         }
     }
 }

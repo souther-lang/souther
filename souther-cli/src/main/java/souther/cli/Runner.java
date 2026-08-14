@@ -261,7 +261,7 @@ public final class Runner {
         // against names the source settled.
         String requested = Reserved.name(requestedSpelling);
         java.util.Set<String> implemented = module.fns().stream()
-                .map(Hir.FnDef::name).collect(Collectors.toSet());
+                .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
         Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
         Map<String, Hir.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
@@ -348,7 +348,7 @@ public final class Runner {
     private static RunException whyNotRunnable(Prepared module, String name, java.util.Set<String> drivable) {
         String available = drivable.isEmpty() ? "none" : String.join(", ", drivable);
         java.util.Set<String> implemented = module.fns().stream()
-                .map(Hir.FnDef::name).collect(Collectors.toSet());
+                .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
         Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {

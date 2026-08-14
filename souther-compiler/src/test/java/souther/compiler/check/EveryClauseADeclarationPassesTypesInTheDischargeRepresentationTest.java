@@ -115,7 +115,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
 
             Clauses clauses = new Clauses(symbols, declared);
             int read = 0;
-            for (Hir.Def def : prepared.defs()) {
+            for (Hir.Def def : prepared.defs().stream().map(Derived.Def::read).toList()) {
                 if (!(def instanceof Hir.Data data)) {
                     continue;
                 }

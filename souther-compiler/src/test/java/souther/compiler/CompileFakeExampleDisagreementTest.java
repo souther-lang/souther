@@ -446,7 +446,7 @@ class CompileFakeExampleDisagreementTest {
         souther.compiler.check.Prepared prepared =
                 c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value();
         return ExampleStatements.disagreements(
-                prepared.forExamples(prepared.examples()),
+                prepared.forExamples(),
                 c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(

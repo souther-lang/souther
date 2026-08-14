@@ -42,9 +42,7 @@ public final class Deriver {
                 case Hir.UnitData u -> u;
             });
         }
-        return new Hir.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                module.imports(), defs, module.behaviors(), module.fns(), module.takenOn(),
-                module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
+        return module.withDefs(defs);
     }
 
     private static Hir.Data deriveData(Hir.Data d, Symbols symbols) {

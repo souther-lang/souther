@@ -8,11 +8,15 @@ import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
 import souther.compiler.frontend.CstFrontend;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -42,13 +46,73 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * about the tree it was rewritten from. A state saying "resolution produced this" would be a
  * record of where a value came from, and {@link Hir} already says the one thing such a state could
  * claim: no occurrence of it is one nothing has read.
+ *
+ * <p>The second half is about what a state hands out. Closing the ways in leaves the other end open:
+ * a rung can hold every claim below it and still answer a route with a node, and then the claim is
+ * gone with nothing saying so. That is what happened between {@code Derived} and {@code Prepared}
+ * (#714) — the answers were per declaration and per definition, the assemblies poured them into a
+ * tree, and above that there was nothing but nodes to hand over.
+ *
+ * <p>So the states hold their parts and project a tree, rather than holding a tree and being asked
+ * for parts of it. Three propositions keep it that way, and each reads the production types rather
+ * than a description of them kept here: the claim about a part is still made one rung up, the way
+ * that proves a claim again refuses a value it is not true of, and no reader in the compiler takes
+ * the projection where it wanted a part.
  */
 class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
-    private static final List<Class<?>> STATES =
-            List.of(Expandable.class, InvariantSettled.class, InvariantSettled.Def.class,
-                    Derived.Def.class, Derived.Module.class, Desugared.Fn.class,
-                    Desugared.Module.class, Prepared.class);
+    /**
+     * The states, worked out from the topmost one rather than listed.
+     *
+     * <p>A state is a final class of this package that cannot be built from outside it, and the
+     * family is what {@link Prepared} and {@link Expandable} reach through their fields and through
+     * what their routes answer with. Listing them would be the thing these propositions are about,
+     * written a second time: a rung added tomorrow and left off the list would be a rung nothing
+     * here says anything about, and the list would still be green.
+     */
+    private static final List<Class<?>> STATES = states();
+
+    private static List<Class<?>> states() {
+        List<Class<?>> found = new ArrayList<>();
+        Deque<Class<?>> pending = new ArrayDeque<>(List.of(Prepared.class, Expandable.class));
+        while (!pending.isEmpty()) {
+            Class<?> one = pending.poll();
+            if (!isState(one) || found.contains(one)) {
+                continue;
+            }
+            found.add(one);
+            for (Field f : one.getDeclaredFields()) {
+                mentioned(f.getGenericType(), pending);
+            }
+            for (Method m : one.getDeclaredMethods()) {
+                mentioned(m.getGenericReturnType(), pending);
+            }
+            pending.addAll(List.of(one.getDeclaredClasses()));
+        }
+        found.sort(Comparator.comparing(Class::getName));
+        return List.copyOf(found);
+    }
+
+    /** Arrived at rather than built: a final class of this package with no way in from outside but
+     *  the operations these propositions are about. */
+    private static boolean isState(Class<?> c) {
+        return c != null && Modifier.isFinal(c.getModifiers())
+                && "souther.compiler.check".equals(c.getPackageName())
+                && c.getConstructors().length == 0
+                && !Modifier.isAbstract(c.getModifiers());
+    }
+
+    private static void mentioned(java.lang.reflect.Type t, Deque<Class<?>> into) {
+        if (t instanceof Class<?> c) {
+            into.add(c);
+        }
+        if (t instanceof java.lang.reflect.ParameterizedType p) {
+            mentioned(p.getRawType(), into);
+            for (java.lang.reflect.Type a : p.getActualTypeArguments()) {
+                mentioned(a, into);
+            }
+        }
+    }
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
@@ -89,9 +153,54 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 "a settled declaration is projected from the module it is one of");
         assertEquals(Set.of("derive(Def, Symbols)"), waysInto(Derived.Def.class));
         assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
-        assertEquals(Set.of("desugar(FnDef, Symbols)"), waysInto(Desugared.Fn.class));
+        assertEquals(Set.of("desugar(FnDef, Symbols)", "reestablish(FnDef, Symbols)"),
+                waysInto(Desugared.Fn.class),
+                "the second is for a rung that rewrote a definition this state already held: it "
+                        + "proves the proposition again of what came out, and refuses where the "
+                        + "rewrite would have changed it");
         assertEquals(Set.of("assemble(Module, Map)"), waysInto(Desugared.Module.class));
-        assertEquals(Set.of("prepare(Module, Map)"), waysInto(Prepared.class));
+        assertEquals(Set.of("prepare(Module, Symbols, Map)"), waysInto(Prepared.class));
+        assertEquals(Set.of(), waysInto(Prepared.Rows.class),
+                "an example block is projected from the module it is one of");
+        assertEquals(Set.of(), waysInto(Prepared.FakeTable.class),
+                "and so is a fake table");
+        assertEquals(Set.of(), waysInto(Prepared.ExampleExecution.class),
+                "a run is asked for of the module, which is what pairs the rows with the artifact");
+    }
+
+    /**
+     * And the way that proves a proposition again refuses where proving it would have changed the
+     * value.
+     *
+     * <p>The positive control for {@code prepare} calling it. Today the desugaring of an already
+     * desugared definition answers with the same definition every time — 21,206 of them over a
+     * compile of the suite — so the refusal never fires there, and a check that never fires is one
+     * nothing has shown to be about anything. Handed a definition nothing desugared, it fires.
+     */
+    @Test
+    void reestablishingRefusesADefinitionTheClaimIsNotTrueOf() {
+        Hir.Module resolved = resolved("""
+                module m exposing ( Amount, go )
+
+                data Amount = Int
+
+                behavior go : (n: Int) -> Amount
+                    constructs Amount
+                let go (n) = Amount(n)
+                """);
+        Symbols scope = TypeChecker.symbols(resolved);
+        Hir.FnDef written = resolved.fns().stream()
+                .filter(f -> f.name().equals("go")).findFirst().orElseThrow();
+
+        assertEquals(1, applications(bodyOf(written)),
+                "the construction is written as an application until the desugaring runs");
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> Desugared.Fn.reestablish(written, scope));
+        assertTrue(refused.getMessage().contains("go"), refused.getMessage());
+
+        assertEquals(written.name(),
+                Desugared.Fn.reestablish(Desugared.Fn.desugar(written, scope).read(), scope).name(),
+                "and answers for one the claim is true of");
     }
 
     /**
@@ -127,12 +236,189 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     @Test
     void whatAModulePreparesDoesNotDependOnAnOutputFile() {
         for (Method m : Prepared.class.getMethods()) {
+            boolean takesAName = false;
             for (Class<?> takes : m.getParameterTypes()) {
-                assertFalse(takes == String.class,
-                        "Prepared." + signature(m) + " takes a name, and the only one it could be "
-                                + "is an output's");
+                takesAName |= takes == String.class;
+            }
+            if (!takesAName) {
+                continue;
+            }
+            // A run over one source's rows may be asked for, and is not what the module prepared:
+            // which rows are reported on is `Output.Examples`' question and its key carries the
+            // source. What must not take one is the way in, or a route to a part — either would be
+            // a module whose contents are a function of which file is being reported on.
+            assertEquals(Prepared.ExampleExecution.class, m.getReturnType(),
+                    "Prepared." + signature(m) + " takes a name, and the only one it could be "
+                            + "is an output's");
+        }
+    }
+
+    /**
+     * A claim made about a part of a module is still being made about it one rung up.
+     *
+     * <p>This is the proposition #714 was: {@code Derived} answered per declaration, the assembly
+     * poured the answers into an {@link Hir.Module}, and from {@code Prepared} there was nothing
+     * left to hand over but nodes. Nothing said so.
+     *
+     * <p>About the routes a state has, and not about the ones it has not. A state that answers a part
+     * is a state saying something about that part, and what it says may not be less than what was
+     * said below it. One with no route for a part is not answering about it at all — an example run
+     * hands over no declarations, and a reader that wants them asks the module or the declaration
+     * world, neither of which this is. What stops that becoming a way out is the other side of it:
+     * a reader that goes to {@code tree()} for the part instead is what
+     * {@link #noReaderInTheCompilerTakesAStatesPayloadInsteadOfItsParts} refuses.
+     *
+     * <p>Read off the production types and nothing else. What the parts are is what {@link Hir.Module}
+     * is made of; which rung is below which is which state a state holds; and what a rung says about
+     * a part is what its route for that part answers with. A table here saying which rung claims what
+     * would be the same knowledge written twice, and the copy is what goes stale.
+     */
+    @Test
+    void aClaimAboutAPartIsStillMadeAboutItOneRungUp() {
+        List<String> lost = new ArrayList<>();
+        for (Class<?> above : STATES) {
+            for (Class<?> below : rungsBelow(above)) {
+                for (String part : parts()) {
+                    if (answeredBy(above, part).isEmpty()) {
+                        continue;
+                    }
+                    if (answersWithAState(below, part) && !answersWithAState(above, part)) {
+                        lost.add(named(above) + "." + part + "() answers "
+                                + answered(above, part) + ", where "
+                                + named(below) + "." + part + "() answers "
+                                + answered(below, part));
+                    }
+                }
             }
         }
+        assertEquals(List.of(), lost,
+                "a rung below said something about that part, and this one hands over a value that "
+                        + "no longer carries it");
+    }
+
+    /** What a module is made of, which is what there is to say something about. */
+    private static Set<String> parts() {
+        Set<String> named = new LinkedHashSet<>();
+        for (java.lang.reflect.RecordComponent c : Hir.Module.class.getRecordComponents()) {
+            if (!elementsOf(c.getGenericType()).isEmpty()) {
+                named.add(c.getName());
+            }
+        }
+        return named;
+    }
+
+    /** The states this one holds, and the ones those hold: the pipeline, read off the fields. */
+    private static Set<Class<?>> rungsBelow(Class<?> state) {
+        Set<Class<?>> below = new LinkedHashSet<>();
+        Deque<Class<?>> pending = new ArrayDeque<>(List.of(state));
+        while (!pending.isEmpty()) {
+            for (Field f : pending.poll().getDeclaredFields()) {
+                Deque<Class<?>> mentioned = new ArrayDeque<>();
+                mentioned(f.getGenericType(), mentioned);
+                for (Class<?> one : mentioned) {
+                    if (STATES.contains(one) && below.add(one)) {
+                        pending.add(one);
+                    }
+                }
+            }
+        }
+        below.remove(state);
+        return below;
+    }
+
+    private static boolean answersWithAState(Class<?> state, String part) {
+        for (Class<?> answered : answeredBy(state, part)) {
+            if (STATES.contains(answered)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String answered(Class<?> state, String part) {
+        Set<Class<?>> answers = answeredBy(state, part);
+        return answers.isEmpty() ? "nothing — there is no route for it"
+                : named(answers.iterator().next());
+    }
+
+    /** {@code Derived.Module} rather than {@code Module}: the states are nested and their simple
+     *  names collide with each other and with the nodes they stand for. */
+    private static String named(Class<?> c) {
+        String binary = c.getName();
+        return binary.substring(binary.lastIndexOf('.') + 1).replace('$', '.');
+    }
+
+    /** What the route named for {@code part} answers with, or nothing where the state has none. */
+    private static Set<Class<?>> answeredBy(Class<?> state, String part) {
+        for (Method m : state.getDeclaredMethods()) {
+            if (Modifier.isPublic(m.getModifiers()) && !Modifier.isStatic(m.getModifiers())
+                    && m.getParameterCount() == 0 && m.getName().equals(part)) {
+                return elementsOf(m.getGenericReturnType());
+            }
+        }
+        return Set.of();
+    }
+
+    /** The types a list-shaped part is a list of — the node it holds, or the state that stands for
+     *  one. A route answering something that is neither says nothing about the part. */
+    private static Set<Class<?>> elementsOf(java.lang.reflect.Type t) {
+        Set<Class<?>> out = new LinkedHashSet<>();
+        if (!(t instanceof java.lang.reflect.ParameterizedType p)
+                || p.getRawType() != List.class) {
+            return out;
+        }
+        Deque<Class<?>> mentioned = new ArrayDeque<>();
+        for (java.lang.reflect.Type a : p.getActualTypeArguments()) {
+            mentioned(a, mentioned);
+        }
+        for (Class<?> one : mentioned) {
+            if (STATES.contains(one) || Hir.class.isAssignableFrom(one)) {
+                out.add(one);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A declaration's clauses get their spelling where they are settled, and nowhere above it.
+     *
+     * <p>This is what lets {@link Prepared} hand on the answers the rung below gave rather than
+     * establishing anything of its own about the declarations: nothing between the settling and the
+     * preparing puts a foreign name back into a clause, so there is nothing that could have made the
+     * claim false. Measured — over a compile of the suite, qualifying the declarations of a prepared
+     * module changed none of 12,963 of them — and held here rather than remembered, because a rewrite
+     * added above the settling would make it false in silence.
+     *
+     * <p>With the control beside it. A rule that says a rewrite changes nothing is a rule that reads
+     * the same whether or not the rewrite works at all, so the same call is made where it does have
+     * something to do.
+     */
+    @Test
+    void aPreparedModulesInvariantsAreAlreadyWrittenTheWayItReachesThem() {
+        String lib = """
+                module lib exposing ( atLeast )
+
+                let atLeast (n: Int) : Bool = n >= 0
+                """;
+        String uses = """
+                module shop exposing ( Amount )
+
+                import lib ( atLeast )
+
+                data Amount = Int
+                    invariant atLeast(value)
+                """;
+        souther.compiler.query.Compilation compilation = souther.compiler.query.Compilation
+                .ofSources(List.of(lib, uses), souther.compiler.meta.ModulePath.EMPTY);
+        Hir.Module resolved = compilation.db()
+                .ask(new souther.compiler.query.Names.Resolved("shop")).value();
+        assertNotEquals(resolved, HelperNames.withQualifiedInvariants(resolved),
+                "the clause names an imported definition bare, so there is something to write out");
+
+        Prepared prepared = compilation.db()
+                .ask(new souther.compiler.query.Shapes.Prepared("shop")).value();
+        assertEquals(prepared.tree(), HelperNames.withQualifiedInvariants(prepared.tree()),
+                "and by the time the module is prepared there is nothing left to write out");
     }
 
     /**
@@ -164,7 +450,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertTrue(unsettled.params().get(0).type() == null,
                 "the parameter is open, which is a definition this state admits");
         Desugared.Fn desugared = Desugared.Fn.desugar(unsettled, scope);
-        assertEquals(0, applications(bodyOf(desugared.fn())),
+        assertEquals(0, applications(bodyOf(desugared.read())),
                 "and its constructions are constructions all the same");
     }
 
@@ -256,6 +542,136 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         }
         assertEquals(List.of(), reading,
                 "a state answers the part a reader wants; ask it for that rather than for the tree");
+    }
+
+    /**
+     * And the projection under its other name is reachable from nowhere new.
+     *
+     * <p>{@code tree} is public and no reader in the compiler writes it. The states also project for
+     * their own use, through a package-private accessor, and that one a class of this package could
+     * call — {@code prepared.module().fns()} says exactly what {@code prepared.tree().fns()} is
+     * banned for saying. Reading the source for it does not work: {@code module} is what
+     * {@code CstFrontend.Parsed}, {@code Resolve.Resolution} and an import all call their own
+     * accessor, so the spelling finds seven readers of other types and none of this one.
+     *
+     * <p>What can be read exactly is who is in a position to call it at all. Java has it down to this
+     * package; within it, a class that can reach a projection is one that holds a state or is handed
+     * one. The states themselves are governed by the routes they answer with; what is left is the
+     * boundary where the module leaves the ladder, and there is one — {@code Lower}, which hands the
+     * whole of it to the pass that settles helper parameter types across it and answers with a tree
+     * carrying no proposition ({@code Bodies.Settled}, measured in #710).
+     *
+     * <p>Of the states that say something about a part, because those are the ones with something to
+     * lose. {@code Expandable} answers whether a body of the module may be expanded and claims
+     * nothing about what is in it, so a reader handed one and taking its tree has dropped no claim —
+     * which is why the discharge representation is built from one and is not a second boundary.
+     *
+     * <p>A second one appearing here is a reader that could take the payload where it wanted a part,
+     * and it fails until it is either given the part or written down as this one is.
+     */
+    @Test
+    void theModuleLeavesTheLadderInOnePlace() throws IOException {
+        List<String> handling = new ArrayList<>();
+        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            if (!source.toString().contains("/souther/compiler/check/")) {
+                continue;   // Java has the accessor down to this package already
+            }
+            Class<?> in = classOf(source);
+            if (in == null || STATES.contains(in)) {
+                continue;   // a state projecting for its own use is what the routes are about
+            }
+            for (Method m : in.getDeclaredMethods()) {
+                for (Class<?> takes : m.getParameterTypes()) {
+                    if (saysSomethingAboutAPart(takes)) {
+                        handling.add(in.getSimpleName() + "." + signature(m));
+                    }
+                }
+            }
+            for (Field f : in.getDeclaredFields()) {
+                if (saysSomethingAboutAPart(f.getType())) {
+                    handling.add(in.getSimpleName() + "." + f.getName());
+                }
+            }
+        }
+        assertEquals(List.of("Lower.settle(Prepared, Symbols, Map)"), handling,
+                "a class here that is handed a state can reach its projection, and taking a part "
+                        + "off that is the claim thrown away with nothing saying so");
+    }
+
+    /** Whether the state answers any part of the module with a state — whether, that is, its
+     *  projection has a claim in it to lose. */
+    private static boolean saysSomethingAboutAPart(Class<?> state) {
+        if (!STATES.contains(state)) {
+            return false;
+        }
+        for (String part : parts()) {
+            if (answersWithAState(state, part)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Class<?> classOf(Path source) {
+        String name = String.valueOf(source.getFileName());
+        try {
+            return Class.forName("souther.compiler.check."
+                    + name.substring(0, name.length() - ".java".length()));
+        } catch (ClassNotFoundException _) {
+            return null;
+        }
+    }
+
+    /**
+     * And no state hands over the rung it was built from.
+     *
+     * <p>A state holds the one below it because that is what it was made from and what carries the
+     * parts it did not touch. What it must not do is offer it: a reader given the lower rung reads
+     * the parts as they were before this one rewrote them, and they are the same types, so nothing
+     * says which of the two it got. {@code Prepared} holds the definitions it re-established beside
+     * a {@code Desugared.Module} holding the ones it re-established them from, and only the first is
+     * what the module is.
+     *
+     * <p>The rung it was built from, and not the parts it holds. A part is held as a list of states
+     * and answering it is the whole point; what is asked here is about the single state a rung keeps
+     * beside those, which is its provenance rather than a value on offer.
+     */
+    @Test
+    void noStateHandsOverTheRungItWasBuiltFrom() {
+        List<String> offered = new ArrayList<>();
+        for (Class<?> state : STATES) {
+            Set<Class<?>> from = builtFrom(state);
+            for (Method m : state.getDeclaredMethods()) {
+                if (Modifier.isStatic(m.getModifiers())) {
+                    continue;
+                }
+                Deque<Class<?>> answers = new ArrayDeque<>();
+                mentioned(m.getGenericReturnType(), answers);
+                for (Class<?> one : answers) {
+                    if (from.contains(one)) {
+                        offered.add(named(state) + "." + signature(m) + " answers " + named(one));
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), offered,
+                "the rung below is what this one was built from, not a rung a reader may pick");
+    }
+
+    /** The rungs this one was made from: the states it keeps one of, and the ones those keep. A
+     *  state kept a list of is a part rather than a rung. */
+    private static Set<Class<?>> builtFrom(Class<?> state) {
+        Set<Class<?>> from = new LinkedHashSet<>();
+        Deque<Class<?>> pending = new ArrayDeque<>(List.of(state));
+        while (!pending.isEmpty()) {
+            for (Field f : pending.poll().getDeclaredFields()) {
+                if (STATES.contains(f.getType()) && from.add(f.getType())) {
+                    pending.add(f.getType());
+                }
+            }
+        }
+        from.remove(state);
+        return from;
     }
 
     /**
