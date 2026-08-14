@@ -60,7 +60,7 @@ final class NeutralForm {
      * @param helper the helper that produced the value, for the reason a row is given when it cannot be
      *               read back
      */
-    Object of(Object live, Type position, String helper) {
+    Object of(Object live, Position position, String helper) {
         if (live == null) {
             return live;
         }
@@ -73,10 +73,12 @@ final class NeutralForm {
             }
             return live;
         }
-        Type opened = open(position);
+        Position opened = position.opened();
         if (live instanceof Map<?, ?> m) {
-            Type key = opened instanceof Type.MapOf map ? map.key() : null;
-            Type value = opened instanceof Type.MapOf map ? map.value() : null;
+            Position key = opened instanceof Position.At(Type type) && type instanceof Type.MapOf map
+                    ? Position.at(map.key()) : Position.UNREAD;
+            Position value = opened instanceof Position.At(Type type) && type instanceof Type.MapOf map
+                    ? Position.at(map.value()) : Position.UNREAD;
             Map<Object, Object> out = new LinkedHashMap<>();
             for (Map.Entry<?, ?> e : m.entrySet()) {
                 out.put(of(e.getKey(), key, helper), of(e.getValue(), value, helper));
@@ -84,7 +86,7 @@ final class NeutralForm {
             return out;
         }
         if (live instanceof Iterable<?> it) {
-            Type element = elementOf(opened);
+            Position element = opened.element();
             List<Object> out = new ArrayList<>();
             for (Object e : it) {
                 out.add(of(e, element, helper));
@@ -107,7 +109,7 @@ final class NeutralForm {
         }
         if (!(symbols.declarations().declaration(caseName.key()) instanceof Hir.Data data)) {
             // a unit case: its name where the position reads one, else the tag its sum's decoder reads
-            if (readsABareName(position, caseName)) {
+            if (readsABareName(position)) {
                 return caseName.name();
             }
             Map<String, Object> unit = new LinkedHashMap<>();
@@ -115,15 +117,15 @@ final class NeutralForm {
             return unit;
         }
         if (data.newtype()) {
-            Type base = shapeOf(newtypeBaseType(caseName));
+            Position base = Position.declaredBy(newtypeBaseType(caseName));
             return newtypeAt(position, caseName,
                     shaped(of(field(live, "value", helper), base, helper), base));
         }
         Map<String, Hir.TypeRef> declared = fieldTypes(caseName);
         Map<String, Object> out = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.TypeRef> f : declared.entrySet()) {
-            Type type = shapeOf(f.getValue());
-            Object value = shaped(of(field(live, f.getKey(), helper), type, helper), type);
+            Position at = Position.declaredBy(f.getValue());
+            Object value = shaped(of(field(live, f.getKey(), helper), at, helper), at);
             // an absent optional is left out, the same neutral form a fixture writes for `None`
             if (value != null) {
                 out.put(f.getKey(), value);
@@ -166,23 +168,27 @@ final class NeutralForm {
      * this being answered by searching every visible sum for one that lists the case, which is a
      * question about the case rather than about the position it stands at.
      *
+     * <p>{@link Position.Unread} writes nothing, and nothing is worked out for it. A place no type
+     * reads asks for nothing beside the case, so what stands there is the case's own form — which is
+     * what a position typed by the case itself writes, and what a union answer writes, since a union
+     * has no decoder to read a discriminator with. Asking the sums that list the case instead is the
+     * same question as above with the position dropped from it, and it makes a value's form move when
+     * a sum nothing here reads it through is declared.
+     *
      * <p>A field the fixture wrote itself is never replaced. A case whose own field is named like its
      * sum's discriminator is already ambiguous at the boundary — the case encoder and the sum encoder
      * both claim that key — and overwriting here would hide that behind an example that passes while
      * decoding something the author did not write. Leaving the written value in place makes the row
      * fail on the tag it cannot match, which is the honest outcome.
      */
-    void tagged(Type declaredType, TypeSymbol caseName, Map<String, Object> map) {
+    void tagged(Position position, TypeSymbol caseName, Map<String, Object> map) {
         if (caseName == null) {
             return;
         }
-        if (declaredType == null) {
-            taggedWithoutADeclaredType(caseName, map);
-            return;
-        }
-        // Anything but a sum reads the case as itself: its own type, and — since a union is written
-        // only as a behavior's own answer, where it arrives with no declared type below — nothing else.
-        if (!(open(declaredType) instanceof Type.Ref ref)
+        // Anything but a sum reads the case as itself: its own type, a union — which is written only
+        // as a behavior's own answer and has no decoder — and a place nothing reads.
+        if (!(position.opened() instanceof Position.At(Type type))
+                || !(type instanceof Type.Ref ref)
                 || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
                 || sum.decoder().isEmpty()) {
             return;
@@ -196,39 +202,14 @@ final class NeutralForm {
         }
     }
 
-    /**
-     * The same, where the position has no declared type to read the case through: an answer of
-     * several types, which admission and not a decoder decides ({@code FixtureReader}), and a value
-     * written where nothing says what it stands at.
-     *
-     * <p>Nothing here can be asked of the position, so the sums that list the case answer instead.
-     * That is right for as long as they agree, and today they cannot disagree: every discriminator is
-     * derived — keyed {@code "type"} and tagged with the case's own name — and a sum's cases are
-     * declared in its own module, so one case has one tag however many sums list it (issue #683
-     * measured this). A written discriminator would end the agreement and this fallback with it.
-     */
-    private void taggedWithoutADeclaredType(TypeSymbol caseName, Map<String, Object> map) {
-        for (Hir.Def def : symbols.visible()) {
-            if (!(def instanceof Hir.SumData sum) || sum.decoder().isEmpty()) {
-                continue;
-            }
-            for (Hir.Variant variant : sum.decoder().get().variants()) {
-                if (caseName.equals(variant.caseType().denotes())) {
-                    map.putIfAbsent(sum.decoder().get().key(), variant.tag());
-                    return;
-                }
-            }
-        }
-    }
-
     /** Gives a value the neutral shape its declared type decodes from. A {@code Map} is written as a
      * list of {@code (key, value)} pairs — Elm's {@code Dict.fromList}, and the same list literal a
      * {@code Set} takes — while the decoder wants a map, so the pairs are collected here. Everything
      * else passes through; a {@code List} written as a list stays one, since the declared type, not the
      * literal, decides. Read on the checked type, so it applies wherever a value is decoded: a field of
      * a record fixture, and a behavior's argument or output. */
-    Object shaped(Object v, Type type) {
-        if (type == null || v == null) {
+    Object shaped(Object v, Position position) {
+        if (v == null || !(position instanceof Position.At(Type type))) {
             return v;
         }
         if (type instanceof Type.MapOf map && v instanceof List<?> entries) {
@@ -241,7 +222,8 @@ final class NeutralForm {
                 // Both sides. A key is a position of the same kind as a value, so an inner
                 // collection written in key position is the neutral form of that collection
                 // and not the list of pairs it was written as.
-                m.put(shaped(pair.get(0), map.key()), shaped(pair.get(1), map.value()));
+                m.put(shaped(pair.get(0), Position.at(map.key())),
+                        shaped(pair.get(1), Position.at(map.value())));
             }
             return m;
         }
@@ -254,7 +236,7 @@ final class NeutralForm {
             if (element != null) {
                 List<Object> out = new ArrayList<>(elements.size());
                 for (Object e : elements) {
-                    out.add(shaped(e, element));
+                    out.add(shaped(e, Position.at(element)));
                 }
                 return out;
             }
@@ -279,7 +261,7 @@ final class NeutralForm {
      * <p>Takes a case already resolved: a name spelled here would have to be one
      * {@link Symbols#resolve} answers to, which an imported type's declared name is not.
      */
-    Object newtypeAt(Type position, TypeSymbol caseName, Object inner) {
+    Object newtypeAt(Position position, TypeSymbol caseName, Object inner) {
         Map<String, Object> envelope = new LinkedHashMap<>();
         tagged(position, caseName, envelope);
         if (envelope.isEmpty()) {
@@ -299,9 +281,34 @@ final class NeutralForm {
      *
      * <p>Only the widening direction has to be answered, because it is the only one admission lets
      * through: a case reaches a position typed by a sum that lists it, never the other way.
+     *
+     * <p>Moving to a {@link Position.Unread} leaves the value as it stands. What a position adds is
+     * what it asks to be written beside the case, and a place nothing reads asks for nothing — it
+     * does not ask for what is already there to come off. Re-rendering a value into the case's own
+     * form on the way to one would lose what the form it is in carries: an enumeration's {@code
+     * "Draft"} says which case it is, and the {@code {}} it would become says nothing, with nothing
+     * left to put it back from.
+     *
+     * <p>Moving from one is not a reading. A value whose form nothing decided is in the case's own
+     * form, and that form does not say which case it is — {@code {}} is every unit case — so there is
+     * nothing here to write a discriminator from. Nothing asks for it: a value reaches this having
+     * been built at the type a declaration gave it, and a projection whose target declares nothing is
+     * refused before it gets here. Stated rather than answered with the value, which would be right
+     * only for as long as that stays true.
      */
-    Object reread(Object value, Type from, Type to) {
-        if (value == null || from == null || to == null || from.equals(to)) {
+    Object reread(Object value, Position from, Position to) {
+        if (from instanceof Position.At(Type a) && to instanceof Position.At(Type b)) {
+            return reread(value, a, b);
+        }
+        if (from instanceof Position.Unread && to instanceof Position.At) {
+            throw new IllegalStateException("a value nothing read is in the case's own form, which"
+                    + " does not say which case it is, so it cannot be read at " + to);
+        }
+        return value;
+    }
+
+    private Object reread(Object value, Type from, Type to) {
+        if (value == null || from.equals(to)) {
             return value;
         }
         if (from instanceof Type.OptionOf a) {
@@ -329,7 +336,7 @@ final class NeutralForm {
         }
         if (from instanceof Type.Ref r && isNewtype(r.name())) {
             // Bare here, because `from` is the newtype's own reference and reads it as itself.
-            return newtypeAt(to, r.name(), value);
+            return newtypeAt(Position.at(to), r.name(), value);
         }
         // A unit case travels as a bare name where its position reads one — an enumeration — and
         // carries its sum's discriminator where it does not. So a case standing at an enumeration
@@ -345,11 +352,11 @@ final class NeutralForm {
                         || symbols.declarations().declaration(caseName.key()) instanceof Hir.Data) {
                     continue;
                 }
-                if (readsABareName(to, caseName)) {
+                if (readsABareName(Position.at(to))) {
                     return written;
                 }
                 Map<String, Object> unit = new LinkedHashMap<>();
-                tagged(to, caseName, unit);
+                tagged(Position.at(to), caseName, unit);
                 return unit;
             }
         }
@@ -363,34 +370,19 @@ final class NeutralForm {
                 : type instanceof Type.SetOf s ? s.element() : null;
     }
 
-    /** As above, for a construction written as a call, where the name is what the row spelled. */
-    /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,
-     * or it is untyped here and every sum that lists the case is one. */
-    boolean readsABareName(Type expected, TypeSymbol caseName) {
-        Type position = open(expected);
-        return position != null
-                ? TypeOps.isUnitOnlySum(position, symbols)
-                : onlyEnumerationsList(caseName);
-    }
-
-    /** Whether every sum that lists this case is an enumeration, so its neutral form is its name
-     * wherever it is written. Asked only where the position has no declared type to read it as. */
-    private boolean onlyEnumerationsList(TypeSymbol caseName) {
-        boolean listed = false;
-        for (Hir.Def def : symbols.visible()) {
-            if (!(def instanceof Hir.SumData sum) || sum.decoder().isEmpty()) {
-                continue;
-            }
-            for (Hir.Variant variant : sum.decoder().get().variants()) {
-                if (caseName.equals(variant.caseType().denotes())) {
-                    if (!TypeOps.isUnitOnlySum(sum, symbols)) {
-                        return false;
-                    }
-                    listed = true;
-                }
-            }
-        }
-        return listed;
+    /**
+     * Whether this place reads a unit case as a bare name: it is typed as an enumeration, whose
+     * external form is the case's name (spec §sum-discrimination).
+     *
+     * <p>A question about the place and not about the case standing there, which is why the case is
+     * not asked for. Where nothing reads the value the answer is no: a name is what a sum of units
+     * writes a case as, and nothing here is that sum. Answered by asking whether every sum that lists
+     * the case is an enumeration, it moved with a declaration nothing here reads the value through —
+     * a case listed only by an enumeration wrote its bare name until another sum listed it too.
+     */
+    boolean readsABareName(Position position) {
+        return position.opened() instanceof Position.At(Type type)
+                && TypeOps.isUnitOnlySum(type, symbols);
     }
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
@@ -439,30 +431,6 @@ final class NeutralForm {
 
     // --- reading a position's type ----------------------------------------------------------------
 
-    /** What a written list holds, when the position says: a list's or a set's element, or a map's
-     * entry pair. An optional is opened first — writing a value for a `T?` field writes a `T`. */
-    static Type elementOf(Type expected) {
-        return switch (open(expected)) {
-            case Type.ListOf l -> l.element();
-            case Type.SetOf s -> s.element();
-            case Type.MapOf m -> Type.tuple(List.of(m.key(), m.value()));
-            case null, default -> null;
-        };
-    }
-
-    /** The types of a written tuple's parts, or null when the position does not say. A map's entry is
-     * the pair that carries its key type, which is where an enumeration key is written. */
-    static List<Type> entryTypes(Type expected, int arity) {
-        Type opened = open(expected);
-        if (opened instanceof Type.MapOf m && arity == 2) {
-            return List.of(m.key(), m.value());
-        }
-        if (opened instanceof Type.TupleOf t && t.elements().size() == arity) {
-            return t.elements();
-        }
-        return null;
-    }
-
     static Type open(Type t) {
         return t instanceof Type.OptionOf o ? open(o.element()) : t;
     }
@@ -480,9 +448,9 @@ final class NeutralForm {
      * author wrote, and what a helper returned. Stated on one side and read from the other, the two
      * would answer differently about the same position.
      */
-    Type.Prim temporalUnder(Type position) {
+    Type.Prim temporalUnder(Position position) {
         Set<TypeSymbol> through = new LinkedHashSet<>();
-        Type at = open(position);
+        Type at = position.opened() instanceof Position.At(Type type) ? type : null;
         while (true) {
             if (at instanceof Type.Prim prim) {
                 // Which primitives are temporal is asked of each one, so a primitive added later is
@@ -519,20 +487,20 @@ final class NeutralForm {
      * fixture. The walk stops at anything nominal — a generated value's fields are the types they were
      * declared as, so there is nothing there a fixture could have written wrongly.
      */
-    void requireWrittenForm(Object live, Type position) {
+    void requireWrittenForm(Object live, Position position) {
         if (live instanceof String text && temporalUnder(position) instanceof Type.Prim temporal) {
             throw notWrittenAsATemporal(temporal, text);
         }
-        Type opened = open(position);
-        if (live instanceof Map<?, ?> entries && opened instanceof Type.MapOf map) {
+        Position opened = position.opened();
+        if (live instanceof Map<?, ?> entries
+                && opened instanceof Position.At(Type type) && type instanceof Type.MapOf map) {
             for (Map.Entry<?, ?> e : entries.entrySet()) {
-                requireWrittenForm(e.getKey(), map.key());
-                requireWrittenForm(e.getValue(), map.value());
+                requireWrittenForm(e.getKey(), Position.at(map.key()));
+                requireWrittenForm(e.getValue(), Position.at(map.value()));
             }
             return;
         }
-        Type element = elementOf(opened);
-        if (element != null && live instanceof Iterable<?> elements) {
+        if (opened.element() instanceof Position.At element && live instanceof Iterable<?> elements) {
             for (Object e : elements) {
                 requireWrittenForm(e, element);
             }
