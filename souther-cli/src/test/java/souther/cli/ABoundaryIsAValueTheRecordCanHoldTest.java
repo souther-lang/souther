@@ -204,13 +204,15 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                         else Small
                 """, "--generate", "--boundaries");
 
-        assertFalse(report.contains("pair.b = 50"),
+        // Read off the values the rows are written with: a row composed only for a line carries no
+        // name, so what is asked for is a row holding the value rather than a line named in the text.
+        assertFalse(report.contains("b = Count(50)"),
                 () -> "no pair holds a `b` of 50, so the guard draws no line there:\n" + report);
-        assertFalse(report.contains("pair.b = 49"),
+        assertFalse(report.contains("b = Count(49)"),
                 () -> "and none holds the value below it either:\n" + report);
         assertFalse(report.contains("pair.b=50 <= x"),
                 () -> "a class nothing can be in is not a class:\n" + report);
-        assertTrue(report.contains("pair.b = 1"),
+        assertTrue(report.contains("b = Count(1)"),
                 () -> "the end the record moved is still asked for:\n" + report);
         assertFalse(report.contains("every value tried was refused"),
                 () -> "and everything left is writable:\n" + report);

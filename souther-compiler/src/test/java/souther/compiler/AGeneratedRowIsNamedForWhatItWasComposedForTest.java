@@ -74,7 +74,45 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
         Map<String, Adequacy.Filling> filling = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(filling, "the model under test compiles");
-        return GeneratedRows.of("example.limit", filling, boundaries, SourceNameResolver.identity());
+        return GeneratedRows.of(compilation.modules().get(0), filling, boundaries,
+                SourceNameResolver.identity());
+    }
+
+    /** Two minimum edges of one behavior, which compose one row between them. */
+    private static final String POLICY = """
+            module example.policy
+
+            data Rate = Int
+                invariant nonNegative = value >= 0
+
+            data Cap = Int
+                invariant nonNegative = value >= 0
+
+            data Policy =
+                { rate: Rate
+                , cap: Cap
+                }
+
+            behavior fee : (days: Int, policy: Policy) -> Int
+
+            let fee (days, policy) = {
+                let accrued = days * policy.rate.value
+
+                if accrued > policy.cap.value then policy.cap.value else accrued
+            }
+
+            example fee
+                | "under the cap" : (5, Policy { rate = Rate(10), cap = Cap(500) }) -> 50
+            """;
+
+    /** The same, and a row meeting `policy.cap = 0` and no other line. */
+    private static final String POLICY_AND_A_ROW_AT_THE_CAP = POLICY + """
+                | "a cap of nothing caps everything" : (5, Policy { rate = Rate(10), cap = Cap(0) }) -> 0
+            """;
+
+    /** How many rows the block writes, named or not. A row the formatter wrapped is still one. */
+    private static int rows(String block) {
+        return (int) block.lines().filter(line -> line.startsWith("//     | ")).count();
     }
 
     /** The names the block offers, in the order it writes them. */
@@ -89,10 +127,11 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
 
     @Test
     void noTwoRowsOfOneBehaviorAreOfferedUnderOneName() {
-        List<String> offered = names(block(LIMIT, true));
+        String block = block(LIMIT, true);
+        List<String> offered = names(block);
 
-        assertTrue(offered.size() >= 5,
-                "the model owes rows for both classes of two positions and for a line: " + offered);
+        assertEquals(5, rows(block), "the model owes a row for each class pair and one at the line");
+        assertEquals(4, offered.size(), "the four composed for a cell are named: " + offered);
         Set<String> distinct = new LinkedHashSet<>(offered);
         assertEquals(offered.size(), distinct.size(),
                 "a name says which row it is, so no two rows share one: " + offered);
@@ -134,12 +173,31 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
      */
     @Test
     void askingForTheLinesDoesNotRenameTheRowsOfferedWithoutThem() {
-        List<String> without = names(block(LIMIT, false));
-        List<String> with = names(block(LIMIT, true));
+        String without = block(LIMIT, false);
+        String with = block(LIMIT, true);
 
-        assertTrue(with.containsAll(without),
-                "every row offered without the lines is offered under the same name with them: "
-                        + without + " / " + with);
-        assertTrue(with.size() > without.size(), "and the lines add rows of their own: " + with);
+        assertEquals(names(without), names(with),
+                "every row offered without the lines is offered under the same name with them");
+        assertTrue(rows(with) > rows(without), "and the lines add rows of their own: " + with);
+    }
+
+    /**
+     * Two lines composing one row is the case with no cell to name it and no line that can. Each
+     * probe fills what its own edge does not name from the bottom of the other's domain, so the two
+     * minimum edges here compose one row; which of them is still owed is what an unrelated row
+     * changes, and a row named for whichever was offered would be renamed by that. It is offered
+     * without a name, and stays that way.
+     */
+    @Test
+    void aRowTwoLinesComposeIsOfferedWithoutAName() {
+        String before = block(POLICY, true);
+        String after = block(POLICY_AND_A_ROW_AT_THE_CAP, true);
+        String written = "| (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>";
+
+        assertTrue(before.contains(written), "the row two lines compose carries no name: " + before);
+        assertTrue(after.contains(written),
+                "and carries none once a row meets one of the two lines: " + after);
+        assertEquals(List.of(), names(before), "there is nothing here a cell composed");
+        assertEquals(List.of(), names(after), "nor after");
     }
 }

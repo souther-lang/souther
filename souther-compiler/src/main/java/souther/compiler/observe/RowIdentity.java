@@ -73,13 +73,16 @@ public sealed interface RowIdentity {
     /**
      * The identity of a row written with {@code written} as its name, or without one.
      *
-     * <p>A blank {@code written} is read as no name, so that {@code Named} never holds one. The row
-     * that wrote it is told where it is written; here there is nothing to name it with.
+     * <p>Writing no name and writing one that names nothing are two things, and only the first is a
+     * row without a name. The second is refused where it is written, so nothing reaches here with
+     * one; reading it as no name would turn a refused row into an unnamed one and hide the refusal
+     * from whatever came next. It arrives here as what it is — a name that {@link Named} will not
+     * hold — which is a defect in the compiler rather than a state of the source.
      *
      * @param written the name as the row wrote it, or null where the row wrote none
      * @param ordinal which of its behavior's rows in this source this is, counted from one
      */
     static RowIdentity of(String written, int ordinal) {
-        return written == null || written.isBlank() ? new Unnamed(ordinal) : new Named(written);
+        return written == null ? new Unnamed(ordinal) : new Named(written);
     }
 }

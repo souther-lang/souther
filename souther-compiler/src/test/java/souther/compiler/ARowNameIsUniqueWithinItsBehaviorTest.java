@@ -7,6 +7,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
@@ -16,6 +17,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -179,6 +181,20 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
 
         assertTrue(all(source).stream().anyMatch(d -> d.said() instanceof ParseMessage.ARowNameSaysNothing),
                 "spaces are not a name either");
+    }
+
+    /**
+     * The two are held apart in the type as well. Writing no name and writing one that names nothing
+     * are different things, and reading the second as the first would turn a row the compiler refused
+     * into an unnamed row and carry it past the refusal.
+     */
+    @Test
+    void aNameThatNamesNothingIsNotReadAsARowWrittenWithoutOne() {
+        assertEquals(new RowIdentity.Unnamed(1), RowIdentity.of(null, 1),
+                "a row that wrote no name is the row without one");
+        assertThrows(IllegalArgumentException.class, () -> RowIdentity.of("   ", 1),
+                "and one that wrote a name naming nothing is refused where it is written, so reaching "
+                        + "here with one is a defect rather than a state of the source");
     }
 
     // --- what is not ---------------------------------------------------------------------------

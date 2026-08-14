@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A boundary is probed once per obligation, and a probe fills the positions its edge does not name
  * from the bottom of each one's own domain — which is the value a minimum edge names. So two edges of
  * one behavior compose the same input, and offering a row per obligation offers a reader two rows they
- * cannot tell apart. What is offered is a row. It is named for one of the edges it stands on, the
- * first of them by name, so that the row is offered under that name whether or not the other edge is
- * still owed: what a row settles is this run's to change and is not what the row is called.
+ * cannot tell apart. What is offered is a row, and it is offered without a name: an edge cannot name
+ * it, since which of the two is still owed is what an unrelated row changes, and a name that moved
+ * with that would be a name for the state of the generation rather than for the row.
  *
  * <p>The sentence above the block describes the block. Counted from the obligations instead, it is a
  * number about work the reader cannot see, and the line telling them to answer each placeholder is
@@ -110,7 +110,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
 
         assertEquals(List.of(
                         "// example fee",
-                        "//     | \"policy.cap = 0\" : (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>"),
+                        "//     | (0, Policy { rate = Rate(0), cap = Cap(0) }) -> <?>"),
                 written(block));
     }
 
