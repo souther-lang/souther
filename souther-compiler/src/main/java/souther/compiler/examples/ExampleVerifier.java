@@ -930,11 +930,14 @@ public final class ExampleVerifier {
         // reader, so a row that does not finish inside a table's helper is still inside a helper. What
         // is wrong with the table is said where the fake is written, and said once: this row and every
         // other row reaching the same fake would each repeat the one thing wrong with the one table.
-        ExampleStatements.Standins table =
+        ExampleStatements.BuiltTable built =
                 ExampleStatements.standins(fixtures, fk, paramTypes, depSig.out(), new ArrayList<>());
-        if (table == null) {
+        if (built == null) {
             return null;
         }
+        // The dispatch, which is what a row runs against. What the table was written with and cannot
+        // dispatch to is said where the fake is written, and is nothing this proxy can answer with.
+        ExampleStatements.Standins table = built.standins();
         String depName = fk.target();
         int arity = paramTypes.size();
         java.util.function.Function<Object[], Object> body = a -> {

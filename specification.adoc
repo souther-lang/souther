@@ -2800,6 +2800,8 @@ When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior pro
 
 [[fake-table-builds]]Building a `+fake+` table MUST come to a value within the budget and the wait it is held to; where it does not, the table states nothing that was checked.
 
+[[every-row-of-a-fake-table-can-answer]]Every row of a `+fake+` table MUST be one the table's dispatch can answer with. A row stating what an earlier row states is never the first match, and a `+_+` row followed by another `+_+` is never the one a table falls through to; either is a statement the author is making and nothing reads, and is reported at the row that answers nothing, naming the row that answers instead (<<e1926>>). Which of a pair is the dead one is the dispatch's to say and is not the order they are written in: of two rows stating one input the later answers nothing, and of two `+_+` rows the earlier does.
+
 To evaluate a behavior that `+depends on+` an injected dependency (<<depends-on>>), the example supplies a fake for it. Best is to need none: an outside-world value written as an *input* rather than an injected behavior keeps the behavior example-able with no fake (<<purity>>). When a dependency stays injected, a fake stands in, scoped to the example and never shipped (no run-time class is produced).
 
 A *value dependency* — one whose faked result is a constant — is given on the row with `+with+`. Its value is a fixture and is written like one: as a value of the type the dependency answers with (<<example-fixtures-are-buildable>>), so a `+now+` answering `+DateTime+` is stood in for by `+DateTime("…")+` and not by the string a boundary would carry one as (<<fixture-is-written-not-carried>>).
@@ -5567,6 +5569,21 @@ Emitted at every row of one behavior carrying a name another of its rows carries
 Both rows are reported and neither is named as the duplicate. Which source a row is in comes from the order a compile was handed its files, which a build and a command line decide differently; a rule naming one of the two would say different things about one model depending on how it was compiled.
 
 Rows written with no name are not compared with each other: a row without a name is not addressable from outside, so there is nothing for two of them to disagree about (<<example-row-name>>).
+
+[#e1926]
+=== A row of a fake's table can never answer
+
+[,text]
+----
+An earlier row of `fake findMember` states these arguments, so that is what the table
+answers with and this row answers nothing.
+----
+
+Emitted at a row of a `+fake+` table that the table's dispatch can never return, naming the row it returns instead (<<every-row-of-a-fake-table-can-answer>>). Two rows are written and never reached: one stating what an earlier row states, since the first match is what answers; and a `+_+` row with another `+_+` after it, since the last of them is what a table falls through to. The two point in opposite directions — the earlier explicit row answers, the later `+_+` does — so the row that answers is quoted rather than left to be read off the order.
+
+An error, and not a measurement: which row answers is decided by the table's own rule rather than by anything a run finds out, so a row that cannot answer is refused the way an arm no `+match+` can reach is (<<e1204>>) rather than reported as something a build may carry.
+
+A `+_+` row and an explicit row do not shadow each other, whichever order they are written in: an explicit row answers where it is asked for what it states, and the `+_+` row answers everywhere else. A second table written for one dependency is not this either — the first one written is what answers, and what the second states is said where that is decided (<<example-pending>>).
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

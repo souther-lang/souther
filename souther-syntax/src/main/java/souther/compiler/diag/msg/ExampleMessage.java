@@ -104,6 +104,22 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1908)
     record TheFakeCouldNotBeBuilt(String dependency, String why) implements ExampleMessage, Reported {}
 
+    /**
+     * A row states arguments an earlier row of the table states, so the table answers with that one.
+     *
+     * <p>The dispatch takes the first row stating what it is asked, so a second is written and never
+     * reached.
+     */
+    @Code(DiagnosticCode.E1926)
+    record AnEarlierRowAnswersTheseArguments(String fake) implements ExampleMessage, Reported {}
+
+    /** A `_` row is followed by another, which is what the table falls through to instead. */
+    @Code(DiagnosticCode.E1926)
+    record ALaterDefaultRowAnswersInstead(String fake) implements ExampleMessage, Reported {}
+
+    /** Where the row that does answer is written. */
+    record TheRowThatAnswersIsHere(String fake) implements ExampleMessage, Supporting {}
+
     /** A fake was asked for an input its table has no output for. */
     @Code(DiagnosticCode.E1909)
     record AFakeHadNoOutputForAnInput(String input) implements ExampleMessage, Reported {}

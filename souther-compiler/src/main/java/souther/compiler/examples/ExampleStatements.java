@@ -196,7 +196,12 @@ public final class ExampleStatements {
             // built the table of a fake nothing reads, so this is the first thing that would run it.
             Read<List<Diagnostic>> read = v.within(reader -> {
                 List<Diagnostic> wrong = new ArrayList<>();
-                standins(reader, fk, sig.ins(), sig.out(), wrong);
+                BuiltTable built = standins(reader, fk, sig.ins(), sig.out(), wrong);
+                if (built != null) {
+                    for (Shadowed dead : built.shadowed()) {
+                        wrong.add(cannotAnswer(fk, dead));
+                    }
+                }
                 return wrong;
             }, new Deadline.Work.Table(fk.target(), sourceId, fk.pos()));
             switch (read) {
@@ -478,7 +483,7 @@ public final class ExampleStatements {
             return;
         }
         // The whole table, built the one way the proxy builds it.
-        Read<Standins> read = within(
+        Read<BuiltTable> read = within(
                 reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
                 new Deadline.Work.Table(fk.target(), origin, fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
@@ -512,14 +517,18 @@ public final class ExampleStatements {
             case Read.RuntimeAbsent() -> {
                 return;
             }
-            case Read.Got(Standins _) -> { }
+            case Read.Got(BuiltTable _) -> { }
         }
         // The whole table or nothing: a table with a row that will not build answers nothing here,
         // and what is wrong with it is reported where the fake is written ({@link #fakeTables}).
-        Standins table = read.orNull();
-        if (table == null) {
+        BuiltTable built = read.orNull();
+        if (built == null) {
             return;
         }
+        // What the fake answers with, which is what a comparison is about. A row the table cannot
+        // dispatch to is written and unreachable, and reporting a disagreement about it would be a
+        // disagreement over a value the fake never gives (ADR-0093).
+        Standins table = built.standins();
         for (RecordedRow row : rows) {
             Standin answering = table.answering(row.arguments());
             if (answering == null) {
@@ -762,6 +771,26 @@ public final class ExampleStatements {
     record Standins(List<Standin> explicit, Standin fallback) {
 
         /**
+         * Every row here is one {@link #answering} can return.
+         *
+         * <p>A row the dispatch would never reach is not part of the table's semantics, and is held
+         * apart where the table is built ({@link BuiltTable}). So a reader walking {@link #explicit}
+         * is walking answers the fake can give, which is what a reader of a listing has to be able to
+         * assume of the rule beside it — and the assumption is held here rather than left to whoever
+         * fills the list, since a listing and a rule that disagree are what this exists to prevent.
+         */
+        public Standins {
+            explicit = List.copyOf(explicit);
+            for (int i = 0; i < explicit.size(); i++) {
+                if (answering(explicit.subList(0, i), null, explicit.get(i).arguments()) != null) {
+                    throw new IllegalArgumentException(
+                            "a table holds no row its dispatch cannot return, and the row at " + i
+                                    + " states what an earlier one states");
+                }
+            }
+        }
+
+        /**
          * Which row answers {@code arguments}: the first explicit row stating them, and otherwise the
          * {@code _} row. Null where the table answers nothing, which is <em>E1909</em>'s to say where
          * the fake is used.
@@ -772,9 +801,22 @@ public final class ExampleStatements {
          * is one, and adding another means writing it somewhere it plainly does not belong.
          */
         Standin answering(Object[] arguments) {
-            for (Standin standin : explicit) {
-                if (sameArguments(standin.arguments(), arguments)) {
-                    return standin;
+            return answering(explicit, fallback, arguments);
+        }
+
+        /**
+         * The same rule over rows that have not been built into answers yet.
+         *
+         * <p>Which row answers and which row can never answer are one question, so there is one rule
+         * and this is it. Deciding it needs what a row states and nothing else — an answer a row was
+         * built into says nothing about whether the row is ever asked — so it is asked of what states
+         * rather than of what answers, and a row whose answer has not been built (and, being
+         * unreachable, never will be) is decided by the same walk as the rest.
+         */
+        static <T extends Stated> T answering(List<T> explicit, T fallback, Object[] arguments) {
+            for (T stated : explicit) {
+                if (sameArguments(stated.arguments(), arguments)) {
+                    return stated;
                 }
             }
             return fallback;
@@ -795,9 +837,61 @@ public final class ExampleStatements {
         }
     }
 
-    /** One row of a fake's table: the arguments it states — none, for the {@code _} row — and the
-     * answer it was built into. */
-    record Standin(Object[] arguments, Hir.FakeRow row, FixtureReader.BuiltFixture answer) {}
+    /**
+     * What a row of a fake's table states: the arguments it answers for — none, for the {@code _}
+     * row — and where it is written.
+     *
+     * <p>All that deciding which row answers reads. A row is written before any of it is built, and
+     * whether the table can ever reach it is settled from what it states, so the answer a row was
+     * built into is not part of the question and a row that answers nothing never has one built.
+     */
+    sealed interface Stated {
+
+        /** The arguments this row states, or null for the {@code _} row. */
+        Object[] arguments();
+
+        /** Where the row is written. */
+        Hir.FakeRow row();
+    }
+
+    /** A row as written, with its arguments read and nothing else of it built. */
+    record Written(Object[] arguments, Hir.FakeRow row) implements Stated {}
+
+    /** One row of the table the fake dispatches with: what it states, and the answer it was built
+     * into. */
+    record Standin(Object[] arguments, Hir.FakeRow row, FixtureReader.BuiltFixture answer)
+            implements Stated {}
+
+    /**
+     * A row the table's dispatch can never return, and the row it returns instead.
+     *
+     * <p>Two ways a row is written and never reached, and the dispatch decides both: an explicit row
+     * stating what an earlier explicit row states is never the first match, and a {@code _} row
+     * followed by another {@code _} is never the one a table falls through to. Which of the pair is
+     * the dead one is not the same in the two — the earlier explicit row answers, and the later
+     * {@code _} does — so what is recorded is the pair rather than a rule for reading it off.
+     *
+     * <p>Where the rows are written, and not what they were built into: nothing of an unreachable row
+     * is built, so there is nothing else of it to carry.
+     */
+    record Shadowed(Hir.FakeRow row, Hir.FakeRow answeredBy) {}
+
+    /**
+     * A fake's table as it was built: what it dispatches with, and the rows it was written with that
+     * it cannot dispatch to.
+     *
+     * <p>Apart, because they are read by different things. {@link Standins} is the fake's semantics —
+     * the proxy a row runs against and the reading that holds the table to what the rows record ask
+     * it, and a reader that enumerates it is enumerating rows the fake can answer with. What was
+     * written and cannot be reached is a fact about the source, which is the reporting's to say and
+     * nothing else's.
+     */
+    record BuiltTable(Standins standins, List<Shadowed> shadowed) {
+
+        public BuiltTable {
+            shadowed = List.copyOf(shadowed);
+        }
+    }
 
     /**
      * {@code fk}'s table, decoded against {@code ins} and {@code outType}; null (with a diagnostic
@@ -809,7 +903,7 @@ public final class ExampleStatements {
      * so a table with an arity slip and a slow or non-terminating output reported the second problem
      * instead of the first, or ran out of time before reporting either.
      */
-    static Standins standins(FixtureReader fixtures, Hir.Fake fk, List<BoundaryInput> ins,
+    static BuiltTable standins(FixtureReader fixtures, Hir.Fake fk, List<BoundaryInput> ins,
                                      BoundaryOutput outType, List<Diagnostic> out) {
         for (Hir.FakeRow r : fk.rows()) {
             if (!r.isDefault() && r.inputs().size() != ins.size()) {
@@ -818,22 +912,59 @@ public final class ExampleStatements {
                 return null;
             }
         }
+        // Which `_` the table falls through to is the last one written, and that is read off the
+        // rows rather than built: a `_` with another after it answers nothing, so nothing of it is
+        // built either.
+        Hir.FakeRow lastDefault = null;
+        for (Hir.FakeRow r : fk.rows()) {
+            if (r.isDefault()) {
+                lastDefault = r;
+            }
+        }
+        List<Written> reachable = new ArrayList<>();
         List<Standin> explicit = new ArrayList<>();
+        List<Shadowed> shadowed = new ArrayList<>();
         Standin fallback = null;
+        // In the order the rows are written, each read as far as it is reached: what a row states,
+        // then — for a row the table can return — what it answers. A row the dispatch never returns
+        // is a row nothing asks for what it states, so building its answer would be work done for a
+        // statement nothing reads, and where that work is what fails or overruns the table would be
+        // reported for a row that is not part of it. Reading every row's arguments first and every
+        // answer after would move that fault rather than remove it: a row whose answer is wrong is
+        // wrong wherever a later row's arguments take their time.
         try {
             for (Hir.FakeRow r : fk.rows()) {
-                // A dependency that returns a sum has no single decoder; each row names one case,
-                // so decode the row's output against that case's type (as an expected value is).
-                FixtureReader.BuiltFixture answer = fixtures.buildFixture(r.output(), outType);
                 if (r.isDefault()) {
-                    fallback = new Standin(null, r, answer);
+                    if (r != lastDefault) {
+                        shadowed.add(new Shadowed(r, lastDefault));
+                        continue;
+                    }
+                    fallback = new Standin(null, r, fixtures.buildFixture(r.output(), outType));
                     continue;
                 }
                 Object[] arguments = new Object[ins.size()];
                 for (int i = 0; i < ins.size(); i++) {
                     arguments[i] = fixtures.built(r.inputs().get(i), ins.get(i));
                 }
-                explicit.add(new Standin(arguments, r, answer));
+                Written written = new Written(arguments, r);
+                // Whether the table would return this row when asked what this row states, asked of
+                // the table this row is in. Not of the rows before it: a `_` written above an
+                // explicit row answers where the explicit row is absent and not where it is, so a
+                // reading that took any answer as a shadow would call a live row dead. And not by a
+                // second comparison of arguments, which is the one thing this must not grow — the
+                // rule that decides which row answers is the rule that decides which row cannot.
+                List<Written> with = new ArrayList<>(reachable);
+                with.add(written);
+                Written answers = Standins.answering(with,
+                        lastDefault == null ? null : new Written(null, lastDefault), arguments);
+                if (answers != written) {
+                    shadowed.add(new Shadowed(r, answers.row()));
+                    continue;
+                }
+                reachable.add(written);
+                // A dependency that returns a sum has no single decoder; each row names one case, so
+                // decode the row's output against that case's type (as an expected value is).
+                explicit.add(new Standin(arguments, r, fixtures.buildFixture(r.output(), outType)));
             }
         } catch (FixtureException fe) {
             out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
@@ -842,7 +973,25 @@ public final class ExampleStatements {
             out.add(unbuildableFake(fk.pos(), fk.target(), nt.getMessage()));
             return null;
         }
-        return new Standins(explicit, fallback);
+        return new BuiltTable(new Standins(explicit, fallback), shadowed);
+    }
+
+    /**
+     * A row of a fake's table that the table's dispatch can never return.
+     *
+     * <p>Said at the row that answers nothing, and quoting the row answered instead — which is the
+     * one thing an author cannot read off the text: an explicit row is shadowed by an earlier one and
+     * a {@code _} row by a later one, so which of the two is dead is decided by the rule rather than
+     * by the order they are written in.
+     */
+    static Diagnostic cannotAnswer(Hir.Fake fk, Shadowed dead) {
+        return Diagnostic.at(dead.row().pos())
+                .say(dead.row().isDefault()
+                        ? new ExampleMessage.ALaterDefaultRowAnswersInstead(fk.target())
+                        : new ExampleMessage.AnEarlierRowAnswersTheseArguments(fk.target()))
+                .secondaryIn(null, souther.compiler.diag.Region.point(dead.answeredBy().pos()),
+                        new ExampleMessage.TheRowThatAnswersIsHere(fk.target()))
+                .build();
     }
 
     /**

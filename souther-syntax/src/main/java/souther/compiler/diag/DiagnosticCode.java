@@ -161,6 +161,7 @@ public enum DiagnosticCode {
     E1923("example-evaluation-answers", "check.example.title"),
     E1924("example-evaluation-stays-within-stack", "check.example.title"),
     E1925("a-row-name-is-unique-within-its-behavior", "check.example.title"),
+    E1926("every-row-of-a-fake-table-can-answer", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),
