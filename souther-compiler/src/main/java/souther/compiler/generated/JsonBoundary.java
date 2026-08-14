@@ -1,7 +1,7 @@
 package souther.compiler.generated;
 
 import souther.compiler.check.BoundaryInput;
-import souther.compiler.check.BoundaryMapKey;
+import souther.compiler.check.CrossingMapKey;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -123,7 +123,7 @@ public final class JsonBoundary {
      * the map-key rule answers with travels in the shape. A named key runs its own decoder, and a
      * lexical one is the string leaf, parsed for a temporal.
      */
-    private static Decoder<Object, ?> keyDecoder(ClassLoader loader, BoundaryMapKey key) {
+    private static Decoder<Object, ?> keyDecoder(ClassLoader loader, CrossingMapKey key) {
         return switch (key.representation()) {
             case MapKeyRepresentation.NamedKey n -> codecOf(loader, n.name(), "decoder");
             case MapKeyRepresentation.Text _ -> text();
@@ -287,7 +287,7 @@ public final class JsonBoundary {
      * encoder writes ({@code CodecGen.pushKeyRenderer}), which is what keeps the two paths from
      * spelling a key differently.
      */
-    private static String encodeKey(ClassLoader loader, BoundaryMapKey key, Object value) {
+    private static String encodeKey(ClassLoader loader, CrossingMapKey key, Object value) {
         return (String) switch (key.representation()) {
             case MapKeyRepresentation.Lexical l -> encodeLeaf(l.leaf(), value);
             case MapKeyRepresentation.NamedKey n -> encodeThrough(loader, n.name().qualified(), value);
