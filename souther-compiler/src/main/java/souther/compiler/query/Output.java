@@ -620,7 +620,8 @@ public final class Output {
             // `requirements` is asked for above as a readiness condition — a module whose
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
-            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(prepared.value().tree(),
+            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
+                    prepared.value().forExamples(prepared.value().examples()),
                     scope.value(), sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     deadlineOf(db), policyOf(db)));
@@ -843,7 +844,8 @@ public final class Output {
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // As above: `requirements` says this module is ready to be read, not what to read.
-            return souther.compiler.examples.ExampleStatements.fakeTables(prepared.value().tree(), scope.value(),
+            return souther.compiler.examples.ExampleStatements.fakeTables(
+                    prepared.value().forExamples(prepared.value().examples()), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     deadlineOf(db), policyOf(db));
@@ -879,7 +881,9 @@ public final class Output {
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
-            Hir.Module rows = written(db, name, sourceId, prepared.value().tree());
+            souther.compiler.check.Prepared.ExampleExecution rows =
+                    prepared.value().forExamples(writtenIn(db, name, sourceId,
+                            prepared.value().examples()));
             if (rows.examples().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
@@ -952,23 +956,22 @@ public final class Output {
             return names;
         }
 
-        /** The module carrying only the rows written in {@code sourceId}. The fakes stay whole: a
+        /** The rows of {@code rows} written in {@code sourceId}. The fakes are not selected: a
          * module's own fakes are what its attached files' rows run against, and the other way
          * round. */
-        private static Hir.Module written(Db db, String name, String sourceId, Hir.Module m) {
+        private static List<Hir.Example> writtenIn(Db db, String name, String sourceId,
+                                                   List<Hir.Example> rows) {
             List<String> origins = db.ask(new Front.ExampleOrigins(name)).value();
-            if (origins == null || origins.size() != m.examples().size()) {
-                return m;
+            if (origins == null || origins.size() != rows.size()) {
+                return rows;
             }
             List<Hir.Example> mine = new ArrayList<>();
             for (int i = 0; i < origins.size(); i++) {
                 if (origins.get(i).equals(sourceId)) {
-                    mine.add(m.examples().get(i));
+                    mine.add(rows.get(i));
                 }
             }
-            return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), m.defs(),
-                    m.behaviors(), m.fns(), m.takenOn(), mine, m.fakes(), m.exampleFileTarget(),
-                    m.pos());
+            return mine;
         }
     }
 }

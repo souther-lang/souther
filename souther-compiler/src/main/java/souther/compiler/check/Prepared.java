@@ -86,6 +86,11 @@ public final class Prepared {
         return module.defs();
     }
 
+    /** The example rows attached to this module, from its own file and from every file naming it. */
+    public List<Hir.Example> examples() {
+        return module.examples();
+    }
+
     /** Its definitions, the taken-on ones not among them — those are what the artifact carries
      * beside what the module wrote. */
     public List<Hir.FnDef> fns() {
@@ -101,6 +106,73 @@ public final class Prepared {
             }
         }
         return packages;
+    }
+
+    /**
+     * This module's artifact with {@code rows} standing where its example rows were — what an
+     * example run is given.
+     *
+     * <p>The rows are a subset because which of them are reported on is an output's question: a
+     * module's rows come from its own file and from every {@code examples for} file naming it, and
+     * a run reports on one of those files at a time. What does not change with the choice is
+     * everything else here, which is what the artifact is.
+     */
+    public ExampleExecution forExamples(List<Hir.Example> rows) {
+        return new ExampleExecution(module, rows);
+    }
+
+    /**
+     * The rows an example run reads, and the artifact they are evaluated in.
+     *
+     * <p>Its own type because that pairing is what an example run needs and neither half is enough:
+     * the rows say what to try and the artifact says what is there to try it against — the helpers
+     * a row applies are methods because this module took them on, and a run that was handed the rows
+     * alone would be looking for them in a class that does not carry them.
+     *
+     * <p>What it claims is about its input and not about its outcome. Nothing here says a row
+     * agreed with anything; that is what running them answers.
+     */
+    public static final class ExampleExecution {
+
+        private final Hir.Module module;
+        private final List<Hir.Example> rows;
+
+        private ExampleExecution(Hir.Module module, List<Hir.Example> rows) {
+            this.module = module;
+            this.rows = List.copyOf(rows);
+        }
+
+        /** What the module is called. */
+        public String name() {
+            return module.name();
+        }
+
+        /** The behaviors a row names. */
+        public List<Hir.BehaviorDef> behaviors() {
+            return module.behaviors();
+        }
+
+        /** The definitions the module wrote. */
+        public List<Hir.FnDef> fns() {
+            return module.fns();
+        }
+
+        /** The definitions its artifact carries beside them — what a row applies. */
+        public List<Hir.FnDef> takenOn() {
+            return module.takenOn();
+        }
+
+        /** The rows this run is over. */
+        public List<Hir.Example> examples() {
+            return rows;
+        }
+
+        /** The fake tables its rows run against, which are the module's whole and not one file's:
+         * a module's own fakes are what its attached files' rows run against, and the other way
+         * round. */
+        public List<Hir.Fake> fakes() {
+            return module.fakes();
+        }
     }
 
     /**

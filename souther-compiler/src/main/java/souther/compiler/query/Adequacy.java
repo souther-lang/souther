@@ -483,7 +483,8 @@ public final class Adequacy {
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say.
             boolean armsAsked = levelOf(db).measuresArms();
-            FixtureReader.Construction building = constructing(db, name, prepared.value().tree(), symbols);
+            FixtureReader.Construction building = constructing(db, name,
+                    prepared.value().forExamples(prepared.value().examples()), symbols);
 
             Map<String, List<BoundaryAssessment>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -1068,7 +1069,8 @@ public final class Adequacy {
             Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
 
             Map<String, Filling> out = new LinkedHashMap<>();
-            FixtureReader.Construction building = constructing(db, name, prepared.value().tree(), symbols);
+            FixtureReader.Construction building = constructing(db, name,
+                    prepared.value().forExamples(prepared.value().examples()), symbols);
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;
@@ -1351,7 +1353,7 @@ public final class Adequacy {
      * nothing. Asking for the uncounted classes instead would generate every one of them again to get
      * the same answers.
      */
-    static FixtureReader.Construction constructing(Db db, String module, Hir.Module written,
+    static FixtureReader.Construction constructing(Db db, String module, souther.compiler.check.Prepared.ExampleExecution written,
                                                    Symbols symbols) {
         Map<String, byte[]> classes =
                 db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
@@ -1515,7 +1517,7 @@ public final class Adequacy {
             // An injected behavior produces nothing, so every case of its output is unverified and
             // saying so of each says nothing. Left out here rather than at the printing, so that what
             // a report shows and what a build is told come from one list.
-            if (!ExampleVerifier.isPending(module, behavior.name())) {
+            if (!ExampleVerifier.isPending(module.behaviors(), module.fns(), behavior.name())) {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
                         out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,

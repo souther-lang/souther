@@ -27,22 +27,23 @@ public final class InjectionSigs {
      * of the same name as an imported one wins; the imported signature only fills a name this module
      * does not declare.
      */
-    public static Map<String, ReqSig> of(Hir.Module module, Symbols symbols,
-                                         Map<String, Sig> importedSigs, Set<String> importedInjected) {
+    public static Map<String, ReqSig> of(List<Hir.BehaviorDef> behaviors, List<Hir.FnDef> fns,
+                                         Symbols symbols, Map<String, Sig> importedSigs,
+                                         Set<String> importedInjected) {
         Set<String> own = new HashSet<>();
-        for (Hir.BehaviorDef b : module.behaviors()) {
+        for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec
-                    && (isInjectionTarget(module, spec) || !spec.dependsOn().isEmpty())) {
+                    && (isInjectionTarget(fns, spec) || !spec.dependsOn().isEmpty())) {
                 own.add(spec.name());
             }
         }
-        return dependencies(module, symbols, own, importedSigs, importedInjected);
+        return dependencies(behaviors, symbols, own, importedSigs, importedInjected);
     }
 
     /** Whether {@code spec} is written with no {@code let} of its own, so something else supplies
      *  the body (spec {@code [#injected-behavior]}). */
-    private static boolean isInjectionTarget(Hir.Module module, Hir.SpecBehavior spec) {
-        for (Hir.FnDef fn : module.fns()) {
+    private static boolean isInjectionTarget(List<Hir.FnDef> fns, Hir.SpecBehavior spec) {
+        for (Hir.FnDef fn : fns) {
             if (fn.name().equals(spec.name())) {
                 return false;
             }
@@ -56,12 +57,12 @@ public final class InjectionSigs {
      * caller so a module read from the path, which publishes no {@code let}, is decided the same way
      * as one being compiled.
      */
-    public static Map<String, ReqSig> dependencies(Hir.Module module, Symbols symbols,
+    public static Map<String, ReqSig> dependencies(List<Hir.BehaviorDef> behaviors, Symbols symbols,
                                                    Set<String> dependencies,
                                                    Map<String, Sig> importedSigs,
                                                    Set<String> importedInjected) {
         Map<String, ReqSig> sigs = new HashMap<>();
-        for (Hir.BehaviorDef b : module.behaviors()) {
+        for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec && dependencies.contains(spec.name())) {
                 List<Type> params = new ArrayList<>();
                 for (Hir.Param p : spec.params()) {
@@ -88,12 +89,12 @@ public final class InjectionSigs {
      * <p>{@code callable} names this module's own; {@code importedCallable} the ones it borrows. A
      * local behavior of the same name as an imported one wins, as it does for an injection target.
      */
-    public static Map<String, ReqSig> callable(Hir.Module module, Symbols symbols,
+    public static Map<String, ReqSig> callable(List<Hir.BehaviorDef> behaviors, Symbols symbols,
                                                Set<String> callable,
                                                Map<String, Sig> importedSigs,
                                                Set<String> importedCallable) {
         Map<String, ReqSig> sigs = new HashMap<>();
-        for (Hir.BehaviorDef b : module.behaviors()) {
+        for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec && callable.contains(spec.name())) {
                 List<Type> params = new ArrayList<>();
                 for (Hir.Param p : spec.params()) {

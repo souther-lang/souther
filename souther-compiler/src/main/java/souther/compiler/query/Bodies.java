@@ -391,7 +391,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.dependencies(prepared.value().tree(), scope.value(),
+                return Answer.of(InjectionSigs.dependencies(prepared.value().behaviors(), scope.value(),
                         own.value(), imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
@@ -425,7 +425,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.callable(prepared.value().tree(), scope.value(), own.value(),
+                return Answer.of(InjectionSigs.callable(prepared.value().behaviors(), scope.value(), own.value(),
                         imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());

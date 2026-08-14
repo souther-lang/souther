@@ -85,7 +85,8 @@ public final class ExampleVerifier {
      * <p>{@code values} are the values a row may name beyond this module's own: the ones its imports
      * bring in, each already closed over the module that published it (ADR-0074).
      */
-    public static Observations check(Hir.Module module, Symbols symbols, Map<String, Sig> sigs,
+    public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
+                                     Symbols symbols, Map<String, Sig> sigs,
                                      Map<String, byte[]> classes,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
@@ -174,7 +175,7 @@ public final class ExampleVerifier {
         return d.said() == null ? "example failed" : DiagnosticRenderer.legacyBody(d);
     }
 
-    private final Hir.Module module;
+    private final souther.compiler.check.Prepared.ExampleExecution module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     /** What each behavior of this module takes injected, in the order its constructor takes it. */
@@ -194,7 +195,8 @@ public final class ExampleVerifier {
      * the machinery running it is given. */
     private final EvaluationPolicy policy;
 
-    private ExampleVerifier(Hir.Module module, Symbols symbols, Map<String, Sig> sigs,
+    private ExampleVerifier(souther.compiler.check.Prepared.ExampleExecution module,
+                            Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy) {
@@ -275,7 +277,7 @@ public final class ExampleVerifier {
                 continue;
             }
             return new ExampleTarget(name, requirements.getOrDefault(name, List.of()),
-                    isPending(module, name));
+                    isPending(module.behaviors(), module.fns(), name));
         }
         return null;
     }
@@ -288,21 +290,22 @@ public final class ExampleVerifier {
      * from the same answer. Two statements of it would let a report say a behavior is implemented while
      * its rows are being recorded rather than run.
      */
-    public static boolean isPending(Hir.Module module, String name) {
-        for (Hir.BehaviorDef b : module.behaviors()) {
+    public static boolean isPending(List<Hir.BehaviorDef> behaviors, List<Hir.FnDef> fns,
+                                    String name) {
+        for (Hir.BehaviorDef b : behaviors) {
             if (b.name().equals(name)) {
-                return b instanceof Hir.SpecBehavior && !hasFn(module, name);
+                return b instanceof Hir.SpecBehavior && !hasFn(fns, name);
             }
         }
         return false;
     }
 
     private boolean hasFn(String name) {
-        return hasFn(module, name);
+        return hasFn(module.fns(), name);
     }
 
-    private static boolean hasFn(Hir.Module module, String name) {
-        return module.fns().stream().anyMatch(f -> f.name().equals(name));
+    private static boolean hasFn(List<Hir.FnDef> fns, String name) {
+        return fns.stream().anyMatch(f -> f.name().equals(name));
     }
 
     /** The injected behavior named {@code name} in this module (a SpecBehavior with no {@code let}),

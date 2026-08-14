@@ -443,8 +443,10 @@ class CompileFakeExampleDisagreementTest {
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         c.db().ask(new souther.compiler.query.Output.All());
         String name = c.modules().get(0);
+        souther.compiler.check.Prepared prepared =
+                c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value();
         return ExampleStatements.disagreements(
-                c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value().tree(),
+                prepared.forExamples(prepared.examples()),
                 c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(

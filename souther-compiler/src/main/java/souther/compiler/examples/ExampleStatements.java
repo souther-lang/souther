@@ -53,7 +53,7 @@ import java.util.Set;
  */
 public final class ExampleStatements {
 
-    private final Hir.Module module;
+    private final souther.compiler.check.Prepared.ExampleExecution module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     private final MemoryClassLoader loader;
@@ -72,7 +72,7 @@ public final class ExampleStatements {
      * say, not by how fast the host reading them is. */
     private final EvaluationPolicy policy;
 
-    private ExampleStatements(Hir.Module module, Symbols symbols, Map<String, Sig> sigs,
+    private ExampleStatements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy) {
         this.module = module;
@@ -115,7 +115,7 @@ public final class ExampleStatements {
      * itself dispatches with ({@link Standins#answering}) — the same rule, not a second reading of it — and
      * the two answers are compared as the written values they are built into.
      */
-    public static Readings disagreements(Hir.Module module, Symbols symbols,
+    public static Readings disagreements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
                                          List<String> exampleOrigins,
@@ -166,7 +166,7 @@ public final class ExampleStatements {
      * a report in the wrong file is a report, and the reason to know the file is to place it, while
      * nothing else would say what is wrong with the table at all.
      */
-    public static List<Diagnostic> fakeTables(Hir.Module module, Symbols symbols,
+    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               List<String> fakeOrigins, String sourceId,
@@ -367,7 +367,7 @@ public final class ExampleStatements {
 
     /** The behaviors this module both stands in for — the target of a {@code fake}, the dependency a
      * {@code with} that takes no input answers for ({@link #againstWiths}) — and records rows of. */
-    private static Set<String> contested(Hir.Module module, Map<String, Sig> sigs) {
+    private static Set<String> contested(souther.compiler.check.Prepared.ExampleExecution module, Map<String, Sig> sigs) {
         Set<String> stoodIn = new LinkedHashSet<>();
         for (Hir.Fake fk : module.fakes()) {
             stoodIn.add(fk.target());
