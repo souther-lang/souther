@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -109,6 +110,22 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
         return found.stream().anyMatch(d -> d.said() instanceof ParseMessage);
     }
 
+    /**
+     * The type that absorbs standing where a type goes: on its own, or inside a union, a
+     * collection, a tuple or a function type. It is shown as {@code ?} and nothing else is.
+     *
+     * <p>An optional is not this. Its {@code ?} is written onto the type it is made of
+     * ({@code Int?}), so it never stands where a type begins — which is why the whole value cannot
+     * simply be compared against {@code ?}, and why looking for the character anywhere in it would
+     * call every optional a leak.
+     */
+    private static final Pattern ABSORBING = Pattern.compile("(^|[<,(|]\\s*)\\?");
+
+    private static boolean namesTheTypeThatAbsorbs(Diagnostic d) {
+        return d.values().values().stream()
+                .anyMatch(v -> ABSORBING.matcher(String.valueOf(v)).find());
+    }
+
     private static String shown(List<Diagnostic> found) {
         List<String> out = new ArrayList<>();
         for (Diagnostic d : found) {
@@ -133,7 +150,7 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
                 if (!spelling.answered().equals(found.stream().map(Diagnostic::code).sorted().toList())) {
                     answered.add(cell + ": " + shown(found));
                 }
-                if (found.stream().anyMatch(d -> d.values().containsValue("?"))) {
+                if (found.stream().anyMatch(ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest::namesTheTypeThatAbsorbs)) {
                     naming.add(cell + ": " + shown(found));
                 }
             }
@@ -141,10 +158,12 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
 
         assertEquals(NOT_WRITABLE, notWritable,
                 "which positions cannot be written a union; read the change rather than re-fitting");
-        assertEquals(List.of(), answered,
-                "the name that denotes nothing, what is wrong beside it, and nothing else");
+        // The sharper of the two first: a diagnostic naming the type that absorbs says nothing an
+        // author could go looking for, whatever else is right about the answer it is part of.
         assertEquals(List.of(), naming,
                 "the type a name that denotes nothing leaves behind is named in nothing");
+        assertEquals(List.of(), answered,
+                "the name that denotes nothing, what is wrong beside it, and nothing else");
     }
 
     /**

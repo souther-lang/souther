@@ -209,7 +209,8 @@ public final class TypeOps {
      * <p>An output with a member resting on a name that denotes nothing has no case set, and is the
      * type that absorbs — the same answer a single such case already gives, so one mistake has one
      * recovery wherever it is written. A check that would hold such an output against what is
-     * produced asks {@link #restsOnAnUnresolvedName} first and abandons.
+     * produced reads it here first, so that what is wrong with the union itself is still said, and
+     * then asks {@link #restsOnAnUnresolvedName} whether there is a case set to compare.
      */
     public static Type successType(Hir.RetType ret) {
         List<Type> members = new ArrayList<>();
