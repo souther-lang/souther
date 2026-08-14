@@ -42,6 +42,9 @@ import java.util.Set;
  * no runtime to run against  (as reached)        INCOMPLETE    INFRASTRUCTURE
  * </pre>
  *
+ * <p>Whether the behavior was applied is the {@link Stage} column: everything at {@code INVOKED} or
+ * past it says what applied it ({@link Run}), and everything before it says nothing did.
+ *
  * @param at             where the row is written
  * @param target         the behavior the row is about
  * @param identity       what the row names itself. A {@link RowIdentity.Named} is unique among the
@@ -57,13 +60,14 @@ import java.util.Set;
  * @param inputCases     the case each input fixture constructs, in order; an entry is null where the
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
- * @param hits           the branch sites this row passed through; empty until branches are measured
- * @param stepsSpent     how many counted points the evaluation passed. What the row cost, in the unit
- *                       it is actually held to — so a build can see how much of the budget its rows
- *                       use before one of them reaches it, which is the only way to set the budget
- *                       from evidence rather than by guessing. Zero says the row passed no counted
- *                       point, which a row that ran a body with no loop in it does as much as one
- *                       that never ran — {@link #disposition} is what tells those apart.
+ * @param run            what applied the behavior, and what that application is measured in. A row
+ *                       that reached {@link Stage#INVOKED} says what applied it and a row that did
+ *                       not says nothing did, which is held to at construction: the two are
+ *                       different cuts of one evaluation and cannot be recorded disagreeing. What a
+ *                       row cost is inside the arm it is defined for, so a build reading it has the
+ *                       answerer in hand — how much of the budget a row spends is a fact about code
+ *                       this compile counted into, and there is no such number for code it did not
+ *                       write
  */
 public record RowOutcome(SourceRef at,
                          String target,
@@ -75,8 +79,7 @@ public record RowOutcome(SourceRef at,
                          TypeSymbol resultArm,
                          List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
-                         Set<Integer> hits,
-                         long stepsSpent) {
+                         Run run) {
 
     public RowOutcome {
         // A list that keeps a null in it cannot be List.copyOf'd, and an input whose case the text does
@@ -84,7 +87,14 @@ public record RowOutcome(SourceRef at,
         inputCases = inputCases == null ? List.of()
                 : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(inputCases));
         inputs = inputs == null ? List.of() : List.copyOf(inputs);
-        hits = hits == null ? Set.of() : Set.copyOf(hits);
+        if (stage.reached(Stage.INVOKED) == run instanceof Run.NotRun) {
+            // Held here because the two are written from one evaluation and read apart: a stage that
+            // says the behavior was applied and a run that says nothing applied it is a state no
+            // evaluation produces, and a reader that met it would have to decide which half to trust.
+            throw new IllegalArgumentException(
+                    "a row that applied the behavior says what applied it, and one that did not says "
+                            + "nothing did: " + stage + " with " + run);
+        }
     }
 
     /** Whether this row is evidence that the behavior can answer with {@link #resultArm}. A row that

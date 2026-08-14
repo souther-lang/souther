@@ -28,6 +28,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.Run;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 
@@ -476,7 +477,17 @@ public final class ExampleVerifier {
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
         return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.identity(),
                 state.stage, state.disposition, state.failurePhase, state.expectedArm, state.resultArm,
-                state.inputCases, state.inputs, state.hits, state.stepsSpent);
+                state.inputCases, state.inputs, ran(state.stage, state.stepsSpent, state.hits));
+    }
+
+    /**
+     * What applied the behavior, for a row this compile ran.
+     *
+     * <p>One answer, and it is this compile's own classes: nothing else applies a behavior here. The
+     * numbers go with it because they are its — what the emitter counted into is what has a count.
+     */
+    private static Run ran(Stage reached, long steps, Set<Integer> hits) {
+        return reached.reached(Stage.INVOKED) ? new Run.Generated(steps, hits) : new Run.NotRun();
     }
 
     /**
@@ -521,7 +532,7 @@ public final class ExampleVerifier {
                 // while it runs would be some of what it spent rather than what it spent.
                 rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
                         row.identity(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
-                        null, null, List.of(), List.of(), Set.of(), 0L));
+                        null, null, List.of(), List.of(), ran(reached, 0L, Set.of())));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The evaluated code stopped itself, having gone through more than it was allowed.

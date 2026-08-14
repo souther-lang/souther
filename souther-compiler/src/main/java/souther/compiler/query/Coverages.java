@@ -10,6 +10,7 @@ import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.Run;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
@@ -542,7 +543,8 @@ final class Coverages {
             if (on instanceof NumericTerm.Reading.Number here
                     && against instanceof NumericTerm.Reading.Number there
                     && here.value().sameAs(there.value())
-                    && row.hits().contains(origin.site())) {
+                    && row.run() instanceof Run.Generated ran
+                    && ran.hits().contains(origin.site())) {
                 return Met.YES;
             }
         }
@@ -685,7 +687,8 @@ final class Coverages {
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
                     if (number.value().sameAs(boundary)
-                            && row.hits().contains(origin.site())) {
+                            && row.run() instanceof Run.Generated ran
+                            && ran.hits().contains(origin.site())) {
                         return Met.YES;
                     }
                 }
