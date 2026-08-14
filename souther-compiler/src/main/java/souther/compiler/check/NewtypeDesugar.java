@@ -34,9 +34,7 @@ public final class NewtypeDesugar {
         for (Hir.FnDef fn : m.fns()) {
             fns.add(rewriteOf(fn, symbols));
         }
-        return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                m.defs(), m.behaviors(), fns, m.takenOn(), m.examples(), m.fakes(),
-                m.exampleFileTarget(), m.pos());
+        return m.withFns(fns);
     }
 
     /**
@@ -67,9 +65,7 @@ public final class NewtypeDesugar {
         for (Hir.Def def : m.defs()) {
             defs.add(rewriteInvariantsOf(def, symbols));
         }
-        return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                m.exampleFileTarget(), m.pos());
+        return m.withDefs(defs);
     }
 
     /**

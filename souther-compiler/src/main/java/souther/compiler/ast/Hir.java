@@ -269,7 +269,45 @@ public interface Hir {
                   List<Example> examples,
                   List<Fake> fakes,
                   String exampleFileTarget,
-                  SourcePos pos) implements Hir {}
+                  SourcePos pos) implements Hir {
+
+        /**
+         * This module with {@code replacement} standing where its declarations were.
+         *
+         * <p>Written here rather than at each rewrite. {@code fns} and {@code takenOn} are both
+         * {@code List<FnDef>}, so a rebuild that lists the components out has two slots the compiler
+         * cannot tell apart — and the mistake is a module that emits the helpers it wrote and writes
+         * the ones it took on.
+         */
+        public Module withDefs(List<Def> replacement) {
+            return new Module(name, exposing, exposedOutputs, imports, replacement, behaviors, fns,
+                    takenOn, examples, fakes, exampleFileTarget, pos);
+        }
+
+        /** This module with {@code replacement} standing where its definitions were. */
+        public Module withFns(List<FnDef> replacement) {
+            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, replacement,
+                    takenOn, examples, fakes, exampleFileTarget, pos);
+        }
+
+        /** This module with {@code replacement} standing where what it took on was. */
+        public Module withTakenOn(List<FnDef> replacement) {
+            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+                    replacement, examples, fakes, exampleFileTarget, pos);
+        }
+
+        /** This module with {@code replacement} standing where its example blocks were. */
+        public Module withExamples(List<Example> replacement) {
+            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+                    takenOn, replacement, fakes, exampleFileTarget, pos);
+        }
+
+        /** This module with {@code replacement} standing where its fake tables were. */
+        public Module withFakes(List<Fake> replacement) {
+            return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
+                    takenOn, examples, replacement, exampleFileTarget, pos);
+        }
+    }
 
     /**
      * {@code fake <injected> | (in) -> out | ...} — a test double for an injected behavior, used to

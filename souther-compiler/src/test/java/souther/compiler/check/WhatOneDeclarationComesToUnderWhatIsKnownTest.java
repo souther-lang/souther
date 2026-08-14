@@ -44,7 +44,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         for (int each = 0; each < assumed.length; each += 2) {
             solution.put(TypeSymbols.declared(new TypeKey(symbols.module(), (String) assumed[each])), (Cardinality) assumed[each + 1]);
         }
-        for (Hir.Def def : compilation.module("demo").defs()) {
+        for (Hir.Def def : compilation.module("demo").defs().stream().map(Derived.Def::read).toList()) {
             if (def.name().equals(name)) {
                 return CardinalityTransfer.upperOf(TypeSymbols.declared(new TypeKey(symbols.module(), name)), def, symbols, solution, _ -> false);
             }

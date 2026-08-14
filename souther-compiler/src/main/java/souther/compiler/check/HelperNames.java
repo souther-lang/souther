@@ -45,68 +45,70 @@ public final class HelperNames {
     }
 
     /**
-     * {@code m} with every name that denotes another module's definition written qualified.
+     * {@code fn} with every name in its body that denotes another module's definition written
+     * qualified.
      *
-     * <p>Done once, here, because the spelling travels as far as the emitted method name; deciding it
-     * at each reader is how one of them comes to disagree.
+     * <p>Done once, at the rung that says so, because the spelling travels as far as the emitted
+     * method name; deciding it at each reader is how one of them comes to disagree.
+     *
+     * <p>A part at a time and not a module. What comes back is a definition, and the rung that
+     * asked for it has to say again what it holds of one. A whole-module rewrite would hand back a
+     * tree with nobody saying anything about the parts in it, which is how the claims the rungs
+     * below had established came to be dropped here (#714).
      */
-    static Hir.Module qualifyImports(Hir.Module m) {
-        List<Hir.FnDef> fns = new ArrayList<>();
-        for (Hir.FnDef fn : m.fns()) {
-            fns.add(fn.body() instanceof Hir.FnBody.Written w
-                    ? fn.withBody(new Hir.FnBody.Written(qualifyForeign(w.expr(), m.name())))
-                    : fn);
-        }
-        List<Hir.Def> defs = qualifiedInvariants(m);
-        List<Hir.Example> examples = new ArrayList<>();
-        for (Hir.Example ex : m.examples()) {
-            List<Hir.ExampleRow> rows = new ArrayList<>();
-            for (Hir.ExampleRow row : ex.rows()) {
-                List<Hir.Expr> inputs = new ArrayList<>();
-                for (Hir.Expr in : row.inputs()) {
-                    inputs.add(qualifyForeign(in, m.name()));
-                }
-                List<Hir.With> withs = new ArrayList<>();
-                for (Hir.With w : row.withs()) {
-                    withs.add(new Hir.With(w.dep(), qualifyForeign(w.value(), m.name()), w.pos()));
-                }
-                rows.add(new Hir.ExampleRow(row.description(), inputs, withs,
-                        qualifyForeign(row.expected(), m.name()), row.pos()));
-            }
-            examples.add(new Hir.Example(ex.target(), rows, ex.pos()));
-        }
-        List<Hir.Fake> fakes = new ArrayList<>();
-        for (Hir.Fake fake : m.fakes()) {
-            List<Hir.FakeRow> rows = new ArrayList<>();
-            for (Hir.FakeRow row : fake.rows()) {
-                List<Hir.Expr> inputs = null;
-                if (row.inputs() != null) {   // a default row matches anything and writes none
-                    inputs = new ArrayList<>();
-                    for (Hir.Expr in : row.inputs()) {
-                        inputs.add(qualifyForeign(in, m.name()));
-                    }
-                }
-                rows.add(new Hir.FakeRow(inputs, qualifyForeign(row.output(), m.name()),
-                        row.isDefault(), row.pos()));
-            }
-            fakes.add(new Hir.Fake(fake.target(), rows, fake.pos()));
-        }
-        // Nothing is taken on until the pass below this one works out what the module reaches, so
-        // there is none here to qualify — and what arrives there is already named by the name this
-        // module reaches it by, which is what it will be emitted under.
-        return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
-                m.behaviors(), fns, m.takenOn(), examples, fakes, m.exampleFileTarget(), m.pos());
+    static Hir.FnDef qualifyImportsIn(Hir.FnDef fn, String self) {
+        return fn.body() instanceof Hir.FnBody.Written w
+                ? fn.withBody(new Hir.FnBody.Written(qualifyForeign(w.expr(), self)))
+                : fn;
     }
 
-    /** {@code m} with the foreign names in its invariants written qualified, and nothing else
-     * changed. An invariant is read before the bodies are — settled here, classified for discharge
-     * there — so this is the part of {@link #qualifyImports} that has to be available on its own. */
+    /** The same of one example block: its inputs, its stand-ins and what it expects. */
+    static Hir.Example qualifyImportsIn(Hir.Example ex, String self) {
+        List<Hir.ExampleRow> rows = new ArrayList<>();
+        for (Hir.ExampleRow row : ex.rows()) {
+            List<Hir.Expr> inputs = new ArrayList<>();
+            for (Hir.Expr in : row.inputs()) {
+                inputs.add(qualifyForeign(in, self));
+            }
+            List<Hir.With> withs = new ArrayList<>();
+            for (Hir.With w : row.withs()) {
+                withs.add(new Hir.With(w.dep(), qualifyForeign(w.value(), self), w.pos()));
+            }
+            rows.add(new Hir.ExampleRow(row.description(), inputs, withs,
+                    qualifyForeign(row.expected(), self), row.pos()));
+        }
+        return new Hir.Example(ex.target(), rows, ex.pos());
+    }
+
+    /** The same of one fake table: what each row matches on and what it answers with. */
+    static Hir.Fake qualifyImportsIn(Hir.Fake fake, String self) {
+        List<Hir.FakeRow> rows = new ArrayList<>();
+        for (Hir.FakeRow row : fake.rows()) {
+            List<Hir.Expr> inputs = null;
+            if (row.inputs() != null) {   // a default row matches anything and writes none
+                inputs = new ArrayList<>();
+                for (Hir.Expr in : row.inputs()) {
+                    inputs.add(qualifyForeign(in, self));
+                }
+            }
+            rows.add(new Hir.FakeRow(inputs, qualifyForeign(row.output(), self),
+                    row.isDefault(), row.pos()));
+        }
+        return new Hir.Fake(fake.target(), rows, fake.pos());
+    }
+
+    /**
+     * {@code m} with the foreign names in its invariants written qualified, and nothing else
+     * changed.
+     *
+     * <p>This is where a declaration's clauses get their spelling, and there is no second place: the
+     * rungs above rewrite the definitions and the rows and leave the declarations alone, which is
+     * measured rather than arranged, and held by
+     * {@code AStateIsReachedOnlyThroughWhatEstablishesItTest}.
+     */
     static Hir.Module withQualifiedInvariants(Hir.Module m) {
         List<Hir.Def> defs = qualifiedInvariants(m);
-        return defs.equals(m.defs()) ? m
-                : new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
-                        m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                        m.exampleFileTarget(), m.pos());
+        return defs.equals(m.defs()) ? m : m.withDefs(defs);
     }
 
     /** {@code m}'s declarations with every name in an invariant that denotes another module's

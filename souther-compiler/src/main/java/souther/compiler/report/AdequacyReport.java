@@ -219,7 +219,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             Adequacy.BranchEvidence branch =
                     branches == null ? null : branches.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
-                    ExampleVerifier.isPending(module.behaviors(), module.fns(), behavior.name()),
+                    ExampleVerifier.isPending(module.behaviors(),
+                            ExampleVerifier.definedNames(module.fns()), behavior.name()),
                     rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
                     signature, partition, branch,

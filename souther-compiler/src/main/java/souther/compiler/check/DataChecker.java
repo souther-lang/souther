@@ -53,11 +53,18 @@ public final class DataChecker {
      * Every {@code 金額(constant)} in the module: a newtype construction whose argument folds to a
      * compile-time constant. The compiler runs each through the generated {@code $Ctfe.check}
      * (CTFE) so a violation becomes a compile error rather than a run-time abort (ADR-0032).
+     *
+     * <p>Desugared definitions, because that is what this finds them by. A construction is matched
+     * as {@link Hir.NewData}, and a body that has not been desugared writes {@code 金額(500)} as an
+     * application — so the walk matches nothing, the list comes back empty, and the compile goes on
+     * with no check made and nothing said. Over a compile of the suite that is 174 constructions
+     * found against 1: the state in the signature is what stops a caller handing over the bodies
+     * from a rung below and being told the module is clean.
      */
-    public static List<ConstCheck> constNewtypeChecks(List<Hir.FnDef> fns, Symbols symbols) {
+    public static List<ConstCheck> constNewtypeChecks(List<Desugared.Fn> fns, Symbols symbols) {
         List<ConstCheck> out = new ArrayList<>();
-        for (Hir.FnDef fn : fns) {
-            collectConstChecks(fn.writtenBody(), symbols, out);
+        for (Desugared.Fn fn : fns) {
+            collectConstChecks(fn.read().writtenBody(), symbols, out);
         }
         return out;
     }

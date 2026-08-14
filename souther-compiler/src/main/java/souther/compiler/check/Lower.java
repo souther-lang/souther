@@ -101,9 +101,7 @@ public final class Lower {
                 defs.add(def);
             }
         }
-        return new Hir.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                module.imports(), defs, module.behaviors(), fns, takenOn,
-                module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
+        return module.withDefs(defs).withFns(fns).withTakenOn(takenOn);
     }
 
     /** Desugars one expression the way a body is desugared, for the paths that hold a single

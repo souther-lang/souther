@@ -539,8 +539,8 @@ public final class Output {
                 return null;
             }
             List<Hir.InvariantClause> clauses = null;
-            for (Hir.Def def : declaring.value().defs()) {
-                if (def instanceof Hir.Data d && d.name().equals(check.type().name())) {
+            for (souther.compiler.check.Derived.Def declared : declaring.value().defs()) {
+                if (declared.read() instanceof Hir.Data d && d.name().equals(check.type().name())) {
                     clauses = TypeOps.effectiveInvariants(d, scope.value());
                 }
             }
@@ -621,7 +621,7 @@ public final class Output {
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
             return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
-                    prepared.value().forExamples(prepared.value().examples()),
+                    prepared.value().forExamples(),
                     scope.value(), sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     deadlineOf(db), policyOf(db)));
@@ -845,7 +845,7 @@ public final class Output {
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // As above: `requirements` says this module is ready to be read, not what to read.
             return souther.compiler.examples.ExampleStatements.fakeTables(
-                    prepared.value().forExamples(prepared.value().examples()), scope.value(),
+                    prepared.value().forExamples(), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     deadlineOf(db), policyOf(db));
@@ -882,8 +882,8 @@ public final class Output {
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
             souther.compiler.check.Prepared.ExampleExecution rows =
-                    prepared.value().forExamples(writtenIn(db, name, sourceId,
-                            prepared.value().examples()));
+                    prepared.value().forExamplesWrittenIn(
+                            db.ask(new Front.ExampleOrigins(name)).value(), sourceId);
             if (rows.examples().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
@@ -956,22 +956,5 @@ public final class Output {
             return names;
         }
 
-        /** The rows of {@code rows} written in {@code sourceId}. The fakes are not selected: a
-         * module's own fakes are what its attached files' rows run against, and the other way
-         * round. */
-        private static List<Hir.Example> writtenIn(Db db, String name, String sourceId,
-                                                   List<Hir.Example> rows) {
-            List<String> origins = db.ask(new Front.ExampleOrigins(name)).value();
-            if (origins == null || origins.size() != rows.size()) {
-                return rows;
-            }
-            List<Hir.Example> mine = new ArrayList<>();
-            for (int i = 0; i < origins.size(); i++) {
-                if (origins.get(i).equals(sourceId)) {
-                    mine.add(rows.get(i));
-                }
-            }
-            return mine;
-        }
     }
 }
