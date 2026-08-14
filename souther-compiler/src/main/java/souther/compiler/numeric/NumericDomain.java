@@ -133,7 +133,7 @@ public final class NumericDomain<A> {
      *                  failure anywhere near where the guess was made.
      */
     public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, Granularity> atomKinds) {
-        NumericDomain d = knowing(f.coefs().keySet(), atomKinds);
+        NumericDomain<A> d = knowing(f.coefs().keySet(), atomKinds);
         if (d.bottom) {
             return d;
         }
@@ -567,14 +567,14 @@ public final class NumericDomain<A> {
     private NumericDomain<A> withHi(A a, Endpoint bound) {
         Map<A, Endpoint> nhi = new HashMap<>(hi);
         nhi.merge(a, bound, Endpoint::upper);
-        NumericDomain d = new NumericDomain<>(false, lo, nhi, diff, kept, kinds, losses);
+        NumericDomain<A> d = new NumericDomain<>(false, lo, nhi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
     private NumericDomain<A> withLo(A a, Endpoint bound) {
         Map<A, Endpoint> nlo = new HashMap<>(lo);
         nlo.merge(a, bound, Endpoint::lower);
-        NumericDomain d = new NumericDomain<>(false, nlo, hi, diff, kept, kinds, losses);
+        NumericDomain<A> d = new NumericDomain<>(false, nlo, hi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
@@ -582,7 +582,7 @@ public final class NumericDomain<A> {
         Map<A, Map<A, Endpoint>> nd = new HashMap<>();
         diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
         nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, Endpoint::upper);
-        NumericDomain d = new NumericDomain<>(false, lo, hi, nd, kept, kinds, losses);
+        NumericDomain<A> d = new NumericDomain<>(false, lo, hi, nd, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 

@@ -46,9 +46,10 @@ final class Clauses {
     /**
      * @param inTheAnalysisRepresentation the clauses of the module being checked, in the
      *        representation the discharge rules are written at ({@link InliningPolicy#DISCHARGE}). A
-     *        type another module declares is absent, and its clause is read off the declaration in
-     *        the settled form — where the operations have already become the folds they are, so it
-     *        falls outside the fragment.
+     *        type another module declares is not among them and its clauses are read off its
+     *        declaration, which says what its author wrote whether that module was compiled here or
+     *        published and read back (spec §invariant-discharge-representation). What can be
+     *        discharged against a clause is the same either way.
      */
     Clauses(Symbols symbols,
             Map<TypeSymbol, List<Hir.InvariantClause>> inTheAnalysisRepresentation) {

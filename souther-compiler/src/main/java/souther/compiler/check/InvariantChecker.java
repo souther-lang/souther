@@ -120,9 +120,12 @@ public final class InvariantChecker {
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
      * one the backend emits from.
      *
-     * <p>{@code invariants} holds the declarations of the module being checked. A type another module
-     * declares is absent, and its clause is read off the declaration in the settled form — where the
-     * operations have already become the folds they are, so it falls outside the fragment.
+     * <p>{@code invariants} holds the clauses of the module being checked. A type another module
+     * declares is not among them and its clauses are read off its declaration, which for a module
+     * reached through its published classes is the declaration that module published, read back by
+     * this front end (spec §published-modules). Either way the clause read here is the rule its
+     * author wrote, so where a declaration was written does not decide what can be discharged
+     * against it (spec §invariant-discharge-representation).
      */
     public record Source(Hir.Expr body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants) {}
 

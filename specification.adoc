@@ -1372,7 +1372,9 @@ let settle (xs, bill) = {
 
 A value the procedure cannot name all the way down is not a term. What names a call is what the call was resolved to: a `+let+` of this module or of another is pure and total (<<fn-rules>>), and the language's own operations are what the language defines, so a call to either answers one value wherever it is written with the same arguments. What a `+behavior+` answered is named by nothing, and neither is what applying a function value answered — a function a body was handed may be a behavior injected from outside (<<injected-behavior>>), whose implementation is not the language's and may answer differently each time it is asked. So neither is a size taken of one, nor arithmetic over one.
 
-That a helper's body was written into the body that called it, rather than left as the call, is not one of these questions. A `+let+` that recurses cannot be written in, and answers the same value it would have answered written in; a clause about a construction from either is read the same way. A value that is not a number the procedure carries is not a term either, unless a guard on the path states something about it — a string a call handed back is named by nothing a clause could be read against, and a construction from one is left to the run-time check.
+That a helper's body was written into the body that called it, rather than left as the call, is not one of these questions. A `+let+` that recurses cannot be written in, and answers the same value it would have answered written in; a clause about a construction from either is read the same way.
+
+A value the procedure does not carry as a number is a term all the same where what computes it is one — a string a `+let+` answered is the term that call is. What it has none of is anything said about it: the procedure carries no strings, and there is no rule about the operation, so a clause is read against such a value only where a guard on the path has stated something about that very term. Until one has, a construction from it is left to the run-time check, and the silence is that nothing could be asked rather than that the value has no name.
 
 [,souther]
 ----

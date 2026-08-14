@@ -583,10 +583,11 @@ final class Terms {
             case Core.PreservedCall c -> over(c.args(), at, bound, depth,
                     ps -> interned.called(c.operation(), ps));
             case Core.Call c -> switch (c.fn()) {
-                case Core.Reached reached -> callNaming(reached.denotes()) instanceof Naming.Unnamed absent
-                        ? absent
-                        : over(c.args(), at, bound, depth,
-                                ps -> interned.called(reached.denotes(), ps));
+                case Core.Reached reached -> switch (answersOf(reached.denotes())) {
+                    case Naming.OfAName.AnswersNothing none -> new Naming.Opaque(none.reason());
+                    case Naming.OfAName.Answers ignored -> over(c.args(), at, bound, depth,
+                            ps -> interned.called(reached.denotes(), ps));
+                };
                 // A walk this compiler minted for a shape the backend lowers as a whole. The reading
                 // this check is given keeps no such call, so one arriving is a pass having run over a
                 // tree it was not written for rather than a value nothing can be said of.
@@ -598,7 +599,7 @@ final class Terms {
     }
 
     /**
-     * Whether a call to {@code callee} answers a value two writings of the call share.
+     * Whether {@code callee} answers a value two writings of a call to it share.
      *
      * <p>Asked of what the name was resolved to and of nothing else. A module's own helper is pure
      * and total, a value definition's body obeys a helper's rules, and the language's own operations
@@ -613,13 +614,14 @@ final class Terms {
      * two asks are two answers. What is applied through a binding is the same — the binding may hold
      * an injected behavior, and what it holds is not a question about the name.
      */
-    private Naming callNaming(ValueName callee) {
+    private Naming.OfAName answersOf(ValueName callee) {
         return switch (callee) {
-            case ValueName.Behavior _ -> new Naming.Opaque(Naming.Reason.A_BEHAVIOR_ANSWERED);
+            case ValueName.Behavior _ ->
+                    new Naming.OfAName.AnswersNothing(Naming.Reason.A_BEHAVIOR_ANSWERED);
             case ValueName.Local _ ->
-                    new Naming.Opaque(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED);
+                    new Naming.OfAName.AnswersNothing(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED);
             case ValueName.Helper _, ValueName.Stdlib _, ValueName.Builtin _, ValueName.OfType _ ->
-                    new Naming.Named(null);
+                    new Naming.OfAName.Answers();
         };
     }
 

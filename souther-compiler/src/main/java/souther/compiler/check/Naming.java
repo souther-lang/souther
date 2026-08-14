@@ -29,7 +29,14 @@ sealed interface Naming {
     Term term();
 
     /** The value, as the term standing for it. */
-    record Named(Term term) implements Naming {}
+    record Named(Term term) implements Naming {
+
+        public Named {
+            // A name and no term is the state this type exists to make unwritable: it is what the
+            // `null` this replaced meant at one of the places it was returned from.
+            java.util.Objects.requireNonNull(term, "a named value is named by a term");
+        }
+    }
 
     /** Everything that is not a name. */
     sealed interface Unnamed extends Naming {
@@ -74,5 +81,24 @@ sealed interface Naming {
     /** {@code term}, or the reason there is none. */
     static Naming of(Term term, Reason absent) {
         return term == null ? new Opaque(absent) : new Named(term);
+    }
+
+    /**
+     * Whether what a name answers is a value two writings of it share, and why it is not where it is
+     * not.
+     *
+     * <p>Apart from {@link Naming} because it is asked of a name rather than of an expression: what
+     * a call to a nameable one is called is built from the call's arguments, which the name knows
+     * nothing about. Answering this with a {@link Named} holding no term would be the state {@link
+     * Named} exists to rule out, and answering it with a {@code boolean} would drop the reason the
+     * other side of it carries.
+     */
+    sealed interface OfAName {
+
+        /** It answers one value wherever it is written with the same arguments. */
+        record Answers() implements OfAName {}
+
+        /** It does not, for {@code reason}. */
+        record AnswersNothing(Reason reason) implements OfAName {}
     }
 }
