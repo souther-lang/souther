@@ -5,7 +5,6 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
-import souther.compiler.observe.Run;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 
@@ -15,7 +14,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -189,11 +187,9 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                 "nothing on the path is not a class this compile failed to produce");
     }
 
-    /** What a row spent, taken from the run that spent it: a count is defined for the code this
-     * compile counted into, so reading one means having in hand what applied the behavior. */
+    /** What a row spent: the counted work of its whole evaluation, fixtures and application alike. */
     private static long steps(RowOutcome row) {
-        return assertInstanceOf(Run.Generated.class, row.run(),
-                "this compile's own classes are what applied the row").steps();
+        return row.run().counted().steps();
     }
 
 }

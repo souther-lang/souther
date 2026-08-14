@@ -28,6 +28,8 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.Applied;
+import souther.compiler.observe.Counted;
 import souther.compiler.observe.Run;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
@@ -481,13 +483,16 @@ public final class ExampleVerifier {
     }
 
     /**
-     * What applied the behavior, for a row this compile ran.
+     * What became of the row's evaluation: what applied the behavior, and what this compile counted.
      *
-     * <p>One answer, and it is this compile's own classes: nothing else applies a behavior here. The
-     * numbers go with it because they are its — what the emitter counted into is what has a count.
+     * <p>One answer to the first, and it is this compile's own classes — nothing else applies a
+     * behavior here. The second is read whatever the row reached, because the counting starts with
+     * the evaluation and a fixture applies the helpers it names before the behavior is reached.
      */
     private static Run ran(Stage reached, long steps, Set<Integer> hits) {
-        return reached.reached(Stage.INVOKED) ? new Run.Generated(steps, hits) : new Run.NotRun();
+        return new Run(reached.reached(Stage.INVOKED)
+                ? new Applied.GeneratedHere() : new Applied.Nothing(),
+                new Counted(steps, hits));
     }
 
     /**

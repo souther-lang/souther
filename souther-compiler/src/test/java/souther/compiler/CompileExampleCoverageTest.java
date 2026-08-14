@@ -263,9 +263,10 @@ class CompileExampleCoverageTest {
         assertEquals(souther.compiler.observe.Disposition.INCOMPLETE, rows.get(0).disposition(),
                 "the row is the one that never came back");
         assertEquals(souther.compiler.observe.FailurePhase.TIMEOUT, rows.get(0).failurePhase());
-        assertEquals(new souther.compiler.observe.Run.NotRun(), rows.get(0).run(),
-                "the deadline gave the row up before the behavior was applied, so nothing applied it "
-                        + "and there is nothing measured about it to read");
+        assertEquals(new souther.compiler.observe.Applied.Nothing(), rows.get(0).run().applied(),
+                "the deadline gave the row up before the behavior was applied");
+        assertEquals(java.util.Set.of(), rows.get(0).run().counted().hits(),
+                "and what it went through on the way is not read");
 
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(module)).value().get("go");

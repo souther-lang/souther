@@ -39,11 +39,17 @@ import java.util.Set;
  * it held                    COMPARED            HELD          NONE
  * a fixture's helper hung    NONE                INCOMPLETE    TIMEOUT
  * the behavior hung          INVOKED             INCOMPLETE    TIMEOUT
- * no runtime to run against  (as reached)        INCOMPLETE    INFRASTRUCTURE
  * </pre>
  *
+ * <p>{@link FailurePhase#INFRASTRUCTURE} is not among them. Nothing writes it: what a host was
+ * supposed to provide and did not — the runtime off the classpath, so the generated classes will not
+ * link — is said of the module rather than of a row ({@link Incompleteness}). A row-level phase for
+ * it waits for something that produces one.
+ *
  * <p>Whether the behavior was applied is the {@link Stage} column: everything at {@code INVOKED} or
- * past it says what applied it ({@link Run}), and everything before it says nothing did.
+ * past it says what applied it ({@link Run#applied()}), and everything before it says nothing did.
+ * What the row counted is a different question and is not read off this table — a row that stopped
+ * at {@code NONE} spent whatever its fixtures spent.
  *
  * @param at             where the row is written
  * @param target         the behavior the row is about
@@ -60,14 +66,13 @@ import java.util.Set;
  * @param inputCases     the case each input fixture constructs, in order; an entry is null where the
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
- * @param run            what applied the behavior, and what that application is measured in. A row
- *                       that reached {@link Stage#INVOKED} says what applied it and a row that did
- *                       not says nothing did, which is held to at construction: the two are
- *                       different cuts of one evaluation and cannot be recorded disagreeing. What a
- *                       row cost is inside the arm it is defined for, so a build reading it has the
- *                       answerer in hand — how much of the budget a row spends is a fact about code
- *                       this compile counted into, and there is no such number for code it did not
- *                       write
+ * @param run            what applied the behavior, and what this compile counted while the row ran.
+ *                       A row that reached {@link Stage#INVOKED} says what applied it and a row that
+ *                       did not says nothing did, which is held to at construction: the two are
+ *                       different cuts of one evaluation and cannot be recorded disagreeing. What
+ *                       was counted is not held to the stage, because a row's evaluation is not only
+ *                       its application — a fixture applies the helpers it names first, so a row
+ *                       that applied nothing can still have spent counted points
  */
 public record RowOutcome(SourceRef at,
                          String target,
@@ -87,13 +92,16 @@ public record RowOutcome(SourceRef at,
         inputCases = inputCases == null ? List.of()
                 : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(inputCases));
         inputs = inputs == null ? List.of() : List.copyOf(inputs);
-        if (stage.reached(Stage.INVOKED) == run instanceof Run.NotRun) {
+        java.util.Objects.requireNonNull(run, "a row says what became of its evaluation");
+        if (stage.reached(Stage.INVOKED) == run.applied() instanceof Applied.Nothing) {
             // Held here because the two are written from one evaluation and read apart: a stage that
             // says the behavior was applied and a run that says nothing applied it is a state no
             // evaluation produces, and a reader that met it would have to decide which half to trust.
+            // What the row counted is not held to the stage — a fixture spends counted points before
+            // the behavior is reached, and a row that never reached it spent what it spent.
             throw new IllegalArgumentException(
                     "a row that applied the behavior says what applied it, and one that did not says "
-                            + "nothing did: " + stage + " with " + run);
+                            + "nothing did: " + stage + " with " + run.applied());
         }
     }
 

@@ -18,7 +18,6 @@ import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.observe.RowOutcome;
-import souther.compiler.observe.Run;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
@@ -311,9 +310,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : rowsOf(db, name).values()) {
                 for (RowOutcome row : observed.rows()) {
-                    if (row.run() instanceof Run.Generated ran) {
-                        lit.addAll(ran.hits());
-                    }
+                    lit.addAll(row.run().counted().hits());
                 }
             }
             Map<String, Effective> out = new LinkedHashMap<>();
@@ -785,9 +782,7 @@ public final class Adequacy {
             Set<Integer> lit = new LinkedHashSet<>();
             for (Observed observed : byTarget.values()) {
                 for (RowOutcome row : observed.rows()) {
-                    if (row.run() instanceof Run.Generated ran) {
-                        lit.addAll(ran.hits());
-                    }
+                    lit.addAll(row.run().counted().hits());
                 }
             }
 
