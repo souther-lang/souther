@@ -49,16 +49,17 @@ public final class UninhabitableTypes {
     private UninhabitableTypes() {}
 
     /**
-     * The groups of declarations to report, each in the order the module declares them.
+     * The groups of declarations to report, each in the order {@code declarations} are written in.
      *
-     * <p>Only groups holding a declaration of {@code module}: a type of another module having no
-     * value is that module's to report, and a type here that has none because of it is left to come
-     * right when it does.
+     * <p>Only groups holding one of {@code declarations}: a type of another module having no value
+     * is that module's to report, and a type here that has none because of it is left to come right
+     * when it does. So what the caller passes is the declarations the report is being made for, and
+     * nothing about the rest of the module is read.
      */
-    public static List<List<TypeSymbol>> withNoValueOfTheirOwn(Hir.Module module, Symbols symbols,
+    public static List<List<TypeSymbol>> withNoValueOfTheirOwn(List<Hir.Def> declarations,
                                                              TypeCardinality.Cardinalities solved) {
         Map<TypeSymbol, Integer> declaredAt = new LinkedHashMap<>();
-        for (Hir.Def def : module.defs()) {
+        for (Hir.Def def : declarations) {
             declaredAt.put(def.declares(), declaredAt.size());
         }
         Set<TypeSymbol> none = solved.withNoValue();

@@ -448,10 +448,10 @@ public final class DataChecker {
      * declarations with no value to say so about is {@link UninhabitableTypes}. What is left here is
      * saying it.
      */
-    static List<CompileException> typesWithNoValue(Hir.Module module, Symbols symbols) {
+    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols) {
         List<CompileException> found = new ArrayList<>();
-        for (List<TypeSymbol> group : UninhabitableTypes.withNoValueOfTheirOwn(module, symbols,
-                TypeCardinality.solve(module, symbols))) {
+        for (List<TypeSymbol> group : UninhabitableTypes.withNoValueOfTheirOwn(declarations,
+                TypeCardinality.solve(declarations, symbols))) {
             // The group is one thing to say and is said at the first of them the module declares.
             // Which one that is settles where the report sits and not what it is about: the others
             // have no value in the same way and for the same reason.

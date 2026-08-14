@@ -259,7 +259,7 @@ public final class TypeChecker {
         if (errors.isEmpty()) {
             List<CompileException> withNoValue = new ArrayList<>();
             collect(errors, abandoned,
-                    () -> withNoValue.addAll(DataChecker.typesWithNoValue(module, symbols)));
+                    () -> withNoValue.addAll(DataChecker.typesWithNoValue(module.defs(), symbols)));
             errors.addAll(withNoValue);
         }
         Map<String, Hir.FnDef> fns = new HashMap<>();

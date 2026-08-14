@@ -43,9 +43,9 @@ public final class TypeCardinality {
 
     private TypeCardinality() {}
 
-    /** How many values each declaration the module reaches has at most. */
-    public static Cardinalities solve(Hir.Module module, Symbols symbols) {
-        Map<TypeSymbol, Hir.Def> declared = reached(module, symbols);
+    /** How many values each declaration {@code declarations} reaches has at most. */
+    public static Cardinalities solve(List<Hir.Def> declarations, Symbols symbols) {
+        Map<TypeSymbol, Hir.Def> declared = reached(declarations, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
         // Fixed before the rising starts. What makes it stop is that there are finitely many answers
@@ -197,16 +197,16 @@ public final class TypeCardinality {
     }
 
     /**
-     * Every declaration the module's own reach, itself included.
+     * Everything {@code declarations} reach, themselves included.
      *
      * <p>A type of another module is one of these. What a declaration comes to is settled by what it
      * is written in terms of wherever that was declared, and stopping at the edge of the module would
      * answer a record by the module its field's type happens to sit in.
      */
-    private static Map<TypeSymbol, Hir.Def> reached(Hir.Module module, Symbols symbols) {
+    private static Map<TypeSymbol, Hir.Def> reached(List<Hir.Def> declarations, Symbols symbols) {
         Map<TypeSymbol, Hir.Def> declared = new LinkedHashMap<>();
         List<TypeSymbol> left = new ArrayList<>();
-        for (Hir.Def def : module.defs()) {
+        for (Hir.Def def : declarations) {
             left.add(def.declares());
         }
         while (!left.isEmpty()) {

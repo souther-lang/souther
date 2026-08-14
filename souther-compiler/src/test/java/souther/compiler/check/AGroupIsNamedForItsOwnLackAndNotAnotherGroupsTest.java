@@ -30,9 +30,8 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo"),
-                        compilation.symbols("demo"),
-                        TypeCardinality.solve(compilation.module("demo"),
+        return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs(),
+                        TypeCardinality.solve(compilation.module("demo").defs(),
                                 compilation.symbols("demo")))
                 .stream().map(each -> each.stream().map(TypeSymbol::name).toList()).toList();
     }
