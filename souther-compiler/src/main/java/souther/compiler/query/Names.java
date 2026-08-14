@@ -63,25 +63,51 @@ public final class Names {
      * has resolved. */
     public enum Stage { RESOLVED, DERIVED }
 
-    /** A registry over this compilation, reading each module's declarations at {@code stage}. */
+    /**
+     * A registry over this compilation, reading each module's declarations at {@code stage}.
+     *
+     * <p>Where a derived declaration stops being one and becomes a node. What the derived stage
+     * answers with says that the constructions in what a declaration says are constructions; this
+     * hands over {@link Hir.Def}, because that is what a registry is over and what every check below
+     * reads. It is the seam the declaration world has yet to close, and it is here rather than
+     * anywhere a reader felt like unwrapping.
+     */
     public static Registry<Hir.Def> registry(Db db, Stage stage) {
         return new Registry<Hir.Def>() {
             @Override
             public Hir.Def declaration(TypeKey address) {
-                Answer<Hir.Def> def = switch (stage) {
-                    case RESOLVED -> db.ask(new ResolvedDeclaration(address));
-                    case DERIVED -> db.ask(new Shapes.DerivedDef(address));
+                return switch (stage) {
+                    case RESOLVED -> {
+                        Answer<Hir.Def> def = db.ask(new ResolvedDeclaration(address));
+                        yield def.present() ? def.value() : null;
+                    }
+                    case DERIVED -> {
+                        Answer<souther.compiler.check.Derived.Def> def =
+                                db.ask(new Shapes.DerivedDef(address));
+                        yield def.present() ? def.value().read() : null;
+                    }
                 };
-                return def.present() ? def.value() : null;
             }
 
             @Override
             public Map<String, Hir.Def> declaredIn(String moduleName) {
-                Answer<Map<String, Hir.Def>> defs = switch (stage) {
-                    case RESOLVED -> db.ask(new ResolvedDeclarations(moduleName));
-                    case DERIVED -> db.ask(new Shapes.DerivedDeclarations(moduleName));
+                return switch (stage) {
+                    case RESOLVED -> {
+                        Answer<Map<String, Hir.Def>> defs =
+                                db.ask(new ResolvedDeclarations(moduleName));
+                        yield defs.present() ? defs.value() : Map.of();
+                    }
+                    case DERIVED -> {
+                        Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
+                                db.ask(new Shapes.DerivedDeclarations(moduleName));
+                        if (!defs.present()) {
+                            yield Map.of();
+                        }
+                        Map<String, Hir.Def> out = new LinkedHashMap<>();
+                        defs.value().forEach((name, def) -> out.put(name, def.read()));
+                        yield Map.copyOf(out);
+                    }
                 };
-                return defs.present() ? defs.value() : Map.of();
             }
 
             @Override

@@ -93,12 +93,16 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         // below it hand on as an ordinary module.
         Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
         assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
-        stages.put("derived", new Shapes.Derived(name));
+        // The derived stage answers with the module where every declaration came out; what is asked
+        // about here is the tree it holds, which is a question about the payload and not about that.
+        Answer<souther.compiler.check.Derived.Module> derived = db.ask(new Shapes.Derived(name));
+        assertTrue(derived.present(), "derived of " + name + ": " + derived.reports());
         stages.put("desugared", new Shapes.Desugared(name));
         stages.put("prepared", new Shapes.Prepared(name));
         stages.put("settled", new Bodies.Settled(name));
         Map<String, Hir.Module> out = new LinkedHashMap<>();
         out.put("resolved", resolved.value());
+        out.put("derived", derived.value().tree());
         stages.forEach((stage, key) -> {
             Answer<Hir.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());

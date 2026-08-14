@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -95,36 +96,84 @@ public final class InvariantSettled {
         return module.name();
     }
 
-    /** Its declarations, each with the clauses it wrote expanded. */
-    public List<Hir.Def> defs() {
-        return module.defs();
+    /** The tree, for the states of this package that are assembled from it. */
+    Hir.Module module() {
+        return module;
     }
 
-    /** Its definitions, as resolution left them. */
+    /**
+     * Its declarations, each of them the settled declaration and not the node.
+     *
+     * <p>The whole of the way to one, so a reader that has a declaration of this module has what
+     * this state says about it. Handing over {@link Hir.Def} instead would put the module-level
+     * claim back where it was — carried by nobody — one level down: the pass that reads a
+     * declaration's clauses does different work depending on whether they have been expanded, and
+     * silently.
+     */
+    public List<Def> defs() {
+        List<Def> out = new ArrayList<>();
+        for (Hir.Def def : module.defs()) {
+            out.add(new Def(def));
+        }
+        return out;
+    }
+
+    /**
+     * Its definitions, as resolution left them but for the helper parameter types this settled.
+     *
+     * <p>Handed over as they are, because nothing this state claims is about them. What reads a
+     * definition here rewrites the newtype constructions in its body, and that reading is the same
+     * whether or not anything has been settled — measured, not assumed. What does depend on the
+     * settling is further down, where a helper's parameter type is read, and that is the fn family's
+     * to carry when it has one.
+     */
     public List<Hir.FnDef> fns() {
         return module.fns();
     }
 
     /**
-     * The tree with each declaration replaced by the one of {@code derived} that answers to its
-     * name, or null where one of them has no answer.
+     * One declaration of a settled module.
      *
-     * <p>An assembly, and what it answers with is a tree and not a state of this module: what each
-     * declaration came to is that declaration's answer, and a module put back together from them
-     * claims nothing this carrier claims.
+     * <p>Its own type because a reader of one needs what the module-level state says: a clause here
+     * is the rule it states. {@code NewtypeDesugar.rewriteInvariantsOf} is the measured case — handed
+     * a declaration whose clause still names a helper, it rewrites the constructions it can see,
+     * which are none of the ones in the helper's body, and says nothing about it.
+     *
+     * <p>Reached from the module and from nothing else. A way to make one out of a node would be
+     * the module-level {@code with} written one level down.
      */
-    public Hir.Module withEachDeclarationDerived(Map<String, Hir.Def> derived) {
-        List<Hir.Def> defs = new ArrayList<>();
-        for (Hir.Def def : module.defs()) {
-            Hir.Def came = derived.get(def.name());
-            if (came == null) {
-                return null;
-            }
-            defs.add(came);
+    public static final class Def {
+
+        private final Hir.Def def;
+
+        private Def(Hir.Def def) {
+            this.def = def;
         }
-        return new Hir.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                module.imports(), defs, module.behaviors(), module.fns(), module.takenOn(),
-                module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
+
+        /** The name it is declared under. */
+        public String name() {
+            return def.name();
+        }
+
+        /** Which declaration it is. */
+        public TypeKey declaredKey() {
+            return def.declaredKey();
+        }
+
+        /** The node, for the passes of this package that read one. */
+        Hir.Def def() {
+            return def;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Def other && def.equals(other.def);
+        }
+
+        @Override
+        public int hashCode() {
+            return def.hashCode();
+        }
     }
 
     @Override

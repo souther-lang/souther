@@ -147,19 +147,20 @@ public final class Shapes {
      * nothing. A module still derives its declarations together, and this is read through that, so
      * what it depends on is still the module — what it is about is the one declaration.
      */
-    public record DerivedDef(TypeKey named) implements Key<Hir.Def> {
+    public record DerivedDef(TypeKey named) implements Key<souther.compiler.check.Derived.Def> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<Hir.Def> compute(Db db) {
-            Answer<Map<String, Hir.Def>> defs = db.ask(new DerivedDeclarations(named.module()));
+        public Answer<souther.compiler.check.Derived.Def> compute(Db db) {
+            Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
+                    db.ask(new DerivedDeclarations(named.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
-            Hir.Def def = defs.value().get(named.name());
+            souther.compiler.check.Derived.Def def = defs.value().get(named.name());
             return def == null ? Answer.absent() : Answer.of(def);
         }
     }
@@ -178,24 +179,26 @@ public final class Shapes {
      * stopping at the first would leave the declarations after it without an answer, and each of
      * them owns what it has to say.
      */
-    public record DerivedDeclarations(String name) implements Key<Map<String, Hir.Def>> {
+    public record DerivedDeclarations(String name)
+            implements Key<Map<String, souther.compiler.check.Derived.Def>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Hir.Def>> compute(Db db) {
+        public Answer<Map<String, souther.compiler.check.Derived.Def>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Map<String, Hir.Def> out = new LinkedHashMap<>();
+            Map<String, souther.compiler.check.Derived.Def> out = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
-            for (Hir.Def def : settling.value().defs()) {
+            for (InvariantSettled.Def def : settling.value().defs()) {
                 try {
-                    out.put(def.name(), NewtypeDesugar.rewriteInvariantsOf(def, scope.value()));
+                    out.put(def.name(),
+                            souther.compiler.check.Derived.Def.derive(def, scope.value()));
                 } catch (CompileException e) {
                     reports.addAll(Report.of(e));
                 }
@@ -213,20 +216,23 @@ public final class Shapes {
      * one that does not declare it, which is a different thing to say and not a true one — while the
      * declarations beside it keep the answers they have.
      */
-    public record Derived(String name) implements Key<Hir.Module> {
+    public record Derived(String name) implements Key<souther.compiler.check.Derived.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Hir.Module> compute(Db db) {
+        public Answer<souther.compiler.check.Derived.Module> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Map<String, Hir.Def>> declarations = db.ask(new DerivedDeclarations(name));
+            Answer<Map<String, souther.compiler.check.Derived.Def>> declarations =
+                    db.ask(new DerivedDeclarations(name));
             if (!settling.present() || !declarations.present()) {
                 return Answer.absent();
             }
-            Hir.Module assembled = settling.value().withEachDeclarationDerived(declarations.value());
+            souther.compiler.check.Derived.Module assembled =
+                    souther.compiler.check.Derived.Module.assemble(settling.value(),
+                            declarations.value());
             return assembled == null ? Answer.absent() : Answer.of(assembled);
         }
     }
@@ -244,23 +250,13 @@ public final class Shapes {
 
         @Override
         public Answer<Hir.Module> compute(Db db) {
-            Answer<Hir.Module> derived = db.ask(new Derived(name));
+            Answer<souther.compiler.check.Derived.Module> derived = db.ask(new Derived(name));
             Answer<Map<String, Hir.FnDef>> fns = db.ask(new DesugaredFns(name));
             if (!derived.present() || !fns.present()) {
                 return Answer.absent();
             }
-            List<Hir.FnDef> out = new ArrayList<>();
-            for (Hir.FnDef fn : derived.value().fns()) {
-                Hir.FnDef came = fns.value().get(fn.name());
-                if (came == null) {
-                    return Answer.absent();
-                }
-                out.add(came);
-            }
-            Hir.Module m = derived.value();
-            return Answer.of(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                    m.defs(), m.behaviors(), out, m.takenOn(), m.examples(), m.fakes(),
-                    m.exampleFileTarget(), m.pos()));
+            Hir.Module assembled = derived.value().withEachFnDesugared(fns.value());
+            return assembled == null ? Answer.absent() : Answer.of(assembled);
         }
     }
 

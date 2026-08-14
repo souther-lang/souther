@@ -39,7 +39,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
-    private static final List<Class<?>> STATES = List.of(Expandable.class, InvariantSettled.class);
+    private static final List<Class<?>> STATES =
+            List.of(Expandable.class, InvariantSettled.class, InvariantSettled.Def.class,
+                    Derived.Def.class, Derived.Module.class);
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
@@ -76,6 +78,79 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     void everyWayIntoAStateIsTheOperationThatEstablishesIt() {
         assertEquals(Set.of("check(Module, Map)"), waysInto(Expandable.class));
         assertEquals(Set.of("settle(Expandable, Symbols, Map)"), waysInto(InvariantSettled.class));
+        assertEquals(Set.of(), waysInto(InvariantSettled.Def.class),
+                "a settled declaration is projected from the module it is one of");
+        assertEquals(Set.of("derive(Def, Symbols)"), waysInto(Derived.Def.class));
+        assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
+    }
+
+    /**
+     * Every route from a settled module to one of its declarations answers with a settled
+     * declaration.
+     *
+     * <p>The constructor being closed is not enough on its own. A module handing out
+     * {@link Hir.Def} would put the claim back where it was — carried by nobody — one level down,
+     * and the reader that needs it is the measured one: the rewrite of what a declaration says does
+     * different work depending on whether its clauses have been expanded, and says nothing about the
+     * difference.
+     */
+    @Test
+    void noRouteToADeclarationOfASettledModuleHandsOverANode() {
+        for (Method m : InvariantSettled.class.getMethods()) {
+            assertFalse(mentions(m.getGenericReturnType(), Hir.Def.class),
+                    "InvariantSettled." + signature(m) + " hands over a declaration node");
+        }
+    }
+
+    private static boolean mentions(java.lang.reflect.Type type, Class<?> named) {
+        if (type == named) {
+            return true;
+        }
+        if (type instanceof java.lang.reflect.ParameterizedType parameterized) {
+            for (java.lang.reflect.Type argument : parameterized.getActualTypeArguments()) {
+                if (mentions(argument, named)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * And deriving one is what writes the constructions in what it says as constructions — the
+     * reading that made the declaration its own state.
+     */
+    @Test
+    void theWayToADerivedDeclarationIsTheRewrite() {
+        Hir.Module resolved = resolved("""
+                module m exposing ( Amount, Wrapped )
+
+                data Wrapped = Int
+                data Amount = Int
+                    invariant isOk(value)
+
+                let isOk (n: Int) : Bool = Wrapped(n) == Wrapped(0)
+                """);
+        Symbols scope = TypeChecker.symbols(resolved);
+        InvariantSettled settled =
+                InvariantSettled.settle(Expandable.check(resolved, Map.of()), scope, Map.of());
+        InvariantSettled.Def amount = settled.defs().stream()
+                .filter(d -> d.name().equals("Amount")).findFirst().orElseThrow();
+
+        assertEquals(2, applications(clauseOf(List.of(amount.def()), "Amount")),
+                "the constructions are written as applications until this rewrites them");
+        assertEquals(0, applications(clauseOf(List.of(Derived.Def.derive(amount, scope).read()),
+                        "Amount")),
+                "and none is left as one afterwards");
+    }
+
+    private static int applications(Hir.Expr e) {
+        if (e == null) {
+            return 0;
+        }
+        int[] found = {e instanceof Hir.Apply ? 1 : 0};
+        Hir.forEachChild(e, c -> found[0] += applications(c));
+        return found[0];
     }
 
     private static Set<String> waysInto(Class<?> state) {
@@ -151,7 +226,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         InvariantSettled settled = InvariantSettled.settle(expandable,
                 TypeChecker.symbols(expandable.module()), Map.of());
 
-        assertFalse(clauseOf(settled.defs(), "Amount") instanceof Hir.Apply,
+        assertFalse(clauseOf(settled.defs().stream().map(InvariantSettled.Def::def).toList(),
+                        "Amount") instanceof Hir.Apply,
                 "settling is what expands it, and it is what the state is named for");
     }
 
