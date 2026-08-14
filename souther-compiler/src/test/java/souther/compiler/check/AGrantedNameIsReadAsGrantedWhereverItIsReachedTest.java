@@ -51,7 +51,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 "the model this reads has to be one somebody could write");
         Symbols symbols = compilation.symbols("demo");
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs(), symbols);
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols);
         assertEquals(Cardinality.NO_VALUE, solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))),
                 "`" + reader + "` has no value while nothing is granted");
         assertFalse(solved.granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), granted))))
@@ -135,7 +135,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         compilation.answerEverything();
         Symbols symbols = compilation.symbols("demo");
         assertEquals(Cardinality.NO_VALUE,
-                TypeCardinality.solve(compilation.module("demo").defs(), symbols)
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols)
                         .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))),
                 "and what it wraps was not granted anything");
     }
@@ -168,7 +168,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         compilation.answerEverything();
         Symbols symbols = compilation.symbols("demo");
         TypeCardinality.Cardinalities solved =
-                TypeCardinality.solve(compilation.module("demo").defs(), symbols);
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols);
 
         assertEquals(List.of(Cardinality.NO_VALUE, Cardinality.NO_VALUE),
                 List.of(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "A"))), solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "B")))),

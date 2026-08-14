@@ -1994,11 +1994,14 @@ public final class FixtureReader {
      * produces a function, and that reads as this. The reach name for the reason {@link #helperDef}
      * takes one: this module's fns are keyed by the names it reaches them by. */
     private boolean noMethod(String reached) {
-        for (List<Hir.FnDef> component : List.of(module.fns(), module.takenOn())) {
-            for (Hir.FnDef fn : component) {
-                if (fn.name().equals(reached) && !fn.params().isEmpty()) {
-                    return true;
-                }
+        for (souther.compiler.check.Desugared.Fn fn : module.fns()) {
+            if (fn.name().equals(reached) && !fn.read().params().isEmpty()) {
+                return true;
+            }
+        }
+        for (Hir.FnDef fn : module.takenOn()) {
+            if (fn.name().equals(reached) && !fn.params().isEmpty()) {
+                return true;
             }
         }
         return false;

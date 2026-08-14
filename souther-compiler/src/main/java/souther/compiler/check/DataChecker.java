@@ -53,11 +53,18 @@ public final class DataChecker {
      * Every {@code 金額(constant)} in the module: a newtype construction whose argument folds to a
      * compile-time constant. The compiler runs each through the generated {@code $Ctfe.check}
      * (CTFE) so a violation becomes a compile error rather than a run-time abort (ADR-0032).
+     *
+     * <p>Desugared definitions, because that is what this finds them by. A construction is matched
+     * as {@link Hir.NewData}, and a body that has not been desugared writes {@code 金額(500)} as an
+     * application — so the walk matches nothing, the list comes back empty, and the compile goes on
+     * with no check made and nothing said. Over a compile of the suite that is 174 constructions
+     * found against 1: the state in the signature is what stops a caller handing over the bodies
+     * from a rung below and being told the module is clean.
      */
-    public static List<ConstCheck> constNewtypeChecks(List<Hir.FnDef> fns, Symbols symbols) {
+    public static List<ConstCheck> constNewtypeChecks(List<Desugared.Fn> fns, Symbols symbols) {
         List<ConstCheck> out = new ArrayList<>();
-        for (Hir.FnDef fn : fns) {
-            collectConstChecks(fn.writtenBody(), symbols, out);
+        for (Desugared.Fn fn : fns) {
+            collectConstChecks(fn.read().writtenBody(), symbols, out);
         }
         return out;
     }
@@ -572,15 +579,44 @@ public final class DataChecker {
         }
     }
 
+    /**
+     * Whether a codec is there to be reached for (spec {@code [#a-codec-reached-for-exists]}).
+     *
+     * <p>Read of the declaration and not of a node on it. A unit data carries no derived decoder — it
+     * has no field for one to read — and is decoded all the same, by the one its class is generated
+     * with, which ignores its input and answers the single value there is. Reading the node refused a
+     * field written from a unit data while the same type crossed a behavior's boundary, which is a
+     * disagreement about the compiler's representation rather than about the model.
+     *
+     * <p>Whose vocabulary the name is, is asked before this and elsewhere
+     * ({@code CrossingNominal}), so what is left here is the specification's other rule: a codec
+     * named where none was derived and none was given.
+     */
+    private static boolean hasDecoder(Hir.Def def) {
+        return switch (def) {
+            case Hir.Data d -> d.decoder().isPresent();
+            case Hir.SumData s -> s.decoder().isPresent();
+            case Hir.UnitData _ -> true;
+            case null -> false;
+        };
+    }
+
+    /** As {@link #hasDecoder}, for the other direction. */
+    private static boolean hasEncoder(Hir.Def def) {
+        return switch (def) {
+            case Hir.Data d -> d.encoder().isPresent();
+            case Hir.SumData s -> s.encoder().isPresent();
+            case Hir.UnitData _ -> true;
+            case null -> false;
+        };
+    }
+
     private static Type decRefType(Hir.DecRef ref, Symbols symbols) {
         return switch (ref) {
             case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
             case Hir.DataDecRef d -> {
-                Hir.Def def = symbols.declarations().declaration(d.typeName().denotes().key());
-                boolean hasDecoder = (def instanceof Hir.Data dd && dd.decoder().isPresent())
-                        || (def instanceof Hir.SumData s && s.decoder().isPresent());
-                if (!hasDecoder) {
+                if (!hasDecoder(symbols.declarations().declaration(d.typeName().denotes().key()))) {
                     throw CompileException.of(Diagnostic.at(d.pos())
                             .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
                             .build());
@@ -762,10 +798,8 @@ public final class DataChecker {
                 }
             }
             case Hir.EncodeRaw e -> {
-                Hir.Def encDef = ctx.symbols().declarations().declaration(e.typeName().denotes().key());
-                boolean hasEncoder = (encDef instanceof Hir.Data ed && ed.encoder().isPresent())
-                        || (encDef instanceof Hir.SumData sd && sd.encoder().isPresent());
-                if (!hasEncoder) {
+                if (!hasEncoder(ctx.symbols().declarations()
+                        .declaration(e.typeName().denotes().key()))) {
                     throw CompileException.of(Diagnostic.at(e.pos())
                             .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
                             .build());

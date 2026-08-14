@@ -88,9 +88,7 @@ final class HelperParams {
         // Both, and each back where it was. A helper the module took on to emit has parameters to
         // settle like any other, and one written back into the wrong component would be a
         // declaration this module never wrote.
-        return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), m.defs(),
-                m.behaviors(), written(m.fns(), settled), written(m.takenOn(), settled),
-                m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+        return m.withFns(written(m.fns(), settled)).withTakenOn(written(m.takenOn(), settled));
     }
 
     /** {@code fns} with each one that {@code settled} answered for replaced by what it settled to. */

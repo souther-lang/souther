@@ -180,7 +180,7 @@ public final class ExampleStatements {
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
         for (int i = 0; i < module.fakes().size(); i++) {
-            Hir.Fake fk = module.fakes().get(i);
+            Hir.Fake fk = module.fakes().get(i).read();
             if (!answering.add(fk.target())) {
                 continue;   // a second table for one dependency answers nothing, here as anywhere
             }
@@ -369,11 +369,11 @@ public final class ExampleStatements {
      * {@code with} that takes no input answers for ({@link #againstWiths}) — and records rows of. */
     private static Set<String> contested(souther.compiler.check.Prepared.ExampleExecution module, Map<String, Sig> sigs) {
         Set<String> stoodIn = new LinkedHashSet<>();
-        for (Hir.Fake fk : module.fakes()) {
-            stoodIn.add(fk.target());
+        for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
+            stoodIn.add(table.target());
         }
-        for (Hir.Example ex : module.examples()) {
-            for (Hir.ExampleRow row : ex.rows()) {
+        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+            for (Hir.ExampleRow row : block.read().rows()) {
                 for (Hir.With w : row.withs()) {
                     Sig depSig = sigs.get(w.dep());
                     if (depSig != null && depSig.inputTypes().isEmpty()) {
@@ -383,9 +383,9 @@ public final class ExampleStatements {
             }
         }
         Set<String> both = new LinkedHashSet<>();
-        for (Hir.Example ex : module.examples()) {
-            if (stoodIn.contains(ex.target())) {
-                both.add(ex.target());
+        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+            if (stoodIn.contains(block.target())) {
+                both.add(block.target());
             }
         }
         return both;
@@ -400,7 +400,7 @@ public final class ExampleStatements {
                                           List<String> fakeOrigins, Set<String> contested) {
         Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
         for (int i = 0; i < module.examples().size(); i++) {
-            Hir.Example ex = module.examples().get(i);
+            Hir.Example ex = module.examples().get(i).read();
             if (contested.contains(ex.target())) {
                 readRecorded(ex, exampleOrigins.get(i), recorded);
             }
@@ -416,13 +416,13 @@ public final class ExampleStatements {
         // disagree with. What that second table is, is its own question.
         Set<String> answering = new LinkedHashSet<>();
         for (int j = 0; j < module.fakes().size(); j++) {
-            Hir.Fake fk = module.fakes().get(j);
+            Hir.Fake fk = module.fakes().get(j).read();
             if (answering.add(fk.target())) {
                 againstFake(fk, fakeOrigins.get(j), recorded, found, timedOut);
             }
         }
         for (int i = 0; i < module.examples().size(); i++) {
-            againstWiths(module.examples().get(i), exampleOrigins.get(i), recorded, found);
+            againstWiths(module.examples().get(i).read(), exampleOrigins.get(i), recorded, found);
         }
         return new Readings(found, timedOut);
     }

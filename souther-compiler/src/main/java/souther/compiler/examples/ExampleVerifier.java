@@ -34,6 +34,8 @@ import souther.compiler.observe.Stage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
@@ -102,7 +104,8 @@ public final class ExampleVerifier {
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
-        for (Hir.Example ex : module.examples()) {
+        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+            Hir.Example ex = block.read();
             try {
                 v.checkExample(ex, failures, rows);
             } catch (LinkageError _) {
@@ -278,7 +281,7 @@ public final class ExampleVerifier {
                 continue;
             }
             return new ExampleTarget(name, requirements.getOrDefault(name, List.of()),
-                    isPending(module.behaviors(), module.fns(), name));
+                    isPending(module.behaviors(), defined(), name));
         }
         return null;
     }
@@ -291,22 +294,33 @@ public final class ExampleVerifier {
      * from the same answer. Two statements of it would let a report say a behavior is implemented while
      * its rows are being recorded rather than run.
      */
-    public static boolean isPending(List<Hir.BehaviorDef> behaviors, List<Hir.FnDef> fns,
+    public static boolean isPending(List<Hir.BehaviorDef> behaviors, Collection<String> defined,
                                     String name) {
         for (Hir.BehaviorDef b : behaviors) {
             if (b.name().equals(name)) {
-                return b instanceof Hir.SpecBehavior && !hasFn(fns, name);
+                return b instanceof Hir.SpecBehavior && !defined.contains(name);
             }
         }
         return false;
     }
 
-    private boolean hasFn(String name) {
-        return hasFn(module.fns(), name);
+    /** The names the module's definitions are written under. What this asks of them is that there
+     * is one, so it is handed the names and not the definitions: a reader taking the desugared
+     * definitions would be asking for a claim it has no use for. */
+    public static Set<String> definedNames(List<souther.compiler.check.Desugared.Fn> fns) {
+        Set<String> names = new LinkedHashSet<>();
+        for (souther.compiler.check.Desugared.Fn fn : fns) {
+            names.add(fn.name());
+        }
+        return names;
     }
 
-    private static boolean hasFn(List<Hir.FnDef> fns, String name) {
-        return fns.stream().anyMatch(f -> f.name().equals(name));
+    private Collection<String> defined() {
+        return definedNames(module.fns());
+    }
+
+    private boolean hasFn(String name) {
+        return defined().contains(name);
     }
 
     /** The injected behavior named {@code name} in this module (a SpecBehavior with no {@code let}),
@@ -851,7 +865,8 @@ public final class ExampleVerifier {
             }
         }
         // a function fake given as a `fake dep | table` declaration
-        for (Hir.Fake fk : module.fakes()) {
+        for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
+            Hir.Fake fk = table.read();
             if (fk.target().equals(depName)) {
                 return tableProxy(fixtures, fk, dep, depSig, out);
             }

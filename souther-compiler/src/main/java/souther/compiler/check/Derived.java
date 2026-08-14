@@ -99,10 +99,15 @@ public final class Derived {
      */
     public static final class Module {
 
-        private final Hir.Module module;
+        private final InvariantSettled settled;
+        private final List<Def> defs;
+        /** Worked out once. The parts are what this holds; the tree is the shape they take, and a
+         *  rung above asks for it every time it rewrites one of its own parts. */
+        private volatile Hir.Module projected;
 
-        private Module(Hir.Module module) {
-            this.module = module;
+        private Module(InvariantSettled settled, List<Def> defs) {
+            this.settled = settled;
+            this.defs = List.copyOf(defs);
         }
 
         /**
@@ -113,6 +118,11 @@ public final class Derived {
          * holding one of these is holding a module where every declaration came out, and there is
          * no way to hold one otherwise.
          *
+         * <p>What comes out holds the answers. Pouring them into a tree would leave the module
+         * saying every declaration came out and no declaration of it saying so, which is where the
+         * rungs above lost the claim (#714): a state built from a tree has nothing but nodes to
+         * answer a route with.
+         *
          * <p>Which declaration each answer is for is checked and not taken from the key it arrived
          * under. {@code derived} is keyed by bare name, and a bare name is a name in some module —
          * so an answer for another module's declaration of the same name would otherwise be built
@@ -122,7 +132,7 @@ public final class Derived {
          *     it stands in for
          */
         public static Module assemble(InvariantSettled settled, Map<String, Def> derived) {
-            List<Hir.Def> defs = new ArrayList<>();
+            List<Def> defs = new ArrayList<>();
             for (Hir.Def def : settled.module().defs()) {
                 Def came = derived.get(def.name());
                 if (came == null) {
@@ -132,54 +142,70 @@ public final class Derived {
                     throw new IllegalArgumentException("the declaration derived under `" + def.name()
                             + "` is " + came.declaredKey() + ", not " + def.declaredKey());
                 }
-                defs.add(came.def);
+                defs.add(came);
             }
-            Hir.Module m = settled.module();
-            return new Module(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(),
-                    m.imports(), defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                    m.exampleFileTarget(), m.pos()));
+            return new Module(settled, defs);
         }
 
         /** What the module is called. */
         public String name() {
-            return module.name();
+            return settled.name();
+        }
+
+        /** Its declarations, each of them the derived declaration and not the node. */
+        public List<Def> defs() {
+            return defs;
+        }
+
+        /** The behaviors this module declares, which no rung at or below this one rewrites. */
+        public List<Hir.BehaviorDef> behaviors() {
+            return settled.module().behaviors();
         }
 
         /** Its definitions, which this state says nothing about — what it declares is what it
          * answered for. */
         public List<Hir.FnDef> fns() {
-            return module.fns();
-        }
-
-        /** This module's declarations with {@code desugared} standing where its definitions were —
-         * what {@link Desugared.Module} is assembled from, which is why it is that state's to ask
-         * for rather than anyone's to build. */
-        Hir.Module withEachFnDesugared(List<Hir.FnDef> desugared) {
-            return new Hir.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                    module.imports(), module.defs(), module.behaviors(), desugared,
-                    module.takenOn(), module.examples(), module.fakes(), module.exampleFileTarget(),
-                    module.pos());
+            return settled.fns();
         }
 
         /**
-         * The tree.
+         * The parts written back into the shape a pass over a whole module takes.
          *
-         * <p>For a reader asking about the payload rather than about the claim — what shape the
-         * module has at this stage, which is a question about the tree and not about what came out.
-         * A reader that needs a declaration to have been derived asks for {@link Def}.
+         * <p>One direction only. What this module declares is the list above; this is that list
+         * projected, and nothing reads a module back into parts — a state made that way would be
+         * claiming of nodes what was established of the answers they replaced.
+         */
+        Hir.Module module() {
+            Hir.Module built = projected;
+            if (built == null) {
+                List<Hir.Def> nodes = new ArrayList<>();
+                for (Def def : defs) {
+                    nodes.add(def.def);
+                }
+                projected = built = settled.module().withDefs(nodes);
+            }
+            return built;
+        }
+
+        /**
+         * The same, for the tests that audit what a module carries at each stage.
+         *
+         * <p>They ask about the payload rather than about the claim — what shape the module has
+         * here — which is what this is for and the whole of it. A reader in the compiler that needs
+         * a declaration to have been derived asks for {@link Def}.
          */
         public Hir.Module tree() {
-            return module;
+            return module();
         }
 
         @Override
         public boolean equals(Object o) {
-            return o instanceof Module other && module.equals(other.module);
+            return o instanceof Module other && module().equals(other.module());
         }
 
         @Override
         public int hashCode() {
-            return module.hashCode();
+            return module().hashCode();
         }
     }
 }

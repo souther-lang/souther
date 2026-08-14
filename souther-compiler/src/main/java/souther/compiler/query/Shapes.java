@@ -346,16 +346,17 @@ public final class Shapes {
         @Override
         public Answer<souther.compiler.check.Prepared> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
+            Answer<Symbols> scope = db.ask(new Scope(name));
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            if (!desugared.present()) {
+            if (!desugared.present() || !scope.present()) {
                 return Answer.absent();
             }
             // A module whose imports form a cycle takes nothing from them — the cycle is reported
             // where it is found, and this module is not compiled either way.
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
-                return Answer.of(
-                        souther.compiler.check.Prepared.prepare(desugared.value(), published));
+                return Answer.of(souther.compiler.check.Prepared.prepare(
+                        desugared.value(), scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

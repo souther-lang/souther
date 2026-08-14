@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,87 +26,129 @@ import java.util.Map;
  * gathered over all of them, and which rows are reported on is a question asked later, by
  * {@code Output.Examples}, which carries the source file in its key. A state that took one would be
  * pulling an output's concern up into what the module is.
+ *
+ * <p>What it holds is parts and not a tree. Each route out of it answers with the state of the part
+ * it is for, and the projection writes those back into the shape a whole-module pass takes. The
+ * other way round is what this rung used to be: the rungs below answered per declaration and per
+ * definition, the assemblies poured the answers into an {@link Hir.Module}, and from here there was
+ * nothing left to hand over but nodes.
  */
 public final class Prepared {
 
-    private final Hir.Module module;
+    private final Desugared.Module desugared;
+    private final List<Desugared.Fn> fns;
+    private final List<Rows> examples;
+    private final List<FakeTable> fakes;
+    private final List<Hir.FnDef> takenOn;
+    /** Worked out once, as the rungs below work theirs out. */
+    private volatile Hir.Module projected;
 
-    private Prepared(Hir.Module module) {
-        this.module = module;
+    private Prepared(Desugared.Module desugared, List<Desugared.Fn> fns, List<Rows> examples,
+                     List<FakeTable> fakes, List<Hir.FnDef> takenOn) {
+        this.desugared = desugared;
+        this.fns = List.copyOf(fns);
+        this.examples = List.copyOf(examples);
+        this.fakes = List.copyOf(fakes);
+        this.takenOn = List.copyOf(takenOn);
     }
 
     /**
      * {@code desugared} with its imports written out and what its artifact must carry taken on.
      *
      * <p>{@code published} is what the modules this one imports offer it, which is what a row
-     * applying one of their helpers is answered from.
+     * applying one of their helpers is answered from. {@code scope} is what a name in it means,
+     * which is what the definitions are held to after they are rewritten.
+     *
+     * <p>The rewriting is done a part at a time, and each part's state is established of what came
+     * out rather than carried over it. A definition is handed to
+     * {@link Desugared.Fn#reestablish}, which proves the proposition again of the rewritten node; a
+     * row and a fake table arrive at their state here, because this is the rung that says anything
+     * about them.
+     *
+     * <p>What it does not rewrite is the declarations. Their clauses were written qualified where
+     * they were settled, and nothing between there and here puts a name back into one — measured
+     * over a compile of the suite, and held by
+     * {@code AStateIsReachedOnlyThroughWhatEstablishesItTest}. So they are the answers the rung
+     * below gave, and no state is claimed of anything a second time.
      *
      * @throws CompileException where a helper this module reaches cannot be read
      */
-    public static Prepared prepare(Desugared.Module desugared, Map<String, Hir.FnDef> published) {
+    public static Prepared prepare(Desugared.Module desugared, Symbols scope,
+                                   Map<String, Hir.FnDef> published) {
         // An imported definition is written here bare and denotes the module that declares it.
         // Spelling it out, once, settles the name this module reaches it by, which is what the table
         // a call expands against is keyed by and what the method a recursive helper becomes is
         // called. It settles nothing about where the definition came from: the fns below hold
         // declarations of several modules under names of one shape, and which module wrote each is
         // carried on the declaration (Hir.FnDef.declaredIn).
-        Hir.Module m = HelperNames.qualifyImports(desugared.module());
-        HelperInliner inliner = HelperInliner.forModule(m, published);
+        String self = desugared.name();
+        List<Desugared.Fn> fns = new ArrayList<>();
+        for (Desugared.Fn fn : desugared.fns()) {
+            fns.add(Desugared.Fn.reestablish(HelperNames.qualifyImportsIn(fn.read(), self), scope));
+        }
+        List<Rows> examples = new ArrayList<>();
+        for (Hir.Example block : desugared.module().examples()) {
+            examples.add(new Rows(HelperNames.qualifyImportsIn(block, self)));
+        }
+        List<FakeTable> fakes = new ArrayList<>();
+        for (Hir.Fake table : desugared.module().fakes()) {
+            fakes.add(new FakeTable(HelperNames.qualifyImportsIn(table, self)));
+        }
+        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of());
+        HelperInliner inliner = HelperInliner.forModule(written.module(), published);
         Map<String, Hir.FnDef> injected = new LinkedHashMap<>(inliner.injectedRecursiveHelpers());
         // A helper an example row applies is emitted for that reason (ADR-0077); one this module
         // does not declare is taken on here, as a recursive one it reaches is.
         inliner.injectedExampleHelpers().forEach(injected::putIfAbsent);
-        if (injected.isEmpty()) {
-            return new Prepared(m);
-        }
         // Beside what the module declared, not among it. Both are emitted and only the first was
         // written here, and a reader asking which is which asks the component it is in rather than
         // the shape of a name.
-        return new Prepared(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                m.defs(), m.behaviors(), m.fns(), List.copyOf(injected.values()), m.examples(),
-                m.fakes(), m.exampleFileTarget(), m.pos()));
+        return injected.isEmpty() ? written
+                : new Prepared(desugared, fns, examples, fakes, List.copyOf(injected.values()));
     }
 
     /** What the module is called. */
     public String name() {
-        return module.name();
+        return desugared.name();
     }
 
-    /** The tree, for the passes of this package that read what this state claims. */
-    Hir.Module module() {
-        return module;
-    }
-
-    /** The behaviors this module declares. */
+    /** The behaviors this module declares, which no rung at or below this one rewrites. */
     public List<Hir.BehaviorDef> behaviors() {
-        return module.behaviors();
+        return desugared.behaviors();
     }
 
     /** The names its source offers to whatever reads it, which no stage rewrites. */
     public List<String> exposing() {
-        return module.exposing();
+        return desugared.module().exposing();
     }
 
-    /** Its declarations, which this state says nothing about beyond what the one below it did. */
-    public List<Hir.Def> defs() {
-        return module.defs();
+    /**
+     * Its declarations, each of them the derived declaration and not the node.
+     *
+     * <p>The answers the rung below gave, handed on. Nothing here rewrites a declaration, so there
+     * is nothing that could have made the claim false and no reason to hand over a value that no
+     * longer carries it.
+     */
+    public List<Derived.Def> defs() {
+        return desugared.defs();
     }
 
-    /** The example rows attached to this module, from its own file and from every file naming it. */
-    public List<Hir.Example> examples() {
-        return module.examples();
+    /** The example blocks attached to this module, from its own file and from every file naming
+     * it, each of them read the way this module reaches its names. */
+    public List<Rows> examples() {
+        return examples;
     }
 
     /** Its definitions, the taken-on ones not among them — those are what the artifact carries
      * beside what the module wrote. */
-    public List<Hir.FnDef> fns() {
-        return module.fns();
+    public List<Desugared.Fn> fns() {
+        return fns;
     }
 
     /** Which module each imported name came from. */
     public Map<String, String> importedFrom() {
         Map<String, String> packages = new LinkedHashMap<>();
-        for (Hir.Import imp : module.imports()) {
+        for (Hir.Import imp : desugared.module().imports()) {
             for (String imported : imp.names()) {
                 packages.put(imported, imp.module());
             }
@@ -114,16 +157,117 @@ public final class Prepared {
     }
 
     /**
-     * This module's artifact with {@code rows} standing where its example rows were — what an
-     * example run is given.
-     *
-     * <p>The rows are a subset because which of them are reported on is an output's question: a
-     * module's rows come from its own file and from every {@code examples for} file naming it, and
-     * a run reports on one of those files at a time. What does not change with the choice is
-     * everything else here, which is what the artifact is.
+     * This module's artifact with all of its rows — what an example run over the module is given.
      */
-    public ExampleExecution forExamples(List<Hir.Example> rows) {
-        return new ExampleExecution(module, rows);
+    public ExampleExecution forExamples() {
+        return new ExampleExecution(this, examples);
+    }
+
+    /**
+     * The same over the rows {@code sourceId} wrote, {@code origins} saying which source each of
+     * this module's blocks came from.
+     *
+     * <p>The selection is made here rather than handed in. A module's rows come from its own file
+     * and from every {@code examples for} file naming it, and a run reports on one of those files at
+     * a time — so what varies is which of these rows, and an operation that took a list of them
+     * would be a way to put any rows at all into the state that says these are the module's.
+     *
+     * <p>Where {@code origins} does not line up with the blocks, all of them are the answer: the
+     * origins are a parallel record, and one that does not match is one that says nothing about
+     * which row is whose.
+     */
+    public ExampleExecution forExamplesWrittenIn(List<String> origins, String sourceId) {
+        if (origins == null || origins.size() != examples.size()) {
+            return forExamples();
+        }
+        List<Rows> mine = new ArrayList<>();
+        for (int i = 0; i < origins.size(); i++) {
+            if (origins.get(i).equals(sourceId)) {
+                mine.add(examples.get(i));
+            }
+        }
+        return new ExampleExecution(this, mine);
+    }
+
+    /**
+     * One example block of this module, with every name in it that denotes another module's
+     * definition written qualified.
+     *
+     * <p>Its own type because a reader of one leans on it and would say something else without it:
+     * a row whose names are written bare builds no fixture, and what the author is told is that the
+     * fixture cannot be built — a report about their model for a reason that is not in it. Measured
+     * over a compile of the suite, where the rows qualification touches are the rows whose readings
+     * change and no others.
+     *
+     * <p>Reached from {@link #prepare} and from nothing else.
+     */
+    public static final class Rows {
+
+        private final Hir.Example block;
+
+        private Rows(Hir.Example block) {
+            this.block = block;
+        }
+
+        /** The behavior the rows are about. */
+        public String target() {
+            return block.target();
+        }
+
+        /**
+         * The block.
+         *
+         * <p>For a reader that holds this state, as {@link Desugared.Fn#read()} is. What the state
+         * says is that the names in it are the ones this module reaches, and a reader that walks
+         * the rows has been handed that rather than left to hope for it.
+         */
+        public Hir.Example read() {
+            return block;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Rows other && block.equals(other.block);
+        }
+
+        @Override
+        public int hashCode() {
+            return block.hashCode();
+        }
+    }
+
+    /**
+     * One fake table of this module, with every name in it that denotes another module's definition
+     * written qualified — the same claim {@link Rows} carries, about what stands in for an
+     * injected behavior while a row runs.
+     */
+    public static final class FakeTable {
+
+        private final Hir.Fake table;
+
+        private FakeTable(Hir.Fake table) {
+            this.table = table;
+        }
+
+        /** The injected behavior this table stands in for. */
+        public String target() {
+            return table.target();
+        }
+
+        /** The table, for a reader that holds this state. */
+        public Hir.Fake read() {
+            return table;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof FakeTable other && table.equals(other.table);
+        }
+
+        @Override
+        public int hashCode() {
+            return table.hashCode();
+        }
     }
 
     /**
@@ -139,10 +283,10 @@ public final class Prepared {
      */
     public static final class ExampleExecution {
 
-        private final Hir.Module module;
-        private final List<Hir.Example> rows;
+        private final Prepared module;
+        private final List<Rows> rows;
 
-        private ExampleExecution(Hir.Module module, List<Hir.Example> rows) {
+        private ExampleExecution(Prepared module, List<Rows> rows) {
             this.module = module;
             this.rows = List.copyOf(rows);
         }
@@ -158,47 +302,89 @@ public final class Prepared {
         }
 
         /** The definitions the module wrote. */
-        public List<Hir.FnDef> fns() {
+        public List<Desugared.Fn> fns() {
             return module.fns();
         }
 
-        /** The definitions its artifact carries beside them — what a row applies. */
+        /**
+         * The definitions its artifact carries beside them — what a row applies.
+         *
+         * <p>Nodes, and the boundary is why. What is taken on is another module's definition,
+         * reached through what that module published; it comes here from a question that is not a
+         * rung of this ladder and holds no proposition to pass on ({@code Bodies.Settled}, measured
+         * in #710). A state claimed of one would be claimed of a value nothing here established it
+         * of.
+         */
         public List<Hir.FnDef> takenOn() {
-            return module.takenOn();
+            return module.takenOn;
         }
 
         /** The rows this run is over. */
-        public List<Hir.Example> examples() {
+        public List<Rows> examples() {
             return rows;
         }
 
         /** The fake tables its rows run against, which are the module's whole and not one file's:
          * a module's own fakes are what its attached files' rows run against, and the other way
          * round. */
-        public List<Hir.Fake> fakes() {
-            return module.fakes();
+        public List<FakeTable> fakes() {
+            return module.fakes;
+        }
+
+        /** The artifact the rows run in. */
+        Hir.Module module() {
+            return module.module();
         }
     }
 
     /**
-     * The tree.
+     * The parts written back into the shape a pass over a whole module takes.
      *
-     * <p>For a reader asking about the payload rather than about the claim — what shape the module
-     * has at this stage, which is a question about the tree and not about what was prepared. What
-     * the checks, the adequacy report and the runner read is the parts above, each of which is a
-     * projection this state names; a reader wanting one of those asks for it rather than for this.
+     * <p>Built in one place and never read back into parts. This is where the module leaves the
+     * ladder: {@code Lower.settle} hands it to a pass that settles helper parameter types across
+     * the whole of it, and what that answers with is a tree carrying no proposition — measured in
+     * #710, which is why {@code Bodies.Settled} is not a rung.
+     */
+    Hir.Module module() {
+        Hir.Module built = projected;
+        if (built != null) {
+            return built;
+        }
+        List<Hir.FnDef> definitions = new ArrayList<>();
+        for (Desugared.Fn fn : fns) {
+            definitions.add(fn.read());
+        }
+        List<Hir.Example> blocks = new ArrayList<>();
+        for (Rows block : examples) {
+            blocks.add(block.read());
+        }
+        List<Hir.Fake> tables = new ArrayList<>();
+        for (FakeTable table : fakes) {
+            tables.add(table.read());
+        }
+        projected = built = desugared.module().withFns(definitions).withExamples(blocks)
+                .withFakes(tables).withTakenOn(takenOn);
+        return built;
+    }
+
+    /**
+     * The same, for the tests that audit what a module carries at each stage.
+     *
+     * <p>They ask about the payload rather than about the claim. What the checks, the adequacy
+     * report and the runner read is the parts above, each of which is what this state has to say
+     * about that part; a reader wanting one of those asks for it rather than for this.
      */
     public Hir.Module tree() {
-        return module;
+        return module();
     }
 
     @Override
     public boolean equals(Object o) {
-        return o instanceof Prepared other && module.equals(other.module);
+        return o instanceof Prepared other && module().equals(other.module());
     }
 
     @Override
     public int hashCode() {
-        return module.hashCode();
+        return module().hashCode();
     }
 }

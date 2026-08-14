@@ -103,6 +103,11 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1325)
     record AParameterTakesATypeTheLanguageDeclares(String parameter, String type) implements TypeMessage, Reported {}
 
+    /** A data field is written from a type the language declares of its own operations. A field
+     *  crosses, so it carries the model's own vocabulary as a behavior's boundary does. */
+    @Code(DiagnosticCode.E1325)
+    record AFieldTakesATypeTheLanguageDeclares(String field, String type) implements TypeMessage, Reported {}
+
     @Code(DiagnosticCode.E1311)
     record AParameterCarriesAFunction(String parameter, String type) implements TypeMessage, Reported {}
 

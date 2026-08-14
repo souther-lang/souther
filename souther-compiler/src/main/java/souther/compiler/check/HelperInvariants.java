@@ -103,9 +103,7 @@ public final class HelperInvariants {
                 defs.add(def);
             }
         }
-        return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                m.exampleFileTarget(), m.pos());
+        return m.withDefs(defs);
     }
 
     /** The conjuncts of an invariant expression, flattened, in the order they are written — what a
