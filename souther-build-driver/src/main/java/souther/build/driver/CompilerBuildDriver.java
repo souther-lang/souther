@@ -22,9 +22,11 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /** Drives the compiler for a build plugin. */
@@ -36,21 +38,23 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
             List<Source> sources = read(request.sourcePaths());
             List<String> texts = sources.stream().map(Source::text).toList();
             Locale locale = Messages.resolveLocale(request.languageTag());
-            // One source with no `module` header is a self-contained module and can import nothing;
-            // one that names itself is a module set of one, and may import a module off the path.
+            ModulePath path = ModulePath.ofClassPath(request.classPath());
+            // One source with no `module` header is a self-contained module rather than a module set
+            // of one, and is asked for differently. What it may not do is be imported — a module
+            // nothing can name cannot be the target of an import (ADR-0043) — and that is no reason
+            // to keep the class path from it: an import it writes resolves like any other.
             boolean selfContained =
                     texts.size() == 1 && Compiler.moduleNameFromHeader(texts.get(0)) == null;
             Compiler.Compiled compiled;
             try {
                 compiled = selfContained
-                        ? Compiler.compileWithWarnings(texts.get(0))
-                        : Compiler.compileModulesWithWarnings(
-                                texts, ModulePath.ofClassPath(request.classPath()));
+                        ? selfContained(texts.get(0), path)
+                        : Compiler.compileModulesWithWarnings(texts, path);
             } catch (CompileException e) {
                 return new BuildResult(false,
                         rendered(e.locatedDiagnostics(), sources, locale, Severity.ERROR));
             }
-            write(compiled.classes(), request.outputDirectory());
+            write(compiled.classes(), request.outputDirectory(), request.stateDirectory());
             // A warning is the whole of what the checker has to say about an unproven construction,
             // so a build that never reports one lets them accumulate while staying green.
             return new BuildResult(true,
@@ -58,6 +62,16 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * One header-less source, named the way the annotation processor names one, and resolving its
+     * imports against {@code path}.
+     */
+    private static Compiler.Compiled selfContained(String text, ModulePath path) {
+        List<Located> warnings = new ArrayList<>();
+        Compilation compilation = Compiler.compiled(text, "Main", warnings, path);
+        return new Compiler.Compiled(compilation.classes(), warnings);
     }
 
     /**
@@ -121,12 +135,64 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
         return sources;
     }
 
-    /** Each generated class under {@code outputDirectory}, at the path its binary name says. */
-    private static void write(Map<String, byte[]> classes, Path outputDirectory) throws IOException {
+    /** What this compile generated, from the last one, so it can be taken back. */
+    private static final String GENERATED = "generated";
+
+    /**
+     * Each generated class under {@code outputDirectory}, at the path its binary name says, and away
+     * with whatever the compile before this one put there and this one does not.
+     *
+     * <p>Taken back one file at a time, from a record of what was written, rather than by emptying
+     * the directory: on Maven that directory is where javac writes too. A renamed module would
+     * otherwise leave the old name's classes behind — its {@code $Module} among them, which is what
+     * another project imports it by, so a build downstream would go on importing a module that is
+     * no longer written anywhere.
+     */
+    private static void write(Map<String, byte[]> classes, Path outputDirectory, Path stateDirectory)
+            throws IOException {
+        Set<String> written = new LinkedHashSet<>();
         for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
-            Path file = outputDirectory.resolve(entry.getKey().replace('.', '/') + ".class");
+            String relative = entry.getKey().replace('.', '/') + ".class";
+            Path file = outputDirectory.resolve(relative);
             Files.createDirectories(file.getParent());
             Files.write(file, entry.getValue());
+            written.add(relative);
+        }
+        remove(generatedBefore(stateDirectory), written, outputDirectory);
+        Files.createDirectories(stateDirectory);
+        Files.write(stateDirectory.resolve(GENERATED), written);
+    }
+
+    /** What the compile before this one wrote, or nothing when there was none. */
+    private static List<String> generatedBefore(Path stateDirectory) throws IOException {
+        Path record = stateDirectory.resolve(GENERATED);
+        return Files.exists(record) ? Files.readAllLines(record) : List.of();
+    }
+
+    private static void remove(List<String> before, Set<String> written, Path outputDirectory)
+            throws IOException {
+        for (String previous : before) {
+            if (previous.isBlank() || written.contains(previous)) {
+                continue;
+            }
+            Path stale = outputDirectory.resolve(previous);
+            Files.deleteIfExists(stale);
+            emptyParents(stale.getParent(), outputDirectory);
+        }
+    }
+
+    /** Up from a removed class, while a directory is left with nothing in it. */
+    private static void emptyParents(Path from, Path outputDirectory) throws IOException {
+        Path directory = from;
+        while (directory != null && !directory.equals(outputDirectory)
+                && directory.startsWith(outputDirectory) && Files.isDirectory(directory)) {
+            try (Stream<Path> held = Files.list(directory)) {
+                if (held.findAny().isPresent()) {
+                    return;
+                }
+            }
+            Files.delete(directory);
+            directory = directory.getParent();
         }
     }
 

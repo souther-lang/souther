@@ -30,11 +30,57 @@ class CompilerBuildDriverTest {
         Path classes = dir.resolve("classes");
 
         BuildResult result = new CompilerBuildDriver()
-                .compile(new BuildRequest(List.of(sources), List.of(), classes, "en"));
+                .compile(new BuildRequest(List.of(sources), List.of(), classes, dir.resolve("state"), "en"));
 
         assertTrue(result.succeeded(), () -> String.valueOf(result.diagnostics()));
         assertTrue(Files.exists(classes.resolve("shared/money/Amount.class")),
                 "the generated classes go under the output directory the request named");
+    }
+
+    /**
+     * A class this compile no longer generates is a class the build must not keep. Renaming a module
+     * leaves the old one's classes behind otherwise — its {@code $Module} among them, which is what
+     * another project imports it by, so a build downstream would go on importing a module that no
+     * longer exists.
+     *
+     * <p>The output directory cannot simply be emptied: on Maven it is where javac writes too. So
+     * what this compile generated is recorded, and what it no longer generates is removed.
+     */
+    @Test
+    void aModuleThatIsNoLongerGeneratedIsRemovedFromTheOutput(@TempDir Path dir) throws IOException {
+        Path sources = Files.createDirectories(dir.resolve("src"));
+        Path classes = dir.resolve("classes");
+        Path state = dir.resolve("state");
+        Files.writeString(sources.resolve("money.sou"), """
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """);
+        compiled(sources, classes, state);
+        Path handWritten = Files.createDirectories(classes.resolve("app")).resolve("Other.class");
+        Files.writeString(handWritten, "not ours");
+
+        Files.writeString(sources.resolve("money.sou"), """
+                module shared.wallet exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """);
+        compiled(sources, classes, state);
+
+        assertTrue(Files.exists(classes.resolve("shared/wallet/Amount.class")));
+        assertFalse(Files.exists(classes.resolve("shared/money/Amount.class")));
+        assertFalse(Files.exists(classes.resolve("shared/money/$Module.class")),
+                "the declarations another project imports the old module by");
+        assertFalse(Files.exists(classes.resolve("shared/money")),
+                "and not an empty directory where it was");
+        assertTrue(Files.exists(handWritten),
+                "what this compile did not write is not this compile's to remove");
+    }
+
+    private static void compiled(Path sources, Path classes, Path state) {
+        BuildResult result = new CompilerBuildDriver().compile(
+                new BuildRequest(List.of(sources), List.of(), classes, state, "en"));
+        assertTrue(result.succeeded(), () -> String.valueOf(result.diagnostics()));
     }
 
     /**
@@ -70,16 +116,44 @@ class CompilerBuildDriverTest {
         Path classes = dir.resolve(project).resolve("classes");
 
         BuildResult result = new CompilerBuildDriver()
-                .compile(new BuildRequest(List.of(sources), classPath, classes, "en"));
+                .compile(new BuildRequest(List.of(sources), classPath, classes, dir.resolve(project).resolve("state"), "en"));
 
         assertTrue(result.succeeded(), () -> project + ": " + result.diagnostics());
         return classes;
     }
 
     /**
-     * A single source with no {@code module} header is a self-contained module: it can import
-     * nothing, and it is not a module set of one. The compiler is asked differently for it, which is
-     * a distinction a build has no way to make itself.
+     * What ADR-0043 leaves out of a header-less source is a name others can import, not the ability
+     * to import. A build hands over a class path whatever its sources look like, and an import that
+     * names no module among them resolves against it — that is the whole of what the class path is
+     * for.
+     */
+    @Test
+    void aLoneHeaderLessSourceStillImportsFromTheClassPath(@TempDir Path dir) throws IOException {
+        Path libClasses = compiled(dir, "lib", """
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                    invariant value >= 0
+                """, List.of());
+        Path sources = Files.createDirectories(dir.resolve("app").resolve("src"));
+        Files.writeString(sources.resolve("orders.sou"), """
+                import shared.money ( Amount )
+                data Order = { total: Amount }
+                """);
+        Path classes = dir.resolve("app").resolve("classes");
+
+        BuildResult result = new CompilerBuildDriver().compile(new BuildRequest(
+                List.of(sources), List.of(libClasses), classes,
+                dir.resolve("app").resolve("state"), "en"));
+
+        assertTrue(result.succeeded(), () -> String.valueOf(result.diagnostics()));
+        assertTrue(Files.exists(classes.resolve("Main/Order.class")));
+    }
+
+    /**
+     * A single source with no {@code module} header is a self-contained module rather than a module
+     * set of one, and the compiler is asked differently for it — a distinction a build has no way to
+     * make itself.
      */
     @Test
     void aLoneSourceWithNoModuleHeaderIsCompiledAsASelfContainedModule(@TempDir Path dir)
@@ -92,7 +166,7 @@ class CompilerBuildDriverTest {
         Path classes = dir.resolve("classes");
 
         BuildResult result = new CompilerBuildDriver()
-                .compile(new BuildRequest(List.of(sources), List.of(), classes, "en"));
+                .compile(new BuildRequest(List.of(sources), List.of(), classes, dir.resolve("state"), "en"));
 
         assertTrue(result.succeeded(), () -> String.valueOf(result.diagnostics()));
         assertTrue(Files.exists(classes.resolve("Main/Amount.class")),
@@ -123,7 +197,7 @@ class CompilerBuildDriverTest {
         Path classes = dir.resolve("classes");
 
         BuildResult result = new CompilerBuildDriver()
-                .compile(new BuildRequest(List.of(sources), List.of(), classes, "en"));
+                .compile(new BuildRequest(List.of(sources), List.of(), classes, dir.resolve("state"), "en"));
 
         assertTrue(result.succeeded(), () -> String.valueOf(result.diagnostics()));
         assertEquals(1, result.diagnostics().size(), () -> String.valueOf(result.diagnostics()));
@@ -142,7 +216,7 @@ class CompilerBuildDriverTest {
         Files.writeString(sources.resolve("demo.sou"), UNPROVEN);
 
         BuildResult result = new CompilerBuildDriver().compile(
-                new BuildRequest(List.of(sources), List.of(), dir.resolve("classes"), "ja"));
+                new BuildRequest(List.of(sources), List.of(), dir.resolve("classes"), dir.resolve("state"), "ja"));
 
         String rendered = result.diagnostics().get(0).rendered();
         assertTrue(rendered.contains("(警告)"), rendered);
@@ -159,7 +233,7 @@ class CompilerBuildDriverTest {
                 """);
 
         BuildResult result = new CompilerBuildDriver().compile(
-                new BuildRequest(List.of(sources), List.of(), dir.resolve("classes"), "en"));
+                new BuildRequest(List.of(sources), List.of(), dir.resolve("classes"), dir.resolve("state"), "en"));
 
         assertFalse(result.succeeded());
         List<BuildDiagnostic> errors = result.diagnostics().stream()
