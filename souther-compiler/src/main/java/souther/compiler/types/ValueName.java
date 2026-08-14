@@ -116,7 +116,7 @@ public sealed interface ValueName {
      * it wraps. Which of the two is decided by what the type is, not by how the name was written.
      *
      * <p>{@code origin} says where the construction came from. A unit data is *constructed* by being
-     * named, and a construction says where it came from ({@link souther.compiler.ast.Ast.NewData}) so
+     * named, and a construction says where it came from ({@link souther.compiler.ast.Hir.NewData}) so
      * that the permission check can tell the reader's own from one it was handed; a unit data has no
      * node of its own to say it on, so the name says it.
      */

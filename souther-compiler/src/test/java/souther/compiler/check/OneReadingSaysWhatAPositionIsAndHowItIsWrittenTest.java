@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -45,9 +46,9 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
 
     private final Symbols symbols = Symbols.of(resolved());
 
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     private TypeView view(String name) {

@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Classification;
@@ -94,15 +94,15 @@ class GeneratorTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         assertNotNull(prepared);
         assertNotNull(sigs);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
-        List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
         return new Model(new Generator.Subject(
                 new BehaviorInputs(parameters, sig.inputTypes(), symbols), partitioning.axes()),

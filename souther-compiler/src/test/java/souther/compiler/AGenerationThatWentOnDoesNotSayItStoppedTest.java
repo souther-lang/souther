@@ -2,7 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
@@ -65,14 +65,14 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Compilation compilation = Compilation.ofSource(TRIP, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
         return new Generator.Subject(new souther.compiler.partition.BehaviorInputs(
-                spec.params().stream().map(Ast.Param::name).toList(), sig.inputTypes(), symbols),
+                spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols),
                 Partitions.of(spec, sig, symbols, Exclusions.NONE).axes());
     }
 

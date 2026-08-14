@@ -1,7 +1,7 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.generated.GeneratedBehavior;
@@ -211,7 +211,7 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
     @Test
     void aValueReadThroughOneAskIsAValueOfTheNext() throws Exception {
         Compilation compilation = Compiler.compiled(SOURCE, "demo", new ArrayList<>());
-        Ast.Module written = compilation.module(compilation.modules().get(0));
+        Hir.Module written = compilation.module(compilation.modules().get(0));
         Sig sig = compilation.signatures(written.name()).get("at");
 
         ClassLoader reading = compilation.loader();

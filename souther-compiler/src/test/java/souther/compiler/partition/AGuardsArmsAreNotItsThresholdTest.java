@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
@@ -56,17 +56,17 @@ class AGuardsArmsAreNotItsThresholdTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("pick")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
         CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
         return GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Ast.Param::name).toList(), symbols);
+                spec.params().stream().map(Hir.Param::name).toList(), symbols);
     }
 
     /** The arm taken when the condition holds, which the plan numbers first. */

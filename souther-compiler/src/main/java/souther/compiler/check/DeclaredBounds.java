@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
@@ -105,8 +105,8 @@ public final class DeclaredBounds {
         // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
         // and every layer that put an end where it is is kept, because each is a rule a row is owed.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+            for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     InvariantBound read = (measure == null ? InvariantBound.of(each, carrier)
                             : InvariantBound.ofSize(each, measure)).orElse(null);
                     if (read == null) {

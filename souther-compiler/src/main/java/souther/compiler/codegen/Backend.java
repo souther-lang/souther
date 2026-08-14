@@ -6,7 +6,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.PipelineSigs;
@@ -74,8 +74,8 @@ public final class Backend {
      * reads the component the fn is in; a class being written is about neither, because a method is a
      * method.
      */
-    private static List<Ast.FnDef> emitted(Ast.Module module) {
-        List<Ast.FnDef> all = new ArrayList<>(module.fns());
+    private static List<Hir.FnDef> emitted(Hir.Module module) {
+        List<Hir.FnDef> all = new ArrayList<>(module.fns());
         all.addAll(module.takenOn());
         return all;
     }
@@ -116,7 +116,7 @@ public final class Backend {
      * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
      * this module's invariant clauses in the representation the language's own operations survive in, which
      * is what a derived decoder's constraint mapping reads (spec §decoder-error). */
-    public static Emissions generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
@@ -124,7 +124,7 @@ public final class Backend {
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked,
-                                               Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants) {
+                                               Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
                 requirements, checked, dischargeInvariants, Instrumentation.NONE);
     }
@@ -142,7 +142,7 @@ public final class Backend {
      * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
      * the arm that ran as one nothing reaches.
      */
-    public static Emissions generate(Ast.Module module, Symbols symbols,
+    public static Emissions generate(Hir.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
@@ -150,7 +150,7 @@ public final class Backend {
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked,
-                                               Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
+                                               Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
@@ -163,7 +163,7 @@ public final class Backend {
         }
     }
 
-    private static Emissions generating(Ast.Module module, Symbols symbols,
+    private static Emissions generating(Hir.Module module, Symbols symbols,
                                                   Map<String, String> typePackage,
                                                   Map<String, Sig> sigs,
                                                   Map<String, Sig> importedSigs,
@@ -171,12 +171,12 @@ public final class Backend {
                                                   Map<String, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   TypeChecker.Checked checked,
-                                                  Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
+                                                  Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
-        for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.SumData sum) {
-                for (Ast.Name caseName : sum.cases()) {
+        for (Hir.Def def : module.defs()) {
+            if (def instanceof Hir.SumData sum) {
+                for (Hir.Name caseName : sum.cases()) {
                     caseToSums.computeIfAbsent(caseName.denotes().name(), k -> new ArrayList<>())
                             .add(new GeneratedClass.Value(sum.declares()));
                 }
@@ -188,13 +188,13 @@ public final class Backend {
         // After the Lower stage the only non-behavior fns left are recursive helpers (spec §fn-declaration);
         // each is lowered to a static method on the module's `$Fns` class rather than inlined.
         Set<String> behaviorNames = new HashSet<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             behaviorNames.add(bd.name());
         }
         // Both components: a method is emitted for what the module declared and for what it took on
         // to emit, and by the time a class is written there is no difference between them.
-        Map<String, Ast.FnDef> recHelpers = new LinkedHashMap<>();
-        for (Ast.FnDef fn : emitted(module)) {
+        Map<String, Hir.FnDef> recHelpers = new LinkedHashMap<>();
+        for (Hir.FnDef fn : emitted(module)) {
             if (!behaviorNames.contains(fn.name())) {
                 recHelpers.put(fn.name(), fn);
             }
@@ -215,15 +215,15 @@ public final class Backend {
         // identities the same — so each compares what the ABI answers rather than a spelling worked
         // out here. What collides is decided on the JVM name; what the report names is the Souther
         // declarations that landed on it.
-        Map<JvmClassName, Ast.Def> localTypes = new LinkedHashMap<>();
-        for (Ast.Def d : module.defs()) {
+        Map<JvmClassName, Hir.Def> localTypes = new LinkedHashMap<>();
+        for (Hir.Def d : module.defs()) {
             localTypes.put(SoutherJvmAbi.nameOf(new GeneratedClass.Value(d.declares())), d);
         }
         Map<JvmClassName, String> behaviorClassOwner = new LinkedHashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             JvmClassName cls = SoutherJvmAbi.nameOf(
                     new GeneratedClass.BehaviorInterface(module.name(), bd.name()));
-            Ast.Def data = localTypes.get(cls);
+            Hir.Def data = localTypes.get(cls);
             if (data != null) {
                 throw CompileException.of(Diagnostic
                                 .at(bd.pos()).say(new BehaviorMessage.ABehaviorCapitalizesOntoAData(bd.name(), data.name())).build());
@@ -262,7 +262,7 @@ public final class Backend {
         behaviorResults.forEach((union, members) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
-            Ast.BehaviorDef owner = b.behaviorNamed(module, union.behavior());
+            Hir.BehaviorDef owner = b.behaviorNamed(module, union.behavior());
             emitting(owner.written(), () -> {
                 out.put(union, b.generateBehaviorResult(union, members));
                 out.put(new GeneratedClass.Encoder(union),
@@ -274,19 +274,19 @@ public final class Backend {
         bridgeCases.forEach((member, unions) ->
                 out.put(new GeneratedClass.BridgeCase(module.name(), member),
                         b.value.generateBridgeCase(member, unions)));
-        for (Ast.Def def : module.defs()) {
+        for (Hir.Def def : module.defs()) {
             emitting(def.written(), () -> {
                 switch (def) {
-                    case Ast.Data data -> b.value.generateData(data, out);
-                    case Ast.SumData sum -> b.value.generateSum(sum, out);
-                    case Ast.UnitData unit -> b.value.generateUnit(unit, out);
+                    case Hir.Data data -> b.value.generateData(data, out);
+                    case Hir.SumData sum -> b.value.generateSum(sum, out);
+                    case Hir.UnitData unit -> b.value.generateUnit(unit, out);
                 }
             });
         }
         // Behavior fn bodies arrive with their helper calls already inlined (the Lower stage,
         // ADR-0021); the backend emits them as-is and never lowers a helper on its own.
-        Map<String, Ast.FnDef> fns = new HashMap<>();
-        for (Ast.FnDef fn : emitted(module)) {
+        Map<String, Hir.FnDef> fns = new HashMap<>();
+        for (Hir.FnDef fn : emitted(module)) {
             fns.put(fn.name(), fn);
         }
         // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Each becomes an
@@ -296,11 +296,11 @@ public final class Backend {
         Set<String> requiredNames = Requirements.injectedNames(module, importedInjected);
         Map<String, Type> requiredSuccess = new HashMap<>();
         Map<String, List<Type>> requiredParam = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Ast.SpecBehavior spec && requiredNames.contains(spec.name())) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (bd instanceof Hir.SpecBehavior spec && requiredNames.contains(spec.name())) {
                 requiredSuccess.put(spec.name(), b.successType(spec.ret()));
                 List<Type> reqParams = new ArrayList<>();
-                for (Ast.Param p : spec.params()) {
+                for (Hir.Param p : spec.params()) {
                     reqParams.add(b.successType(p.type()));
                 }
                 requiredParam.put(spec.name(), reqParams);
@@ -310,19 +310,19 @@ public final class Backend {
                 // to build it (spec §asymmetric-interop), and unlike a unit it cannot be told apart from a decoded
                 // pass-through output (会員) by shape alone.
                 List<TypeName> unitCases = new ArrayList<>();
-                for (Ast.TypeTerm term : spec.ret().cases()) {
-                    if (term instanceof Ast.TypeRef t && t.denotes() instanceof Type.Ref r
-                            && b.symbols.declarations().declaration(r.name()) instanceof Ast.UnitData) {
+                for (Hir.TypeTerm term : spec.ret().cases()) {
+                    if (term instanceof Hir.TypeRef t && t.denotes() instanceof Type.Ref r
+                            && b.symbols.declarations().declaration(r.name()) instanceof Hir.UnitData) {
                         unitCases.add(r.name());
                     }
                 }
                 List<TypeName> dataConstructs = new ArrayList<>();
                 Set<TypeName> seenConstruct = new HashSet<>();
                 if (spec.constructs() != null) {
-                    for (Ast.Name tn : spec.constructs()) {
+                    for (Hir.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.declarations().declaration(tn.denotes()) instanceof Ast.Data
+                        if (b.symbols.declarations().declaration(tn.denotes()) instanceof Hir.Data
                                 && seenConstruct.add(tn.denotes())) {
                             dataConstructs.add(tn.denotes());
                         }
@@ -341,25 +341,25 @@ public final class Backend {
         // `depends on` (spec [#depends-on]). Nothing is generated for it here — it has its own $Impl —
         // but the module that named it holds it as a field, so its arity and output belong in the
         // same maps the unary-vs-multi dispatch reads.
-        Map<String, Ast.SpecBehavior> ownSpecs = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Ast.SpecBehavior spec) {
+        Map<String, Hir.SpecBehavior> ownSpecs = new HashMap<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (bd instanceof Hir.SpecBehavior spec) {
                 ownSpecs.put(spec.name(), spec);
             }
         }
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (!(bd instanceof Ast.SpecBehavior spec)) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (!(bd instanceof Hir.SpecBehavior spec)) {
                 continue;
             }
-            for (Ast.Var req : spec.dependsOn()) {
+            for (Hir.Var req : spec.dependsOn()) {
                 String name = req.bare();
                 if (requiredNames.contains(name)) {
                     continue;
                 }
-                Ast.SpecBehavior own = ownSpecs.get(name);
+                Hir.SpecBehavior own = ownSpecs.get(name);
                 if (own != null) {
                     List<Type> ins = new ArrayList<>();
-                    for (Ast.Param p : own.params()) {
+                    for (Hir.Param p : own.params()) {
                         ins.add(b.successType(p.type()));
                     }
                     requiredNames.add(name);
@@ -394,19 +394,19 @@ public final class Backend {
         for (Map.Entry<String, List<BehaviorRequirement>> e : requirements.entrySet()) {
             behaviorDeps.put(e.getKey(), Requirements.names(e.getValue()));
         }
-        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             emitting(bd.written(), () -> {
                 switch (bd) {
-                    case Ast.SpecBehavior spec -> {
-                        Ast.FnDef fn = fns.get(spec.name());
+                    case Hir.SpecBehavior spec -> {
+                        Hir.FnDef fn = fns.get(spec.name());
                         if (fn != null) {
                             // a fn-implemented behavior: the $Impl holds the logic, the public interface
                             // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
                             out.put(new GeneratedClass.BehaviorImpl(module.name(), spec.name()),
                                     b.generateSpecFn(spec, fn, requiredNames, requiredSuccess, requiredParam));
                             List<Type> pts = new ArrayList<>();
-                            for (Ast.Param p : spec.params()) {
+                            for (Hir.Param p : spec.params()) {
                                 pts.add(b.successType(p.type()));
                             }
                             out.put(new GeneratedClass.BehaviorInterface(module.name(), spec.name()),
@@ -415,7 +415,7 @@ public final class Backend {
                         }
                         // else: injection target — its abstract base was generated above (spec §java-base-class)
                     }
-                    case Ast.PipeBehavior pipe -> {
+                    case Hir.PipeBehavior pipe -> {
                         out.put(new GeneratedClass.BehaviorImpl(module.name(), pipe.name()),
                                 b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
                         Sig sig = declaredSig(pipe, sigs);
@@ -434,7 +434,7 @@ public final class Backend {
                 out.put(new GeneratedClass.Helpers(module.name()), b.generateRecursiveHelpers(recHelpers));
             } catch (IllegalArgumentException e) {
                 JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
-                Ast.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
+                Hir.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
                 throw helper == null
                         ? asLimit(e, WrittenName.synthetic(module.name(), module.pos()))
                         : asLimit(e, helper.written());
@@ -481,11 +481,11 @@ public final class Backend {
 
     /** The helper emitted as {@code method} on {@code $Fns}, or null if the name is not one of
      *  theirs. */
-    private static Ast.FnDef helperNamed(Map<String, Ast.FnDef> helpers, String method) {
+    private static Hir.FnDef helperNamed(Map<String, Hir.FnDef> helpers, String method) {
         if (method == null) {
             return null;
         }
-        for (Ast.FnDef helper : helpers.values()) {
+        for (Hir.FnDef helper : helpers.values()) {
             if (CodegenContext.helperMethod(helper.name()).equals(method)) {
                 return helper;
             }
@@ -514,11 +514,11 @@ public final class Backend {
      * plain {@code invokestatic} — the recursion the inliner cannot express. The body is emitted through
      * the same {@code emitBodyTail} path a behavior uses; a helper is pure, so it has no injected fields.
      */
-    private byte[] generateRecursiveHelpers(Map<String, Ast.FnDef> helpers) {
+    private byte[] generateRecursiveHelpers(Map<String, Hir.FnDef> helpers) {
         ClassDesc cdFns = ctx.cd(new GeneratedClass.Helpers(pkg));
         return build(cdFns, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);   // package-private, not exposed
-            for (Ast.FnDef h : helpers.values()) {
+            for (Hir.FnDef h : helpers.values()) {
                 int n = h.params().size();
                 ClassDesc[] params = new ClassDesc[n];
                 java.util.Arrays.fill(params, CD_Object);
@@ -540,7 +540,7 @@ public final class Backend {
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. resolveParamType handles both shapes.
-                        Type pt = TypeOps.resolveParamType(h.params().get(i).type(), symbols);
+                        Type pt = TypeOps.resolveParamType(h.params().get(i).type());
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);
@@ -730,7 +730,7 @@ public final class Backend {
     private void emitDataFactory(ClassBuilder cb, TypeName construct) {
         // The type as the `constructs` clause resolved it: an entry there may name a type another
         // module declares, and the class of one is that module's.
-        Ast.Data data = (Ast.Data) symbols.declarations().declaration(construct);
+        Hir.Data data = (Hir.Data) symbols.declarations().declaration(construct);
         ClassDesc cdType = ctx.cd(construct);
         Map<String, Type> fields = ctx.fieldTypes(data);
         ClassDesc[] fieldDs = fieldDescs(fields, ctx);
@@ -879,16 +879,16 @@ public final class Backend {
      * spelling from two modules — refused within a union by the member-name rule, and reaching here
      * when they are members of two different unions of this module.
      */
-    private void rejectBridgeCaseCollisions(Ast.Module module,
+    private void rejectBridgeCaseCollisions(Hir.Module module,
                                             Map<TypeName, List<GeneratedClass.BehaviorResult>> bridgeCases,
-                                            Map<JvmClassName, Ast.Def> localTypes,
+                                            Map<JvmClassName, Hir.Def> localTypes,
                                             Map<JvmClassName, String> behaviorClassOwner) {
         Map<JvmClassName, TypeName> byBridgeName = new LinkedHashMap<>();
         for (Map.Entry<TypeName, List<GeneratedClass.BehaviorResult>> e : bridgeCases.entrySet()) {
             TypeName member = e.getKey();
             JvmClassName cls = SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member));
             String bridge = cls.classDesc().displayName();
-            Ast.BehaviorDef owner = behaviorNamed(module, e.getValue().get(0).behavior());
+            Hir.BehaviorDef owner = behaviorNamed(module, e.getValue().get(0).behavior());
             SourcePos pos = owner.pos();
             String what = owner.name();
             TypeName sameName = byBridgeName.put(cls, member);
@@ -897,7 +897,7 @@ public final class Backend {
                                 .at(pos)
                                 .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
             }
-            Ast.Def aData = localTypes.get(cls);
+            Hir.Def aData = localTypes.get(cls);
             String aBehavior = behaviorClassOwner.get(cls);
             if (aData != null || aBehavior != null) {
                 String other = aData != null ? aData.name() : aBehavior;
@@ -920,14 +920,14 @@ public final class Backend {
      * behavior capitalizes into. Two result unions cannot collide with each other, their behaviors
      * having already been rejected for capitalizing into one class.
      */
-    private void rejectResultUnionCollisions(Ast.Module module,
+    private void rejectResultUnionCollisions(Hir.Module module,
                                              Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResults,
-                                             Map<JvmClassName, Ast.Def> localTypes,
+                                             Map<JvmClassName, Hir.Def> localTypes,
                                              Map<JvmClassName, String> behaviorClassOwner) {
         for (GeneratedClass.BehaviorResult union : behaviorResults.keySet()) {
             JvmClassName cls = SoutherJvmAbi.nameOf(union);
             String resultName = cls.classDesc().displayName();
-            Ast.BehaviorDef owner = behaviorNamed(module, union.behavior());
+            Hir.BehaviorDef owner = behaviorNamed(module, union.behavior());
             SourcePos pos = owner.pos();
             String what = owner.name();
             if (localTypes.containsKey(cls)) {
@@ -946,8 +946,8 @@ public final class Backend {
 
     /** The behavior of this module written under {@code name}. Every result union and every bridge
      *  case reaching here was built from one of these, so there is always one. */
-    private Ast.BehaviorDef behaviorNamed(Ast.Module module, String name) {
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+    private Hir.BehaviorDef behaviorNamed(Hir.Module module, String name) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             if (bd.name().equals(name)) {
                 return bd;
             }
@@ -958,10 +958,10 @@ public final class Backend {
     /** The result union of each behavior that has one, keyed by the behavior — which is what a result
      *  union is identified by. Keying by what the union is called would mean reading the behavior back
      *  out of the spelling to find whose it is. */
-    private Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResultInterfaces(Ast.Module module,
+    private Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResultInterfaces(Hir.Module module,
                                                                  Map<String, Sig> sigs) {
         Map<GeneratedClass.BehaviorResult, List<TypeName>> results = new LinkedHashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             Sig sig = sigs.get(bd.name());
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
@@ -994,7 +994,7 @@ public final class Backend {
     }
 
 
-    private Type successType(Ast.RetType ret) {
+    private Type successType(Hir.RetType ret) {
         return ctx.successType(ret);
     }
 
@@ -1123,7 +1123,7 @@ public final class Backend {
      * leading parameters name the inputs (their types come from the behavior); the trailing ones
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
      */
-    private byte[] generateSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Set<String> requiredNames,
+    private byte[] generateSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Set<String> requiredNames,
                                   Map<String, Type> requiredSuccess, Map<String, List<Type>> requiredParam) {
         ClassDesc cdB = cdBehaviorImpl(spec.name());   // the $Impl behind the public interface
         int n = spec.params().size();
@@ -1161,7 +1161,7 @@ public final class Backend {
             });
             if (n != 1) {
                 List<Type> pts = new ArrayList<>();
-                for (Ast.Param p : spec.params()) {
+                for (Hir.Param p : spec.params()) {
                     pts.add(successType(p.type()));
                 }
                 emitTypedApplyBridge(cb, cdB, typedApplyDesc(spec.name(), pts, successType(spec.ret())));
@@ -1177,7 +1177,7 @@ public final class Backend {
      * module holding one is not emitted, so reaching this with no signature means the gate that
      * decides let something through that has no meaning, and there is nothing to emit for it.
      */
-    private static Sig declaredSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs) {
+    private static Sig declaredSig(Hir.PipeBehavior pipe, Map<String, Sig> sigs) {
         Sig sig = sigs.get(pipe.name());
         if (sig == null) {
             throw new IllegalStateException("`" + pipe.name() + "` reached codegen with no signature,"
@@ -1187,22 +1187,22 @@ public final class Backend {
     }
 
     /** The behaviors a spec declares it depends on, by the name each is reached by. */
-    private static List<String> requiredBy(Ast.SpecBehavior spec) {
+    private static List<String> requiredBy(Hir.SpecBehavior spec) {
         List<String> names = new ArrayList<>();
-        for (Ast.Var req : spec.dependsOn()) {
+        for (Hir.Var req : spec.dependsOn()) {
             names.add(req.bare());
         }
         return names;
     }
 
-    private byte[] generatePipe(Ast.PipeBehavior pipe, Set<String> requiredNames,
+    private byte[] generatePipe(Hir.PipeBehavior pipe, Set<String> requiredNames,
                                 Map<String, Sig> sigs, Map<String, List<String>> behaviorDeps,
-                                Map<String, List<Ast.Var>> pipeStages) {
+                                Map<String, List<Hir.Var>> pipeStages) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
         // Flatten nested pipeline stages so the routing is over leaf behaviors (spec §type-routing): a named
         // intermediate `half = split >-> work` inlines to `split, work`, which keeps a retired case
         // retired across the composition, making `>->` associative.
-        List<Ast.Var> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Hir.Var> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
         // the pipeline's injected fields are the union of its stages' requirements (spec
         // §composition-with-requirements)
         List<String> reqStages = behaviorDeps.getOrDefault(pipe.name(), List.of());
@@ -1220,7 +1220,7 @@ public final class Backend {
 
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
-                List<Ast.Var> stages = flat;
+                List<Hir.Var> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
                 Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).outputType();
                 applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps,

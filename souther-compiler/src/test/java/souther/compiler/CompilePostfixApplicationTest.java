@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * An argument list applies to the expression before it, not only to a name. What is applied is
- * decided by that expression, which is what {@code Ast.Apply} holds.
+ * decided by that expression, which is what {@code Hir.Apply} holds.
  *
  * <p>Souther's grammar is not newline sensitive — a leading `.` or operator continues the line above
  * — but an argument list is the one thing that cannot follow a line break. A block whose statement
@@ -140,15 +140,15 @@ class CompilePostfixApplicationTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { m = pick(i.n + 1)(i.n + 2) }
                 """);
-        Ast.FnDef def = souther.compiler.query.Compilation
+        Hir.FnDef def = souther.compiler.query.Compilation
                 .ofDocuments(byId, java.util.Set.of(), souther.compiler.meta.ModulePath.EMPTY)
                 .db().ask(new souther.compiler.query.Bodies.SettledFn("demo", "go")).value();
         assertEquals(1, occurrences(def.writtenBody(), "pick"), "the callee was worked out more than once");
     }
 
-    private static int occurrences(Ast.Expr e, String callee) {
-        int[] n = {e instanceof Ast.Apply a && callee.equals(a.reaches()) ? 1 : 0};
-        Ast.forEachChild(e, c -> n[0] += occurrences(c, callee));
+    private static int occurrences(Hir.Expr e, String callee) {
+        int[] n = {e instanceof Hir.Apply a && callee.equals(a.reaches()) ? 1 : 0};
+        Hir.forEachChild(e, c -> n[0] += occurrences(c, callee));
         return n[0];
     }
 
@@ -309,11 +309,11 @@ class CompilePostfixApplicationTest {
         SourcePos at = new SourcePos(1, 1);
         souther.compiler.types.ValueName.Stdlib map =
                 new souther.compiler.types.ValueName.Stdlib("List", "map");
-        Ast.Apply named = new Ast.Apply("List.map", map,
+        Hir.Apply named = new Hir.Apply("List.map", map,
                 new ReachName.OfLibrary(map), java.util.List.of(),
                 souther.compiler.types.ConstructionOrigin.own(), at, null);
-        Ast.Apply nameless = new Ast.Apply(new Ast.Block(java.util.List.of(),
-                new Ast.IntLit(1, at, null), at, null), java.util.List.of(),
+        Hir.Apply nameless = new Hir.Apply(new Hir.Block(java.util.List.of(),
+                new Hir.IntLit(1, at, null), at, null), java.util.List.of(),
                 souther.compiler.types.ConstructionOrigin.own(), at, null);
 
         assertTrue(named.appliesAName());
@@ -335,8 +335,8 @@ class CompilePostfixApplicationTest {
     void whatAnApplicationReachesIsNeverTheSpellingAReportQuotes() {
         SourcePos at = new SourcePos(1, 1);
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
-        Ast.Apply lowered = new Ast.Apply(
-                Ast.Var.denoting("$fn0", new ValueName.Local("$fn0", id),
+        Hir.Apply lowered = new Hir.Apply(
+                Hir.Var.denoting("$fn0", new ValueName.Local("$fn0", id),
                         new ReachName.Bare("$fn0"), at),
                 java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at, null);
 

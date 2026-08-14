@@ -41,10 +41,10 @@ public final class TypeScope {
      * a qualifier under its own name, which {@link #moduleOfQualifier} reads off the registry
      * rather than listing here — listing it would mean naming every module up front. */
     private final Map<String, String> aliases;
-    private final Registry registry;
+    private final Registry<?> registry;
 
     TypeScope(String module, Map<String, Denotation> scope, Map<String, String> aliases,
-              Registry registry) {
+              Registry<?> registry) {
         this.module = module;
         this.scope = scope;
         this.aliases = aliases;

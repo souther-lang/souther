@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.numeric.CardinalityCuts;
 import souther.compiler.types.Type;
@@ -44,8 +44,8 @@ public final class TypeCardinality {
     private TypeCardinality() {}
 
     /** How many values each declaration the module reaches has at most. */
-    public static Cardinalities solve(Ast.Module module, Symbols symbols) {
-        Map<TypeName, Ast.Def> declared = reached(module, symbols);
+    public static Cardinalities solve(Hir.Module module, Symbols symbols) {
+        Map<TypeName, Hir.Def> declared = reached(module, symbols);
         Map<TypeName, Set<TypeName>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
         // Fixed before the rising starts. What makes it stop is that there are finitely many answers
@@ -69,13 +69,13 @@ public final class TypeCardinality {
 
         private final Map<TypeName, Cardinality> upper;
         private final List<List<TypeName>> components;
-        private final Map<TypeName, Ast.Def> declared;
+        private final Map<TypeName, Hir.Def> declared;
         private final Map<TypeName, Set<TypeName>> edges;
         private final CardinalityCuts cuts;
         private final Symbols symbols;
 
         private Cardinalities(Map<TypeName, Cardinality> upper, List<List<TypeName>> components,
-                              Map<TypeName, Ast.Def> declared,
+                              Map<TypeName, Hir.Def> declared,
                               Map<TypeName, Set<TypeName>> edges, CardinalityCuts cuts,
                               Symbols symbols) {
             this.upper = upper;
@@ -141,7 +141,7 @@ public final class TypeCardinality {
      * one value, and once the value it lacks is granted it has as many as anything.
      */
     private static Map<TypeName, Cardinality> pass(List<List<TypeName>> components,
-                                                   Map<TypeName, Ast.Def> declared,
+                                                   Map<TypeName, Hir.Def> declared,
                                                    Map<TypeName, Set<TypeName>> edges,
                                                    CardinalityCuts cuts, Symbols symbols,
                                                    Set<TypeName> granted) {
@@ -176,7 +176,7 @@ public final class TypeCardinality {
      * those too would put the loss of precision at every edge of the graph rather than at the one
      * place the rising needs it.
      */
-    private static void rise(List<TypeName> component, Map<TypeName, Ast.Def> declared,
+    private static void rise(List<TypeName> component, Map<TypeName, Hir.Def> declared,
                              Symbols symbols, CardinalityCuts cuts,
                              Map<TypeName, Cardinality> solution, Set<TypeName> granted) {
         for (TypeName each : component) {
@@ -203,15 +203,15 @@ public final class TypeCardinality {
      * is written in terms of wherever that was declared, and stopping at the edge of the module would
      * answer a record by the module its field's type happens to sit in.
      */
-    private static Map<TypeName, Ast.Def> reached(Ast.Module module, Symbols symbols) {
-        Map<TypeName, Ast.Def> declared = new LinkedHashMap<>();
+    private static Map<TypeName, Hir.Def> reached(Hir.Module module, Symbols symbols) {
+        Map<TypeName, Hir.Def> declared = new LinkedHashMap<>();
         List<TypeName> left = new ArrayList<>();
-        for (Ast.Def def : module.defs()) {
+        for (Hir.Def def : module.defs()) {
             left.add(def.declares());
         }
         while (!left.isEmpty()) {
             TypeName name = left.remove(left.size() - 1);
-            if (declared.containsKey(name) || !(symbols.declarations().declaration(name) instanceof Ast.Def def)) {
+            if (declared.containsKey(name) || !(symbols.declarations().declaration(name) instanceof Hir.Def def)) {
                 continue;
             }
             declared.put(name, def);
@@ -229,12 +229,12 @@ public final class TypeCardinality {
      *
      * @param among the names to keep, or null to keep them all
      */
-    private static Set<TypeName> read(Ast.Def def, Symbols symbols, Set<TypeName> among) {
+    private static Set<TypeName> read(Hir.Def def, Symbols symbols, Set<TypeName> among) {
         Set<TypeName> named = new LinkedHashSet<>();
         switch (def) {
-            case Ast.UnitData _ -> { }
-            case Ast.SumData sum -> sum.cases().forEach(each -> named.add(each.denotes()));
-            case Ast.Data data ->
+            case Hir.UnitData _ -> { }
+            case Hir.SumData sum -> sum.cases().forEach(each -> named.add(each.denotes()));
+            case Hir.Data data ->
                     TypeOps.fieldTypes(data, symbols).values().forEach(each -> names(each, named));
         }
         if (among != null) {
@@ -263,10 +263,10 @@ public final class TypeCardinality {
      * written at the position, and a count missed here is precision lost and nothing else: the
      * answers still tell apart everything the questions found.
      */
-    private static Set<Long> asked(Map<TypeName, Ast.Def> declared, Symbols symbols) {
+    private static Set<Long> asked(Map<TypeName, Hir.Def> declared, Symbols symbols) {
         Set<Long> counts = new HashSet<>();
         declared.forEach((name, def) -> {
-            if (!(def instanceof Ast.Data data)) {
+            if (!(def instanceof Hir.Data data)) {
                 return;
             }
             OccurrenceCounts held = OccurrenceCounts.of(name, data, symbols);

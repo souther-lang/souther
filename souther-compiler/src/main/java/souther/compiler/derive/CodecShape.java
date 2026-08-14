@@ -1,6 +1,6 @@
 package souther.compiler.derive;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
@@ -65,7 +65,7 @@ sealed interface CodecShape {
      * @param field  the field's name
      * @param pos    where the field is written, for the caret
      */
-    static CodecShape of(Type t, Ast.Data d, String field, SourcePos pos, Symbols symbols) {
+    static CodecShape of(Type t, Hir.Data d, String field, SourcePos pos, Symbols symbols) {
         return switch (t) {
             case Type.Prim p -> scalar(p, t, d, field, pos);
             case Type.Ref r -> new Named(r.name());
@@ -82,7 +82,7 @@ sealed interface CodecShape {
     }
 
     /** What an optional holds, which is not another optional. */
-    private static Bare present(Type.OptionOf o, Ast.Data d, String field, SourcePos pos,
+    private static Bare present(Type.OptionOf o, Hir.Data d, String field, SourcePos pos,
                                 Symbols symbols) {
         // The inner type is read before it is judged, so a tuple under an optional is reported as
         // the tuple it is rather than as the optional carrying one.
@@ -94,7 +94,7 @@ sealed interface CodecShape {
 
     /** The scalar a primitive is written as. {@code Raw} is the language's own vocabulary and is
      *  written as itself nowhere, so it has no leaf codec to be given one. */
-    private static Scalar scalar(Type.Prim prim, Type t, Ast.Data d, String field, SourcePos pos) {
+    private static Scalar scalar(Type.Prim prim, Type t, Hir.Data d, String field, SourcePos pos) {
         LeafScalar leaf = LeafScalar.of(prim);
         if (leaf == null) {
             throw noRepresentation(t, d, field, pos);
@@ -107,7 +107,7 @@ sealed interface CodecShape {
      * to a bare string, and which string is the checker's answer rather than one worked out here. A
      * key with no classification never had a boundary representation (ADR-0040).
      */
-    private static MapKeyRepresentation mapKey(Type.MapOf m, Ast.Data d, String field, SourcePos pos,
+    private static MapKeyRepresentation mapKey(Type.MapOf m, Hir.Data d, String field, SourcePos pos,
                                                Symbols symbols) {
         MapKeyRepresentation key = TypeOps.classifyConcreteMapKey(m.key(), symbols);
         if (key == null) {
@@ -118,7 +118,7 @@ sealed interface CodecShape {
 
     /** A tuple names what is unrepresentable about it — it has no field names to write — rather than
      *  naming the codec that gave up. */
-    private static CompileException aTuple(Type t, Ast.Data d, String field, SourcePos pos) {
+    private static CompileException aTuple(Type t, Hir.Data d, String field, SourcePos pos) {
         return CompileException.of(Diagnostic.at(pos)
                 .say(new DataMessage.ATupleHasNoExternalRepresentation(where(d, field), Type.showInside(t)))
                 .build());
@@ -128,7 +128,7 @@ sealed interface CodecShape {
      *  sits. It is positioned on the field rather than on the data, so the caret lands on what has to
      *  change, and it prints the part that had no representation — which is not always the whole
      *  field type, and is what the author has to replace. */
-    private static CompileException noRepresentation(Type t, Ast.Data d, String field, SourcePos pos) {
+    private static CompileException noRepresentation(Type t, Hir.Data d, String field, SourcePos pos) {
         return CompileException.of(Diagnostic.at(pos)
                 .say(new DataMessage.NoCodecCanBeDerived(where(d, field), Type.showInside(t)))
                 .build());
@@ -140,7 +140,7 @@ sealed interface CodecShape {
      * the reader has to change the key type either way, and being told twice in two vocabularies
      * helps nobody.
      */
-    private static CompileException badMapKey(Type key, Ast.Data d, String field, SourcePos pos) {
+    private static CompileException badMapKey(Type key, Hir.Data d, String field, SourcePos pos) {
         return CompileException.of(Diagnostic.at(pos)
                 .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings())
                 .say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(where(d, field), Type.show(key)))
@@ -150,7 +150,7 @@ sealed interface CodecShape {
     /** How to name the place a boundary complaint belongs to. A newtype's single field is implicit —
      *  the author wrote {@code data X = Y}, never a field called {@code value} — so it is named by
      *  the type alone. */
-    private static String where(Ast.Data d, String field) {
+    private static String where(Hir.Data d, String field) {
         return d.newtype() ? d.name() : d.name() + "." + field;
     }
 }

@@ -4,7 +4,7 @@ import souther.compiler.Compiler;
 import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
 import souther.compiler.Reserved;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
@@ -207,10 +207,10 @@ public final class Runner {
         Compilation compilation = Compiler.compiled(source, moduleName, warningsOut, path);
         // The module this file declares, and not one it reached: what the path holds is read for its
         // declarations and is no part of what this compilation declares.
-        Ast.Module module = compilation.module(compilation.modules().get(0));
+        Hir.Module module = compilation.module(compilation.modules().get(0));
         Map<String, Sig> sigs = compilation.signatures(module.name());
 
-        Ast.BehaviorDef spec = resolveBehavior(module, behaviorName);
+        Hir.BehaviorDef spec = resolveBehavior(module, behaviorName);
         Sig sig = sigs.get(spec.name());
 
         // The compilation's own — its classes over the ones the path already built. Composing a
@@ -227,9 +227,9 @@ public final class Runner {
     // --- behavior selection ---------------------------------------------------------------------
 
     /** The names a behavior depends on, as a message lists them. */
-    private static String dependencyNames(Ast.SpecBehavior spec) {
+    private static String dependencyNames(Hir.SpecBehavior spec) {
         List<String> names = new java.util.ArrayList<>();
-        for (Ast.Var dep : spec.dependsOn()) {
+        for (Hir.Var dep : spec.dependsOn()) {
             names.add(dep.bare());
         }
         return String.join(", ", names);
@@ -242,7 +242,7 @@ public final class Runner {
      * which the JVM allows only for a class the module published. A module with no {@code exposing}
      * list keeps nothing to itself, so a header-less file publishes everything in it.
      */
-    private static boolean exposes(Ast.Module module, String name) {
+    private static boolean exposes(Hir.Module module, String name) {
         return module.exposing().isEmpty() || module.exposing().contains(name);
     }
 
@@ -255,22 +255,22 @@ public final class Runner {
      * module and arrives the way any other reader does. A behavior can answer the first and not the
      * second, and one the module keeps to itself is exactly that.
      */
-    private static Ast.BehaviorDef resolveBehavior(Ast.Module module, String requestedSpelling) {
+    private static Hir.BehaviorDef resolveBehavior(Hir.Module module, String requestedSpelling) {
         // What `--behavior` was given is a name arriving from outside, and it is looked up
         // against names the source settled.
         String requested = Reserved.name(requestedSpelling);
         java.util.Set<String> implemented = module.fns().stream()
-                .map(Ast.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
-        Map<String, Ast.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
+                .map(Hir.FnDef::name).collect(Collectors.toSet());
+        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, Hir.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
             if (!exposes(module, b.name())) {
                 continue;
             }
-            if (b instanceof Ast.SpecBehavior spec
+            if (b instanceof Hir.SpecBehavior spec
                     && implemented.contains(spec.name()) && spec.dependsOn().isEmpty()) {
                 drivable.put(spec.name(), spec);
-            } else if (b instanceof Ast.PipeBehavior pipe
+            } else if (b instanceof Hir.PipeBehavior pipe
                     && pipelineBlocker(module, pipe, implemented, pipeStages) == null) {
                 drivable.put(pipe.name(), pipe);
             }
@@ -289,7 +289,7 @@ public final class Runner {
             throw usage("run.behavior.several",
                     "several behaviors can be run — pick one with --behavior: " + names, names);
         }
-        Ast.BehaviorDef found = drivable.get(requested);
+        Hir.BehaviorDef found = drivable.get(requested);
         if (found != null) {
             return found;
         }
@@ -307,15 +307,15 @@ public final class Runner {
      * behavior. A stage with no implementation (injected from Java) or one that needs its own injected
      * dependencies would make that constructor take those behaviors, which {@code run} cannot supply.
      */
-    private static Blocker pipelineBlocker(Ast.Module module, Ast.PipeBehavior pipe,
-            java.util.Set<String> implemented, Map<String, List<Ast.Var>> pipeStages) {
-        Map<String, Ast.SpecBehavior> specs = new java.util.HashMap<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec) {
+    private static Blocker pipelineBlocker(Hir.Module module, Hir.PipeBehavior pipe,
+            java.util.Set<String> implemented, Map<String, List<Hir.Var>> pipeStages) {
+        Map<String, Hir.SpecBehavior> specs = new java.util.HashMap<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.SpecBehavior spec) {
                 specs.put(spec.name(), spec);
             }
         }
-        for (Ast.Var named : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
+        for (Hir.Var named : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
             String stage = named.bare();
             if (!implemented.contains(stage)) {
                 return new Blocker("run.pipeline.noimpl",
@@ -323,7 +323,7 @@ public final class Runner {
                                 + "` has no implementation (it is injected from Java), which `run` cannot supply.",
                         pipe.name(), stage);
             }
-            Ast.SpecBehavior spec = specs.get(stage);
+            Hir.SpecBehavior spec = specs.get(stage);
             if (spec != null && !spec.dependsOn().isEmpty()) {
                 String dependencies = dependencyNames(spec);
                 return new Blocker("run.pipeline.depends",
@@ -344,12 +344,12 @@ public final class Runner {
      * what a reader standing outside it is owed, and following one of them would only bring the
      * author back to the same refusal.
      */
-    private static RunException whyNotRunnable(Ast.Module module, String name, java.util.Set<String> drivable) {
+    private static RunException whyNotRunnable(Hir.Module module, String name, java.util.Set<String> drivable) {
         String available = drivable.isEmpty() ? "none" : String.join(", ", drivable);
         java.util.Set<String> implemented = module.fns().stream()
-                .map(Ast.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
-        for (Ast.BehaviorDef b : module.behaviors()) {
+                .map(Hir.FnDef::name).collect(Collectors.toSet());
+        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        for (Hir.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;
             }
@@ -359,7 +359,7 @@ public final class Runner {
                                 + " exposes — add it to `exposing`. Available to run: " + available + ".",
                         name, available);
             }
-            if (b instanceof Ast.PipeBehavior pipe) {
+            if (b instanceof Hir.PipeBehavior pipe) {
                 Blocker blocker = pipelineBlocker(module, pipe, implemented, pipeStages);
                 if (blocker == null) {
                     return fail("run.behavior.runnable",
@@ -370,7 +370,7 @@ public final class Runner {
                 args[args.length - 1] = available;
                 return fail(blocker.key(), blocker.message() + " Available to run: " + available + ".", args);
             }
-            if (b instanceof Ast.SpecBehavior spec) {
+            if (b instanceof Hir.SpecBehavior spec) {
                 if (!implemented.contains(name)) {
                     return fail("run.behavior.noimpl",
                             "`" + name + "` has no implementation (it is injected from Java). "

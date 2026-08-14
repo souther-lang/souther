@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.types.TypeName;
 
@@ -55,10 +55,10 @@ public final class UninhabitableTypes {
      * value is that module's to report, and a type here that has none because of it is left to come
      * right when it does.
      */
-    public static List<List<TypeName>> withNoValueOfTheirOwn(Ast.Module module, Symbols symbols,
+    public static List<List<TypeName>> withNoValueOfTheirOwn(Hir.Module module, Symbols symbols,
                                                              TypeCardinality.Cardinalities solved) {
         Map<TypeName, Integer> declaredAt = new LinkedHashMap<>();
-        for (Ast.Def def : module.defs()) {
+        for (Hir.Def def : module.defs()) {
             declaredAt.put(def.declares(), declaredAt.size());
         }
         Set<TypeName> none = solved.withNoValue();

@@ -2,6 +2,7 @@ package souther.compiler.ast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * What a source construct costs, and the bound a module is held to.
@@ -83,14 +84,34 @@ public final class StructuralCost {
      * kept in step.
      */
     public static int of(Ast.Expr e) {
-        return counted(e, _ -> null, Integer.MAX_VALUE).costs();
+        // Nothing is substituted into a tree the parser has just built: what a name reaches is an
+        // answer resolution gives, and this is asked before it. So every node costs a level and the
+        // walk is the count of them.
+        List<Ast.Expr> todo = new ArrayList<>();
+        todo.add(e);
+        int most = 0;
+        Map<Ast.Expr, Integer> above = new java.util.IdentityHashMap<>();
+        above.put(e, 0);
+        while (!todo.isEmpty()) {
+            Ast.Expr node = todo.remove(todo.size() - 1);
+            if (node == null) {
+                continue;
+            }
+            int at = above.get(node) + 1;
+            most = Math.max(most, at);
+            Ast.forEachChild(node, child -> {
+                above.put(child, at);
+                todo.add(child);
+            });
+        }
+        return most;
     }
 
     /** What one node costs where it stands. A block's statements and a pattern's bindings are
      *  bindings by the time this reads them, so the rule for a construct counts them a level each,
      *  which is what those rules say they cost. */
-    private static int here(Ast.Expr e, boolean expanded) {
-        return expanded && e instanceof Ast.Apply apply ? Math.max(1, apply.args().size()) : 1;
+    private static int here(Hir.Expr e, boolean expanded) {
+        return expanded && e instanceof Hir.Apply apply ? Math.max(1, apply.args().size()) : 1;
     }
 
     /**
@@ -99,7 +120,7 @@ public final class StructuralCost {
      */
     @FunctionalInterface
     public interface Reaches {
-        Ast.Expr substitutedAt(Ast.Var name);
+        Hir.Expr substitutedAt(Hir.Var name);
     }
 
     /**
@@ -113,7 +134,7 @@ public final class StructuralCost {
      *              this falls on, and that is all it answers. {@link #of} counts the whole way
      * @param past the name whose substitution took it past, or null where it did not go past
      */
-    public record Composed(int costs, Ast.Var past) {
+    public record Composed(int costs, Hir.Var past) {
 
         /** Whether this is more than a definition may say. */
         public boolean isPastTheBound() {
@@ -139,20 +160,20 @@ public final class StructuralCost {
      * not by this and not before it — this is asked before a body is expanded, which is earlier
      * than the expansion that finds the cycle by re-entering it.
      */
-    public static Composed composed(Ast.Expr root, Reaches reaches) {
+    public static Composed composed(Hir.Expr root, Reaches reaches) {
         return counted(root, reaches, MAX);
     }
 
     /** As above, giving up once the count is past {@code cap} — which is the bound where what is
      *  being asked is which side of it this falls on, and nothing where the number itself is the
      *  answer. */
-    private static Composed counted(Ast.Expr root, Reaches reaches, int cap) {
+    private static Composed counted(Hir.Expr root, Reaches reaches, int cap) {
         List<Step> todo = new ArrayList<>();
         todo.add(new Step(root, 0, null, null));
         int most = 0;
         while (!todo.isEmpty()) {
             Step step = todo.remove(todo.size() - 1);
-            Ast.Expr node = step.node();
+            Hir.Expr node = step.node();
             if (node == null) {
                 continue;
             }
@@ -160,8 +181,8 @@ public final class StructuralCost {
             // reaches is an answer resolution gives, and the tree this is measured on before that
             // has none — a definition is counted as written the moment it is parsed, and nothing is
             // substituted into it there.
-            if (node instanceof Ast.Var name) {
-                Ast.Expr body = reaches.substitutedAt(name);
+            if (node instanceof Hir.Var name) {
+                Hir.Expr body = reaches.substitutedAt(name);
                 if (body != null && !Path.holds(step.path(), name.reaches())) {
                     todo.add(new Step(body, step.above(), name,
                             new Path(name.reaches(), step.path())));
@@ -173,22 +194,22 @@ public final class StructuralCost {
             if (at > cap) {
                 return new Composed(at, step.by());
             }
-            Ast.forEachChild(node, child ->
+            Hir.forEachChild(node, child ->
                     todo.add(new Step(child, at, step.by(), step.path())));
         }
         return new Composed(most, null);
     }
 
     /** Whether applying this splices a body here, which is what makes its arguments bindings. */
-    private static boolean isExpanded(Ast.Expr e, Reaches reaches) {
-        return e instanceof Ast.Apply apply
-                && apply.function() instanceof Ast.Var applied
+    private static boolean isExpanded(Hir.Expr e, Reaches reaches) {
+        return e instanceof Hir.Apply apply
+                && apply.function() instanceof Hir.Var applied
                 && reaches.substitutedAt(applied) != null;
     }
 
     /** One node left to count: what is above it, the name whose substitution put it there, and the
      *  names being substituted around it. */
-    private record Step(Ast.Expr node, int above, Ast.Var by, Path path) {}
+    private record Step(Hir.Expr node, int above, Hir.Var by, Path path) {}
 
     /**
      * What a step is inside the substitution of, innermost first. Shared between the steps that came

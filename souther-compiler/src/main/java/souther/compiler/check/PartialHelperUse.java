@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -48,7 +48,7 @@ final class PartialHelperUse {
     /** The first rule, for one helper of {@code module}: unmarked, it may reach no {@code partial} one.
      * Asked per helper so that a module with several of them reports all of them in one build — the
      * word goes on each. */
-    static void rejectReachingPartial(Ast.FnDef helper, String module,
+    static void rejectReachingPartial(Hir.FnDef helper, String module,
                                       PartialReachability reachability) {
         if (!helper.declaredBy(module) || helper.partial()) {
             return;
@@ -65,7 +65,7 @@ final class PartialHelperUse {
      * each member of a mutually-recursive group is reported on its own — the word goes on each of them,
      * so a single report for the group would leave the rest to be found one build at a time.
      */
-    private static CompileException reachesPartial(Ast.FnDef helper, List<String> path) {
+    private static CompileException reachesPartial(Hir.FnDef helper, List<String> path) {
         String reached = path.get(path.size() - 1);
         String rendered = PartialReachability.render(path);
         return CompileException.of(Diagnostic
@@ -80,8 +80,8 @@ final class PartialHelperUse {
      * a {@code partial} helper and may not hand it over either — what the rule is about is the function
      * value, which is the same thing wherever it is written.
      */
-    static void rejectNamedAsValue(Ast.FnDef fn, String module, PartialReachability reachability) {
-        if (!fn.declaredBy(module) || !(fn.body() instanceof Ast.FnBody.Written written)) {
+    static void rejectNamedAsValue(Hir.FnDef fn, String module, PartialReachability reachability) {
+        if (!fn.declaredBy(module) || !(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
         }
         walkForNamedAsValue(written.expr(), reachability);
@@ -92,17 +92,17 @@ final class PartialHelperUse {
      * application is not such a place — that is the call the rule allows — so it is skipped where it is
      * a name and walked where it is anything else.
      */
-    private static void walkForNamedAsValue(Ast.Expr e, PartialReachability reachability) {
+    private static void walkForNamedAsValue(Hir.Expr e, PartialReachability reachability) {
         switch (e) {
-            case Ast.Apply call -> {
-                if (!(call.function() instanceof Ast.Var)) {
+            case Hir.Apply call -> {
+                if (!(call.function() instanceof Hir.Var)) {
                     walkForNamedAsValue(call.function(), reachability);
                 }
-                for (Ast.Expr arg : call.args()) {
+                for (Hir.Expr arg : call.args()) {
                     walkForNamedAsValue(arg, reachability);
                 }
             }
-            case Ast.Var v -> {
+            case Hir.Var v -> {
                 // A `let` with no parameter list is a value, not a function: reading its name runs its
                 // body where it is written, which the reachability walk follows. Only a name standing
                 // for a helper that takes arguments becomes a function value, and that is the one a
@@ -112,7 +112,7 @@ final class PartialHelperUse {
                                     .at(v.written().reportedAt()).say(new BehaviorMessage.APartialHelperIsWrittenWhereAValueGoes(v.name())).build());
                 }
             }
-            default -> Ast.forEachChild(e, child -> walkForNamedAsValue(child, reachability));
+            default -> Hir.forEachChild(e, child -> walkForNamedAsValue(child, reachability));
         }
     }
 }

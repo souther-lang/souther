@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -57,25 +57,25 @@ final class CardinalityTransfer {
      *                reached: a record holding it would otherwise be told it holds nothing by the
      *                very rules the supposing was about.
      */
-    static Cardinality upperOf(TypeName named, Ast.Def def, Symbols symbols,
+    static Cardinality upperOf(TypeName named, Hir.Def def, Symbols symbols,
                                Map<TypeName, Cardinality> solution, Predicate<TypeName> granted) {
         return switch (def) {
-            case Ast.UnitData _ -> Cardinality.atMost(1);
-            case Ast.SumData sum -> {
+            case Hir.UnitData _ -> Cardinality.atMost(1);
+            case Hir.SumData sum -> {
                 // A case bottoming out is the whole sum bottoming out, so these are added and not
                 // multiplied: what has no value adds none, and the sum has none only where every one
                 // of them has none.
                 Cardinality across = Cardinality.NO_VALUE;
-                for (Ast.Name each : sum.cases()) {
+                for (Hir.Name each : sum.cases()) {
                     across = across.plus(known(solution, each.denotes()));
                 }
                 yield across;
             }
-            case Ast.Data data -> ofData(named, data, symbols, solution, granted);
+            case Hir.Data data -> ofData(named, data, symbols, solution, granted);
         };
     }
 
-    private static Cardinality ofData(TypeName named, Ast.Data data, Symbols symbols,
+    private static Cardinality ofData(TypeName named, Hir.Data data, Symbols symbols,
                                       Map<TypeName, Cardinality> solution,
                                       Predicate<TypeName> granted) {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
@@ -177,7 +177,7 @@ final class CardinalityTransfer {
                                      Predicate<TypeName> granted, Set<TypeName> worn) {
         Cardinality named = known(solution, ref.name());
         if (granted.test(ref.name())
-                || !(symbols.declarations().declaration(ref.name()) instanceof Ast.Data data) || !data.newtype()
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || !data.newtype()
                 || !worn.add(ref.name())) {
             return named;
         }

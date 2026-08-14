@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -37,7 +37,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         assertNotNull(symbols, "the model did not compile");
         TypeName named = new TypeName(module, type);
-        Ast.Data data = (Ast.Data) symbols.declarations().declaration(named);
+        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named);
         assertNotNull(data, "no `" + type + "` in " + module);
         return FieldDomains.of(named, data, symbols, settled);
     }

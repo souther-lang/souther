@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
@@ -57,8 +57,8 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
-        Ast.Expr twoArgs = new Ast.Apply("List.map", MAP, new ReachName.OfLibrary(MAP),
-                List.of(new Ast.IntLit(1, POS, null), new Ast.IntLit(2, POS, null)),
+        Hir.Expr twoArgs = new Hir.Apply("List.map", MAP, new ReachName.OfLibrary(MAP),
+                List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> elaborate(twoArgs, keeping(MAP, SIGNATURE)));
@@ -85,9 +85,9 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         assertEquals(keeping.preserved(), keeping.forData(null).preserved());
     }
 
-    private static Ast.Expr callTo(ValueName.Stdlib operation) {
-        return new Ast.Apply(operation.qualified(), operation, new ReachName.OfLibrary(operation),
-                List.of(new Ast.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
+    private static Hir.Expr callTo(ValueName.Stdlib operation) {
+        return new Hir.Apply(operation.qualified(), operation, new ReachName.OfLibrary(operation),
+                List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
     }
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {
@@ -95,7 +95,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
                 new CompleteSignature(signature.params(), signature.result())));
     }
 
-    private static Core elaborate(Ast.Expr e, Preserved kept) {
+    private static Core elaborate(Hir.Expr e, Preserved kept) {
         return Elaborator.elaborate(e, Scope.NONE,
                 CheckContext.of(Symbols.none()).preserving(kept));
     }

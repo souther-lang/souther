@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -58,40 +58,40 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
             """;
 
     /** Every expression of every row the model is offered, at every depth. */
-    private static List<Ast.Expr> everyNodeOfEveryRow() {
+    private static List<Hir.Expr> everyNodeOfEveryRow() {
         Compilation compilation = Compilation.ofSources(List.of(LIB, APP), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         Adequacy.Filling filling =
                 compilation.db().ask(new Adequacy.Generated("app")).value().get("f");
 
-        List<Ast.Expr> nodes = new ArrayList<>();
+        List<Hir.Expr> nodes = new ArrayList<>();
         java.util.stream.Stream
                 .concat(filling.boundaries().rows().stream(), filling.pairs().rows().stream())
                 .forEach(row -> row.inputs().forEach(input -> collect(input.value(), nodes)));
         return nodes;
     }
 
-    private static void collect(Ast.Expr e, List<Ast.Expr> into) {
+    private static void collect(Hir.Expr e, List<Hir.Expr> into) {
         if (e == null) {
             return;
         }
         into.add(e);
-        Ast.forEachChild(e, child -> collect(child, into));
+        Hir.forEachChild(e, child -> collect(child, into));
     }
 
     /** The names, each with what it denotes — and nothing carrying a spelling and no answer. */
     @Test
     void everyNameInARowCarriesWhatItDenotes() {
-        List<Ast.Expr> nodes = everyNodeOfEveryRow();
+        List<Hir.Expr> nodes = everyNodeOfEveryRow();
         assertFalse(nodes.isEmpty(), "the model under test produces rows");
 
         List<String> unanswered = new ArrayList<>();
-        for (Ast.Expr node : nodes) {
-            if (node instanceof Ast.Var name && name.denotes() == null) {
+        for (Hir.Expr node : nodes) {
+            if (node instanceof Hir.Var name && name.denotes() == null) {
                 unanswered.add(name.name());
             }
-            if (node instanceof Ast.NewData nd && nd.typeName().denotes() == null) {
+            if (node instanceof Hir.NewData nd && nd.typeName().denotes() == null) {
                 unanswered.add(nd.typeName().written());
             }
         }
@@ -107,8 +107,8 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
     @Test
     void everyNameInARowAnswersWhatItReaches() {
         List<String> reached = new ArrayList<>();
-        for (Ast.Expr node : everyNodeOfEveryRow()) {
-            if (node instanceof Ast.Var name) {
+        for (Hir.Expr node : everyNodeOfEveryRow()) {
+            if (node instanceof Hir.Var name) {
                 reached.add(name.reaches());
             }
         }

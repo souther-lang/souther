@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.HelperInvariants;
@@ -116,7 +116,7 @@ public final class Partitions {
 
     /** The axes of one behavior. {@code sig} says the types; {@code behavior} says the parameter names,
      * which is what a path is written from. */
-    public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
+    public static Partitioning of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols,
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
@@ -710,7 +710,7 @@ public final class Partitions {
      */
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
         TypeName read = readAs(type, symbols);
-        return read != null && symbols.declarations().declaration(read) instanceof Ast.Data data
+        return read != null && symbols.declarations().declaration(read) instanceof Hir.Data data
                 ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
     }
 
@@ -725,7 +725,7 @@ public final class Partitions {
      */
     private static TypeName readAs(Type type, Symbols symbols) {
         TypeName written = nameOf(type);
-        return written != null && symbols.declarations().declaration(written) instanceof Ast.Data ? written
+        return written != null && symbols.declarations().declaration(written) instanceof Hir.Data ? written
                 : heldIn(type, symbols);
     }
 
@@ -839,7 +839,7 @@ public final class Partitions {
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
-        if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Ast.Data data) {
+        if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) {
             if (!data.newtype()) {
                 return composed(ref.name(), symbols, expanding);
             }
@@ -894,7 +894,7 @@ public final class Partitions {
      */
     private static List<FixtureTemplate> composed(TypeName record, Symbols symbols,
                                                   java.util.Set<TypeName> expanding) {
-        if (expanding.contains(record) || !(symbols.declarations().declaration(record) instanceof Ast.Data data)) {
+        if (expanding.contains(record) || !(symbols.declarations().declaration(record) instanceof Hir.Data data)) {
             return List.of();
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
@@ -1137,9 +1137,9 @@ public final class Partitions {
         if (at != null) {
             candidates.add(at);
         }
-        if (base == Type.STRING && symbols.declarations().declaration(newtype) instanceof Ast.Data data) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+        if (base == Type.STRING && symbols.declarations().declaration(newtype) instanceof Hir.Data data) {
+            for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     if (InvariantConstraints.of(each, base).orElse(null)
                             instanceof InvariantConstraints.Pattern format) {
                         PatternValues.shortestAccepted(format.regex())
@@ -1196,7 +1196,7 @@ public final class Partitions {
      */
     static List<FixtureTemplate> inReserve(Type type, Symbols symbols,
                                            NumericDomain.Bounds within) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name()) instanceof Ast.Data data)
+        if (!(type instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data)
                 || !data.newtype()) {
             return List.of();
         }

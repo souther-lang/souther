@@ -3,7 +3,9 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.query.Adequacy;
@@ -52,9 +54,9 @@ class ADeclaredCaseIsNotYetAClassThePositionHoldsTest {
 
     private final Symbols symbols = Symbols.of(resolved());
 
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODEL);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     /** The declaration's own answer, which the rule on the newtype does not enter into. */

@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -58,16 +58,16 @@ final class ValueClassGen {
     }
 
     private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
-    private GeneratedClass.Value valueOf(Ast.Def def) { return new GeneratedClass.Value(def.declares()); }
-    private ClassDesc cd(Ast.Def def) { return ctx.cd(def); }
+    private GeneratedClass.Value valueOf(Hir.Def def) { return new GeneratedClass.Value(def.declares()); }
+    private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
     private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
-    private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
+    private Map<String, Type> fieldTypes(Hir.Data data) { return ctx.fieldTypes(data); }
     private int pub(String name) { return ctx.pub(name); }
     private ClassDesc jvmType(Type type) { return JvmTypes.jvmType(type, ctx); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
 
-    void generateData(Ast.Data data, Emissions out) {
+    void generateData(Hir.Data data, Emissions out) {
         ClassDesc cdName = cd(data);
         Map<String, Type> fields = fieldTypes(data);
 
@@ -139,10 +139,10 @@ final class ValueClassGen {
      * predicate, so a rule no Raoh constraint states exactly is still reported as the rule it is
      * rather than as the whole invariant (issue #83, spec §decoder-error).
      */
-    private void emitCtfeCheck(Ast.Data data, Map<String, Type> fields, Emissions out) {
+    private void emitCtfeCheck(Hir.Data data, Map<String, Type> fields, Emissions out) {
         ClassDesc cdName = cd(data);
         ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(valueOf(data)));
-        List<Ast.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
+        List<Hir.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
         out.put(new GeneratedClass.Ctfe(valueOf(data)), build(cdCtfe, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             emitClauseCheck(cb, "check", cdName, data, fields, clauses);
@@ -158,8 +158,8 @@ final class ValueClassGen {
         return "check$" + index;
     }
 
-    private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Ast.Data data,
-                                 Map<String, Type> fields, List<Ast.InvariantClause> clauses) {
+    private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Hir.Data data,
+                                 Map<String, Type> fields, List<Hir.InvariantClause> clauses) {
         cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
                 ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
                     BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
@@ -170,7 +170,7 @@ final class ValueClassGen {
                         gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
                         slot += width(f.getValue());
                     }
-                    for (Ast.InvariantClause clause : clauses) {
+                    for (Hir.InvariantClause clause : clauses) {
                         gen.expr(clause.expr());       // the same boolean __construct checks
                         Label ok = code.newLabel();
                         code.ifne(ok);
@@ -183,10 +183,10 @@ final class ValueClassGen {
                 });
     }
 
-    void generateSum(Ast.SumData sum, Emissions out) {
+    void generateSum(Hir.SumData sum, Emissions out) {
         ClassDesc cdX = cd(sum);
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (Ast.Name caseName : sum.cases()) {
+        for (Hir.Name caseName : sum.cases()) {
             caseCds.add(cd(caseName.denotes()));
         }
         boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
@@ -334,7 +334,7 @@ final class ValueClassGen {
         });
     }
 
-    void generateUnit(Ast.UnitData unit, Emissions out) {
+    void generateUnit(Hir.UnitData unit, Emissions out) {
         ClassDesc cdU = cd(unit);
         ClassDesc cdDec = cd(new GeneratedClass.Decoder(valueOf(unit), DecoderKind.VALUE));
         ClassDesc cdEnc = cd(new GeneratedClass.Encoder(valueOf(unit)));
@@ -452,7 +452,7 @@ final class ValueClassGen {
     /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
      * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
      * by natural order, and a Java reader can put it in a {@code TreeSet}. */
-    private boolean isOrderedNewtype(Ast.Data data, Map<String, Type> fields) {
+    private boolean isOrderedNewtype(Hir.Data data, Map<String, Type> fields) {
         return data.newtype() && fields.size() == 1
                 && TypeOps.supportsOrdering(fields.values().iterator().next(), symbols);
     }
@@ -646,7 +646,7 @@ final class ValueClassGen {
         });
     }
 
-    private void emitConstructMethod(ClassBuilder cb, ClassDesc cdName, Ast.Data data,
+    private void emitConstructMethod(ClassBuilder cb, ClassDesc cdName, Hir.Data data,
                                      Map<String, Type> fields) {
         // Public for an exposed type: a behavior of another module may declare `constructs T`
         // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
@@ -668,7 +668,7 @@ final class ValueClassGen {
                         // Clause by clause, in the order they are declared, stopping at the first that
                         // does not hold: what the failure carries is that clause, so a reordering of
                         // the declaration changes which one a caller is told about.
-                        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                        for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                             gen.expr(clause.expr());
                             Label ok = code.newLabel();
                             code.ifne(ok);

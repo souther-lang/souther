@@ -130,7 +130,7 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
                 souther.compiler.types.TypeReachName.Bare::new);
 
         assertEquals("Qualified", written.text());
-        assertInstanceOf(souther.compiler.ast.Ast.Var.class, written.value(),
+        assertInstanceOf(souther.compiler.ast.Hir.Var.class, written.value(),
                 "naming a case is constructing it");
     }
 }

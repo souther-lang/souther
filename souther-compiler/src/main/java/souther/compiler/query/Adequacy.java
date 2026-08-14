@@ -6,7 +6,7 @@ import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.examples.FixtureReader;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -182,7 +182,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, Exclusions>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
@@ -192,12 +192,12 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             Map<String, Exclusions> out = new LinkedHashMap<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;   // a composition has no body of its own to read this off
                 }
                 out.put(spec.name(), Exclusions.of(bodies.get(spec.name()),
-                        spec.params().stream().map(Ast.Param::name).toList(), scope.value()));
+                        spec.params().stream().map(Hir.Param::name).toList(), scope.value()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -224,7 +224,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, souther.compiler.partition.GuardReachability>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -240,8 +240,8 @@ public final class Adequacy {
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
             Map<String, souther.compiler.partition.GuardReachability> out = new LinkedHashMap<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;   // a composition has no body of its own, so no arms of its own
                 }
                 souther.compiler.core.Core body = bodies.get(spec.name());
@@ -249,7 +249,7 @@ public final class Adequacy {
                 if (body == null || sig == null) {
                     continue;
                 }
-                List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+                List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
                 souther.compiler.partition.GuardThresholds.Guards guards =
                         souther.compiler.partition.GuardThresholds.of(
                                 spec.name(), body, plan, parameters, symbols);
@@ -340,7 +340,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, SignatureEvidence>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -359,15 +359,15 @@ public final class Adequacy {
                             Coverage.sourceIdOf(db, name), producing);
             Map<String, Effective> reachableArms = db.ask(new Reached(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 Sig sig = sigs.value().get(behavior.name());
                 if (sig == null) {
                     continue;   // a behavior whose signature did not work out has nothing to measure
                 }
                 out.put(behavior.name(), evidenceOf(sig, scope.value(),
                         byTarget.getOrDefault(behavior.name(), Observed.NONE),
-                        behavior instanceof Ast.SpecBehavior spec ? spec.params().stream()
-                                .map(Ast.Param::name).toList() : List.of(),
+                        behavior instanceof Hir.SpecBehavior spec ? spec.params().stream()
+                                .map(Hir.Param::name).toList() : List.of(),
                         excluded == null ? Exclusions.NONE
                                 : excluded.getOrDefault(behavior.name(), Exclusions.NONE),
                         producing.get(behavior.name()), producingPlan,
@@ -394,7 +394,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, PartitionEvidence>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -413,8 +413,8 @@ public final class Adequacy {
             Map<String, List<BoundaryAssessment>> boundaries = db.ask(new Boundaries(name)).value();
 
             Map<String, PartitionEvidence> out = new LinkedHashMap<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;   // a composition's inputs are its first stage's, measured there
                 }
                 Sig sig = sigs.value().get(spec.name());
@@ -464,7 +464,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, List<BoundaryAssessment>>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -486,8 +486,8 @@ public final class Adequacy {
             FixtureReader.Construction building = constructing(db, name, prepared.value(), symbols);
 
             Map<String, List<BoundaryAssessment>> out = new LinkedHashMap<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;   // a composition's inputs are its first stage's, measured there
                 }
                 Sig sig = sigs.value().get(spec.name());
@@ -504,10 +504,10 @@ public final class Adequacy {
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
         private static List<BoundaryAssessment> assess(
-                Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
+                Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 boolean armsAsked, FixtureReader.Construction building, Exclusions excluded) {
-            List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols);
@@ -761,7 +761,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, BranchEvidence>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             if (!prepared.present()) {
                 return Answer.absent();
             }
@@ -788,7 +788,7 @@ public final class Adequacy {
             Map<String, Effective> reachable = db.ask(new Reached(name)).value();
 
             Map<String, BranchEvidence> out = new LinkedHashMap<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 // The arms, and not every site of the behavior. A comparison of a guard's condition
                 // has a site of its own and is not a fork a row is in or out of, so counting it here
                 // would report an arm the body does not have.
@@ -1044,7 +1044,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, Filling>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -1069,8 +1069,8 @@ public final class Adequacy {
 
             Map<String, Filling> out = new LinkedHashMap<>();
             FixtureReader.Construction building = constructing(db, name, prepared.value(), symbols);
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;
                 }
                 Sig sig = sigs.value().get(spec.name());
@@ -1126,7 +1126,7 @@ public final class Adequacy {
                                                       List<BoundaryAssessment> edges,
                                                       PartitionEvidence partition,
                                                       Generator.GenerationResult pairs,
-                                                      Ast.SpecBehavior spec) {
+                                                      Hir.SpecBehavior spec) {
             List<GapDisposition> out = new ArrayList<>();
             for (Finding gap : findings) {
                 if (!gap.isAdequacyGap()) {
@@ -1214,7 +1214,7 @@ public final class Adequacy {
          */
         private static GenerationOutcome atCase(Finding gap, PartitionEvidence partition,
                                                 Generator.GenerationResult pairs,
-                                                Ast.SpecBehavior spec) {
+                                                Hir.SpecBehavior spec) {
             String missing = String.valueOf(gap.args().get(0));
             int at = ((Number) gap.args().get(1)).intValue() - 1;
             String parameter = at >= 0 && at < spec.params().size()
@@ -1311,7 +1311,7 @@ public final class Adequacy {
         }
 
         private static Generator.GenerationResult pairsFor(
-                Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
+                Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, Exclusions excluded) {
             if (observed.someRowsUnseen()) {
@@ -1323,7 +1323,7 @@ public final class Adequacy {
                                 spec.name(), observed.incompleteness())));
             }
             List<RowOutcome> rows = observed.rows();
-            List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             // One reading of what the behavior takes, for both halves of this: the rows already
             // written are read by it, and the rows offered are generated from it.
             souther.compiler.partition.BehaviorInputs inputs =
@@ -1351,7 +1351,7 @@ public final class Adequacy {
      * nothing. Asking for the uncounted classes instead would generate every one of them again to get
      * the same answers.
      */
-    static FixtureReader.Construction constructing(Db db, String module, Ast.Module written,
+    static FixtureReader.Construction constructing(Db db, String module, Hir.Module written,
                                                    Symbols symbols) {
         Map<String, byte[]> classes =
                 db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
@@ -1360,7 +1360,7 @@ public final class Adequacy {
         if (classes == null || requirements == null) {
             return null;
         }
-        Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
+        Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
         // `requirements` is asked above as a readiness condition, not as an input: whether a
         // value builds at this module's boundary is the decoder's answer, and nothing here runs.
         return FixtureReader.constructing(written, symbols, classes,
@@ -1471,7 +1471,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, List<Finding>>> compute(Db db) {
             Level level = levelOf(db);
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
             if (!prepared.present()) {
                 return Answer.absent();
             }
@@ -1483,7 +1483,7 @@ public final class Adequacy {
                     level.measuresArms() ? db.ask(new BranchCoverage(name)).value() : null;
 
             Map<String, List<Finding>> out = new LinkedHashMap<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 List<Finding> found = new ArrayList<>();
                 signatureFindings(behavior, prepared.value(),
                         signatures == null ? null : signatures.get(behavior.name()), found);
@@ -1501,7 +1501,7 @@ public final class Adequacy {
         /** What the rows say about the cases of the signature. Carried at the measurement's own status:
          *  a case nothing here claims is, where some row could not be read, a case nothing *seen*
          *  claims. */
-        private static void signatureFindings(Ast.BehaviorDef behavior, Ast.Module module,
+        private static void signatureFindings(Hir.BehaviorDef behavior, Hir.Module module,
                                               SignatureEvidence signature, List<Finding> out) {
             if (signature == null || !signature.status().counted()) {
                 return;
@@ -1534,7 +1534,7 @@ public final class Adequacy {
         /** What the rows reach of what the model distinguishes. A boundary is named only where the
          *  position was read on every row: a row writing the very number the rule names, whose
          *  observation was cut short elsewhere in the same input, is not a row that missed. */
-        private static void partitionFindings(Ast.BehaviorDef behavior, PartitionEvidence partition,
+        private static void partitionFindings(Hir.BehaviorDef behavior, PartitionEvidence partition,
                                               List<Finding> out) {
             if (partition == null) {
                 return;
@@ -1620,7 +1620,7 @@ public final class Adequacy {
          *  written there. Named only where every row was read — an arm a row that never finished might
          *  have gone through is undecided, and calling it unreached sends the author after a row that
          *  exists. */
-        private static void armFindings(Ast.BehaviorDef behavior, BranchEvidence branch,
+        private static void armFindings(Hir.BehaviorDef behavior, BranchEvidence branch,
                                         List<Finding> out) {
             if (branch == null || branch.status() != MeasurementStatus.COMPLETE) {
                 return;

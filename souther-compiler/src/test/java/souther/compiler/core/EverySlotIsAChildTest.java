@@ -1,6 +1,6 @@
 package souther.compiler.core;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -35,6 +35,14 @@ class EverySlotIsAChildTest {
     private static final SourcePos POS = new SourcePos(1, 1);
     private static final CoverageOrigin ORIGIN = CoverageOrigin.written("t", 0);
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "go");
+
+    private static final Hir.Binders BINDERS = new Hir.Binders(OWNER);
+
+    /** A binding this test writes. Nothing runs after a pass that writes into a resolved body to
+     *  answer a binder it left, so one is minted with its binding rather than a spelling. */
+    private static Hir.Binder binder(String name) {
+        return BINDERS.binder(name, POS);
+    }
     private static final TypeName PERSON = new TypeName("demo", "Person");
 
     private static Core.Read read(String name, int ordinal) {
@@ -85,7 +93,7 @@ class EverySlotIsAChildTest {
     @Test
     void anAttemptsConstructionIsAChild() {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
-                Ast.Binder.desugared("p", POS), new Core.Int(0, Type.INT, POS),
+                binder("p"), new Core.Int(0, Type.INT, POS),
                 List.of(new Core.ElseArm(Optional.empty(), new Core.Int(1, Type.INT, POS))),
                 ORIGIN, Type.INT, POS);
 
@@ -96,7 +104,7 @@ class EverySlotIsAChildTest {
     @Test
     void eachSlotGoesThroughTheOperatorForItsKind() {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
-                Ast.Binder.desugared("p", POS),
+                binder("p"),
                 new Core.Apply(read("f", 1), List.of(), Type.INT, POS),
                 List.of(), ORIGIN, Type.INT, POS);
 

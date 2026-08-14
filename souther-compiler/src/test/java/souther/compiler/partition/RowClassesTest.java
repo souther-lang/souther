@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -63,17 +63,17 @@ class RowClassesTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("submit");
         CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
-        List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
                 Partitions.of(spec, sigs.get("submit"), symbols, Exclusions.NONE),
                 GuardThresholds.of("submit", body, plan, parameters, symbols).thresholds(),

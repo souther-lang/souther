@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.TypeMessage;
@@ -42,13 +42,13 @@ final class SignatureBoundary {
     private SignatureBoundary() {}
 
     /** The signature a declared behavior publishes — every parameter and its answer. */
-    static Sig of(Ast.SpecBehavior spec, Symbols symbols) {
+    static Sig of(Hir.SpecBehavior spec, Symbols symbols) {
         List<BoundaryInput> ins = new ArrayList<>(spec.params().size());
-        for (Ast.Param p : spec.params()) {
-            Type t = TypeOps.successType(p.type(), symbols);
+        for (Hir.Param p : spec.params()) {
+            Type t = TypeOps.successType(p.type());
             ins.add(input(t, t, Where.param(p, spec.pos()), symbols));
         }
-        Type out = TypeOps.successType(spec.ret(), symbols);
+        Type out = TypeOps.successType(spec.ret());
         return new Sig(ins, output(out, out, Where.output(spec.name(), spec.pos()), symbols));
     }
 
@@ -232,7 +232,7 @@ final class SignatureBoundary {
      */
     private record Where(boolean parameter, String name, Region region, SourcePos pos) {
 
-        static Where param(Ast.Param p, SourcePos behavior) {
+        static Where param(Hir.Param p, SourcePos behavior) {
             return new Where(true, p.name(), p.written().region(), behavior);
         }
 

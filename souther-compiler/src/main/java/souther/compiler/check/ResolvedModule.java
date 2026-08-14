@@ -1,16 +1,16 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 
 /**
  * A module {@code Resolve} has read: one holding no occurrence anything is still to answer.
  *
  * <p>Not a module whose names all answer to something. Resolution finishing and every name finding
- * a declaration are two things, which is what {@link Ast.Name.Unanswered} and
- * {@link Ast.Var.Unanswered} are for — a name nothing declares was read, was reported where it is
+ * a declaration are two things, which is what {@link Hir.Name.Unanswered} and
+ * {@link Hir.Var.Unanswered} are for — a name nothing declares was read, was reported where it is
  * written, and is as answered as the pass can make it. What this says is the other one: the pass has
- * been over this tree, so nothing in it is {@link Ast.Name.Written}, {@link Ast.Var.Written} or
- * {@link Ast.TypeRef.Written}.
+ * been over this tree — which is what its being a {@link Hir} says, since no reference occurrence of
+ * that representation has a form for one nothing has read.
  *
  * <p>The three node types say it for themselves at each occurrence; this says it of the whole, which
  * is what a signature can carry. {@code Resolve} states the invariant in prose and every consumer
@@ -18,21 +18,21 @@ import souther.compiler.ast.Ast;
  * for a resolution, because it holds nothing to resolve.
  *
  * <p>It does not make the unread state unrepresentable at each occurrence. A switch over
- * {@link Ast.Var} is total over three records whatever module the value came out of, so a reader
+ * {@link Hir.Var} is total over three records whatever module the value came out of, so a reader
  * still writes an arm for the one that cannot be there and refuses it. What this removes is the
  * question being asked again at every consumer, not the arm.
  *
  * <p>Minted in this package and nowhere else — the constructor is package-private, and
  * {@link Resolve} is what calls it. A pass that rewrites a resolved tree goes through
- * {@link #with(Ast.Module)}, which is the same claim made again by whoever is making it: the pass
+ * {@link #with(Hir.Module)}, which is the same claim made again by whoever is making it: the pass
  * mints its nodes resolved, as {@code Deriver}, {@code NewtypeDesugar}, {@code HelperInliner} and
  * {@code FixtureTemplate} already do.
  */
 public final class ResolvedModule {
 
-    private final Ast.Module module;
+    private final Hir.Module module;
 
-    ResolvedModule(Ast.Module module) {
+    ResolvedModule(Hir.Module module) {
         if (module == null) {
             throw new IllegalArgumentException("a resolved module is a module");
         }
@@ -45,7 +45,7 @@ public final class ResolvedModule {
     }
 
     /** The tree. */
-    public Ast.Module module() {
+    public Hir.Module module() {
         return module;
     }
 
@@ -56,7 +56,7 @@ public final class ResolvedModule {
      * rather than anywhere a tree can be built. What a pass writes into one it mints resolved, which
      * is what every pass after {@code Resolve} already does.
      */
-    public ResolvedModule with(Ast.Module rewritten) {
+    public ResolvedModule with(Hir.Module rewritten) {
         return new ResolvedModule(rewritten);
     }
 

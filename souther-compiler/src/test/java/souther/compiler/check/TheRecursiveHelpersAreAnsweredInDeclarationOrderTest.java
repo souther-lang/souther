@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,7 @@ class TheRecursiveHelpersAreAnsweredInDeclarationOrderTest {
 
     private static HelperTable tableOf(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        Ast.Module resolved = Resolve.module(parsed, Symbols.of(parsed));
+        Hir.Module resolved = Resolve.module(parsed, SyntaxSymbols.of(parsed));
         return HelperTable.of(resolved.name(), HelperInliner.helpersOf(resolved),
                 Map.of(), Map.of(), InliningPolicy.FULL);
     }

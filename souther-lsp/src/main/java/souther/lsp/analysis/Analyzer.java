@@ -11,6 +11,7 @@ import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstLexer;
@@ -387,14 +388,14 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
         if (written == null) {
             return List.of();
         }
         Adequacy.Of adequacy = compilation.adequacy(module);
         LineIndex lines = new LineIndex(graph.text(uri));
         List<CodeLens> out = new ArrayList<>();
-        for (Ast.BehaviorDef behavior : written.behaviors()) {
+        for (Hir.BehaviorDef behavior : written.behaviors()) {
             // A module's declarations need not all be in this document, and a line number from
             // another file read against this one's index points somewhere arbitrary.
             if (!uri.equals(documentOf(behavior.pos(), null, graph))) {
@@ -568,12 +569,12 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
         if (written == null) {
             return List.of();
         }
         LineIndex lines = new LineIndex(text);
-        for (Ast.BehaviorDef behavior : written.behaviors()) {
+        for (Hir.BehaviorDef behavior : written.behaviors()) {
             // The cursor is in this document, so a declaration written in another one is not what
             // it is on, however the lines happen to line up.
             if (!uri.equals(documentOf(behavior.pos(), null, graph))

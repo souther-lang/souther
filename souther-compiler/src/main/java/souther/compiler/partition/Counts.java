@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 
@@ -25,15 +25,15 @@ final class Counts {
      * and two readings of what a written value counts as are two chances to settle different
      * things.
      */
-    static Place writtenIn(Ast.Expr written) {
+    static Place writtenIn(Hir.Expr written) {
         return switch (written) {
-            case Ast.IntLit i -> Count.of(i.value());
-            case Ast.DecimalLit d -> Count.of(d.value());
-            case Ast.Neg n -> {
+            case Hir.IntLit i -> Count.of(i.value());
+            case Hir.DecimalLit d -> Count.of(d.value());
+            case Hir.Neg n -> {
                 Place inner = writtenIn(n.operand());
                 yield inner == null ? null : Count.number(inner).negate();
             }
-            case Ast.Apply a when a.args().size() == 1 -> writtenIn(a.args().get(0));
+            case Hir.Apply a when a.args().size() == 1 -> writtenIn(a.args().get(0));
             case null, default -> null;
         };
     }

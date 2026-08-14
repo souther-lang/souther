@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -206,10 +206,10 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().get(0);
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");
         Partitions.Partitioning p =
                 Partitions.of(spec, sigs.get(spec.name()), symbols, Exclusions.NONE);

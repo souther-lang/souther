@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 
 import java.util.ArrayDeque;
 import java.util.Collection;
@@ -41,7 +41,7 @@ public record HelperGraph(Map<String, Set<String>> callsOf, SequencedSet<String>
     /** The graph of {@code table}: what each declaration in it calls, and which of them recurse. */
     public static HelperGraph of(HelperTable table) {
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> e : table.reachable().entrySet()) {
+        for (Map.Entry<String, Hir.FnDef> e : table.reachable().entrySet()) {
             Set<String> called = new LinkedHashSet<>();
             HelperInliner.helperCallsIn(e.getValue().writtenBody(), table.reachable(), called);
             callsOf.put(e.getKey(), called);

@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.HelperInvariants;
@@ -262,8 +262,8 @@ public sealed interface LocalInspection {
                                                    Carrier carried, ValueName measure) {
         List<UnreadRule> out = new ArrayList<>();
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+            for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     BlockReason why = whyUnread(each, carried, measure);
                     // Once per position, as a comparison is: what a reader has to lift is the first
                     // limit in the way, and a second clause behind it says nothing further.
@@ -278,7 +278,7 @@ public sealed interface LocalInspection {
 
     /** What stopped one clause from being an end, or null where nothing did — either because it was
      * read, or because it is not a rule about where the value stops. */
-    private static BlockReason whyUnread(Ast.Expr clause, Carrier carried, ValueName measure) {
+    private static BlockReason whyUnread(Hir.Expr clause, Carrier carried, ValueName measure) {
         if (InvariantBound.statesAnEnd(clause, null)) {
             if (carried == null) {
                 // The value is ordered — it is compared in the clause — and this reads no line on

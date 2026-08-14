@@ -1,6 +1,6 @@
 package souther.compiler.coverage;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.CoverageOrigin;
@@ -398,7 +398,7 @@ public final class CoverageSites {
          */
         private void comparisons(Core condition) {
             if (condition instanceof Core.Binary binary
-                    && (binary.op() == Ast.BinOp.AND || binary.op() == Ast.BinOp.OR)) {
+                    && (binary.op() == Hir.BinOp.AND || binary.op() == Hir.BinOp.OR)) {
                 comparisons(binary.left());
                 comparisons(binary.right());
                 return;

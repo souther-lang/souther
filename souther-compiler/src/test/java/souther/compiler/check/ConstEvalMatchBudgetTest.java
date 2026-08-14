@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
@@ -26,9 +26,9 @@ class ConstEvalMatchBudgetTest {
 
     private static Optional<Object> fold(String pattern, String subject) {
         ValueName.Stdlib matches = new ValueName.Stdlib("String", "matches");
-        return ConstEval.eval(new Ast.Apply("String.matches", matches,
+        return ConstEval.eval(new Hir.Apply("String.matches", matches,
                 new ReachName.OfLibrary(matches),
-                List.of(new Ast.StringLit(pattern, POS, null), new Ast.StringLit(subject, POS, null)),
+                List.of(new Hir.StringLit(pattern, POS, null), new Hir.StringLit(subject, POS, null)),
                 ConstructionOrigin.own(), POS, null));
     }
 

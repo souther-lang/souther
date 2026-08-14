@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -47,7 +47,7 @@ public final class OccurrenceCounts {
      * up to how many values the element has, and each of those is the same reading of the same
      * clauses.
      */
-    public static OccurrenceCounts of(TypeName named, Ast.Data data, Symbols symbols) {
+    public static OccurrenceCounts of(TypeName named, Hir.Data data, Symbols symbols) {
         return of(named, data, symbols, _ -> false);
     }
 
@@ -58,7 +58,7 @@ public final class OccurrenceCounts {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceCounts of(TypeName named, Ast.Data data, Symbols symbols,
+    static OccurrenceCounts of(TypeName named, Hir.Data data, Symbols symbols,
                                  java.util.function.Predicate<TypeName> granted) {
         return new OccurrenceCounts(
                 InvariantChecker.seedFields(named, data, symbols, java.util.Map.of(),

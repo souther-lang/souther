@@ -2,7 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Symbols;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -40,7 +40,7 @@ final class CodegenContext {
     final Set<String> exposed;
     /** The module's recursive helpers, lowered to static methods on {@code $Fns} (spec §fn-declaration), keyed
      * by helper name. A call to one is an {@code invokestatic}, not an inlined body. */
-    final Map<String, Ast.FnDef> emittedHelpers;
+    final Map<String, Hir.FnDef> emittedHelpers;
 
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
      * module output once every behavior is generated. */
@@ -67,13 +67,13 @@ final class CodegenContext {
      * constraint mapping a derived decoder does is written against those operations, so it reads this
      * rather than the settled form the rest of the backend emits from.
      */
-    private Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants = Map.of();
+    private Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants = Map.of();
 
-    void setDischargeInvariants(Map<TypeName, List<Ast.InvariantClause>> clauses) {
+    void setDischargeInvariants(Map<TypeName, List<Hir.InvariantClause>> clauses) {
         this.dischargeInvariants = clauses;
     }
 
-    Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants() {
+    Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants() {
         return dischargeInvariants;
     }
 
@@ -288,7 +288,7 @@ final class CodegenContext {
 
     CodegenContext(String pkg, Symbols symbols, Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Ast.FnDef> emittedHelpers) {
+                   Map<String, Hir.FnDef> emittedHelpers) {
         this.pkg = pkg;
         this.symbols = symbols;
         this.caseToSums = caseToSums;
@@ -321,7 +321,7 @@ final class CodegenContext {
     }
 
     /** The class of a declaration of the module being generated. */
-    ClassDesc cd(Ast.Def def) {
+    ClassDesc cd(Hir.Def def) {
         return cd(def.declares());
     }
 
@@ -468,12 +468,12 @@ final class CodegenContext {
         return JvmTypes.boxedPrim(t);
     }
 
-    Map<String, Type> fieldTypes(Ast.Data data) {
+    Map<String, Type> fieldTypes(Hir.Data data) {
         return TypeOps.fieldTypes(data, symbols);
     }
 
-    Type successType(Ast.RetType ret) {
-        return TypeOps.successType(ret, symbols);
+    Type successType(Hir.RetType ret) {
+        return TypeOps.successType(ret);
     }
 
     /** Whether {@code name} is an imported type or behavior (declared in another module, spec §modules). */

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
@@ -63,9 +64,9 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
 
     /** A sum's cases are read by name, so the module has to be resolved before its enumerations can
      *  be asked about. */
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     private MapKeyRepresentation classify(Type key) {

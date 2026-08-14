@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -197,7 +197,7 @@ final class PartitionClasses {
         if (!(symbols.scope().reach(leaf) instanceof TypeReachName.Written names)) {
             return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
         }
-        if (!(symbols.declarations().declaration(leaf) instanceof Ast.Data data)) {
+        if (!(symbols.declarations().declaration(leaf) instanceof Hir.Data data)) {
             return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));

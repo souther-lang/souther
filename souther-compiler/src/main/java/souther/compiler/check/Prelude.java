@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
@@ -27,7 +28,7 @@ import java.util.Set;
  * {@linkplain #entry(String) entry} per qualified name: the declaration as it was written and its
  * resolved signature. What is behind the name — a Souther body, expanded inline at each call site
  * (see {@code check.HelperInliner}), or a named kernel the backend emits — is the declaration's
- * {@linkplain Ast.FnBody body}, not a second registry.
+ * {@linkplain Hir.FnBody body}, not a second registry.
  *
  * <p>The library publishes no bare names (spec §stdlib), so entries are keyed by the qualified name
  * — {@code List.map}, {@code String.trim}. A module that imports a name writes it without the
@@ -61,7 +62,7 @@ public final class Prelude {
     /** Everything the library says under one qualified name: the {@code let} as it was written and
      *  its resolved signature. Existence, declaration, signature and implementation are one answer —
      *  a reader takes the projection it wants rather than picking a map. */
-    public record PreludeEntry(Ast.FnDef declaration, Signature signature) {
+    public record PreludeEntry(Hir.FnDef declaration, Signature signature) {
     }
 
     /** Every declaration the library ships, keyed by qualified name ({@code "List.map"}) — the
@@ -96,7 +97,7 @@ public final class Prelude {
     private static final Set<String> RUNTIME_BACKED_DATA = Set.of("RoundingMode");
 
     /** The resolved runtime-backed declarations — the sums and their cases — keyed by bare name. */
-    private static final Map<String, Ast.Def> RUNTIME_DEFS = new LinkedHashMap<>();
+    private static final Map<String, Hir.Def> RUNTIME_DEFS = new LinkedHashMap<>();
 
     /** Each kernel's declared signature, keyed by its intrinsic key ({@code "decimal.toInt"}) —
      *  the projection of {@link #ENTRIES} the backend reads to derive a kernel's JVM descriptor
@@ -105,13 +106,13 @@ public final class Prelude {
 
     /** The Souther-bodied declarations, as the inliner's table wants them: a materialized projection
      *  of {@link #ENTRIES}, derived once after loading and never written again. */
-    private static final Map<String, Ast.FnDef> HELPERS;
+    private static final Map<String, Hir.FnDef> HELPERS;
 
     static {
         load();
-        Map<String, Ast.FnDef> helpers = new LinkedHashMap<>();
+        Map<String, Hir.FnDef> helpers = new LinkedHashMap<>();
         for (Map.Entry<String, PreludeEntry> e : ENTRIES.entrySet()) {
-            if (e.getValue().declaration().body() instanceof Ast.FnBody.Written) {
+            if (e.getValue().declaration().body() instanceof Hir.FnBody.Written) {
                 helpers.put(e.getKey(), e.getValue().declaration());
             }
         }
@@ -274,7 +275,7 @@ public final class Prelude {
 
     /** The Souther-bodied declarations (inlined at call sites), keyed by qualified name, in
      *  declaration order. */
-    public static Map<String, Ast.FnDef> helpers() {
+    public static Map<String, Hir.FnDef> helpers() {
         return HELPERS;
     }
 
@@ -311,21 +312,20 @@ public final class Prelude {
             // RUNTIME_BACKED_DATA), and the names anchor to the runtime namespace where the
             // implementation classes live.
             Ast.Module parsed = CstFrontend.parse(read(resource));
-            Symbols symbols = symbolsOf(parsed, resource);
-            Ast.Module module = Resolve.module(parsed, symbols);
+            Hir.Module module = Resolve.module(parsed, symbolsOf(parsed, resource));
             if (!declared.moduleName().equals(module.name())) {
                 throw new IllegalStateException("prelude resource " + resource + " declares module "
                         + module.name() + ", not " + declared.moduleName());
             }
             String alias = declared.qualifier();
-            for (Ast.Def def : module.defs()) {
+            for (Hir.Def def : module.defs()) {
                 if (RUNTIME_DEFS.containsKey(def.name())) {
                     throw new IllegalStateException(
                             "the standard library declares `" + def.name() + "` twice");
                 }
                 RUNTIME_DEFS.put(def.name(), def);
             }
-            for (Ast.FnDef fn : module.fns()) {
+            for (Hir.FnDef fn : module.fns()) {
                 ValueName.Stdlib operation = new ValueName.Stdlib(alias, fn.name());
                 String qualified = operation.qualified();
                 // One qualified name, one declaration. The library has no overloading: a name that
@@ -336,10 +336,10 @@ public final class Prelude {
                     throw new IllegalStateException(
                             "the standard library declares `" + qualified + "` twice");
                 }
-                Signature signature = signatureOf(fn, qualified, symbols);
+                Signature signature = signatureOf(fn, qualified);
                 ENTRIES.put(qualified, new PreludeEntry(fn, signature));
                 OPERATIONS.put(qualified, operation);
-                if (fn.body() instanceof Ast.FnBody.Intrinsic intrinsic) {
+                if (fn.body() instanceof Hir.FnBody.Intrinsic intrinsic) {
                     KERNELS.put(intrinsic.key(), signature);
                 }
                 if (fn.isPrivate()) {
@@ -356,10 +356,10 @@ public final class Prelude {
      * {@link #RUNTIME_BACKED_DATA} is refused: its cases would have no implementation classes.
      * A case of a registered sum is registered with it.
      */
-    private static Symbols symbolsOf(Ast.Module m, String resource) {
-        Map<String, Ast.Def> declared = TypeChecker.ownDefs(m);
+    private static SyntaxSymbols symbolsOf(Ast.Module m, String resource) {
+        Map<String, Ast.Def> declared = Registry.ownDefs(m);
         if (declared.isEmpty()) {
-            return Symbols.none();   // signatures over primitives and type variables only
+            return SyntaxSymbols.none();   // signatures over primitives and type variables only
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Ast.Def def : declared.values()) {
@@ -378,12 +378,12 @@ public final class Prelude {
             }
             scope.put(name, new Denotation.Denotes(TypeName.runtime(name)));
         }
-        return Symbols.of(TypeName.RUNTIME,
-                Registry.of(Map.of(TypeName.RUNTIME, m)), scope, Map.of());
+        return SyntaxSymbols.of(TypeName.RUNTIME,
+                Registry.ofWritten(Map.of(TypeName.RUNTIME, m)), scope, Map.of());
     }
 
     /** The runtime-backed declaration {@code name} denotes, or null when there is none. */
-    public static Ast.Def runtimeBackedDef(TypeName name) {
+    public static Hir.Def runtimeBackedDef(TypeName name) {
         return TypeName.RUNTIME.equals(name.module()) ? RUNTIME_DEFS.get(name.name()) : null;
     }
 
@@ -394,7 +394,7 @@ public final class Prelude {
     }
 
     /** Every runtime-backed declaration, keyed by bare name — what the runtime namespace declares. */
-    public static Map<String, Ast.Def> runtimeBackedDefs() {
+    public static Map<String, Hir.Def> runtimeBackedDefs() {
         return Collections.unmodifiableMap(RUNTIME_DEFS);
     }
 
@@ -409,15 +409,15 @@ public final class Prelude {
      *  could pin it — and a kernel's calls are checked against the declared result with no body to
      *  infer one from. Either would be an entry answering a type question with nothing, so a
      *  declaration of either kind that writes no return type is refused here. */
-    static Signature signatureOf(Ast.FnDef fn, String qualified, Symbols symbols) {
+    static Signature signatureOf(Hir.FnDef fn, String qualified) {
         List<Type> params = new ArrayList<>();
-        for (Ast.FnParam p : fn.params()) {
-            params.add(TypeOps.resolveParamType(p.type(), symbols));
+        for (Hir.FnParam p : fn.params()) {
+            params.add(TypeOps.resolveParamType(p.type()));
         }
         Type result = fn.declaredReturn() == null
-                ? null : TypeOps.successType(fn.declaredReturn(), symbols);
+                ? null : TypeOps.successType(fn.declaredReturn());
         if (result == null
-                && (fn.params().isEmpty() || fn.body() instanceof Ast.FnBody.Intrinsic)) {
+                && (fn.params().isEmpty() || fn.body() instanceof Hir.FnBody.Intrinsic)) {
             throw new IllegalStateException("a prelude "
                     + (fn.params().isEmpty() ? "value" : "kernel")
                     + " must declare its return type: `" + qualified + "`");

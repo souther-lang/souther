@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
@@ -221,7 +221,7 @@ public final class GuardThresholds {
     }
 
     /** Whether an operator is one that compares two values rather than combining two conditions. */
-    private static boolean orders(Ast.BinOp op) {
+    private static boolean orders(Hir.BinOp op) {
         return switch (op) {
             case EQ, NE, LT, LE, GT, GE -> true;
             case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
@@ -321,7 +321,7 @@ public final class GuardThresholds {
     }
 
     /** Whether an operator orders its two sides, which {@code ==} and {@code /=} do not. */
-    private static boolean ordersStrictly(Ast.BinOp op) {
+    private static boolean ordersStrictly(Hir.BinOp op) {
         return switch (op) {
             case LT, LE, GT, GE -> true;
             case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
@@ -330,8 +330,8 @@ public final class GuardThresholds {
 
     /** Whether the line's own values satisfy the comparison, which is what tells {@code <} from
      * {@code <=} and is the whole of what the row on the line shows. */
-    private static boolean holdsAtTheLine(Ast.BinOp op) {
-        return op == Ast.BinOp.LE || op == Ast.BinOp.GE;
+    private static boolean holdsAtTheLine(Hir.BinOp op) {
+        return op == Hir.BinOp.LE || op == Hir.BinOp.GE;
     }
 
     /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
@@ -395,13 +395,13 @@ public final class GuardThresholds {
         }
     }
 
-    private static boolean combines(Ast.BinOp op) {
-        return op == Ast.BinOp.AND || op == Ast.BinOp.OR;
+    private static boolean combines(Hir.BinOp op) {
+        return op == Hir.BinOp.AND || op == Hir.BinOp.OR;
     }
 
     private static void placed(Core e, Reached reached, List<Placed> out) {
         if (e instanceof Core.Binary binary && combines(binary.op())) {
-            boolean and = binary.op() == Ast.BinOp.AND;
+            boolean and = binary.op() == Hir.BinOp.AND;
             // A conjunction's value being true makes both its operands true; a disjunction's being
             // false makes both false. Neither says anything the other way round.
             Reached left = new Reached(reached.onThen(), reached.onElse(),
@@ -430,7 +430,7 @@ public final class GuardThresholds {
                                     Symbols symbols, List<Threshold> out, List<GuardEdge> edges,
                                     List<Guards.Singled> singled) {
         Core.Binary comparison = placed.comparison();
-        Ast.BinOp op = comparison.op();
+        Hir.BinOp op = comparison.op();
         // The carrier comes from the side that named the position, so the literal on the other side
         // is read on the carrier the line is being drawn on. A size call is an `Int` there, which is
         // the whole-number carrier, and a position holding dates is a day count — the same answer
@@ -456,18 +456,18 @@ public final class GuardThresholds {
         if (below == null) {
             // An equality singles the value out instead. Recorded as that rather than as a place to
             // cut, because the values either side of it are not a distinction the model has drawn.
-            if (op != Ast.BinOp.EQ && op != Ast.BinOp.NE) {
+            if (op != Hir.BinOp.EQ && op != Hir.BinOp.NE) {
                 return null;
             }
             singled.add(new Guards.Singled(term, value,
                     new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
                             new SourceRef(guard.at().sourceId(), iff.pos()),
-                            true, placed.witness(), op == Ast.BinOp.EQ, true)));
+                            true, placed.witness(), op == Hir.BinOp.EQ, true)));
             return term.path();
         }
         // True at the line's own value for the operators that include it, which is not the same
         // question as which class the value falls in: `x <= c` and `x > c` agree about the second.
-        boolean holds = op == Ast.BinOp.LE || op == Ast.BinOp.GE;
+        boolean holds = op == Hir.BinOp.LE || op == Hir.BinOp.GE;
         out.add(new Threshold(term, value, below,
                 new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
                         new SourceRef(guard.at().sourceId(), iff.pos()),
@@ -624,12 +624,12 @@ public final class GuardThresholds {
         };
     }
 
-    private static Ast.BinOp mirrored(Ast.BinOp op) {
+    private static Hir.BinOp mirrored(Hir.BinOp op) {
         return switch (op) {
-            case LT -> Ast.BinOp.GT;
-            case LE -> Ast.BinOp.GE;
-            case GT -> Ast.BinOp.LT;
-            case GE -> Ast.BinOp.LE;
+            case LT -> Hir.BinOp.GT;
+            case LE -> Hir.BinOp.GE;
+            case GT -> Hir.BinOp.LT;
+            case GE -> Hir.BinOp.LE;
             default -> op;
         };
     }

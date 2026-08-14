@@ -1,6 +1,6 @@
 package souther.compiler.examples;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -161,7 +161,7 @@ final class ValueMatch {
     /** What {@code type} declares {@code field} to be, or null where nothing says. A newtype's single
      *  {@code value} is read the same way, since that is the field it is written with. */
     private Type fieldType(TypeName type, String field) {
-        Map<String, Ast.TypeRef> declared = neutral.fieldTypes(type);
+        Map<String, Hir.TypeRef> declared = neutral.fieldTypes(type);
         return declared.containsKey(field) ? neutral.shapeOf(declared.get(field)) : null;
     }
 

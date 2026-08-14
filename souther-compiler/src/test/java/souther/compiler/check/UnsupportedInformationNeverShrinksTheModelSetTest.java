@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeName;
 
@@ -26,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class UnsupportedInformationNeverShrinksTheModelSetTest {
 
-    private static Ast.Data data(Compilation compilation, String name) {
-        for (Ast.Def def : compilation.module("demo").defs()) {
-            if (def instanceof Ast.Data found && found.name().equals(name)) {
+    private static Hir.Data data(Compilation compilation, String name) {
+        for (Hir.Def def : compilation.module("demo").defs()) {
+            if (def instanceof Hir.Data found && found.name().equals(name)) {
                 return found;
             }
         }

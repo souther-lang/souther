@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.BindingId;
@@ -54,10 +55,10 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
 
     private static HelperInliner inliner() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return HelperInliner.forModule(Resolve.module(parsed, Symbols.of(parsed)));
+        return HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed)));
     }
 
-    private static Ast.Expr expand(HelperInliner inliner, String helper) {
+    private static Hir.Expr expand(HelperInliner inliner, String helper) {
         return inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
     }
 
@@ -70,9 +71,9 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     void theNextBodyIsExpandedAsThoughTheRefusalHadNotHappened() {
         HelperInliner afterARefusal = inliner();
         assertThrows(CompileException.class, () -> expand(afterARefusal, "wrong"));
-        Ast.Expr next = expand(afterARefusal, "right");
+        Hir.Expr next = expand(afterARefusal, "right");
 
-        Ast.Expr onItsOwn = expand(inliner(), "right");
+        Hir.Expr onItsOwn = expand(inliner(), "right");
 
         assertEquals(onItsOwn, next,
                 "what the refused expansion left behind changed what came after it");
@@ -87,7 +88,7 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     void twoWritingsIntoOneBodyDoNotWriteTheSameBinding() {
         HelperInliner inliner = inliner();
         BindingOwner body = new BindingOwner.OfData(new TypeName("demo", "X"));
-        Ast.Expr clause = inliner.held().get("right").writtenBody();
+        Hir.Expr clause = inliner.held().get("right").writtenBody();
 
         Set<BindingId> first = bindingsOf(inliner.inline(clause, body));
         Set<BindingId> second = bindingsOf(inliner.inline(clause, body));
@@ -98,19 +99,19 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     }
 
     /** Every binding written inside {@code e}. */
-    private static Set<BindingId> bindingsOf(Ast.Expr e) {
+    private static Set<BindingId> bindingsOf(Hir.Expr e) {
         Set<BindingId> out = new LinkedHashSet<>();
         collect(e, out);
         return out;
     }
 
-    private static void collect(Ast.Expr e, Set<BindingId> out) {
-        if (e instanceof Ast.LetIn li) {
+    private static void collect(Hir.Expr e, Set<BindingId> out) {
+        if (e instanceof Hir.LetIn li) {
             out.add(li.binder().id());
         }
-        if (e instanceof Ast.Expansion ex) {
+        if (e instanceof Hir.Expansion ex) {
             ex.bound().forEach(b -> out.add(b.binder().id()));
         }
-        Ast.forEachChild(e, c -> collect(c, out));
+        Hir.forEachChild(e, c -> collect(c, out));
     }
 }

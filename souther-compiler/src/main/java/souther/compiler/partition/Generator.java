@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
@@ -862,7 +862,7 @@ public final class Generator {
      * <p>Depth first, so that a position is chosen against a projection that already has the ones
      * before it in it. The projection is the same one the whole search started from — what the
      * record's rules leave each of its fields — asked again with the assignment so far settled into
-     * it, which is what {@link FieldDomains#of(TypeName, Ast.Data, Symbols, Map)} is for.
+     * it, which is what {@link FieldDomains#of(TypeName, Hir.Data, Symbols, Map)} is for.
      *
      * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
      * branch, and the search in front of it answers most rows without any of that; running this one
@@ -1086,7 +1086,7 @@ public final class Generator {
      */
     private static FieldDomains rulesOf(Type type, Symbols symbols, Map<String, Count> settled) {
         return type instanceof Type.Ref ref
-                && symbols.declarations().declaration(ref.name()) instanceof Ast.Data data && !data.newtype()
+                && symbols.declarations().declaration(ref.name()) instanceof Hir.Data data && !data.newtype()
                 ? FieldDomains.of(ref.name(), data, symbols, settled) : FieldDomains.NONE;
     }
 

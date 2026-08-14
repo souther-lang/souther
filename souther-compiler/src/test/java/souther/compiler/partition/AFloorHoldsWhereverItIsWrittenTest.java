@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
@@ -29,7 +29,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
 
         FieldDomains domainsOf(String type) {
             TypeName named = new TypeName(module, type);
-            Ast.Data data = (Ast.Data) symbols.declarations().declaration(named);
+            Hir.Data data = (Hir.Data) symbols.declarations().declaration(named);
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, data, symbols);
         }

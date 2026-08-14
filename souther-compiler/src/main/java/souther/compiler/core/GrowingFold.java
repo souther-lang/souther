@@ -1,6 +1,6 @@
 package souther.compiler.core;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 
@@ -216,7 +216,7 @@ public final class GrowingFold {
      * see through. A binding of a binding is followed the same way, so the set is closed rather than
      * one level deep.
      */
-    private static Set<BindingId> aliases(Core body, Ast.Binder acc) {
+    private static Set<BindingId> aliases(Core body, Hir.Binder acc) {
         Set<BindingId> names = new LinkedHashSet<>();
         names.add(acc.id());
         int before;
@@ -367,7 +367,7 @@ public final class GrowingFold {
 
     /** {@code acc ++ rhs} as an add to the builder. */
     private static Core appended(Core e, Set<BindingId> acc) {
-        if (!(e instanceof Core.Binary b) || b.op() != Ast.BinOp.CONCAT
+        if (!(e instanceof Core.Binary b) || b.op() != Hir.BinOp.CONCAT
                 || !(b.left() instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
         }

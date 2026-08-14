@@ -65,6 +65,6 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
 
     private static Declarations declarations() {
         Ast.Module parsed = CstFrontend.parse(APP);
-        return Symbols.of(Resolve.module(parsed, Symbols.of(parsed))).declarations();
+        return Symbols.of(Resolve.module(parsed, SyntaxSymbols.of(parsed))).declarations();
     }
 }

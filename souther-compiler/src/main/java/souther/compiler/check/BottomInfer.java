@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
@@ -71,11 +71,11 @@ public final class BottomInfer {
      * <p>Which library names those are is the library's to say, so this asks what the name denotes
      * and whether its declaration was written with a parameter list — not how it was spelled.
      */
-    static boolean isEmptyCollectionLiteral(Ast.Expr e) {
-        if (e instanceof Ast.ListLit l) {
+    static boolean isEmptyCollectionLiteral(Hir.Expr e) {
+        if (e instanceof Hir.ListLit l) {
             return l.elements().isEmpty();
         }
-        return e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib
+        return e instanceof Hir.Var v && v.denotes() instanceof ValueName.Stdlib lib
                 && Prelude.isEmptyCollectionValue(lib.qualified());
     }
 
@@ -133,7 +133,7 @@ public final class BottomInfer {
      *       seed there, so it is excluded.</li>
      * </ul>
      */
-    static int untypedEmptySeed(List<Ast.Expr> args, Type.FnOf fn, Map<String, Type> bind,
+    static int untypedEmptySeed(List<Hir.Expr> args, Type.FnOf fn, Map<String, Type> bind,
                                         SourcePos callPos) {
         int seed = 1;
         if (fn.params().size() <= seed || args.size() <= seed) {

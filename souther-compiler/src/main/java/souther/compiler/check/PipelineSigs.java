@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -29,7 +29,7 @@ public final class PipelineSigs {
     private PipelineSigs() {}
 
     /** Builds the input/output signature of every behavior, checking pipeline composition. */
-    public static Map<String, Sig> signatures(Ast.Module module, Symbols symbols) {
+    public static Map<String, Sig> signatures(Hir.Module module, Symbols symbols) {
         return signatures(module, symbols, Map.of());
     }
 
@@ -38,11 +38,11 @@ public final class PipelineSigs {
      * {@code imported} map seeds the resolvable behaviors with those imported from other modules
      * (spec §modules, §composition), so a stage naming an imported behavior resolves through {@link #stageSig}.
      */
-    public static Map<String, Sig> signatures(Ast.Module module, Symbols symbols,
+    public static Map<String, Sig> signatures(Hir.Module module, Symbols symbols,
                                               Map<String, Sig> imported) {
         Map<String, Sig> sigs = new HashMap<>(imported);
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec) {
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.SpecBehavior spec) {
                 // A behavior's signature is what it declares, whether a `let` implements it here or the Java
                 // side is injected (spec §injected-behavior): both are named the same way from a `>->` or a
                 // `depends on`, and both need the output union's generated interface. Where the arity rules
@@ -58,9 +58,9 @@ public final class PipelineSigs {
                 }
             }
         }
-        Map<String, List<Ast.Var>> pipeStages = pipelineStages(module);
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.PipeBehavior pipe) {
+        Map<String, List<Hir.Var>> pipeStages = pipelineStages(module);
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.PipeBehavior pipe) {
                 try {
                     sigs.put(pipe.name(), pipeSig(pipe, sigs, symbols, pipeStages));
                 } catch (Unanswerable _) {
@@ -75,10 +75,10 @@ public final class PipelineSigs {
     }
 
     /** Maps each pipeline behavior's name to its declared stages (for flattening, spec §type-routing). */
-    public static Map<String, List<Ast.Var>> pipelineStages(Ast.Module module) {
-        Map<String, List<Ast.Var>> stages = new HashMap<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.PipeBehavior pipe) {
+    public static Map<String, List<Hir.Var>> pipelineStages(Hir.Module module) {
+        Map<String, List<Hir.Var>> stages = new HashMap<>();
+        for (Hir.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Hir.PipeBehavior pipe) {
                 stages.put(pipe.name(), pipe.stages());
             }
         }
@@ -92,22 +92,22 @@ public final class PipelineSigs {
      * finish}, exactly as the flat form would, so a retired case stays retired across a named
      * intermediate. A pipeline viewed on its own still has the merged output its own stages produce.
      */
-    public static List<Ast.Var> flattenStages(List<Ast.Var> stages,
-                                                   Map<String, List<Ast.Var>> pipeStages,
+    public static List<Hir.Var> flattenStages(List<Hir.Var> stages,
+                                                   Map<String, List<Hir.Var>> pipeStages,
                                                    SourcePos pos) {
-        List<Ast.Var> out = new ArrayList<>();
+        List<Hir.Var> out = new ArrayList<>();
         flattenInto(stages, pipeStages, out, new LinkedHashSet<>(), pos);
         return out;
     }
 
-    private static void flattenInto(List<Ast.Var> stages,
-                                    Map<String, List<Ast.Var>> pipeStages,
-                                    List<Ast.Var> out, Set<String> inProgress, SourcePos pos) {
-        for (Ast.Var s : stages) {
+    private static void flattenInto(List<Hir.Var> stages,
+                                    Map<String, List<Hir.Var>> pipeStages,
+                                    List<Hir.Var> out, Set<String> inProgress, SourcePos pos) {
+        for (Hir.Var s : stages) {
             // A stage that names nothing was reported where it is written. It is no pipeline to
             // splice in, and the composition it is part of is abandoned where its signature is
             // asked for rather than here.
-            List<Ast.Var> sub = s.unresolved() ? null : pipeStages.get(s.bare());
+            List<Hir.Var> sub = s.unresolved() ? null : pipeStages.get(s.bare());
             if (sub == null) {
                 out.add(s);
                 continue;
@@ -129,7 +129,7 @@ public final class PipelineSigs {
      * composition has no meaning to work out: the behavior it belongs to is abandoned, and the
      * definitions around it are checked as they would be without it.
      */
-    public static Sig stageSig(Ast.Var stage, Map<String, Sig> sigs, Symbols symbols,
+    public static Sig stageSig(Hir.Var stage, Map<String, Sig> sigs, Symbols symbols,
                                SourcePos pos) {
         if (stage.unresolved()) {
             throw new Unanswerable(stage.pos());
@@ -143,10 +143,10 @@ public final class PipelineSigs {
         return s;
     }
 
-    private static Sig pipeSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
-                               Map<String, List<Ast.Var>> pipeStages) {
+    private static Sig pipeSig(Hir.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
+                               Map<String, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
-        List<Ast.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Hir.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
         Type mainline = first.outputType();
         Set<TypeName> retired = new LinkedHashSet<>();
@@ -169,7 +169,7 @@ public final class PipelineSigs {
         // accepted.
         if (pipe.declaredOut() != null) {
             Set<TypeName> inferred = TypeOps.leafCases(out, symbols);
-            Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut(), symbols), symbols);
+            Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut()), symbols);
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 

@@ -1,12 +1,15 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -36,7 +39,7 @@ import java.util.Set;
  * {@link TypeName} it denotes, and a check that wants to know whether two names are the same type
  * compares what they denote. There is no spelling left to compare.
  *
- * <p>A name that denotes nothing is reported here and is {@link Ast.Name.Unanswered} from there on
+ * <p>A name that denotes nothing is reported here and is {@link Hir.Name.Unanswered} from there on
  * — a state of the name and not a stand-in identity, so nothing below reads it as a declaration and
  * nothing below has a spelling to fall back to. Where a type reference stands on such a name, what
  * it denotes is {@link souther.compiler.types.Type#ERRONEOUS}. The pass does not stop: the rest of
@@ -48,7 +51,7 @@ import java.util.Set;
  */
 public final class Resolve {
 
-    private final Symbols symbols;
+    private final SyntaxSymbols symbols;
     private final Values values;
     /** Every name this pass answered, in the order it met them. */
     private final List<TypeUse> denotations = new ArrayList<>();
@@ -75,8 +78,18 @@ public final class Resolve {
     private final Map<BindingOwner, Integer> counts = new HashMap<>();
     /** The definition whose text is being read. Every binding met belongs to it. */
     private BindingOwner owner;
+    /**
+     * The behaviors this module named through another module's name, by that module.
+     *
+     * <p>A qualified stage reaches a behavior whether or not an import says so, and the borrowed
+     * signature and the injected field are found by an import. So naming one asks for the import,
+     * and the import is written here rather than left for a reader to work out from the spelling.
+     */
+    private final Map<String, Set<String>> borrowed = new LinkedHashMap<>();
+    /** Where each of those was first named — the position the synthesized import stands at. */
+    private final Map<String, SourcePos> borrowedAt = new LinkedHashMap<>();
 
-    private Resolve(Symbols symbols, Values values) {
+    private Resolve(SyntaxSymbols symbols, Values values) {
         this.symbols = symbols;
         this.values = values;
     }
@@ -87,7 +100,7 @@ public final class Resolve {
     }
 
     /** A binder answered, and the bindings that hold under it. */
-    private record Answered(Ast.Binder binder, Bindings bound) {}
+    private record Answered(Hir.Binder binder, Bindings bound) {}
 
     /**
      * {@code binder} given a binding of its own, and {@code bound} extended with it.
@@ -106,16 +119,16 @@ public final class Resolve {
             binders.put(id, new BoundName(binder.written()));
         }
         return new Answered(
-                new Ast.Binder.Bound(binder.written(), id, binder.pos()),
+                new Hir.Binder(binder.written(), id, binder.pos()),
                 bound.and(binder.name(), new ValueName.Local(binder.name(), id)));
     }
 
     /** Several binders answered, and the bindings that hold under all of them. */
-    private record AnsweredAll(List<Ast.Binder> binders, Bindings bound) {}
+    private record AnsweredAll(List<Hir.Binder> binders, Bindings bound) {}
 
     /** The same as {@link #bind}, for the names one binder writes at once — a block's parameters. */
     private AnsweredAll bindAll(Bindings bound, List<Ast.Binder> written) {
-        List<Ast.Binder> out = new ArrayList<>();
+        List<Hir.Binder> out = new ArrayList<>();
         for (Ast.Binder b : written) {
             Answered a = bind(bound, b);
             bound = a.bound();
@@ -132,8 +145,8 @@ public final class Resolve {
      * read off the module. A module resolved on its own reaches only what it declares.
      */
     public record Values(String module, Map<String, ValueName.Helper> helpers,
-                         Map<String, ValueName.Behavior> behaviors,
-                         Map<String, ValueName.Stdlib> exposed) {
+                         Map<String, ValueName.Behavior> behaviors, boolean behaviorsWhole,
+                         Map<String, ValueName.Stdlib> exposed, Elsewhere elsewhere) {
 
         /**
          * What a module reaches when nothing else is in sight — the core modules, which the library
@@ -142,16 +155,53 @@ public final class Resolve {
          * with what the query answered, which reads its imports from the source that wrote them.
          */
         public static Values of(Ast.Module m) {
-            Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
-            for (String helper : HelperInliner.helpersOf(m).keySet()) {
-                helpers.put(helper, new ValueName.Helper(m.name(), helper));
-            }
             Map<String, ValueName.Behavior> behaviors = new LinkedHashMap<>();
             for (Ast.BehaviorDef b : m.behaviors()) {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));
             }
-            return new Values(m.name(), helpers, behaviors, Map.of());
+            Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
+            for (Ast.FnDef fn : m.fns()) {
+                if (HelperInliner.isHelperName(behaviors.keySet(), fn.name())) {
+                    helpers.put(fn.name(), new ValueName.Helper(m.name(), fn.name()));
+                }
+            }
+            return new Values(m.name(), helpers, behaviors, true, Map.of(), Elsewhere.NONE);
         }
+    }
+
+    /**
+     * What this module can be told about the behaviors of the modules around it, asked one question
+     * at a time.
+     *
+     * <p>A stage may name a behavior of a module this one has not imported, which is what says the
+     * import has to be synthesized; answering that needs the other module, and it is asked for by
+     * name rather than handed over so that a compilation reaching no other module reads none.
+     */
+    public interface Elsewhere {
+
+        /** Nothing else in sight — a module resolved on its own. */
+        Elsewhere NONE = new Elsewhere() {
+            @Override
+            public boolean hasModule(String name) {
+                return false;
+            }
+
+            @Override
+            public Set<String> behaviorsOf(String module) {
+                return Set.of();
+            }
+        };
+
+        /** Whether this compilation has a module of that name. */
+        boolean hasModule(String name);
+
+        /**
+         * The behaviors that module declares, or null where this compilation has it and cannot read
+         * it — which is not the same as its declaring none. Whatever is wrong with it is reported on
+         * its own source, so a name that may have come from there is left unanswered and said
+         * nothing about.
+         */
+        Set<String> behaviorsOf(String module);
     }
 
     /**
@@ -218,7 +268,7 @@ public final class Resolve {
      * A resolved module, what the pass worked out about the names in it, and the names it could not
      * answer.
      *
-     * <p>A name that denotes nothing does not end the pass. It is {@link Ast.Name.Unanswered}, a
+     * <p>A name that denotes nothing does not end the pass. It is {@link Hir.Name.Unanswered}, a
      * type reference standing on one denotes {@link souther.compiler.types.Type#ERRONEOUS}, and the
      * rest of the module is resolved as if the mistake were not there — so an author is told about
      * every unknown name at once instead of one per compile, and an editor can still say what the
@@ -249,12 +299,12 @@ public final class Resolve {
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
      * with nothing else in sight. */
-    public static Ast.Module module(Ast.Module m) {
-        return module(m, TypeChecker.symbols(m));
+    public static Hir.Module module(Ast.Module m) {
+        return module(m, SyntaxSymbols.of(m));
     }
 
     /** {@code m} with every name it writes resolved against {@code symbols}. */
-    public static Ast.Module module(Ast.Module m, Symbols symbols) {
+    public static Hir.Module module(Ast.Module m, SyntaxSymbols symbols) {
         Resolved resolved = resolving(m, symbols);
         if (!resolved.unresolved().isEmpty()) {
             // This entry point answers with a module or not at all, which is what its one caller —
@@ -265,23 +315,23 @@ public final class Resolve {
         return resolved.module().module();
     }
 
-    /** As {@link #module(Ast.Module, Symbols)}, keeping what each name was answered with. */
-    public static Resolved resolving(Ast.Module m, Symbols symbols) {
+    /** As {@link #module(Ast.Module, SyntaxSymbols)}, keeping what each name was answered with. */
+    public static Resolved resolving(Ast.Module m, SyntaxSymbols symbols) {
         return resolving(m, symbols, Values.of(m));
     }
 
-    /** As {@link #resolving(Ast.Module, Symbols)}, with what the module reaches in the value
+    /** As {@link #resolving(Ast.Module, SyntaxSymbols)}, with what the module reaches in the value
      * namespace given rather than read off the module itself. */
-    public static Resolved resolving(Ast.Module m, Symbols symbols, Values values) {
+    public static Resolved resolving(Ast.Module m, SyntaxSymbols symbols, Values values) {
         Resolve r = new Resolve(symbols, values);
-        List<Ast.Def> defs = new ArrayList<>();
+        List<Hir.Def> defs = new ArrayList<>();
         // Which names were answered is settled per declaration: what one of them writes is nothing
         // the one beside it wrote, and the names met while it was being read are its own.
         Map<String, OfDeclaration> declarations = new LinkedHashMap<>();
         for (Ast.Def def : m.defs()) {
             int failedBefore = r.failed;
             int denotedBefore = r.denotations.size();
-            Ast.Def resolved = r.def(def);
+            Hir.Def resolved = r.def(def);
             defs.add(resolved);
             Set<TypeName> reaches = new LinkedHashSet<>();
             for (TypeUse d : r.denotations.subList(denotedBefore, r.denotations.size())) {
@@ -295,136 +345,349 @@ public final class Resolve {
             declarations.putIfAbsent(resolved.name(),
                     new OfDeclaration(r.failed == failedBefore, Set.copyOf(reaches)));
         }
-        List<Ast.BehaviorDef> behaviors = new ArrayList<>();
+        List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
             behaviors.add(switch (b) {
-                case Ast.SpecBehavior spec -> new Ast.SpecBehavior(spec.written(), r.params(spec.params()),
-                        r.retType(spec.ret()), r.names(spec.constructs()), spec.dependsOn(), spec.pos());
-                case Ast.PipeBehavior pipe -> new Ast.PipeBehavior(pipe.written(), pipe.stages(),
-                        r.retType(pipe.declaredOut()), pipe.pos());
+                case Ast.SpecBehavior spec -> new Hir.SpecBehavior(spec.written(), r.params(spec.params()),
+                        r.retType(spec.ret()), r.names(spec.constructs()),
+                        r.required(spec.dependsOn(), spec.name()), spec.pos());
+                case Ast.PipeBehavior pipe -> new Hir.PipeBehavior(pipe.written(),
+                        r.stages(pipe.stages()), r.retType(pipe.declaredOut()), pipe.pos());
             });
         }
-        List<Ast.FnDef> fns = new ArrayList<>();
+        List<Hir.FnDef> fns = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
             fns.add(r.fn(fn));
         }
-        List<Ast.Example> examples = new ArrayList<>();
+        List<Hir.Example> examples = new ArrayList<>();
         for (Ast.Example e : m.examples()) {
             r.owner = r.ownerOfValue(e.target());
-            List<Ast.ExampleRow> rows = new ArrayList<>();
+            List<Hir.ExampleRow> rows = new ArrayList<>();
             for (Ast.ExampleRow row : e.rows()) {
-                List<Ast.With> withs = new ArrayList<>();
+                List<Hir.With> withs = new ArrayList<>();
                 for (Ast.With w : row.withs()) {
-                    withs.add(new Ast.With(w.dep(), r.expr(w.value()), w.pos()));
+                    withs.add(new Hir.With(w.dep(), r.expr(w.value()), w.pos()));
                 }
-                rows.add(new Ast.ExampleRow(row.description(), r.exprs(row.inputs()), withs,
+                rows.add(new Hir.ExampleRow(row.description(), r.exprs(row.inputs()), withs,
                         r.expr(row.expected()), row.pos()));
             }
-            examples.add(new Ast.Example(e.target(), rows, e.pos()));
+            examples.add(new Hir.Example(e.target(), rows, e.pos()));
         }
-        List<Ast.Fake> fakes = new ArrayList<>();
+        List<Hir.Fake> fakes = new ArrayList<>();
         for (Ast.Fake f : m.fakes()) {
             r.owner = r.ownerOfValue(f.target());
-            List<Ast.FakeRow> rows = new ArrayList<>();
+            List<Hir.FakeRow> rows = new ArrayList<>();
             for (Ast.FakeRow row : f.rows()) {
-                rows.add(new Ast.FakeRow(row.inputs() == null ? null : r.exprs(row.inputs()),
+                rows.add(new Hir.FakeRow(row.inputs() == null ? null : r.exprs(row.inputs()),
                         r.expr(row.output()), row.isDefault(), row.pos()));
             }
-            fakes.add(new Ast.Fake(f.target(), rows, f.pos()));
+            fakes.add(new Hir.Fake(f.target(), rows, f.pos()));
         }
-        Map<String, Ast.RetType> exposedOutputs = new LinkedHashMap<>();
+        Map<String, Hir.RetType> exposedOutputs = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.RetType> e : m.exposedOutputs().entrySet()) {
             exposedOutputs.put(e.getKey(), r.retType(e.getValue()));
         }
+        if (!m.takenOn().isEmpty()) {
+            // What a module takes on is worked out by `Shapes.Prepared`, which is far below here. A
+            // module arriving with one has been through a pass that writes into the representation
+            // this one answers with.
+            throw new IllegalStateException(
+                    "`" + m.name() + "` reached resolution having already taken helpers on");
+        }
         return new Resolved(
-                new ResolvedModule(new Ast.Module(m.name(), m.exposing(), exposedOutputs,
-                        m.imports(), defs, behaviors, fns, m.takenOn(), examples, fakes,
+                new ResolvedModule(new Hir.Module(m.name(), m.exposing(), exposedOutputs,
+                        r.imports(m), defs, behaviors, fns, List.of(), examples, fakes,
                         m.exampleFileTarget(), m.pos())),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
                         Map.copyOf(r.binders)),
                 List.copyOf(r.unresolved), Map.copyOf(declarations));
     }
 
-    private Ast.FnDef fn(Ast.FnDef f) {
+    /**
+     * The import lines, carried across unchanged.
+     *
+     * <p>An import writes a module name and the names it brings in, and neither is a reference
+     * occurrence: what a name brought in denotes is decided where it is used, not here. So there is
+     * nothing to answer, and this is the boundary copying a form that says the same thing on both
+     * sides of it.
+     */
+    private List<Hir.Import> imports(Ast.Module m) {
+        List<Hir.Import> out = new ArrayList<>();
+        for (Ast.Import i : m.imports()) {
+            List<Hir.ImportedName> names = new ArrayList<>();
+            for (Ast.ImportedName n : i.importedNames()) {
+                names.add(new Hir.ImportedName(n.written()));
+            }
+            out.add(new Hir.Import(i.module(), i.alias(), names, i.pos()));
+        }
+        for (Map.Entry<String, Set<String>> e : borrowed.entrySet()) {
+            Set<String> already = new LinkedHashSet<>();
+            for (Ast.Import i : m.imports()) {
+                if (i.module().equals(e.getKey())) {
+                    already.addAll(i.names());
+                }
+            }
+            List<Hir.ImportedName> names = new ArrayList<>();
+            for (String bare : e.getValue()) {
+                if (!already.contains(bare)) {
+                    // No position on a synthesized name: nobody wrote it on an import list. The
+                    // qualified reference that asked for it is where it came from, and that is
+                    // already the position of the import as a whole.
+                    names.add(new Hir.ImportedName(bare, null));
+                }
+            }
+            if (!names.isEmpty()) {
+                out.add(new Hir.Import(e.getKey(), null, names, borrowedAt.get(e.getKey())));
+            }
+        }
+        return out;
+    }
+
+    /** The stages of a {@code >->} composition, each answered against the behavior namespace. */
+    private List<Hir.Var> stages(List<Ast.Var> stages) {
+        List<Hir.Var> out = new ArrayList<>();
+        for (Ast.Var stage : stages) {
+            out.add(stage(stage));
+        }
+        return out;
+    }
+
+    /** The names a {@code depends on} clause writes. */
+    private List<Hir.Var> required(List<Ast.Var> refs, String by) {
+        List<Hir.Var> out = new ArrayList<>();
+        for (Ast.Var ref : refs) {
+            out.add(required(ref, by));
+        }
+        return out;
+    }
+
+    // --- the behavior namespace: a pipeline's stages and a spec's dependencies ---
+
+    /**
+     * A {@code >->} stage. {@code X.decoder} / {@code X.encoder} name a codec, which is a boundary
+     * edge rather than a behavior (spec §sequential-composition) — said here, where the question is
+     * what the name denotes, so nothing further down has a spelling to test for it.
+     */
+    private Hir.Var stage(Ast.Var ref) {
+        if (namesABoundaryEdge(ref.name())) {
+            return noBehavior(ref, CompileException.of(Diagnostic
+                    .at(ref.pos()).say(new BehaviorMessage.ABoundaryEdgeIsNotAStage()).build()));
+        }
+        return behaviorNamed(ref, this::unknownBehavior);
+    }
+
+    /**
+     * Whether a qualified spelling names a codec rather than a behavior — {@code X.decoder},
+     * {@code X.encoder}, which are boundary edges (spec §sequential-composition).
+     *
+     * <p>Only a qualified one: {@code decoder} on its own is an ordinary name, and a module may
+     * declare a behavior by it. Asked here and by whatever works out which modules a header reaches,
+     * so that a codec's qualifier is not read as a module by one of them and as a type by the other.
+     */
+    public static boolean namesABoundaryEdge(String written) {
+        int dot = written.lastIndexOf('.');
+        String last = dot < 0 ? "" : written.substring(dot + 1);
+        return last.equals("decoder") || last.equals("encoder");
+    }
+
+    /**
+     * A name a {@code depends on} clause writes. It must name an injection target, and whether the
+     * behavior it names is one is the check's to say (E1607); that nothing declares the name at all
+     * is settled here, in the same message, because it is the same question — what does this name
+     * denote — asked of a clause rather than of a stage.
+     */
+    private Hir.Var required(Ast.Var ref, String by) {
+        return behaviorNamed(ref, (name, candidates) -> CompileException.of(Diagnostic
+                .at(name.written().reportedAt())
+                .suggestion(Suggest.candidate(name.name(), candidates))
+                .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name()))
+                .say(new DeclarationMessage.DependsOnNamesNoSuchBehavior(by, name.name())).build()));
+    }
+
+    /** A name that must denote a behavior, with what to say when none does. */
+    private Hir.Var behaviorNamed(Ast.Var ref, Unknown unknown) {
+        String written = ref.name();
+        int dot = written.lastIndexOf('.');
+        if (dot < 0) {
+            return bareBehavior(ref, written, unknown);
+        }
+        String bare = written.substring(dot + 1);
+        String qualifier = written.substring(0, dot);
+        if (Prelude.isQualifier(qualifier)) {
+            // a standard-library qualifier names a function, and a function is not a behavior
+            return noBehavior(ref, unknown.report(ref, Set.of()));
+        }
+        String target = symbols.scope().moduleOfQualifier(qualifier);
+        if (target == null) {
+            target = qualifier;
+        }
+        if (target.equals(values.module())) {
+            return bareBehavior(ref, bare, unknown);   // this module, named through itself
+        }
+        if (!values.elsewhere().hasModule(target)) {
+            return noBehavior(ref, CompileException.of(Diagnostic
+                    .say(new ModuleMessage.NoModuleOfThatName(qualifier, bare))
+                    .at(ref.pos()).build()));
+        }
+        Set<String> declared = values.elsewhere().behaviorsOf(target);
+        if (declared == null) {
+            // The module is one this compilation has and could not read. What is wrong with it is
+            // reported on its own source; saying anything here sends the author to a file that is
+            // fine.
+            return unanswered(ref);
+        }
+        if (!declared.contains(bare)) {
+            return noBehavior(ref, unknown.report(ref, declared));
+        }
+        ValueName.Behavior named = new ValueName.Behavior(target, bare);
+        // A behavior named through its module is reached through an import, whether or not the
+        // author wrote one: the borrowed signature and the injected field are found by it.
+        borrowed.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
+        borrowedAt.putIfAbsent(target, ref.pos());
+        return behaviorReached(ref, named);
+    }
+
+    /** A bare name: this module's own behavior, or one an import brought in. */
+    private Hir.Var bareBehavior(Ast.Var ref, String written, Unknown unknown) {
+        ValueName.Behavior named = values.behaviors().get(written);
+        if (named != null) {
+            return behaviorReached(ref, named);
+        }
+        if (!values.behaviorsWhole()) {
+            // An import that could not be followed may have been where this name came from.
+            // Whatever is wrong with that module is reported there.
+            return unanswered(ref);
+        }
+        return noBehavior(ref, unknown.report(ref, values.behaviors().keySet()));
+    }
+
+    /**
+     * {@code ref} denoting {@code name}, and reached as this module reaches it.
+     *
+     * <p>Both answers together, from the one place that has them. A behavior is reached by the name
+     * written here — bare, or under the module a qualified reference names.
+     */
+    private Hir.Var behaviorReached(Ast.Var ref, ValueName.Behavior name) {
+        answered(ref.written(), name);
+        return new Hir.Var.Denoting(ref.written(), name,
+                ReachName.of(name, ref.name(), values.module()), ref.region());
+    }
+
+    /** What to say about a name no behavior answers to, given the names that were reachable. */
+    private interface Unknown {
+        CompileException report(Ast.Var ref, Set<String> candidates);
+    }
+
+    private CompileException unknownBehavior(Ast.Var ref, Set<String> candidates) {
+        WrittenName written = ref.written();
+        String name = written.canonical();
+        return CompileException.of(Diagnostic
+                .at(written.reportedAt())
+                .suggestion(Suggest.candidate(name, candidates))
+                .say(new NameMessage.NoBehaviorOfThatNameInThisPipeline(written.quoted())).build());
+    }
+
+    /** Records why a name denotes no behavior, and gives it the name that says so. */
+    private Hir.Var noBehavior(Ast.Var ref, CompileException why) {
+        nothing(why);
+        return unanswered(ref);
+    }
+
+    /** A reference resolution read and found nothing for, keeping where it was written. */
+    private static Hir.Var unanswered(Ast.Var ref) {
+        return new Hir.Var.Unanswered(ref.written(), ref.region());
+    }
+
+    private Hir.FnDef fn(Ast.FnDef f) {
         owner = ownerOfValue(f.name());
-        List<Ast.FnParam> params = new ArrayList<>();
+        List<Hir.FnParam> params = new ArrayList<>();
         Bindings bound = Bindings.NONE;
         for (Ast.FnParam p : f.params()) {
             Answered a = bind(bound, p.binder());
-            params.add(new Ast.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
+            params.add(new Hir.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
             bound = a.bound();
         }
-        Ast.FnBody body = switch (f.body()) {
-            case Ast.FnBody.Written w -> new Ast.FnBody.Written(expr(w.expr(), bound));
-            case Ast.FnBody.Intrinsic i -> i;
+        Hir.FnBody body = switch (f.body()) {
+            case Ast.FnBody.Written w -> new Hir.FnBody.Written(expr(w.expr(), bound));
+            case Ast.FnBody.Intrinsic i -> new Hir.FnBody.Intrinsic(i.key());
         };
-        return new Ast.FnDef(f.written(), f.declaredIn(), params, retType(f.declaredReturn()), body,
-                f.modifiers(), f.pos());
+        return new Hir.FnDef(f.written(), f.declaredIn(), params, retType(f.declaredReturn()), body,
+                new Hir.Modifiers(f.modifiers().partial(), f.modifiers().isPrivate()), f.pos());
     }
 
     // --- written types ---
 
-    private List<Ast.Param> params(List<Ast.Param> params) {
-        List<Ast.Param> out = new ArrayList<>();
+    private List<Hir.Param> params(List<Ast.Param> params) {
+        List<Hir.Param> out = new ArrayList<>();
         for (Ast.Param p : params) {
-            out.add(new Ast.Param(p.written(), retType(p.type())));
+            out.add(new Hir.Param(p.written(), retType(p.type())));
         }
         return out;
     }
 
-    private List<Ast.Field> fields(List<Ast.Field> fields) {
-        List<Ast.Field> out = new ArrayList<>();
+    /** A declaration's invariant clauses, each read against the fields it constrains. */
+    private List<Hir.InvariantClause> clauses(List<Ast.InvariantClause> clauses, Bindings bound) {
+        List<Hir.InvariantClause> out = new ArrayList<>();
+        for (Ast.InvariantClause clause : clauses) {
+            out.add(new Hir.InvariantClause(clause.name(), expr(clause.expr(), bound),
+                    clause.pos()));
+        }
+        return out;
+    }
+
+    private List<Hir.Field> fields(List<Ast.Field> fields) {
+        List<Hir.Field> out = new ArrayList<>();
         for (Ast.Field f : fields) {
-            out.add(new Ast.Field(f.written(), typeTerm(f.type())));
+            out.add(new Hir.Field(f.written(), typeTerm(f.type())));
         }
         return out;
     }
 
-    private Ast.RetType paramType(Ast.RetType t) {
+    private Hir.RetType paramType(Ast.RetType t) {
         return retType(t);
     }
 
-    private Ast.RetType retType(Ast.RetType ret) {
+    private Hir.RetType retType(Ast.RetType ret) {
         if (ret == null) {
             return null;
         }
-        List<Ast.TypeTerm> cases = new ArrayList<>();
+        List<Hir.TypeTerm> cases = new ArrayList<>();
         for (Ast.TypeTerm c : ret.cases()) {
             cases.add(typeTerm(c));
         }
-        return new Ast.RetType(cases, ret.pos());
+        return new Hir.RetType(cases, ret.pos());
     }
 
-    private Ast.TypeTerm typeTerm(Ast.TypeTerm t) {
+    private Hir.TypeTerm typeTerm(Ast.TypeTerm t) {
         return switch (t) {
             case null -> null;
             case Ast.TypeRef ref -> typeRef(ref);
             case Ast.FnType ft -> {
-                List<Ast.RetType> ps = new ArrayList<>();
+                List<Hir.RetType> ps = new ArrayList<>();
                 for (Ast.RetType p : ft.params()) {
                     ps.add(retType(p));
                 }
-                yield new Ast.FnType(ps, retType(ft.result()), ft.pos());
+                yield new Hir.FnType(ps, retType(ft.result()), ft.pos());
             }
         };
     }
 
     /** A written type reference, with what it denotes decided here — once, and in the module that
      * wrote it, so no later reader has to know where it was written. */
-    private Ast.TypeRef typeRef(Ast.TypeRef ref) {
-        if (ref == null || ref instanceof Ast.TypeRef.Denoting) {
-            return ref;
+    private Hir.TypeRef typeRef(Ast.TypeRef ref) {
+        if (ref == null) {
+            return null;
         }
-        Ast.TypeTerm arg = typeTerm(ref.arg());
-        List<Ast.TypeTerm> elems = null;
+        Hir.TypeTerm arg = typeTerm(ref.arg());
+        List<Hir.TypeTerm> elems = null;
         if (ref.tupleElems() != null) {
             elems = new ArrayList<>();
             for (Ast.TypeTerm e : ref.tupleElems()) {
                 elems.add(typeTerm(e));
             }
         }
-        Ast.TypeRef resolved = new Ast.TypeRef.Written(ref.written(), arg, elems, ref.anchor());
-        Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
+        TypeOps.Reference parts = new TypeOps.Reference(ref.written(), arg, elems, ref.anchor());
+        Hir.TypeRef denoted = new Hir.TypeRef(ref.written(), arg, elems, typeOf(parts), ref.anchor());
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
             switch (symbols.scope().resolve(denoted.written())) {
@@ -439,21 +702,24 @@ public final class Resolve {
 
     // --- definitions ---
 
-    private Ast.Def def(Ast.Def def) {
-        owner = new BindingOwner.OfData(def.declares());
+    private Hir.Def def(Ast.Def def) {
+        // The one place a declaration's identity comes into existence: it is minted here, from the
+        // module that wrote the declaration and the name written there, and carried from here on.
+        TypeName declared = DeclaredIdentity.of(def.declaredIn(), def.name());
+        owner = new BindingOwner.OfData(declared);
         return switch (def) {
-            case Ast.UnitData u -> u;
+            case Ast.UnitData u -> new Hir.UnitData(u.written(), declared, u.pos());
             // an invariant reads the fields of the data it belongs to, which are what bind its
             // names — `value > 0` is about this declaration's `value`, whatever else is in scope
             case Ast.Data d -> {
-                declareFields(d);
-                yield new Ast.Data(d.written(), d.declaredIn(), d.newtype(), names(d.includes()),
+                declareFields(d, declared);
+                yield new Hir.Data(d.written(), declared, d.newtype(), names(d.includes()),
                         fields(d.fields()),
-                        Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
+                        clauses(d.invariants(), boundFields(d, declared)),
                         d.decoder().map(this::decoder), d.encoder().map(this::encoder),
                         d.pos());
             }
-            case Ast.SumData s -> new Ast.SumData(s.written(), s.declaredIn(), sumCases(s),
+            case Ast.SumData s -> new Hir.SumData(s.written(), declared, sumCases(s),
                     s.decoder().map(this::discriminate),
                     s.encoder().map(this::sumEncoder), s.pos());
         };
@@ -461,27 +727,23 @@ public final class Resolve {
 
     /** A sum's cases keep their own message: {@code data X = A | B} names the cases of one type, so a
      * name nothing declares is answered against that sum rather than as a bare unknown type. */
-    private List<Ast.Name> sumCases(Ast.SumData s) {
-        List<Ast.Name> out = new ArrayList<>();
+    private List<Hir.Name> sumCases(Ast.SumData s) {
+        List<Hir.Name> out = new ArrayList<>();
         for (Ast.Name c : s.cases()) {
-            if (!(c instanceof Ast.Name.Written)) {
-                out.add(c);
-                continue;
-            }
             Denotation answer = symbols.scope().resolve(c.name());
             if (answer instanceof Denotation.NotInScope) {
                 throw CompileException.of(Diagnostic
                                 .at(s.pos()).say(new BehaviorMessage.UnknownCaseInASum(c.written(), s.name())).build());
             }
             if (answer instanceof Denotation.StandsForNothing) {
-                out.add(answered(c.unanswered()));
+                out.add(answered(unanswered(c)));
                 continue;
             }
             TypeName denoted = answer.type();
             // Recorded like any other written name. A case is a name this module wrote and this pass
             // answered, so leaving it out made it a use nothing could see — an editor asked about it
             // had no answer, and a reader asking which imports are written found the name missing.
-            out.add(answered(c.denoting(denoted)));
+            out.add(answered(denoting(c, denoted)));
         }
         return out;
     }
@@ -499,8 +761,8 @@ public final class Resolve {
      * includes it reads these fields in <em>its</em> invariant, and the binding a field is stays the
      * declaring declaration's, so this is where an editor is answered from either way.
      */
-    private void declareFields(Ast.Data d) {
-        Map<String, BindingId> bindings = TypeOps.fieldBindingsWhileResolving(d.declares(), d, symbols);
+    private void declareFields(Ast.Data d, TypeName declared) {
+        Map<String, BindingId> bindings = TypeOps.fieldBindingsAsWritten(declared, d, symbols);
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
             if (binding != null) {
@@ -509,229 +771,264 @@ public final class Resolve {
         }
     }
 
-    private Bindings boundFields(Ast.Data d) {
+    private Bindings boundFields(Ast.Data d, TypeName declared) {
         Bindings bound = Bindings.NONE;
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again
         for (Map.Entry<String, BindingId> f
-                : TypeOps.fieldBindingsWhileResolving(d.declares(), d, symbols).entrySet()) {
+                : TypeOps.fieldBindingsAsWritten(declared, d, symbols).entrySet()) {
             bound = bound.and(f.getKey(), new ValueName.Local(f.getKey(), f.getValue()));
         }
         return bound;
     }
 
-    private Ast.Discriminate discriminate(Ast.Discriminate d) {
-        List<Ast.Variant> variants = new ArrayList<>();
+    private Hir.Discriminate discriminate(Ast.Discriminate d) {
+        List<Hir.Variant> variants = new ArrayList<>();
         for (Ast.Variant v : d.variants()) {
-            variants.add(new Ast.Variant(v.tag(), type(v.caseType()), v.pos()));
+            variants.add(new Hir.Variant(v.tag(), type(v.caseType()), v.pos()));
         }
-        return new Ast.Discriminate(d.key(), variants, d.pos());
+        return new Hir.Discriminate(d.key(), variants, d.pos());
     }
 
-    private Ast.SumEncoder sumEncoder(Ast.SumEncoder e) {
-        List<Ast.EncVariant> variants = new ArrayList<>();
+    private Hir.SumEncoder sumEncoder(Ast.SumEncoder e) {
+        List<Hir.EncVariant> variants = new ArrayList<>();
         for (Ast.EncVariant v : e.variants()) {
-            variants.add(new Ast.EncVariant(type(v.caseType()), v.tag(), v.pos()));
+            variants.add(new Hir.EncVariant(type(v.caseType()), v.tag(), v.pos()));
         }
-        return new Ast.SumEncoder(e.key(), variants, e.pos());
+        return new Hir.SumEncoder(e.key(), variants, e.pos());
     }
 
     // --- decoders ---
 
     /** A decoder reads the value it is decoding under the name it gives it, and an object decoder
      * reads what each of its binds took out of the object. Those are what bind its names. */
-    private Ast.DecoderDef decoder(Ast.DecoderDef d) {
+    private Hir.DecoderDef decoder(Ast.DecoderDef d) {
         return switch (d) {
             case Ast.PrimDecoder p -> {
                 Answered input = bind(Bindings.NONE, p.input());
                 Bindings bound = input.bound();
-                List<Ast.DecStmt> stmts = new ArrayList<>();
+                List<Hir.DecStmt> stmts = new ArrayList<>();
                 for (Ast.DecStmt s : p.stmts()) {
-                    if (s instanceof Ast.Let let) {
-                        Ast.Expr value = expr(let.value(), bound);
-                        Answered a = bind(bound, let.binder());
-                        stmts.add(new Ast.Let(a.binder(), value, let.pos()));
-                        bound = a.bound();
-                    } else {
-                        stmts.add(s);
-                    }
+                    Ast.Let let = (Ast.Let) s;
+                    Hir.Expr value = expr(let.value(), bound);
+                    Answered a = bind(bound, let.binder());
+                    stmts.add(new Hir.Let(a.binder(), value, let.pos()));
+                    bound = a.bound();
                 }
-                yield new Ast.PrimDecoder(p.from(), input.binder(), stmts,
+                yield new Hir.PrimDecoder(Hir.RawKind.valueOf(p.from().name()), input.binder(), stmts,
                         construct(p.result(), bound), p.pos());
             }
             case Ast.ObjectDecoder o -> {
-                List<Ast.Bind> binds = new ArrayList<>();
+                List<Hir.Bind> binds = new ArrayList<>();
                 Bindings bound = Bindings.NONE;
                 for (Ast.Bind b : o.binds()) {
                     Answered a = bind(bound, b.binder());
-                    binds.add(new Ast.Bind(a.binder(), b.key(), decRef(b.ref()), b.pos()));
+                    binds.add(new Hir.Bind(a.binder(), b.key(), decRef(b.ref()), b.pos()));
                     bound = a.bound();
                 }
-                yield new Ast.ObjectDecoder(binds, construct(o.result(), bound), o.pos());
+                yield new Hir.ObjectDecoder(binds, construct(o.result(), bound), o.pos());
             }
             case Ast.NewtypeDecoder n -> {
                 Answered input = bind(Bindings.NONE, n.input());
-                yield new Ast.NewtypeDecoder(decRef(n.inner()), input.binder(),
+                yield new Hir.NewtypeDecoder(decRef(n.inner()), input.binder(),
                         construct(n.result(), input.bound()), n.pos());
             }
         };
     }
 
-    private Ast.DecRef decRef(Ast.DecRef ref) {
+    private Hir.DecRef decRef(Ast.DecRef ref) {
         return switch (ref) {
             case Ast.DecRef.Bare b -> bareDecRef(b);
-            case Ast.OptionDecRef o -> new Ast.OptionDecRef(bareDecRef(o.element()), o.pos());
+            case Ast.OptionDecRef o -> new Hir.OptionDecRef(bareDecRef(o.element()), o.pos());
         };
     }
 
     /** Resolving keeps the shape it was given, so what an optional holds stays what an optional may
      *  hold. Split here for that reason and not to say anything new about the arms. */
-    private Ast.DecRef.Bare bareDecRef(Ast.DecRef.Bare ref) {
+    private Hir.DecRef.Bare bareDecRef(Ast.DecRef.Bare ref) {
         return switch (ref) {
-            case Ast.PrimDecRef p -> p;
-            case Ast.DataDecRef d -> new Ast.DataDecRef(type(d.typeName()), d.pos());
-            case Ast.ListDecRef l -> new Ast.ListDecRef(decRef(l.element()), l.pos());
-            case Ast.SetDecRef s -> new Ast.SetDecRef(decRef(s.element()), s.pos());
+            case Ast.PrimDecRef p -> new Hir.PrimDecRef(p.kind(), p.pos());
+            case Ast.DataDecRef d -> new Hir.DataDecRef(type(d.typeName()), d.pos());
+            case Ast.ListDecRef l -> new Hir.ListDecRef(decRef(l.element()), l.pos());
+            case Ast.SetDecRef s -> new Hir.SetDecRef(decRef(s.element()), s.pos());
             // the key is already the classification the checker made, carrying a resolved name
-            case Ast.MapDecRef m -> new Ast.MapDecRef(decRef(m.value()), m.key(), m.pos());
+            case Ast.MapDecRef m -> new Hir.MapDecRef(decRef(m.value()), m.key(), m.pos());
         };
     }
 
-    private Ast.Construct construct(Ast.Construct c, Bindings bound) {
-        List<Ast.FieldInit> inits = new ArrayList<>();
+    private Hir.Construct construct(Ast.Construct c, Bindings bound) {
+        List<Hir.FieldInit> inits = new ArrayList<>();
         for (Ast.FieldInit i : c.inits()) {
-            inits.add(new Ast.FieldInit(i.written(), expr(i.value(), bound)));
+            inits.add(new Hir.FieldInit(i.written(), expr(i.value(), bound)));
         }
-        return new Ast.Construct(type(c.typeName()), inits, c.pos());
+        return new Hir.Construct(type(c.typeName()), inits, c.pos());
     }
 
     // --- encoders ---
 
     /** An encoder reads the value it is encoding under the name it gives it. */
-    private Ast.EncoderDef encoder(Ast.EncoderDef e) {
+    private Hir.EncoderDef encoder(Ast.EncoderDef e) {
         Answered self = bind(Bindings.NONE, e.self());
-        return new Ast.EncoderDef(self.binder(), rawExpr(e.result(), self.bound()), e.pos());
+        return new Hir.EncoderDef(self.binder(), rawExpr(e.result(), self.bound()), e.pos());
     }
 
-    private Ast.RawExpr rawExpr(Ast.RawExpr r, Bindings bound) {
+    private Hir.RawExpr rawExpr(Ast.RawExpr r, Bindings bound) {
         return switch (r) {
-            case Ast.TextRaw t -> new Ast.TextRaw(expr(t.arg(), bound), t.pos());
-            case Ast.IntRaw i -> new Ast.IntRaw(expr(i.arg(), bound), i.pos());
-            case Ast.BoolRaw b -> new Ast.BoolRaw(expr(b.arg(), bound), b.pos());
-            case Ast.DecimalRaw d -> new Ast.DecimalRaw(expr(d.arg(), bound), d.pos());
-            case Ast.IsoTextRaw i -> new Ast.IsoTextRaw(expr(i.arg(), bound), i.pos());
+            case Ast.TextRaw t -> new Hir.TextRaw(expr(t.arg(), bound), t.pos());
+            case Ast.IntRaw i -> new Hir.IntRaw(expr(i.arg(), bound), i.pos());
+            case Ast.BoolRaw b -> new Hir.BoolRaw(expr(b.arg(), bound), b.pos());
+            case Ast.DecimalRaw d -> new Hir.DecimalRaw(expr(d.arg(), bound), d.pos());
+            case Ast.IsoTextRaw i -> new Hir.IsoTextRaw(expr(i.arg(), bound), i.pos());
             case Ast.EncodeRaw en ->
-                    new Ast.EncodeRaw(type(en.typeName()), expr(en.arg(), bound), en.pos());
-            case Ast.ListEnc l -> new Ast.ListEnc(expr(l.source(), bound), encElem(l.elem()), l.pos());
-            case Ast.SetEnc s -> new Ast.SetEnc(expr(s.source(), bound), encElem(s.elem()), s.pos());
-            case Ast.MapEnc m -> new Ast.MapEnc(expr(m.source(), bound), encElem(m.elem()),
+                    new Hir.EncodeRaw(type(en.typeName()), expr(en.arg(), bound), en.pos());
+            case Ast.ListEnc l -> new Hir.ListEnc(expr(l.source(), bound), encElem(l.elem()), l.pos());
+            case Ast.SetEnc s -> new Hir.SetEnc(expr(s.source(), bound), encElem(s.elem()), s.pos());
+            case Ast.MapEnc m -> new Hir.MapEnc(expr(m.source(), bound), encElem(m.elem()),
                     m.key(), m.pos());
             // the inner expression reads the element the option holds, under the name given here
             case Ast.OptionRaw o -> {
                 Answered elem = bind(bound, o.elem());
-                yield new Ast.OptionRaw(expr(o.access(), bound),
+                yield new Hir.OptionRaw(expr(o.access(), bound),
                         rawExpr(o.inner(), elem.bound()), elem.binder(), o.pos());
             }
             case Ast.ObjectRaw o -> {
-                List<Ast.RawEntry> entries = new ArrayList<>();
+                List<Hir.RawEntry> entries = new ArrayList<>();
                 for (Ast.RawEntry entry : o.entries()) {
-                    entries.add(new Ast.RawEntry(entry.key(), rawExpr(entry.value(), bound),
+                    entries.add(new Hir.RawEntry(entry.key(), rawExpr(entry.value(), bound),
                             entry.pos()));
                 }
-                yield new Ast.ObjectRaw(entries, o.pos());
+                yield new Hir.ObjectRaw(entries, o.pos());
             }
         };
     }
 
-    private Ast.EncElem encElem(Ast.EncElem e) {
+    private Hir.EncElem encElem(Ast.EncElem e) {
         return switch (e) {
             case Ast.EncElem.Bare b -> bareEncElem(b);
-            case Ast.OptionElemEnc o -> new Ast.OptionElemEnc(bareEncElem(o.elem()), o.pos());
+            case Ast.OptionElemEnc o -> new Hir.OptionElemEnc(bareEncElem(o.elem()), o.pos());
         };
     }
 
-    private Ast.EncElem.Bare bareEncElem(Ast.EncElem.Bare e) {
+    private Hir.EncElem.Bare bareEncElem(Ast.EncElem.Bare e) {
         return switch (e) {
-            case Ast.PrimEnc p -> p;
-            case Ast.DataEnc d -> new Ast.DataEnc(type(d.typeName()), d.pos());
-            case Ast.ListElemEnc l -> new Ast.ListElemEnc(encElem(l.elem()), l.pos());
-            case Ast.SetElemEnc s -> new Ast.SetElemEnc(encElem(s.elem()), s.pos());
-            case Ast.MapElemEnc m -> new Ast.MapElemEnc(encElem(m.value()), m.key(), m.pos());
+            case Ast.PrimEnc p -> new Hir.PrimEnc(p.kind(), p.pos());
+            case Ast.DataEnc d -> new Hir.DataEnc(type(d.typeName()), d.pos());
+            case Ast.ListElemEnc l -> new Hir.ListElemEnc(encElem(l.elem()), l.pos());
+            case Ast.SetElemEnc s -> new Hir.SetElemEnc(encElem(s.elem()), s.pos());
+            case Ast.MapElemEnc m -> new Hir.MapElemEnc(encElem(m.value()), m.key(), m.pos());
         };
     }
 
     // --- expressions ---
 
-    private Ast.Expr expr(Ast.Expr e) {
+    private Hir.Expr expr(Ast.Expr e) {
         return expr(e, Bindings.NONE);
     }
 
     /**
      * Rewrites the names {@code e} itself writes, against the bindings in force where it is written.
      *
-     * <p>A node that binds a name is written out here, because what its parts are resolved against
-     * differs: a {@code let}'s value is outside its own binding and its body is inside. Everything
-     * else recurses through {@link Ast#mapChildren}, so a new expression kind is carried without
-     * being named here.
+     * <p>Every kind is named here. Between the two representations there is no rewrite that carries
+     * a node across on its own, so a node this pass does not know how to answer is a node it cannot
+     * answer at all — and an expression kind added later stops the build here, which is the one
+     * place it has to be accounted for.
      */
-    private Ast.Expr expr(Ast.Expr e, Bindings bound) {
+    private Hir.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
             case Ast.Var v -> reached(v, bound);
             // Applying a name is answered as a name: which of a binding, a helper, a library
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
             case Ast.Apply call when call.appliesAName() -> applied(call, bound);
-            case Ast.Apply call -> new Ast.Apply(callee(call.function(), bound),
-                    exprs(call.args(), bound), call.origin(), call.pos(), call.region());
+            case Ast.Apply call -> new Hir.Apply(callee(call.function(), bound),
+                    exprs(call.args(), bound), call.origin(), call.appliedAs(), call.pos(),
+                    call.region());
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
             // the parser read as a field taken off a name because it reads no case at all. Folded
             // here and nowhere earlier: `Map` may be a parameter, and a binding in force wins over
             // everything else — which is a fact the parser and the AST builder do not have.
             case Ast.FieldAccess fa -> {
-                Ast.Var member = qualifiedName(fa, false, bound);
-                yield member != null ? member : fa.withTarget(expr(fa.target(), bound));
+                Hir.Var member = qualifiedName(fa, false, bound);
+                yield member != null ? member
+                        : new Hir.FieldAccess(expr(fa.target(), bound), fa.name(), fa.pos(),
+                                fa.region());
             }
             // the type being built is this case's business; everything under it is a slot like any
             // other
-            case Ast.NewData nd -> Ast.mapChildren(
-                    new Ast.NewData(type(nd.typeName()), nd.inits(), nd.spreads(), nd.origin(), nd.pos(),
-                            nd.region()),
-                    x -> expr(x, bound), s -> name(s, bound));
+            case Ast.NewData nd -> new Hir.NewData(type(nd.typeName()), inits(nd.inits(), bound),
+                    vars(nd.spreads(), bound), nd.origin(), nd.pos(), nd.region());
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> {
-                Ast.Expr value = expr(li.value(), bound);
+                Hir.Expr value = expr(li.value(), bound);
                 Answered a = bind(bound, li.binder());
-                yield new Ast.LetIn(a.binder(), value,
+                yield new Hir.LetIn(a.binder(), value,
                         paramType(li.declaredType()), li.annotated(),
                         li.opens() == null ? null : caseName(li.opens()),
                         expr(li.body(), a.bound()), li.pos(), li.region());
             }
             case Ast.Block b -> {
                 AnsweredAll ps = bindAll(bound, b.params());
-                yield new Ast.Block(ps.binders(), expr(b.body(), ps.bound()), b.pos(), b.region());
+                yield new Hir.Block(ps.binders(), expr(b.body(), ps.bound()), b.pos(), b.region());
             }
             // an attempt's binder names the value only where there is one to name — the success
             // branch. The construction and the else value are outside it.
             case Ast.IfConstructed ic -> {
                 Answered a = bind(bound, ic.binder());
-                yield new Ast.IfConstructed(expr(ic.construct(), bound), a.binder(),
+                yield new Hir.IfConstructed(expr(ic.construct(), bound), a.binder(),
                         expr(ic.then(), a.bound()), arms(ic.els(), bound), ic.origin(), ic.pos(),
                         ic.region());
             }
             case Ast.Match m -> {
-                List<Ast.Case> cases = new ArrayList<>();
+                List<Hir.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {
                     Answered a = c.binding() == null ? null : bind(bound, c.binding());
                     Bindings inArm = a == null ? bound : a.bound();
-                    cases.add(new Ast.Case(caseNames(c.caseTypes()),
+                    cases.add(new Hir.Case(caseNames(c.caseTypes()),
                             a == null ? null : a.binder(), expr(c.body(), inArm),
                             c.unwrapAsserts() == null ? null : names(c.unwrapAsserts()), c.pos()));
                 }
-                yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.origin(), m.pos(), m.region());
+                yield new Hir.Match(expr(m.scrutinee(), bound), cases, m.origin(), m.pos(), m.region());
             }
-            default -> Ast.mapChildren(e, x -> expr(x, bound), s -> name(s, bound));
+            case Ast.IntLit x -> new Hir.IntLit(x.value(), x.pos(), x.region());
+            case Ast.DecimalLit x -> new Hir.DecimalLit(x.value(), x.pos(), x.region());
+            case Ast.StringLit x -> new Hir.StringLit(x.value(), x.pos(), x.region());
+            case Ast.BoolLit x -> new Hir.BoolLit(x.value(), x.pos(), x.region());
+            case Ast.Unreachable x -> new Hir.Unreachable(x.reason(), x.pos(), x.region());
+            case Ast.Neg x -> new Hir.Neg(expr(x.operand(), bound), x.pos(), x.region());
+            case Ast.Binary x -> new Hir.Binary(Hir.BinOp.valueOf(x.op().name()),
+                    expr(x.left(), bound), expr(x.right(), bound), x.origin(), x.pos(), x.region());
+            case Ast.If x -> new Hir.If(expr(x.cond(), bound), expr(x.then(), bound),
+                    expr(x.els(), bound), x.origin(), x.pos(), x.region());
+            case Ast.ListLit x -> new Hir.ListLit(exprs(x.elements(), bound), x.pos(), x.region());
+            case Ast.ListComp x -> new Hir.ListComp(expr(x.element(), bound),
+                    exprs(x.guards(), bound), x.origin(), x.pos(), x.region());
+            case Ast.Tuple x -> new Hir.Tuple(exprs(x.elements(), bound), x.pos(), x.region());
+            case Ast.TupleGet x -> new Hir.TupleGet(expr(x.tuple(), bound), x.index(), x.arity(),
+                    x.pos(), x.region());
+            // An expansion is what the inliner writes, and the inliner runs on what this pass
+            // answers. One here is a tree that has been below this boundary and come back.
+            case Ast.Expansion x -> throw new IllegalStateException(
+                    "an expansion reached resolution at " + x.pos());
         };
+    }
+
+    /** A construction's field values, each a slot like any other. */
+    private List<Hir.FieldInit> inits(List<Ast.FieldInit> inits, Bindings bound) {
+        List<Hir.FieldInit> out = new ArrayList<>();
+        for (Ast.FieldInit i : inits) {
+            out.add(new Hir.FieldInit(i.written(), expr(i.value(), bound)));
+        }
+        return out;
+    }
+
+    /** The names in a construction's spreads — a name slot, where only a name may stand. */
+    private List<Hir.Var> vars(List<Ast.Var> vars, Bindings bound) {
+        List<Hir.Var> out = new ArrayList<>();
+        for (Ast.Var v : vars) {
+            out.add(name(v, bound));
+        }
+        return out;
     }
 
     /**
@@ -739,32 +1036,32 @@ public final class Resolve {
      * what this pass does at a name slot, wherever a node has one. A binding in force wins over a
      * declaration in a spread as everywhere else.
      *
-     * <p>A name a pass synthesized already knowing what it means is left as it is, as a synthesized
-     * type name is.
      */
-    private Ast.Var name(Ast.Var written, Bindings bound) {
-        return written instanceof Ast.Var.Written ? reached(written, bound) : written;
+    private Hir.Var name(Ast.Var written, Bindings bound) {
+        return reached(written, bound);
     }
 
     /** An application of a name, with what the name denotes and how this module reaches it answered
      * here — the same pair, from the same place, as a name standing on its own. */
-    private Ast.Expr applied(Ast.Apply call, Bindings bound) {
+    private Hir.Expr applied(Ast.Apply call, Bindings bound) {
         ValueName denotes = calledName(call, bound);
         // Answered rather than rebuilt: what the callee means is settled here and where it is
         // written is not this pass's to decide. Building one from the name would take its extent
         // from the characters that spell it, which is short of what a parenthesized callee covers.
-        Ast.Var written = call.function() instanceof Ast.Var applied ? applied
-                : Ast.Var.written(call.name());
-        Ast.Var name;
+        WrittenName written = call.function() instanceof Ast.Var applied ? applied.written()
+                : call.name();
+        Region over = call.function() instanceof Ast.Var applied ? applied.region()
+                : written.region();
+        Hir.Var name;
         if (denotes == null) {
-            name = written.unanswered();
+            name = new Hir.Var.Unanswered(written, over);
         } else {
             answered(call.name(), denotes);
-            name = written.denoting(denotes,
-                    ReachName.of(denotes, call.written(), values.module()));
+            name = new Hir.Var.Denoting(written, denotes,
+                    ReachName.of(denotes, call.written(), values.module()), over);
         }
-        return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos(),
-                call.region());
+        return new Hir.Apply(name, exprs(call.args(), bound), call.origin(), call.appliedAs(),
+                call.pos(), call.region());
     }
 
     /**
@@ -775,29 +1072,30 @@ public final class Resolve {
      * spelling would answer differently depending on which rewrites had run — which is the defect
      * this carries the answer to avoid.
      */
-    private Ast.Var reached(Ast.Var v, Bindings bound) {
+    private Hir.Var reached(Ast.Var v, Bindings bound) {
         ValueName denotes = valueName(v.written(), bound);
         if (denotes == null) {
-            return v.unanswered();
+            return new Hir.Var.Unanswered(v.written(), v.region());
         }
         answered(v.written(), denotes);
-        return v.denoting(denotes, ReachName.of(denotes, v.name(), values.module()));
+        return new Hir.Var.Denoting(v.written(), denotes,
+                ReachName.of(denotes, v.name(), values.module()), v.region());
     }
 
-    private List<Ast.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
-        List<Ast.ElseArm> out = new ArrayList<>();
+    private List<Hir.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
+        List<Hir.ElseArm> out = new ArrayList<>();
         for (Ast.ElseArm arm : arms) {
-            out.add(arm.with(expr(arm.body(), bound)));
+            out.add(new Hir.ElseArm(arm.clause(), expr(arm.body(), bound), arm.pos()));
         }
         return out;
     }
 
-    private List<Ast.Expr> exprs(List<Ast.Expr> es) {
+    private List<Hir.Expr> exprs(List<Ast.Expr> es) {
         return exprs(es, Bindings.NONE);
     }
 
-    private List<Ast.Expr> exprs(List<Ast.Expr> es, Bindings bound) {
-        List<Ast.Expr> out = new ArrayList<>();
+    private List<Hir.Expr> exprs(List<Ast.Expr> es, Bindings bound) {
+        List<Hir.Expr> out = new ArrayList<>();
         for (Ast.Expr e : es) {
             out.add(expr(e, bound));
         }
@@ -879,9 +1177,9 @@ public final class Resolve {
      * it is a newtype taking what it wraps. Anything else is the expression it is, and what may be
      * applied is the check's to say.
      */
-    private Ast.Expr callee(Ast.Expr function, Bindings bound) {
+    private Hir.Expr callee(Ast.Expr function, Bindings bound) {
         if (function instanceof Ast.FieldAccess fa) {
-            Ast.Var name = qualifiedName(fa, true, bound);
+            Hir.Var name = qualifiedName(fa, true, bound);
             if (name != null) {
                 return name;
             }
@@ -906,18 +1204,18 @@ public final class Resolve {
      *
      * <p>Positioned at the root, so what a reader asks about covers every token of the name.
      */
-    private Ast.Var qualifiedName(Ast.FieldAccess fa, boolean applied, Bindings bound) {
+    private Hir.Var qualifiedName(Ast.FieldAccess fa, boolean applied, Bindings bound) {
         Ast.Var root = rootName(fa);
-        if (root == null || !(root instanceof Ast.Var.Written)
-                || bound.binderOf(root.name()) != null) {
+        if (root == null || bound.binderOf(root.name()) != null) {
             return null;
         }
         WrittenName written = dottedName(fa);
         ValueName denotes = lookup(written, applied, bound);
         if (denotes != null) {
             ValueName resolved = answered(written, denotes);
-            return Ast.Var.denoting(written, resolved,
-                    ReachName.of(resolved, written.canonical(), values.module()));
+            return new Hir.Var.Denoting(written, resolved,
+                    ReachName.of(resolved, written.canonical(), values.module()),
+                    written.region());
         }
         return unknownMember(fa, written, applied, bound);
     }
@@ -933,14 +1231,14 @@ public final class Resolve {
      * as the unknown identifier it is once the chain is read as the field access it turned out to
      * be.
      */
-    private Ast.Var unknownMember(Ast.FieldAccess fa, WrittenName written, boolean applied,
+    private Hir.Var unknownMember(Ast.FieldAccess fa, WrittenName written, boolean applied,
                                   Bindings bound) {
         WrittenName qualifier = dottedName(fa.target());
         if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
         }
         nothing(unknownIdentifier(written, bound));
-        return new Ast.Var.Unanswered(written, written.region());
+        return new Hir.Var.Unanswered(written, written.region());
     }
 
     /** Whether {@code qualifier} names a namespace a member may be reached through: a
@@ -1105,25 +1403,30 @@ public final class Resolve {
 
     // --- names ---
 
-    private List<Ast.Name> names(List<Ast.Name> names) {
-        List<Ast.Name> out = new ArrayList<>();
+    private List<Hir.Name> names(List<Ast.Name> names) {
+        List<Hir.Name> out = new ArrayList<>();
         for (Ast.Name n : names) {
             out.add(type(n));
         }
         return out;
     }
 
+    private static Hir.Name denoting(Ast.Name n, TypeName type) {
+        return new Hir.Name.Denoting(n.name(), type);
+    }
+
+    private static Hir.Name unanswered(Ast.Name n) {
+        return new Hir.Name.Unanswered(n.name());
+    }
+
     /** A name that must denote a declared type. */
-    private Ast.Name type(Ast.Name n) {
-        if (!(n instanceof Ast.Name.Written)) {
-            return n;
-        }
+    private Hir.Name type(Ast.Name n) {
         return answered(switch (symbols.scope().resolve(n.name())) {
-            case Denotation.Denotes d -> n.denoting(d.type());
+            case Denotation.Denotes d -> denoting(n, d.type());
             // In scope standing for nothing: a name an import line could not bring in takes the
             // error type rather than being reported as an unknown name at every use. The import
             // line is where that was reported, so nothing more is said here.
-            case Denotation.StandsForNothing ignored -> n.unanswered();
+            case Denotation.StandsForNothing ignored -> unanswered(n);
             case Denotation.NotInScope ignored -> nothingDenotes(n);
         });
     }
@@ -1131,24 +1434,21 @@ public final class Resolve {
     /** The names a {@code match} arm may write: a declared case, a primitive heading a union
      * ({@code Int} in {@code Int | DivisionByZero}), a runtime error case, or one of Option's two.
      * A declared type wins over Option's names, so a model may still declare {@code Some}. */
-    private List<Ast.Name> caseNames(List<Ast.Name> names) {
-        List<Ast.Name> out = new ArrayList<>();
+    private List<Hir.Name> caseNames(List<Ast.Name> names) {
+        List<Hir.Name> out = new ArrayList<>();
         for (Ast.Name n : names) {
             out.add(caseName(n));
         }
         return out;
     }
 
-    private Ast.Name caseName(Ast.Name n) {
-        if (!(n instanceof Ast.Name.Written)) {
-            return n;
-        }
+    private Hir.Name caseName(Ast.Name n) {
         return answered(switch (symbols.scope().resolveCase(n.name())) {
-            case Denotation.Denotes d -> n.denoting(d.type());
-            case Denotation.StandsForNothing ignored -> n.unanswered();
+            case Denotation.Denotes d -> denoting(n, d.type());
+            case Denotation.StandsForNothing ignored -> unanswered(n);
             case Denotation.NotInScope ignored -> {
                 TypeName option = TypeName.optionCase(n.written());
-                yield option != null ? n.denoting(option) : nothingDenotes(n);
+                yield option != null ? denoting(n, option) : nothingDenotes(n);
             }
         });
     }
@@ -1160,7 +1460,7 @@ public final class Resolve {
      * cannot, because it is asked one reference at a time and has nowhere to put a report; here there
      * is somewhere to put it, and a tree to carry on resolving.
      */
-    private Type typeOf(Ast.TypeRef ref) {
+    private Type typeOf(TypeOps.Reference ref) {
         try {
             return TypeOps.denoted(ref, symbols);
         } catch (CompileException e) {
@@ -1171,16 +1471,16 @@ public final class Resolve {
     }
 
     /** Reports that nothing declares {@code n}, and hands back the name that says so. */
-    private Ast.Name nothingDenotes(Ast.Name n) {
+    private Hir.Name nothingDenotes(Ast.Name n) {
         unresolved.add(TypeOps.unknownType(n.name(), symbols));
-        return n.unanswered();
+        return unanswered(n);
     }
 
     /** Records what a name was answered with, and hands it back. A name with no position was
      * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
      * name nothing answered is an absence rather than a declaration to record. */
-    private Ast.Name answered(Ast.Name n) {
-        if (n instanceof Ast.Name.Unanswered) {
+    private Hir.Name answered(Hir.Name n) {
+        if (n instanceof Hir.Name.Unanswered) {
             failed++;
         } else if (n.pos() != null) {
             denotations.add(new TypeUse(n.name(), n.denotes()));

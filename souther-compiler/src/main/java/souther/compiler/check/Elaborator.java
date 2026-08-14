@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -44,17 +44,17 @@ public final class Elaborator {
     static final Map<String, ReqSig> NO_REQS = Map.of();
 
 
-    public static Type typeOf(Ast.Expr e, Scope env, CheckContext ctx) {
+    public static Type typeOf(Hir.Expr e, Scope env, CheckContext ctx) {
         return typeOf(e, env, ctx, null);
     }
 
     /** The type of {@code e}, discarding the Core the elaboration produced — for the checks that ask
      * only whether an expression types (a decoder, an invariant, a helper's standalone check). */
-    public static Type typeOf(Ast.Expr e, Scope env, CheckContext ctx, Type expected) {
+    public static Type typeOf(Hir.Expr e, Scope env, CheckContext ctx, Type expected) {
         return elaborate(e, env, ctx, expected).type();
     }
 
-    public static Core elaborate(Ast.Expr e, Scope env, CheckContext ctx) {
+    public static Core elaborate(Hir.Expr e, Scope env, CheckContext ctx) {
         return elaborate(e, env, ctx, null);
     }
 
@@ -69,7 +69,7 @@ public final class Elaborator {
      * and a generic call pre-binds its result-type variables from it, so a fold whose seed is an
      * empty collection has its accumulator pinned by context before the step is checked.
      */
-    public static Core elaborate(Ast.Expr e, Scope env, CheckContext ctx, Type expected) {
+    public static Core elaborate(Hir.Expr e, Scope env, CheckContext ctx, Type expected) {
         return equatableCollections(elaborating(e, env, ctx, expected), ctx);
     }
 
@@ -94,20 +94,20 @@ public final class Elaborator {
                 .build());
     }
 
-    private static Core elaborating(Ast.Expr e, Scope env, CheckContext ctx,
+    private static Core elaborating(Hir.Expr e, Scope env, CheckContext ctx,
                                     Type expected) {
         return switch (e) {
-            case Ast.IntLit x -> new Core.Int(x.value(), Type.INT, x.pos());
-            case Ast.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());
-            case Ast.StringLit x -> new Core.Str(x.value(), Type.STRING, x.pos());
-            case Ast.BoolLit x -> new Core.Bool(x.value(), Type.BOOL, x.pos());
+            case Hir.IntLit x -> new Core.Int(x.value(), Type.INT, x.pos());
+            case Hir.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());
+            case Hir.StringLit x -> new Core.Str(x.value(), Type.STRING, x.pos());
+            case Hir.BoolLit x -> new Core.Bool(x.value(), Type.BOOL, x.pos());
             // It answers no value, so its type is `Never` — but the position it stands in still has a
             // shape to leave behind, and where the position states one that is what is recorded. A
             // position that states none leaves `Never`, and a sibling branch may still fix it at the
             // join (a `match` arm beside one that answers a value).
-            case Ast.Unreachable u ->
+            case Hir.Unreachable u ->
                     new Core.Unreachable(u.reason(), expected == null ? Type.NEVER : expected, u.pos());
-            case Ast.Tuple tup -> {
+            case Hir.Tuple tup -> {
                 // A pushed-down tuple type reaches each element, so a written `(Set<Int>, List<Int>)`
                 // fixes the empty collections the tuple seeds rather than leaving them bottoms (#74).
                 List<Type> want = expected instanceof Type.TupleOf te
@@ -122,7 +122,7 @@ public final class Elaborator {
                 }
                 yield new Core.Tuple(elems, Type.tuple(elemTypes), tup.pos());
             }
-            case Ast.TupleGet tg -> {
+            case Hir.TupleGet tg -> {
                 Core tuple = elaborate(tg.tuple(), env, ctx);
                 Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
@@ -136,7 +136,7 @@ public final class Elaborator {
                 yield new Core.TupleGet(tuple, tg.index(), tg.arity(),
                         to.elements().get(tg.index()), tg.pos());
             }
-            case Ast.Neg neg -> {
+            case Hir.Neg neg -> {
                 Core operand = elaborate(neg.operand(), env, ctx);
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
@@ -146,7 +146,7 @@ public final class Elaborator {
                 }
                 yield new Core.Neg(operand, t, neg.pos());
             }
-            case Ast.LetIn li -> {
+            case Hir.LetIn li -> {
                 Type annotation = annotatedType(li, ctx.symbols());
                 Core value;
                 Type bindType;
@@ -185,31 +185,29 @@ public final class Elaborator {
                 Core body = elaborate(li.body(), inner, ctx, expected);
                 yield new Core.LetIn(li.binder(), value, body, body.type(), li.pos());
             }
-            case Ast.Expansion ex -> expansion(ex, env, ctx, expected);
+            case Hir.Expansion ex -> expansion(ex, env, ctx, expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
             // would need a runtime closure (spec §blocks)
             // a lambda where a function is expected is that function: the context said what it takes,
             // so nothing has to be read off its applications
-            case Ast.Block block when expected instanceof Type.FnOf want ->
+            case Hir.Block block when expected instanceof Type.FnOf want ->
                     elaborateFunctionValue(block, want.params(), env, ctx);
-            case Ast.Block block -> throw CompileException.of(Diagnostic
+            case Hir.Block block -> throw CompileException.of(Diagnostic
                             .at(block.pos()).say(new NameMessage.ABlockIsNotAValue()).build());
             // What the name is was answered when the module's names were resolved; what is left here
             // is its type. A binding is looked up, a unit data is its own value (spec §unit-data), and
             // anything else is not a value — reported below under the name that was written.
             // A name nothing answered has no meaning to work out, and the definition it is in has
             // none either: reported where it is written, and abandoned here.
-            case Ast.Var.Unanswered v -> throw new Unanswerable(v.pos());
-            case Ast.Var.Written v -> throw new IllegalStateException(
-                    "`" + v.name() + "` reached the check unresolved, at " + v.pos());
-            case Ast.Var v -> switch (v.denotes()) {
+            case Hir.Var.Unanswered v -> throw new Unanswerable(v.pos());
+            case Hir.Var v -> switch (v.denotes()) {
                 // A binding with no type here is not a naming question: an inference probe types a
                 // body before the binding it asks about has one, and reads the report to find out.
                 case ValueName.Local local when env.typeOf(local.id()) != null ->
                         new Core.Read(v.name(), local.id(), env.typeOf(local.id()), v.pos());
                 case ValueName.OfType named
-                        when ctx.symbols().declarations().declaration(named.type()) instanceof Ast.UnitData ->
+                        when ctx.symbols().declarations().declaration(named.type()) instanceof Hir.UnitData ->
                         new Core.UnitValue(named.type(), Type.ref(named.type()), v.pos());
                 // `None` where a `?` field is being given a value: the empty optional (spec §algebraic-types).
                 // What puts it here is the field, which the context says (ADR-0011) — not the expected
@@ -236,15 +234,15 @@ public final class Elaborator {
                                 ctx.preserved().valueKept(v.denotes()), v.pos());
                 default -> throw notAValue(v, env);
             };
-            case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
-            case Ast.Apply call -> CallElaborator.elaborateCall(call, env, ctx, expected);
-            case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
-            case Ast.NewData nd -> {
-                Ast.Name built = nd.typeName();
-                if (built instanceof Ast.Name.Unanswered) {
+            case Hir.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
+            case Hir.Apply call -> CallElaborator.elaborateCall(call, env, ctx, expected);
+            case Hir.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
+            case Hir.NewData nd -> {
+                Hir.Name built = nd.typeName();
+                if (built instanceof Hir.Name.Unanswered) {
                     throw new Unanswerable(nd.pos());
                 }
-                if (!(ctx.symbols().declarations().declaration(built.denotes()) instanceof Ast.Data owner)) {
+                if (!(ctx.symbols().declarations().declaration(built.denotes()) instanceof Hir.Data owner)) {
                     throw CompileException.of(Diagnostic
                                     .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
@@ -252,7 +250,7 @@ public final class Elaborator {
                 // by here every spread names a binding in force: a value spread was bound ahead of
                 // the construction when it was inlined, so Core reads the binding it copies from
                 List<Core.Read> spreads = new ArrayList<>();
-                for (Ast.Var s : nd.spreads()) {
+                for (Hir.Var s : nd.spreads()) {
                     if (!(s.denotes() instanceof ValueName.Local local)) {
                         throw new IllegalStateException("`" + s.name()
                                 + "` is spread but names no binding, at " + s.pos());
@@ -264,8 +262,8 @@ public final class Elaborator {
                 yield new Core.NewData(built.denotes(), inits, spreads,
                         Type.ref(built.denotes()), nd.pos());
             }
-            case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
-            case Ast.If iff -> {
+            case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
+            case Hir.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
                 // Each branch is lifted before the join, so a field taking `T?` can be given a value
                 // on one side and `None` on the other and still have one type (spec §algebraic-types).
@@ -291,7 +289,7 @@ public final class Elaborator {
                                 .hint(new TypeMessage.MakeBothBranchesProduceOneType())
                                 .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
             }
-            case Ast.IfConstructed ic -> {
+            case Hir.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
                 if (!(built instanceof Core.NewData construct)) {
                     throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
@@ -318,7 +316,7 @@ public final class Elaborator {
                         ctx.symbols());
                 List<Core.ElseArm> arms = new ArrayList<>();
                 Type joined = then.type();
-                for (Ast.ElseArm arm : ic.els()) {
+                for (Hir.ElseArm arm : ic.els()) {
                     Core body = liftIntoOption(elaborate(arm.body(), env, ctx, expected), expected,
                             ctx.symbols());
                     arms.add(new Core.ElseArm(arm.clause(), body));
@@ -339,7 +337,7 @@ public final class Elaborator {
                 yield new Core.IfConstructed(construct, ic.binder(), then, arms, ic.origin(), joined,
                         ic.pos());
             }
-            case Ast.ListLit lit -> {
+            case Hir.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
                     // `[]`: element type fixed by context (ADR-0028); adopt an expected list type
                     yield new Core.ListLit(List.of(),
@@ -350,7 +348,7 @@ public final class Elaborator {
                 // an expected list type reaches each element, so a list of functions says what its
                 // elements take without every one of them being annotated
                 Type want = expected instanceof Type.ListOf le ? le.element() : null;
-                for (Ast.Expr el : lit.elements()) {
+                for (Hir.Expr el : lit.elements()) {
                     Core c = elaborate(el, env, ctx, want);
                     elements.add(c);
                     if (elem == null) {
@@ -374,12 +372,12 @@ public final class Elaborator {
                 }
                 yield new Core.ListLit(elements, Type.list(elem), lit.pos());
             }
-            case Ast.ListComp comp -> {
+            case Hir.ListComp comp -> {
                 // A comprehension never reaches the backend: the Lower stage rewrites it to an `if`
                 // before a body is emitted, and the codec emitters desugar the expression they hold
                 // before elaborating it. It still types here, on the pre-lowering paths (a helper's
                 // standalone check), so the node produced is a type carrier, not something to emit.
-                for (Ast.Expr g : comp.guards()) {
+                for (Hir.Expr g : comp.guards()) {
                     requireType(g, Type.BOOL, env, ctx, "guard of a comprehension");
                 }
                 Core element = elaborate(comp.element(), env, ctx);
@@ -390,17 +388,17 @@ public final class Elaborator {
 
     /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
      * bottom-up, as {@link #requireType} is: the expected type is not pushed into the expression. */
-    static Core requireTyped(Ast.Expr e, Type expected, Scope env, CheckContext ctx, String what) {
+    static Core requireTyped(Hir.Expr e, Type expected, Scope env, CheckContext ctx, String what) {
         Core c = elaborate(e, env, ctx);
         requireType(e, c.type(), expected, ctx.symbols(), what);
         return c;
     }
 
 
-    static Core elaborateFieldAccess(Ast.FieldAccess fa, Scope env, CheckContext ctx) {
+    static Core elaborateFieldAccess(Hir.FieldAccess fa, Scope env, CheckContext ctx) {
         Core targetCore = elaborate(fa.target(), env, ctx);
         Type target = targetCore.type();
-        if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Ast.Data owner) {
+        if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.Data owner) {
             Type ft = TypeOps.fieldType(owner, fa.field(), ctx.symbols());
             if (ft != null) {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
@@ -412,7 +410,7 @@ public final class Elaborator {
             // sealed interface declares the accessor its cases already carry (issue #160). Only a
             // named sum, whose interface this compile emits — an anonymous union's cases are not
             // written together, so nothing declares their shared part.
-            if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Ast.SumData) {
+            if (target instanceof Type.Ref ref && ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData) {
                 Type shared = TypeOps.commonSpreadFields(cases, ctx.symbols()).get(fa.field());
                 if (shared != null) {
                     return new Core.FieldAccess(targetCore, fa.field(), shared, fa.pos());
@@ -423,7 +421,7 @@ public final class Elaborator {
             // field" and "read it in each case", which is what the author has to write.
             List<String> without = new ArrayList<>();
             for (TypeName c : cases) {
-                if (!(ctx.symbols().declarations().declaration(c) instanceof Ast.Data cd)
+                if (!(ctx.symbols().declarations().declaration(c) instanceof Hir.Data cd)
                         || !TypeOps.hasField(cd, fa.field(), ctx.symbols())) {
                     without.add(c.name());
                 }
@@ -462,7 +460,7 @@ public final class Elaborator {
      * the way. Shared by the checker's call typing and the backend's step materialization, so the two
      * resolve identically.
      */
-    public static Core resolveStepBinding(String fnName, Type.FnOf declaredStep, Ast.Expr stepArg,
+    public static Core resolveStepBinding(String fnName, Type.FnOf declaredStep, Hir.Expr stepArg,
                                           Map<String, Type> bind, Scope env, CheckContext ctx) {
         Type.FnOf narrow = (Type.FnOf) TypeOps.substitute(declaredStep, bind);
         Core narrowCore = null;
@@ -508,9 +506,9 @@ public final class Elaborator {
 
     /** Elaborates a block argument at {@code paramTypes}; the node it returns carries the
      * {@link Type.FnOf} of the block — the parameter types the call fixed, and the body's result. */
-    static Core elaborateBlockArg(String fnName, Ast.Expr arg, List<Type> paramTypes,
+    static Core elaborateBlockArg(String fnName, Hir.Expr arg, List<Type> paramTypes,
                                   Scope env, CheckContext ctx) {
-        if (!(arg instanceof Ast.Block block)) {
+        if (!(arg instanceof Hir.Block block)) {
             // a function-typed value — a helper's function parameter (spec §fn-declaration) —
             // stands in for a block: check its shape and yield its result type.
             Core value = elaborate(arg, env, ctx);
@@ -553,14 +551,14 @@ public final class Elaborator {
     /** Whether an expression bound to a {@code let} is a function value: a lambda, or an {@code if}
      * whose branches are functions. Such a value cannot be inlined (the inliner leaves it), so it
      * becomes a first-class {@code Fn} (spec §blocks). */
-    public static boolean producesFunction(Ast.Expr e) {
+    public static boolean producesFunction(Hir.Expr e) {
         return switch (e) {
-            case Ast.Block _ -> true;
-            case Ast.If iff -> producesFunction(iff.then()) || producesFunction(iff.els());
+            case Hir.Block _ -> true;
+            case Hir.If iff -> producesFunction(iff.then()) || producesFunction(iff.els());
             // a lambda returned under its capture bindings, e.g. inlining `adder(5)` leaves
             // `let $n = 5 in (x) -> x + $n` (spec §blocks)
-            case Ast.LetIn li -> producesFunction(li.body());
-            case Ast.Expansion ex -> producesFunction(ex.body());
+            case Hir.LetIn li -> producesFunction(li.body());
+            case Hir.Expansion ex -> producesFunction(ex.body());
             default -> false;
         };
     }
@@ -577,7 +575,7 @@ public final class Elaborator {
      * a binding opens — and the value MUST be of that very type, or the pattern claims a shape the
      * value does not have and {@code .value} would be read off the wrong nominal type.
      */
-    private static void checkOpens(Ast.LetIn li, Type valueType, Symbols symbols) {
+    private static void checkOpens(Hir.LetIn li, Type valueType, Symbols symbols) {
         String opened = li.opens().written();
         TypeName layer = li.opens().denotes();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
@@ -596,8 +594,8 @@ public final class Elaborator {
         }
     }
 
-    static Type annotatedType(Ast.LetIn li, Symbols symbols) {
-        return li.annotation() == null ? null : TypeOps.successType(li.annotation(), symbols);
+    static Type annotatedType(Hir.LetIn li, Symbols symbols) {
+        return li.annotation() == null ? null : TypeOps.successType(li.annotation());
     }
 
     /**
@@ -605,7 +603,7 @@ public final class Elaborator {
      * the value does not have is an error rather than a comment the checker ignores — the same rule a
      * helper's declared return type follows.
      */
-    static void checkLetAnnotation(Ast.LetIn li, Type declared, Type valueType,
+    static void checkLetAnnotation(Hir.LetIn li, Type declared, Type valueType,
                                            Symbols symbols) {
         if (TypeOps.assignable(valueType, declared, symbols)) {
             return;
@@ -622,13 +620,13 @@ public final class Elaborator {
      * Other declared types (a type variable in a generic prelude helper, a record, a list) are left to
      * the argument's own type, which monomorphisation and the call-site check already handle.
      */
-    static Type carriedType(Ast.LetIn li, Type valueType, Symbols symbols) {
+    static Type carriedType(Hir.LetIn li, Type valueType, Symbols symbols) {
         return carriedType(li.declaredType(), valueType, symbols);
     }
 
-    static Type carriedType(Ast.RetType declared, Type valueType, Symbols symbols) {
+    static Type carriedType(Hir.RetType declared, Type valueType, Symbols symbols) {
         return declared == null ? valueType
-                : carriedType(TypeOps.resolveParamType(declared, symbols), valueType, symbols);
+                : carriedType(TypeOps.resolveParamType(declared), valueType, symbols);
     }
 
     private static Type carriedType(Type declared, Type valueType, Symbols symbols) {
@@ -660,7 +658,7 @@ public final class Elaborator {
      * <p>What it produces is the bindings it always produced. Grouping them is a statement about
      * typing, not about what runs.
      */
-    private static Core expansion(Ast.Expansion ex, Scope env, CheckContext ctx, Type expected) {
+    private static Core expansion(Hir.Expansion ex, Scope env, CheckContext ctx, Type expected) {
         Applied applied = arguments(ex, env, ctx);
         Substitution decided = applied.decided();
         List<Core> values = applied.values();
@@ -718,20 +716,20 @@ public final class Elaborator {
      * each doing this again. That a helper answers a function is not a reason for its own parameters
      * to go unchecked.
      */
-    private static Applied arguments(Ast.Expansion ex, Scope env, CheckContext ctx) {
+    private static Applied arguments(Hir.Expansion ex, Scope env, CheckContext ctx) {
         Substitution decided = new Substitution(ex.application(), env.decisions());
         List<Core> values = new ArrayList<>();
         Scope inner = env;
-        for (Ast.Bound b : ex.bound()) {
+        for (Hir.Bound b : ex.bound()) {
             // A lambda bound rather than applied needs to be told what it takes — it is a block, and a
             // block is a value only where something says its parameter types. The declaration this
             // binding came from says them, and nothing else here does.
-            Type says = b.value() instanceof Ast.Block && b.declaredType() != null
-                    ? TypeOps.resolveParamType(b.declaredType(), ctx.symbols()) : null;
+            Type says = b.value() instanceof Hir.Block && b.declaredType() != null
+                    ? TypeOps.resolveParamType(b.declaredType()) : null;
             Core value = elaborate(b.value(), env, ctx, says instanceof Type.FnOf ? says : null);
             Type bindType = value.type();
             if (b.declaredType() != null) {
-                Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
+                Type declared = TypeOps.resolveParamType(b.declaredType());
                 // The argument is held to everything the declaration states, whether or not the
                 // callee's body ever reads it, and however many variables stand inside it.
                 constrain(decided, declared, b.value(), value.type(), ctx.symbols(),
@@ -762,11 +760,11 @@ public final class Elaborator {
      * takes, {@code (f: (Int) -> 'a, x: 'a)} to what it answers — and reading one position would
      * carry one of them and drop the other.
      */
-    private static void givenFunctions(Ast.Expansion ex, Substitution decided, Scope env,
+    private static void givenFunctions(Hir.Expansion ex, Substitution decided, Scope env,
                                        CheckContext ctx) {
-        for (Ast.Given g : ex.given()) {
+        for (Hir.Given g : ex.given()) {
             if (g.declaredType() == null
-                    || !(TypeOps.resolveParamType(g.declaredType(), ctx.symbols())
+                    || !(TypeOps.resolveParamType(g.declaredType())
                             instanceof Type.FnOf declared)) {
                 continue;
             }
@@ -807,9 +805,9 @@ public final class Elaborator {
      * supplied — and reading that declaration is what a boundary does. Only a lambda written at the
      * call has no declaration of its own, and it is read at the application that decides it.
      */
-    private static Type arrivesAs(Ast.Given g, Ast.Expansion ex, Scope env, CheckContext ctx) {
-        Type is = g.arrivesAs() != null ? TypeOps.resolveParamType(g.arrivesAs(), ctx.symbols())
-                : g.value() instanceof Ast.Var v
+    private static Type arrivesAs(Hir.Given g, Hir.Expansion ex, Scope env, CheckContext ctx) {
+        Type is = g.arrivesAs() != null ? TypeOps.resolveParamType(g.arrivesAs())
+                : g.value() instanceof Hir.Var v
                         && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf fn ? fn : null;
         return is == null ? null : instantiated(is, ex);
     }
@@ -832,7 +830,7 @@ public final class Elaborator {
      * instantiated when this call was expanded — and the two are read against each other once both
      * stand at variables this application decides.
      */
-    private static Type instantiated(Type declared, Ast.Expansion ex) {
+    private static Type instantiated(Type declared, Hir.Expansion ex) {
         Map<String, Type> theirs = new HashMap<>();
         Type.mentions(declared, t -> {
             if (t instanceof Type.Var v) {
@@ -871,8 +869,8 @@ public final class Elaborator {
      * answers by substituting it into the body. Nothing binds it, so there is nothing here to read
      * it as, and what it is declared as is carried on the boundary instead.
      */
-    private static boolean inSight(Ast.Expr function, Scope env) {
-        if (function instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local) {
+    private static boolean inSight(Hir.Expr function, Scope env) {
+        if (function instanceof Hir.Var v && v.denotes() instanceof ValueName.Local local) {
             return env.holds(local.id());
         }
         return reads(function, env);
@@ -884,13 +882,13 @@ public final class Elaborator {
      * depends on where it was built — so a function argument whose body calls one may be readable
      * where it is applied and not here. Where it is not, it is left to the body that applies it.
      */
-    private static boolean reads(Ast.Expr e, Scope env) {
-        if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Helper
+    private static boolean reads(Hir.Expr e, Scope env) {
+        if (e instanceof Hir.Apply call && call.denotes() instanceof ValueName.Helper
                 && env.of(call.denotes(), call.reaches()) == null) {
             return false;
         }
         boolean[] all = {true};
-        Ast.forEachChild(e, child -> all[0] &= reads(child, env));
+        Hir.forEachChild(e, child -> all[0] &= reads(child, env));
         return all[0];
     }
 
@@ -904,7 +902,7 @@ public final class Elaborator {
      * body does not say what stands there either, which is a function nothing in the program
      * describes.
      */
-    private static List<Type> takes(Type.FnOf declared, Substitution decided, Ast.Expr function,
+    private static List<Type> takes(Type.FnOf declared, Substitution decided, Hir.Expr function,
                                     Scope env, CheckContext ctx) {
         Type.FnOf want = decided.zonk(declared) instanceof Type.FnOf w ? w : declared;
         List<Type> takes = new ArrayList<>();
@@ -914,7 +912,7 @@ public final class Elaborator {
                 takes.add(stated);
                 continue;
             }
-            if (!(function instanceof Ast.Block lambda) || i >= lambda.params().size()) {
+            if (!(function instanceof Hir.Block lambda) || i >= lambda.params().size()) {
                 return null;
             }
             Type read = HelperParams.readFromBody(lambda.params().get(i), lambda.body(), env, ctx,
@@ -927,22 +925,22 @@ public final class Elaborator {
         return takes;
     }
 
-    private static String argument(Ast.Expansion ex, String name) {
+    private static String argument(Hir.Expansion ex, String name) {
         return "`" + name + "` of `" + shown(ex) + "`";
     }
 
     /** The one type the callee's declaration gives its result, or null where it declared none or
      * declared a union — a union names one type where the body may answer several, so there is
      * nothing single to hold the body to. */
-    private static Type declaredResult(Ast.Expansion ex, CheckContext ctx) {
+    private static Type declaredResult(Hir.Expansion ex, CheckContext ctx) {
         return ex.declaredReturn() == null || ex.declaredReturn().cases().size() != 1 ? null
-                : TypeOps.resolveParamType(ex.declaredReturn(), ctx.symbols());
+                : TypeOps.resolveParamType(ex.declaredReturn());
     }
 
     /** The callee as the caller wrote it, for a message about the call. A function the caller
      * supplied is bound under the parameter it was given to, marked as the inliner's own; the mark
      * says nothing to whoever wrote the call, so it is not shown. */
-    private static String shown(Ast.Expansion ex) {
+    private static String shown(Hir.Expansion ex) {
         if (ex.callee() == null) {
             return "a helper";
         }
@@ -954,7 +952,7 @@ public final class Elaborator {
      * a function, so the annotation settles nothing. Raised from the surface check below and from the
      * value path, so the two shapes a function binding takes (a bare lambda, one an {@code if} chooses)
      * read the same. */
-    static CompileException functionAnnotation(Ast.LetIn li) {
+    static CompileException functionAnnotation(Hir.LetIn li) {
         return CompileException.of(Diagnostic.at(li.pos())
                 .say(new HelperMessage.AnAnnotationOnAFunctionBindingIsNotAFunctionType(li.name()))
                 .hint(new HelperMessage.WriteAFunctionTypeOrLeaveTheAnnotationOff())
@@ -967,10 +965,10 @@ public final class Elaborator {
      * What it states is still held against the lambda here — a function type, of the arity the lambda
      * binds. An ordinary type does not describe a lambda at all.
      */
-    static void checkAnnotatedLambdaBindings(Ast.Expr e, Symbols symbols) {
-        if (e instanceof Ast.LetIn li && li.annotation() != null
-                && li.value() instanceof Ast.Block lambda) {
-            Ast.FnType declared = li.annotation().asFn();
+    static void checkAnnotatedLambdaBindings(Hir.Expr e, Symbols symbols) {
+        if (e instanceof Hir.LetIn li && li.annotation() != null
+                && li.value() instanceof Hir.Block lambda) {
+            Hir.FnType declared = li.annotation().asFn();
             if (declared == null) {
                 throw functionAnnotation(li);
             }
@@ -988,7 +986,7 @@ public final class Elaborator {
     /** A value that is a function, whatever it was written as. One applied where it is bound is
      * expanded there and never reaches this; what does is one that escaped, and it becomes a
      * first-class {@code Fn} at the parameter types the context or its applications give. */
-    public static boolean isFunctionSelection(Ast.Expr e) {
+    public static boolean isFunctionSelection(Hir.Expr e) {
         return producesFunction(e);
     }
 
@@ -996,7 +994,7 @@ public final class Elaborator {
     /** Infers a let-bound function's parameter types from how the body applies it: every
      * {@code f(args)} in the body must agree on the argument types (spec §blocks). A function that
      * is never applied cannot have its type inferred. */
-    static List<Type> inferFnParamTypes(Ast.Binder binder, Ast.Expr body, Scope env,
+    static List<Type> inferFnParamTypes(Hir.Binder binder, Hir.Expr body, Scope env,
                                                 CheckContext ctx) {
         List<List<Type>> uses = new ArrayList<>();
         collectApplications(binder, body, env, ctx, uses, Set.of());
@@ -1031,50 +1029,50 @@ public final class Elaborator {
      * <p>Every other application is typed against {@code env}, so a mistake inside its arguments is
      * still reported as the mistake it is.
      */
-    static void collectApplications(Ast.Binder binder, Ast.Expr e, Scope env,
+    static void collectApplications(Hir.Binder binder, Hir.Expr e, Scope env,
                                             CheckContext ctx, List<List<Type>> out,
                                             Set<BindingId> inner) {
         // Handed to something that declares what it takes. A call a representation keeps standing
         // holds the application inside itself, so a function passed to one is applied nowhere this
         // walk can see — but the declaration says the parameter types as plainly as an application
         // would, and it says them at the position the function was given to.
-        if (e instanceof Ast.Apply call) {
+        if (e instanceof Hir.Apply call) {
             handedOver(binder, call, env, ctx, out);
         }
-        if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Local applied
+        if (e instanceof Hir.Apply call && call.denotes() instanceof ValueName.Local applied
                 && applied.id().equals(binder.id())
                 && call.args().stream().noneMatch(a -> reaches(a, inner))) {
             List<Type> argTypes = new ArrayList<>();
-            for (Ast.Expr a : call.args()) {
+            for (Hir.Expr a : call.args()) {
                 argTypes.add(typeOf(a, env, ctx));
             }
             out.add(argTypes);
         }
         switch (e) {
-            case Ast.Block b -> collectApplications(binder, b.body(), env, ctx, out,
+            case Hir.Block b -> collectApplications(binder, b.body(), env, ctx, out,
                     with(inner, b.params()));
-            case Ast.LetIn li -> {
+            case Hir.LetIn li -> {
                 collectApplications(binder, li.value(), env, ctx, out, inner);
                 collectApplications(binder, li.body(), env, ctx, out, with(inner, List.of(li.binder())));
                 // A name given to this function is this function: what the second name is used for is
                 // what the first one is used for. Followed rather than left to the applications alone,
                 // because an alias may be the only thing that is ever applied or handed over.
-                if (li.value() instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local
+                if (li.value() instanceof Hir.Var v && v.denotes() instanceof ValueName.Local local
                         && local.id().equals(binder.id())) {
                     collectApplications(li.binder(), li.body(), env, ctx, out, inner);
                 }
             }
-            case Ast.IfConstructed ic -> {
+            case Hir.IfConstructed ic -> {
                 collectApplications(binder, ic.construct(), env, ctx, out, inner);
                 collectApplications(binder, ic.then(), env, ctx, out,
                         with(inner, List.of(ic.binder())));
-                for (Ast.ElseArm arm : ic.els()) {
+                for (Hir.ElseArm arm : ic.els()) {
                     collectApplications(binder, arm.body(), env, ctx, out, inner);
                 }
             }
-            case Ast.Match m -> {
+            case Hir.Match m -> {
                 collectApplications(binder, m.scrutinee(), env, ctx, out, inner);
-                for (Ast.Case c : m.cases()) {
+                for (Hir.Case c : m.cases()) {
                     collectApplications(binder, c.body(), env, ctx, out,
                             c.binding() == null ? inner : with(inner, List.of(c.binding())));
                 }
@@ -1093,14 +1091,14 @@ public final class Elaborator {
      * read first for that reason, and one that cannot be read yet leaves this call saying nothing —
      * another use, or the author's annotation, answers instead.
      */
-    private static void handedOver(Ast.Binder binder, Ast.Apply call, Scope env, CheckContext ctx,
+    private static void handedOver(Hir.Binder binder, Hir.Apply call, Scope env, CheckContext ctx,
                                    List<List<Type>> out) {
         CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
         if (kept == null || kept.params().size() != call.args().size()) {
             return;
         }
         for (int i = 0; i < call.args().size(); i++) {
-            if (!(call.args().get(i) instanceof Ast.Var v)
+            if (!(call.args().get(i) instanceof Hir.Var v)
                     || !(v.denotes() instanceof ValueName.Local local)
                     || !local.id().equals(binder.id())
                     || !(kept.params().get(i) instanceof Type.FnOf declared)) {
@@ -1124,7 +1122,7 @@ public final class Elaborator {
     }
 
     /** {@code bindings} with what {@code added} introduces. */
-    private static Set<BindingId> with(Set<BindingId> bindings, List<Ast.Binder> added) {
+    private static Set<BindingId> with(Set<BindingId> bindings, List<Hir.Binder> added) {
         if (added.isEmpty()) {
             return bindings;
         }
@@ -1138,29 +1136,29 @@ public final class Elaborator {
      * inside {@code e} introduces another binding, so nothing has to be taken off the set for what it
      * covers: how either happens to be spelled decides nothing.
      */
-    private static boolean reaches(Ast.Expr e, Set<BindingId> inner) {
+    private static boolean reaches(Hir.Expr e, Set<BindingId> inner) {
         if (inner.isEmpty()) {
             return false;
         }
         ValueName denotes = switch (e) {
-            case Ast.Var v -> v.denotes();
-            case Ast.Apply c -> c.denotes();
+            case Hir.Var v -> v.denotes();
+            case Hir.Apply c -> c.denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Local local && inner.contains(local.id())) {
             return true;
         }
         return switch (e) {
-            case Ast.Block b -> reaches(b.body(), inner);
-            case Ast.LetIn li -> reaches(li.value(), inner) || reaches(li.body(), inner);
-            case Ast.IfConstructed ic -> reaches(ic.construct(), inner)
+            case Hir.Block b -> reaches(b.body(), inner);
+            case Hir.LetIn li -> reaches(li.value(), inner) || reaches(li.body(), inner);
+            case Hir.IfConstructed ic -> reaches(ic.construct(), inner)
                     || reaches(ic.then(), inner)
                     || ic.els().stream().anyMatch(arm -> reaches(arm.body(), inner));
-            case Ast.Match m -> {
+            case Hir.Match m -> {
                 if (reaches(m.scrutinee(), inner)) {
                     yield true;
                 }
-                for (Ast.Case c : m.cases()) {
+                for (Hir.Case c : m.cases()) {
                     if (reaches(c.body(), inner)) {
                         yield true;
                     }
@@ -1188,11 +1186,11 @@ public final class Elaborator {
      * {@code None} — this drops the permission as well, so the rule holds here on its own rather than
      * resting on how an argument happens to be typed elsewhere.
      */
-    static Core elaborateFunctionValue(Ast.Expr value, List<Type> paramTypes, Scope env,
+    static Core elaborateFunctionValue(Hir.Expr value, List<Type> paramTypes, Scope env,
                                           CheckContext outer) {
         CheckContext ctx = outer.makingAnOptional(false);
         return switch (value) {
-            case Ast.Block b -> {
+            case Hir.Block b -> {
                 if (b.params().size() != paramTypes.size()) {
                     throw CompileException.of(Diagnostic.at(b.pos())
                             .say(new HelperMessage.TheLambdaIsAppliedWithAnotherNumberOfArguments(
@@ -1207,7 +1205,7 @@ public final class Elaborator {
                 Core body = elaborate(b.body(), inner, ctx);
                 yield new Core.Block(b.params(), body, Type.fn(paramTypes, body.type()), b.pos());
             }
-            case Ast.If iff -> {
+            case Hir.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
                 Core then = elaborateFunctionValue(iff.then(), paramTypes, env, ctx);
                 Core els = elaborateFunctionValue(iff.els(), paramTypes, env, ctx);
@@ -1223,7 +1221,7 @@ public final class Elaborator {
             }
             // a helper that answers a function: `adder(5)` expands to the lambda under the bindings
             // its arguments became, and what those captured is what the lambda closes over
-            case Ast.Expansion ex -> {
+            case Hir.Expansion ex -> {
                 Applied applied = arguments(ex, env, ctx);
                 Core out = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(), ctx);
                 for (int i = ex.bound().size() - 1; i >= 0; i--) {
@@ -1232,7 +1230,7 @@ public final class Elaborator {
                 }
                 yield out;
             }
-            case Ast.LetIn li -> {
+            case Hir.LetIn li -> {
                 // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
                 Core bound = elaborate(li.value(), env, ctx);
                 Scope inner = env.with(li.binder(), bound.type());
@@ -1258,22 +1256,22 @@ public final class Elaborator {
 
     /** Rejects any binder in {@code e} — a {@code let}, {@code match} binding, or lambda parameter —
      * that takes a built-in value's name. */
-    static void rejectBuiltinShadowing(Ast.Expr e) {
+    static void rejectBuiltinShadowing(Hir.Expr e) {
         switch (e) {
-            case Ast.LetIn li -> {
+            case Hir.LetIn li -> {
                 rejectBuiltinShadow(li.name(), li.pos());
                 rejectBuiltinShadowing(li.value());
                 rejectBuiltinShadowing(li.body());
             }
-            case Ast.Block b -> {
+            case Hir.Block b -> {
                 for (String p : b.paramNames()) {
                     rejectBuiltinShadow(p, b.pos());
                 }
                 rejectBuiltinShadowing(b.body());
             }
-            case Ast.Match m -> {
+            case Hir.Match m -> {
                 rejectBuiltinShadowing(m.scrutinee());
-                for (Ast.Case c : m.cases()) {
+                for (Hir.Case c : m.cases()) {
                     if (c.binding() != null) {
                         rejectBuiltinShadow(c.bindingName(), c.pos());
                     }
@@ -1284,14 +1282,14 @@ public final class Elaborator {
         }
     }
 
-    static void requireType(Ast.Expr e, Type expected, Scope env, CheckContext ctx, String what) {
+    static void requireType(Hir.Expr e, Type expected, Scope env, CheckContext ctx, String what) {
         requireType(e, typeOf(e, env, ctx), expected, ctx.symbols(), what);
     }
 
-    /** As {@link #requireType(Ast.Expr, Type, Map, Ast.Data, Map, Map, String)}, but with the
+    /** As {@link #requireType(Hir.Expr, Type, Map, Hir.Data, Map, Map, String)}, but with the
      * operand's type already computed — a caller that has typed {@code e} does not re-type its
      * subtree. */
-    static void requireType(Ast.Expr e, Type actual, Type expected,
+    static void requireType(Hir.Expr e, Type actual, Type expected,
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec §sum-data)
             throw doesNotFit(e, actual, expected, what);
@@ -1306,7 +1304,7 @@ public final class Elaborator {
      * report here rather than writing a second one beside it: which of two sentences a reader gets
      * would otherwise depend on which check ran, and that is not something a reader can see.
      */
-    static CompileException doesNotFit(Ast.Expr operand, Type actual, Type expected, String what) {
+    static CompileException doesNotFit(Hir.Expr operand, Type actual, Type expected, String what) {
         return CompileException.of(Diagnostic
                         .at(operand.reportedAt())
                         .diff(Type.show(actual, expected), Type.show(expected, actual))
@@ -1334,7 +1332,7 @@ public final class Elaborator {
      * signature at once, so it is the only reader that can see two positions of one variable
      * disagree. Reported here rather than inside it because this is what still has {@code operand}.
      */
-    static void constrain(Substitution decided, Type declared, Ast.Expr operand, Type actual,
+    static void constrain(Substitution decided, Type declared, Hir.Expr operand, Type actual,
                           Symbols symbols, String what) {
         decide(decided, declared, operand, actual, symbols, what);
         hold(decided, declared, operand, actual, symbols, what);
@@ -1342,7 +1340,7 @@ public final class Elaborator {
 
     /** What {@code actual} says about the variables {@code declared} carries, refusing a variable
      * this application has already read at a type that does not go with this one. */
-    static void decide(Substitution decided, Type declared, Ast.Expr operand, Type actual,
+    static void decide(Substitution decided, Type declared, Hir.Expr operand, Type actual,
                        Symbols symbols, String what) {
         if (decided.decide(declared, actual, symbols) instanceof Fit.Disagrees d) {
             throw CompileException.of(Diagnostic
@@ -1355,7 +1353,7 @@ public final class Elaborator {
     }
 
     /** {@code actual} held to what {@code declared} states, recording nothing about its variables. */
-    static void hold(Substitution decided, Type declared, Ast.Expr operand, Type actual,
+    static void hold(Substitution decided, Type declared, Hir.Expr operand, Type actual,
                      Symbols symbols, String what) {
         if (decided.hold(declared, actual, symbols) instanceof Fit.Disagrees d) {
             throw CompileException.of(Diagnostic
@@ -1394,8 +1392,8 @@ public final class Elaborator {
      * data, a function named without being applied, or one of Option's cases outside the one place
      * an optional is made.
      */
-    private static RuntimeException notAValue(Ast.Var v, Scope env) {
-        if (v instanceof Ast.Var.Unanswered) {
+    private static RuntimeException notAValue(Hir.Var v, Scope env) {
+        if (v instanceof Hir.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
             return new Unanswerable(v.pos());
         }
@@ -1448,15 +1446,15 @@ public final class Elaborator {
      *
      * <p>Nothing is checked for the {@code else e} form: it already answers any failure.
      */
-    private static void checkArmsAnswerClauses(Ast.IfConstructed ic, TypeName typeName, Symbols symbols) {
+    private static void checkArmsAnswerClauses(Hir.IfConstructed ic, TypeName typeName, Symbols symbols) {
         if (!ic.mapsClauses()) {
             return;
         }
-        List<Ast.InvariantClause> clauses = symbols.declarations().declaration(typeName) instanceof Ast.Data data
+        List<Hir.InvariantClause> clauses = symbols.declarations().declaration(typeName) instanceof Hir.Data data
                 ? TypeOps.effectiveInvariants(data, symbols) : List.of();
         LinkedHashSet<String> named = new LinkedHashSet<>();
         boolean unnamed = false;
-        for (Ast.InvariantClause clause : clauses) {
+        for (Hir.InvariantClause clause : clauses) {
             if (clause.name().isPresent()) {
                 named.add(clause.name().get());
             } else {
@@ -1465,7 +1463,7 @@ public final class Elaborator {
         }
         boolean wildcard = false;
         Set<String> answered = new HashSet<>();
-        for (Ast.ElseArm arm : ic.els()) {
+        for (Hir.ElseArm arm : ic.els()) {
             if (arm.clause().isEmpty()) {
                 wildcard = true;
                 continue;
@@ -1521,14 +1519,14 @@ public final class Elaborator {
      * answered is in that function's own declaration, and the argument is as far as this source
      * goes.
      */
-    public static Region answerRegion(Ast.Expr fnArg) {
-        Ast.Expr answered = fnArg instanceof Ast.Block block ? answering(block.body()) : fnArg;
+    public static Region answerRegion(Hir.Expr fnArg) {
+        Hir.Expr answered = fnArg instanceof Hir.Block block ? answering(block.body()) : fnArg;
         return answered.reportedAt();
     }
 
     /** {@code body} with the bindings written above its answer stepped over. */
-    private static Ast.Expr answering(Ast.Expr body) {
-        return body instanceof Ast.LetIn li ? answering(li.body()) : body;
+    private static Hir.Expr answering(Hir.Expr body) {
+        return body instanceof Hir.LetIn li ? answering(li.body()) : body;
     }
 
 }

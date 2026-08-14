@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
@@ -25,9 +25,9 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
 
     @Test
     void aStandardLibraryCallLeftStandingIsNotSomethingToType() {
-        Ast.Expr call = new Ast.Apply("List.map", new ValueName.Stdlib("List", "map"),
+        Hir.Expr call = new Hir.Apply("List.map", new ValueName.Stdlib("List", "map"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "map")),
-                List.of(new Ast.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
+                List.of(new Hir.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none())));
@@ -38,8 +38,8 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
         // a module's own `let` is expanded into the body that called it, so this is the same failure
         // as above and not a different one — the guard is about the representation, not about which
         // namespace the name was in
-        Ast.Expr call = new Ast.Apply("half", new ValueName.Helper("demo", "half"),
-                new ReachName.Bare("half"), List.of(new Ast.IntLit(1, POS, null)),
+        Hir.Expr call = new Hir.Apply("half", new ValueName.Helper("demo", "half"),
+                new ReachName.Bare("half"), List.of(new Hir.IntLit(1, POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,

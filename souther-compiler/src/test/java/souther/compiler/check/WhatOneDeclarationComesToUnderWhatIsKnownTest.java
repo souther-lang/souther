@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeName;
@@ -42,7 +42,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         for (int each = 0; each < assumed.length; each += 2) {
             solution.put(new TypeName(symbols.module(), (String) assumed[each]), (Cardinality) assumed[each + 1]);
         }
-        for (Ast.Def def : compilation.module("demo").defs()) {
+        for (Hir.Def def : compilation.module("demo").defs()) {
             if (def.name().equals(name)) {
                 return CardinalityTransfer.upperOf(new TypeName(symbols.module(), name), def, symbols, solution, _ -> false);
             }

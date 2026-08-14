@@ -1,7 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
@@ -104,7 +104,7 @@ final class NeutralForm {
             throw new FixtureException("`" + helper + "` returned a " + name
                     + ", which is not a type this example can read");
         }
-        if (!(symbols.declarations().declaration(caseName) instanceof Ast.Data data)) {
+        if (!(symbols.declarations().declaration(caseName) instanceof Hir.Data data)) {
             // a unit case: its name where the position reads one, else the tag its sum's decoder reads
             if (readsABareName(position, caseName)) {
                 return caseName.name();
@@ -118,9 +118,9 @@ final class NeutralForm {
             return newtypeAt(position, caseName,
                     shaped(of(field(live, "value", helper), base, helper), base));
         }
-        Map<String, Ast.TypeRef> declared = fieldTypes(caseName);
+        Map<String, Hir.TypeRef> declared = fieldTypes(caseName);
         Map<String, Object> out = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.TypeRef> f : declared.entrySet()) {
+        for (Map.Entry<String, Hir.TypeRef> f : declared.entrySet()) {
             Type type = shapeOf(f.getValue());
             Object value = shaped(of(field(live, f.getKey(), helper), type, helper), type);
             // an absent optional is left out, the same neutral form a fixture writes for `None`
@@ -182,12 +182,12 @@ final class NeutralForm {
         // Anything but a sum reads the case as itself: its own type, and — since a union is written
         // only as a behavior's own answer, where it arrives with no declared type below — nothing else.
         if (!(open(declaredType) instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name()) instanceof Ast.SumData sum)
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.SumData sum)
                 || sum.decoder().isEmpty()) {
             return;
         }
-        Ast.Discriminate reads = sum.decoder().get();
-        for (Ast.Variant variant : reads.variants()) {
+        Hir.Discriminate reads = sum.decoder().get();
+        for (Hir.Variant variant : reads.variants()) {
             if (caseName.equals(variant.caseType().denotes())) {
                 map.putIfAbsent(reads.key(), variant.tag());
                 return;
@@ -207,11 +207,11 @@ final class NeutralForm {
      * measured this). A written discriminator would end the agreement and this fallback with it.
      */
     private void taggedWithoutADeclaredType(TypeName caseName, Map<String, Object> map) {
-        for (Ast.Def def : symbols.visible()) {
-            if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
+        for (Hir.Def def : symbols.visible()) {
+            if (!(def instanceof Hir.SumData sum) || sum.decoder().isEmpty()) {
                 continue;
             }
-            for (Ast.Variant variant : sum.decoder().get().variants()) {
+            for (Hir.Variant variant : sum.decoder().get().variants()) {
                 if (caseName.equals(variant.caseType().denotes())) {
                     map.putIfAbsent(sum.decoder().get().key(), variant.tag());
                     return;
@@ -341,7 +341,7 @@ final class NeutralForm {
             // name rather than one spelled at the call.
             for (TypeName caseName : TypeOps.leafCases(from, symbols)) {
                 if (!caseName.name().equals(written)
-                        || symbols.declarations().declaration(caseName) instanceof Ast.Data) {
+                        || symbols.declarations().declaration(caseName) instanceof Hir.Data) {
                     continue;
                 }
                 if (readsABareName(to, caseName)) {
@@ -376,11 +376,11 @@ final class NeutralForm {
      * wherever it is written. Asked only where the position has no declared type to read it as. */
     private boolean onlyEnumerationsList(TypeName caseName) {
         boolean listed = false;
-        for (Ast.Def def : symbols.visible()) {
-            if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
+        for (Hir.Def def : symbols.visible()) {
+            if (!(def instanceof Hir.SumData sum) || sum.decoder().isEmpty()) {
                 continue;
             }
-            for (Ast.Variant variant : sum.decoder().get().variants()) {
+            for (Hir.Variant variant : sum.decoder().get().variants()) {
                 if (caseName.equals(variant.caseType().denotes())) {
                     if (!TypeOps.isUnitOnlySum(sum, symbols)) {
                         return false;
@@ -393,16 +393,16 @@ final class NeutralForm {
     }
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
-    Map<String, Ast.TypeRef> fieldTypes(TypeName typeName) {
-        Map<String, Ast.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.declarations().declaration(typeName) instanceof Ast.Data d) {
-            for (Ast.Name inc : d.includes()) {
+    Map<String, Hir.TypeRef> fieldTypes(TypeName typeName) {
+        Map<String, Hir.TypeRef> out = new LinkedHashMap<>();
+        if (symbols.declarations().declaration(typeName) instanceof Hir.Data d) {
+            for (Hir.Name inc : d.includes()) {
                 out.putAll(fieldTypes(inc.denotes()));
             }
-            for (Ast.Field f : d.fields()) {
+            for (Hir.Field f : d.fields()) {
                 // an example builds its input through a decoder, so a field with no external
                 // representation is not one it can state; the data declaration refused it already
-                if (f.type() instanceof Ast.TypeRef ref) {
+                if (f.type() instanceof Hir.TypeRef ref) {
                     out.put(f.name(), ref);
                 }
             }
@@ -417,7 +417,7 @@ final class NeutralForm {
      * a question asked here at all (issue #110 was that question being asked, and answered with the
      * declaring file's position).
      */
-    Type shapeOf(Ast.TypeRef declaredType) {
+    Type shapeOf(Hir.TypeRef declaredType) {
         return declaredType == null ? null : declaredType.denotes();
     }
 
@@ -425,14 +425,14 @@ final class NeutralForm {
      * an imported value's body names its own module's types, which the module reading the row need
      * not have imported, and a module of its own may declare something else of that spelling. */
     boolean isNewtype(TypeName name) {
-        return name != null && symbols.declarations().declaration(name) instanceof Ast.Data d && d.newtype();
+        return name != null && symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype();
     }
 
     /** The written form of what a newtype wraps, kept whole so a generic base
      * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
-    Ast.TypeRef newtypeBaseType(TypeName name) {
-        return name != null && symbols.declarations().declaration(name) instanceof Ast.Data d && d.newtype()
-                && d.fields().size() == 1 && d.fields().get(0).type() instanceof Ast.TypeRef base
+    Hir.TypeRef newtypeBaseType(TypeName name) {
+        return name != null && symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype()
+                && d.fields().size() == 1 && d.fields().get(0).type() instanceof Hir.TypeRef base
                 ? base : null;
     }
 
@@ -495,7 +495,7 @@ final class NeutralForm {
             if (!(at instanceof Type.Ref ref) || !through.add(ref.name())) {
                 return null;
             }
-            Ast.TypeRef base = newtypeBaseType(ref.name());
+            Hir.TypeRef base = newtypeBaseType(ref.name());
             if (base == null) {
                 return null;
             }

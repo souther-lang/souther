@@ -4,7 +4,7 @@ package souther.compiler.types;
  * The name a module reaches a definition by, from the place that named it.
  *
  * <p>Not the definition's identity. Which module declares something is a fact about the declaration
- * and is written there ({@code Ast.FnDef#declaredIn}); this is a fact about the reference, and the two
+ * and is written there ({@code Hir.FnDef#declaredIn}); this is a fact about the reference, and the two
  * cannot be derived from each other. {@code souther.list} declares {@code foldFrom} and a reader
  * reaches it as {@code List.foldFrom}: the alias belongs to the reference, and the declaring module is
  * nowhere in it.
@@ -94,7 +94,7 @@ public sealed interface ReachName {
      * is on its own.
      *
      * <p>Asked only of a name that denotes something. One nothing declares is
-     * {@link souther.compiler.ast.Ast.Var.Unanswered}, which reaches nothing and is not asked; it
+     * {@link souther.compiler.ast.Hir.Var.Unanswered}, which reaches nothing and is not asked; it
      * used to be answered with its own spelling, and a spelling handed back as a reach name is a
      * reference that reaches whatever the reading module happens to mean by it (ADR-0067). A caller
      * with no denotation at hand has not resolved one yet, and is refused for the same reason.

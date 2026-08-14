@@ -373,9 +373,9 @@ public final class Front {
 
         @Override
         public Answer<Ast.Module> compute(Db db) {
-            Answer<Ast.Module> bound = db.ask(new Names.Bound(name));
-            if (bound.present()) {
-                return Answer.of(bound.value());
+            Answer<Ast.Module> exposed = db.ask(new Exposed(name));
+            if (exposed.present()) {
+                return Answer.of(exposed.value());
             }
             FromPath.Of path = db.ask(new FromPath()).value();
             Ast.Module fromPath = path == null ? null : path.modules().get(name);
@@ -398,12 +398,11 @@ public final class Front {
 
         @Override
         public Answer<List<String>> compute(Db db) {
-            Ast.Module m = db.ask(new Available(name)).value();
-            if (m == null) {
+            if (db.ask(new Available(name)).value() == null) {
                 return Answer.of(List.of());
             }
             Set<String> imported = new LinkedHashSet<>();
-            for (Ast.Import imp : m.imports()) {
+            for (Ast.Import imp : Names.importsOf(db, name)) {
                 imported.add(imp.module());
             }
             return Answer.of(List.copyOf(imported));

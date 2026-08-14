@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.HelperInliner;
@@ -73,14 +73,14 @@ public final class Shapes {
             if (!scope.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             // A module whose imports form a cycle takes nothing from them. The cycle is reported where
             // it is found; an invariant naming an imported definition is left unsettled and reported
             // as the unknown name it then is, which is the same answer every other stage gives there.
-            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
-                Ast.Module declared = onlyWhatItDeclares(resolved.value().module());
-                Ast.Module derived = Deriver.derive(declared, scope.value());
+                Hir.Module declared = onlyWhatItDeclares(resolved.value().module());
+                Hir.Module derived = Deriver.derive(declared, scope.value());
                 return Answer.of(resolved.value().with(
                         HelperInvariants.withSettledInvariants(derived, scope.value(), published)));
             } catch (CompileException e) {
@@ -97,12 +97,12 @@ public final class Shapes {
          * again here rather than repeating the rule is what keeps the tree and the scope agreeing about
          * what the module declares.
          */
-        private Ast.Module onlyWhatItDeclares(Ast.Module m) {
-            Collection<Ast.Def> kept = TypeChecker.declared(m).defs().values();
+        private Hir.Module onlyWhatItDeclares(Hir.Module m) {
+            Collection<Hir.Def> kept = TypeChecker.declared(m).defs().values();
             if (kept.size() == m.defs().size()) {
                 return m;
             }
-            return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+            return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                     List.copyOf(kept), m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
                     m.exampleFileTarget(), m.pos());
         }
@@ -143,7 +143,7 @@ public final class Shapes {
             if (!resolved.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             try {
                 ValueCycles.rejectIn(resolved.value().module(),
                         imported.present() ? imported.value() : Map.of());
@@ -163,19 +163,19 @@ public final class Shapes {
      * nothing. A module still derives its declarations together, and this is read through that, so
      * what it depends on is still the module — what it is about is the one declaration.
      */
-    public record DerivedDef(TypeName named) implements Key<Ast.Def> {
+    public record DerivedDef(TypeName named) implements Key<Hir.Def> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<Ast.Def> compute(Db db) {
-            Answer<Map<String, Ast.Def>> defs = db.ask(new DerivedDeclarations(named.module()));
+        public Answer<Hir.Def> compute(Db db) {
+            Answer<Map<String, Hir.Def>> defs = db.ask(new DerivedDeclarations(named.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
-            Ast.Def def = defs.value().get(named.name());
+            Hir.Def def = defs.value().get(named.name());
             return def == null ? Answer.absent() : Answer.of(def);
         }
     }
@@ -194,22 +194,22 @@ public final class Shapes {
      * stopping at the first would leave the declarations after it without an answer, and each of
      * them owns what it has to say.
      */
-    public record DerivedDeclarations(String name) implements Key<Map<String, Ast.Def>> {
+    public record DerivedDeclarations(String name) implements Key<Map<String, Hir.Def>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Ast.Def>> compute(Db db) {
+        public Answer<Map<String, Hir.Def>> compute(Db db) {
             Answer<ResolvedModule> settling = db.ask(new Settling(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Map<String, Ast.Def> out = new LinkedHashMap<>();
+            Map<String, Hir.Def> out = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
-            for (Ast.Def def : settling.value().module().defs()) {
+            for (Hir.Def def : settling.value().module().defs()) {
                 try {
                     out.put(def.name(), NewtypeDesugar.rewriteInvariantsOf(def, scope.value()));
                 } catch (CompileException e) {
@@ -229,29 +229,29 @@ public final class Shapes {
      * one that does not declare it, which is a different thing to say and not a true one — while the
      * declarations beside it keep the answers they have.
      */
-    public record Derived(String name) implements Key<Ast.Module> {
+    public record Derived(String name) implements Key<Hir.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
+        public Answer<Hir.Module> compute(Db db) {
             Answer<ResolvedModule> settling = db.ask(new Settling(name));
-            Answer<Map<String, Ast.Def>> declarations = db.ask(new DerivedDeclarations(name));
+            Answer<Map<String, Hir.Def>> declarations = db.ask(new DerivedDeclarations(name));
             if (!settling.present() || !declarations.present()) {
                 return Answer.absent();
             }
-            List<Ast.Def> defs = new ArrayList<>();
-            for (Ast.Def def : settling.value().module().defs()) {
-                Ast.Def came = declarations.value().get(def.name());
+            List<Hir.Def> defs = new ArrayList<>();
+            for (Hir.Def def : settling.value().module().defs()) {
+                Hir.Def came = declarations.value().get(def.name());
                 if (came == null) {
                     return Answer.absent();
                 }
                 defs.add(came);
             }
-            Ast.Module m = settling.value().module();
-            return Answer.of(new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+            Hir.Module m = settling.value().module();
+            return Answer.of(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                     defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
                     m.exampleFileTarget(), m.pos()));
         }
@@ -262,29 +262,29 @@ public final class Shapes {
      * that type. Only the module's fns change; what it declares is what {@link Derived} left, which
      * is why every stage below reads its declarations from there and not from here.
      */
-    public record Desugared(String name) implements Key<Ast.Module> {
+    public record Desugared(String name) implements Key<Hir.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
-            Answer<Ast.Module> derived = db.ask(new Derived(name));
-            Answer<Map<String, Ast.FnDef>> fns = db.ask(new DesugaredFns(name));
+        public Answer<Hir.Module> compute(Db db) {
+            Answer<Hir.Module> derived = db.ask(new Derived(name));
+            Answer<Map<String, Hir.FnDef>> fns = db.ask(new DesugaredFns(name));
             if (!derived.present() || !fns.present()) {
                 return Answer.absent();
             }
-            List<Ast.FnDef> out = new ArrayList<>();
-            for (Ast.FnDef fn : derived.value().fns()) {
-                Ast.FnDef came = fns.value().get(fn.name());
+            List<Hir.FnDef> out = new ArrayList<>();
+            for (Hir.FnDef fn : derived.value().fns()) {
+                Hir.FnDef came = fns.value().get(fn.name());
                 if (came == null) {
                     return Answer.absent();
                 }
                 out.add(came);
             }
-            Ast.Module m = derived.value();
-            return Answer.of(new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+            Hir.Module m = derived.value();
+            return Answer.of(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                     m.defs(), m.behaviors(), out, m.takenOn(), m.examples(), m.fakes(),
                     m.exampleFileTarget(), m.pos()));
         }
@@ -299,22 +299,22 @@ public final class Shapes {
      * too, so a declaration that did not come out leaves the definitions that do not name it with
      * their answers.
      */
-    public record DesugaredFns(String name) implements Key<Map<String, Ast.FnDef>> {
+    public record DesugaredFns(String name) implements Key<Map<String, Hir.FnDef>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Ast.FnDef>> compute(Db db) {
+        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
             Answer<ResolvedModule> settling = db.ask(new Settling(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.DERIVED);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Map<String, Ast.FnDef> out = new LinkedHashMap<>();
+            Map<String, Hir.FnDef> out = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
-            for (Ast.FnDef fn : settling.value().module().fns()) {
+            for (Hir.FnDef fn : settling.value().module().fns()) {
                 try {
                     out.put(fn.name(), NewtypeDesugar.rewriteOf(fn, scope.value()));
                 } catch (CompileException e) {
@@ -331,19 +331,19 @@ public final class Shapes {
      * {@link DesugaredFns}, which works every definition out, so what it depends on is still the
      * module; what it is about is the one definition.
      */
-    public record DesugaredFn(String module, String fn) implements Key<Ast.FnDef> {
+    public record DesugaredFn(String module, String fn) implements Key<Hir.FnDef> {
         @Override
         public String module() {
             return module;
         }
 
         @Override
-        public Answer<Ast.FnDef> compute(Db db) {
-            Answer<Map<String, Ast.FnDef>> fns = db.ask(new DesugaredFns(module));
+        public Answer<Hir.FnDef> compute(Db db) {
+            Answer<Map<String, Hir.FnDef>> fns = db.ask(new DesugaredFns(module));
             if (!fns.present()) {
                 return Answer.absent();
             }
-            Ast.FnDef came = fns.value().get(fn);
+            Hir.FnDef came = fns.value().get(fn);
             return came == null ? Answer.absent() : Answer.of(came);
         }
     }
@@ -361,32 +361,32 @@ public final class Shapes {
      * new way to reach a construction from Java. Only the reached ones are added; a module that never
      * folds gets none.
      */
-    public record Prepared(String name) implements Key<Ast.Module> {
+    public record Prepared(String name) implements Key<Hir.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
-            Answer<Ast.Module> desugared = db.ask(new Desugared(name));
-            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+        public Answer<Hir.Module> compute(Db db) {
+            Answer<Hir.Module> desugared = db.ask(new Desugared(name));
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             if (!desugared.present()) {
                 return Answer.absent();
             }
             // A module whose imports form a cycle takes nothing from them — the cycle is reported
             // where it is found, and this module is not compiled either way.
-            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             // An imported definition is written here bare and denotes the module that declares it.
             // Spelling it out, once, settles the name this module reaches it by, which is what the
             // table a call expands against is keyed by and what the method a recursive helper becomes
             // is called. It settles nothing about where the definition came from: the fns below hold
             // declarations of several modules under names of one shape, and which module wrote each is
-            // carried on the declaration (Ast.FnDef.declaredIn).
-            Ast.Module m = HelperNames.qualifyImports(desugared.value());
+            // carried on the declaration (Hir.FnDef.declaredIn).
+            Hir.Module m = HelperNames.qualifyImports(desugared.value());
             try {
                 HelperInliner inliner = HelperInliner.forModule(m, published);
-                Map<String, Ast.FnDef> injected =
+                Map<String, Hir.FnDef> injected =
                         new java.util.LinkedHashMap<>(inliner.injectedRecursiveHelpers());
                 // A helper an example row applies is emitted for that reason (ADR-0077); one this
                 // module does not declare is taken on here, as a recursive one it reaches is.
@@ -397,7 +397,7 @@ public final class Shapes {
                 // Beside what the module declared, not among it. Both are emitted and only the first
                 // was written here, and a reader asking which is which asks the component it is in
                 // rather than the shape of a name.
-                return Answer.of(new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(),
+                return Answer.of(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(),
                         m.imports(), m.defs(), m.behaviors(), m.fns(),
                         List.copyOf(injected.values()), m.examples(), m.fakes(),
                         m.exampleFileTarget(), m.pos()));
@@ -441,16 +441,16 @@ public final class Shapes {
             if (!resolved.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             // What the clause says is what the check reads, so an imported bound is substituted here
             // as it is where the invariant is settled. A clause left naming it would be classified as
             // a rule this analysis cannot read, and a construction the bound rejects would compile.
-            Ast.Module declaring = HelperNames.withQualifiedInvariants(resolved.value().module());
+            Hir.Module declaring = HelperNames.withQualifiedInvariants(resolved.value().module());
             try {
                 Map<TypeName, List<ClauseDischarge>> out = new LinkedHashMap<>();
-                for (Ast.Def def : declaring.defs()) {
-                    if (!(def instanceof Ast.Data data) || data.invariants().isEmpty()) {
+                for (Hir.Def def : declaring.defs()) {
+                    if (!(def instanceof Hir.Data data) || data.invariants().isEmpty()) {
                         continue;
                     }
                     // The clause is classified in the representation the check reads, and reported at
@@ -463,8 +463,8 @@ public final class Shapes {
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
-                    for (Ast.InvariantClause declared : data.invariants()) {
-                        for (Ast.Expr written : HelperInvariants.conjunctsOf(declared.expr())) {
+                    for (Hir.InvariantClause declared : data.invariants()) {
+                        for (Hir.Expr written : HelperInvariants.conjunctsOf(declared.expr())) {
                             clauses.add(InvariantChecker.capabilityOf(
                                     inliner.inline(written, new BindingOwner.OfData(named)),
                                     leftmost(written), named, data, scope.value())
@@ -482,9 +482,9 @@ public final class Shapes {
 
     /** Where a clause begins: the earliest position anything in it carries. A node's own position is
      * where its operator is written, and a reader points at the clause. */
-    private static SourcePos leftmost(Ast.Expr e) {
+    private static SourcePos leftmost(Hir.Expr e) {
         SourcePos[] found = {e.pos()};
-        Ast.forEachChild(e, child -> {
+        Hir.forEachChild(e, child -> {
             SourcePos inner = leftmost(child);
             if (inner != null && (found[0] == null || earlier(inner, found[0]))) {
                 found[0] = inner;
@@ -509,21 +509,21 @@ public final class Shapes {
      * inside the fragment — the definition is substituted, as it is everywhere the invariant is read.
      */
     public record InvariantsForDischarge(String name)
-            implements Key<Map<TypeName, List<Ast.InvariantClause>>> {
+            implements Key<Map<TypeName, List<Hir.InvariantClause>>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeName, List<Ast.InvariantClause>>> compute(Db db) {
+        public Answer<Map<TypeName, List<Hir.InvariantClause>>> compute(Db db) {
             Answer<ResolvedModule> resolved = db.ask(new Expandable(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!resolved.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
                 return Answer.of(HelperInvariants.invariantsForDischarge(
                         resolved.value().module(), scope.value(), published));

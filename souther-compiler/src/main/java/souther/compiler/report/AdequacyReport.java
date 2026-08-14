@@ -1,7 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.examples.ExampleVerifier;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
@@ -109,7 +109,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<ModuleReport> modules = new ArrayList<>();
         MeasurementStatus overall = MeasurementStatus.COMPLETE;
         for (String name : compilation.modules()) {
-            Ast.Module module = compilation.module(name);
+            Hir.Module module = compilation.module(name);
             if (module == null) {
                 continue;   // a module that did not get far enough to have behaviors
             }
@@ -147,7 +147,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
     }
 
-    private static ModuleReport moduleReport(Compilation compilation, String name, Ast.Module module) {
+    private static ModuleReport moduleReport(Compilation compilation, String name, Hir.Module module) {
         Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
         // The same rows every measure beside them reads. Two evaluations of
@@ -199,7 +199,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         Map<String, List<Adequacy.Finding>> findings =
                 compilation.db().ask(new Adequacy.Findings(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
-        for (Ast.BehaviorDef behavior : module.behaviors()) {
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
             List<RowOutcome> rows = byTarget.getOrDefault(behavior.name(), List.of());
             int pending = (int) rows.stream()
                     .filter(r -> r.disposition() == souther.compiler.observe.Disposition.PENDING)

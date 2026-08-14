@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Granularity;
@@ -41,7 +41,7 @@ public final class OccurrenceValues {
     }
 
     /** What {@code data}, declared as {@code named}, leaves the values at each of its positions. */
-    public static OccurrenceValues of(TypeName named, Ast.Data data, Symbols symbols) {
+    public static OccurrenceValues of(TypeName named, Hir.Data data, Symbols symbols) {
         return of(named, data, symbols, _ -> false);
     }
 
@@ -52,7 +52,7 @@ public final class OccurrenceValues {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceValues of(TypeName named, Ast.Data data, Symbols symbols,
+    static OccurrenceValues of(TypeName named, Hir.Data data, Symbols symbols,
                                  java.util.function.Predicate<TypeName> granted) {
         return new OccurrenceValues(
                 InvariantChecker.seedFields(named, data, symbols, java.util.Map.of(),

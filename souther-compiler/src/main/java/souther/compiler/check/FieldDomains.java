@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeName;
@@ -60,7 +60,7 @@ public final class FieldDomains {
     private final NumericDomain numbers;
     /** What this was read from, so that it can be read again without one declaration's clauses. */
     private final TypeName named;
-    private final Ast.Data data;
+    private final Hir.Data data;
     private final Symbols symbols;
     private final Map<String, Count> settled;
     private final java.util.function.BooleanSupplier reading;
@@ -70,7 +70,7 @@ public final class FieldDomains {
                          Map<String, NumericDomain.Bounds> heldByField,
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeName>> narrowers, boolean infeasible,
-                         boolean seeded, NumericDomain numbers, TypeName named, Ast.Data data,
+                         boolean seeded, NumericDomain numbers, TypeName named, Hir.Data data,
                          Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
@@ -100,7 +100,7 @@ public final class FieldDomains {
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols) {
+    public static FieldDomains of(TypeName named, Hir.Data data, Symbols symbols) {
         return of(named, data, symbols, Map.of());
     }
 
@@ -112,7 +112,7 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
+    public static FieldDomains of(TypeName named, Hir.Data data, Symbols symbols,
                                   Map<String, Count> settled) {
         return of(named, data, symbols, settled, InvariantChecker.Reach.EVERYTHING);
     }
@@ -126,13 +126,13 @@ public final class FieldDomains {
      * record holding it is otherwise told it holds nothing by the very rules the supposing was
      * about.
      */
-    static FieldDomains granting(TypeName named, Ast.Data data, Symbols symbols,
+    static FieldDomains granting(TypeName named, Hir.Data data, Symbols symbols,
                                  java.util.function.Predicate<TypeName> granted) {
         return of(named, data, symbols, Map.of(), InvariantChecker.Reach.stoppingAt(granted));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
-    private static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
+    private static FieldDomains of(TypeName named, Hir.Data data, Symbols symbols,
                                    Map<String, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
@@ -304,7 +304,7 @@ public final class FieldDomains {
      * bottom out, and a reader that guessed would refuse a type somebody can write.
      *
      */
-    public static boolean mayHoldNothingAt(TypeName named, Ast.Data data, String path,
+    public static boolean mayHoldNothingAt(TypeName named, Hir.Data data, String path,
                                            Symbols symbols) {
         // A count is never below none, so leaving it no room above none is leaving it at none.
         return OccurrenceCounts.of(named, data, symbols).mayHoldAtMost(path, 0);

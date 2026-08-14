@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -23,7 +23,7 @@ public final class MatchElaborator {
 
     private MatchElaborator() {}
 
-    static Core elaborateMatch(Ast.Match m, Scope env, CheckContext ctx,
+    static Core elaborateMatch(Hir.Match m, Scope env, CheckContext ctx,
                                        Type expected) {
         Core scrutinee = Elaborator.elaborate(m.scrutinee(), env, ctx);
         Type st = scrutinee.type();
@@ -34,7 +34,7 @@ public final class MatchElaborator {
             return elaborateCasesMatch(m, scrutinee, union.members(), "union `" + Type.show(union) + "`",
                     st, env, ctx, expected);
         }
-        if (!(st instanceof Type.Ref ref) || !(ctx.symbols().declarations().declaration(ref.name()) instanceof Ast.SumData sum)) {
+        if (!(st instanceof Type.Ref ref) || !(ctx.symbols().declarations().declaration(ref.name()) instanceof Hir.SumData sum)) {
             throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
         }
         return elaborateCasesMatch(m, scrutinee, new HashSet<>(TypeOps.caseNames(sum)),
@@ -48,12 +48,12 @@ public final class MatchElaborator {
      * match takes every `|` after it, so an arm meant for the outer one lands here, and the report
      * says how to end the inner match.
      */
-    static CompileException notCase(Ast.Name written, String what, Ast.Case c, Ast.Match m,
+    static CompileException notCase(Hir.Name written, String what, Hir.Case c, Hir.Match m,
                                             Set<TypeName> cases, Symbols symbols) {
         String caseName = written.written();
         String otherSum = null;
         for (TypeName name : symbols.scope().visibleNames()) {
-            if (!(symbols.declarations().declaration(name) instanceof Ast.SumData sum)) {
+            if (!(symbols.declarations().declaration(name) instanceof Hir.SumData sum)) {
                 continue;
             }
             List<TypeName> others = TypeOps.caseNames(sum);
@@ -77,14 +77,14 @@ public final class MatchElaborator {
      * A single-case case binds that case's type; an or-pattern ({@code A | B}) binds {@code scrutinee}
      * (the sum type), since no one case type fits all its alternatives. Every case must be covered
      * exactly once (E1201; a second cover is an overlap error). */
-    static Core elaborateCasesMatch(Ast.Match m, Core scrutineeCore, Set<TypeName> cases,
+    static Core elaborateCasesMatch(Hir.Match m, Core scrutineeCore, Set<TypeName> cases,
                                         String what, Type scrutinee,
                                         Scope env, CheckContext ctx, Type expected) {
         Set<TypeName> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
-        for (Ast.Case c : m.cases()) {
-            for (Ast.Name written : c.caseTypes()) {
+        for (Hir.Case c : m.cases()) {
+            for (Hir.Name written : c.caseTypes()) {
                 TypeName caseName = names(written);
                 if (!cases.contains(caseName)) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
@@ -127,16 +127,16 @@ public final class MatchElaborator {
 
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
      * {@code None}; both must be present (spec §match). */
-    static Core elaborateOptionMatch(Ast.Match m, Core scrutineeCore, Type element,
+    static Core elaborateOptionMatch(Hir.Match m, Core scrutineeCore, Type element,
                                           Scope env, CheckContext ctx, Type expected) {
         Set<TypeName> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
-        for (Ast.Case c : m.cases()) {
+        for (Hir.Case c : m.cases()) {
             if (c.caseTypes().size() != 1) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOptionMatchTakesNoOrPattern()).build());
             }
-            Ast.Name arm = c.caseTypes().get(0);
+            Hir.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
             TypeName armName = names(arm);
             Type bind;
@@ -175,9 +175,9 @@ public final class MatchElaborator {
     }
 
     /** What each arm name denotes — what a {@code Core} arm dispatches on. */
-    static List<TypeName> denoted(List<Ast.Name> names) {
+    static List<TypeName> denoted(List<Hir.Name> names) {
         List<TypeName> out = new ArrayList<>();
-        for (Ast.Name n : names) {
+        for (Hir.Name n : names) {
             out.add(names(n));
         }
         return out;
@@ -192,8 +192,8 @@ public final class MatchElaborator {
      * cases — is that one mistake seen from another angle, which is what {@link Unanswerable} is
      * for.
      */
-    private static TypeName names(Ast.Name arm) {
-        if (arm instanceof Ast.Name.Unanswered) {
+    private static TypeName names(Hir.Name arm) {
+        if (arm instanceof Hir.Name.Unanswered) {
             throw new Unanswerable(arm.pos());
         }
         return arm.denotes();
@@ -218,8 +218,8 @@ public final class MatchElaborator {
      * (the matched case) then each written inner name. Every opened layer MUST be a newtype, and each
      * inner name MUST equal the newtype the previous layer wraps, or it is a compile error (Elm/F#
      * parity — the constructor in the pattern is type-checked, and a non-newtype cannot be opened). */
-    static void checkUnwrapAsserts(Ast.Case c, Symbols symbols) {
-        List<Ast.Name> opened = new ArrayList<>();
+    static void checkUnwrapAsserts(Hir.Case c, Symbols symbols) {
+        List<Hir.Name> opened = new ArrayList<>();
         opened.add(c.caseTypes().get(0));
         opened.addAll(c.unwrapAsserts());
         checkOpenedLayers(c, opened, symbols, true);
@@ -228,12 +228,12 @@ public final class MatchElaborator {
     /** {@code Some(X(v))} opens the Option's element in the pattern. Unlike a user case, {@code Some}
      * is not itself a newtype — codegen has already unwrapped it — so the first written layer opens the
      * element directly and MUST name the element type; the rest is the same layer check as a user case. */
-    static void checkOptionUnwrapAsserts(Ast.Case c, Type element, Symbols symbols) {
-        List<Ast.Name> layers = c.unwrapAsserts();
+    static void checkOptionUnwrapAsserts(Hir.Case c, Type element, Symbols symbols) {
+        List<Hir.Name> layers = c.unwrapAsserts();
         if (layers.isEmpty()) {
             return;   // `Some(v)` binds the whole element, opening nothing
         }
-        Ast.Name first = layers.get(0);
+        Hir.Name first = layers.get(0);
         // the layer is compared as a type: `Some(billing.金額(v))` opens the same newtype an
         // imported bare `金額` names
         if (!(element instanceof Type.Ref r) || !r.name().equals(names(first))) {
@@ -249,7 +249,7 @@ public final class MatchElaborator {
     /** {@code firstOpensTheCase} says the first opened name is the arm's own case, which is where
      * {@code | X as v} is the spelling to reach for when X turns out not to be a newtype. An inner
      * layer (and Option's element) is reached through the case, so no such binding replaces it. */
-    static void checkOpenedLayers(Ast.Case c, List<Ast.Name> opened, Symbols symbols,
+    static void checkOpenedLayers(Hir.Case c, List<Hir.Name> opened, Symbols symbols,
                                   boolean firstOpensTheCase) {
         for (int i = 0; i < opened.size(); i++) {
             String name = opened.get(i).written();
@@ -264,7 +264,7 @@ public final class MatchElaborator {
                 throw CompileException.of(d.build());
             }
             if (i + 1 < opened.size()) {
-                Ast.Name next = opened.get(i + 1);
+                Hir.Name next = opened.get(i + 1);
                 // the layer a pattern claims is compared as a type, so an inner newtype named
                 // through its module opens the same one an imported bare name does
                 if (!(inner instanceof Type.Ref ir) || !ir.name().equals(names(next))) {
@@ -280,11 +280,11 @@ public final class MatchElaborator {
 
     /** Extends {@code env} with {@code binding} when both it and its type are present; otherwise
      * returns it as is. */
-    static Scope bound(Scope env, Ast.Binder binding, Type type) {
+    static Scope bound(Scope env, Hir.Binder binding, Type type) {
         return binding == null || type == null ? env : env.with(binding, type);
     }
 
-    static Type mergeBranch(Ast.Match m, Type branchType, Type bt, Ast.Case c, Type expected) {
+    static Type mergeBranch(Hir.Match m, Type branchType, Type bt, Hir.Case c, Type expected) {
         if (branchType == null) {
             return bt;
         }

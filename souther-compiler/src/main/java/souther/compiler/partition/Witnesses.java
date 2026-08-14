@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
@@ -410,7 +410,7 @@ final class Witnesses {
      */
     static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
         if (bare == null || !(type instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name()) instanceof Ast.Data data) || !data.newtype()) {
+                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || !data.newtype()) {
             return bare;
         }
         TypeName name = ref.name();

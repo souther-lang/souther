@@ -3,7 +3,9 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.TypeName;
@@ -23,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  *
  * <p>This is checked against the shape of the API rather than against an answer, because the rule was
  * already written down three times — on {@code Symbols}, on {@code Resolve}, on
- * {@code Ast.Apply.written()} — and was broken all the same. A sentence is kept by whoever reads it;
+ * {@code Hir.Apply.written()} — and was broken all the same. A sentence is kept by whoever reads it;
  * a signature is kept by everyone. What a reader outside can reach is the whole of what it can do
  * wrong, so that is what is measured here.
  */
@@ -59,7 +61,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                 continue;
             }
             boolean identity = m.getReturnType() == TypeName.class
-                    || Ast.Def.class.isAssignableFrom(m.getReturnType());
+                    || Hir.Def.class.isAssignableFrom(m.getReturnType());
             boolean fromASpelling = List.of(m.getParameterTypes()).contains(String.class);
             if (identity && fromASpelling) {
                 answering.add(m.getName());
@@ -74,7 +76,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     @Test
     void nothingPublicOnADeclarationTakesAStringAndAnswersWithAnIdentity() {
         List<String> answering = new ArrayList<>();
-        for (Method m : Ast.Def.class.getMethods()) {
+        for (Method m : Hir.Def.class.getMethods()) {
             if (m.getReturnType() == TypeName.class
                     && List.of(m.getParameterTypes()).contains(String.class)) {
                 answering.add(m.getName());
@@ -98,7 +100,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
         List<String> accepting = new ArrayList<>();
         for (Class<?> c : List.of(TypeName.class, souther.compiler.check.Declarations.class,
                 souther.compiler.check.TypeScope.class, souther.compiler.check.Registry.class,
-                Symbols.class, Ast.Def.class)) {
+                Symbols.class, Hir.Def.class)) {
             for (Method m : c.getMethods()) {
                 if (List.of(m.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
                     accepting.add(c.getSimpleName() + "." + m.getName());
@@ -161,13 +163,13 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
         assertNotEquals(mine, theirs);
     }
 
-    private static Ast.Module resolved(String source) {
+    private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
-    private static Ast.Def declarationOf(String source, String name) {
-        for (Ast.Def def : resolved(source).defs()) {
+    private static Hir.Def declarationOf(String source, String name) {
+        for (Hir.Def def : resolved(source).defs()) {
             if (def.name().equals(name)) {
                 return def;
             }

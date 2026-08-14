@@ -1,7 +1,7 @@
 package souther.compiler.doc;
 
 import souther.compiler.check.Prelude;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 
 import java.io.IOException;
@@ -136,7 +136,7 @@ public final class ApiCommand {
     }
 
     private static Signature declared(Prelude.PreludeEntry entry, int arity) {
-        List<Ast.FnParam> params = entry.declaration().params();
+        List<Hir.FnParam> params = entry.declaration().params();
         List<Type> types = entry.signature().params();
         List<String> names = new ArrayList<>();
         List<Type> kept = new ArrayList<>();

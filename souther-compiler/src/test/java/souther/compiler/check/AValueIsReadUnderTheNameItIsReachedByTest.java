@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.ValueName;
 
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>The value edges and the call edges are the two kinds of edge in one graph and are followed
  * together, so they have to be keyed alike. The call side has asked what a call reaches since
- * resolution began settling it; the value side asked {@link Ast.Var#name()}, which is the spelling —
+ * resolution began settling it; the value side asked {@link Hir.Var#name()}, which is the spelling —
  * and an import lets a name be written without its qualifier while the table keys it under the
  * module that declares it.
  *
@@ -32,13 +33,14 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
 
     /** {@code source} resolved with {@code imported} (bare name -> declaring module) reachable, which
      * is the tree {@code HelperNames.qualifyImports} is given — the author's spellings still on it. */
-    private static Ast.Module resolved(String source, Map<String, String> imported) {
+    private static Hir.Module resolved(String source, Map<String, String> imported) {
         Ast.Module parsed = CstFrontend.parse(source);
         Map<String, ValueName.Helper> helpers =
                 new LinkedHashMap<>(Resolve.Values.of(parsed).helpers());
         imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
-        Resolve.Resolved answered = Resolve.resolving(parsed, Symbols.of(parsed),
-                new Resolve.Values(parsed.name(), helpers, Map.of(), Map.of()));
+        Resolve.Resolved answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
+                new Resolve.Values(parsed.name(), helpers, Map.of(), true, Map.of(),
+                        Resolve.Elsewhere.NONE));
         if (!answered.unresolved().isEmpty()) {
             throw answered.unresolved().get(0);
         }
@@ -47,8 +49,8 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
 
     /** The value {@code up} publishes, under the name a reader reaches it by — which is how it
      * arrives in a reader's table. */
-    private static Ast.FnDef published() {
-        Ast.Module up = resolved("""
+    private static Hir.FnDef published() {
+        Hir.Module up = resolved("""
                 module up exposing ( standard )
 
                 let standard = 100
@@ -56,7 +58,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
         return HelperInliner.helpersOf(up).get("standard").reachedAs("up.standard");
     }
 
-    private static Set<String> read(Ast.Module m, String fn, Map<String, Ast.FnDef> table) {
+    private static Set<String> read(Hir.Module m, String fn, Map<String, Hir.FnDef> table) {
         Set<String> out = new LinkedHashSet<>();
         ValueCycles.valuesRead(HelperInliner.helpersOf(m).get(fn).writtenBody(), table, out);
         return out;
@@ -69,7 +71,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
      */
     @Test
     void aPublishedValueWrittenBareIsFoundUnderTheNameItIsReachedBy() {
-        Ast.Module down = resolved("""
+        Hir.Module down = resolved("""
                 module down
 
                 let doubled = standard + standard
@@ -83,7 +85,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
      * moved onto the reach name answers both, which is the point of there being one key. */
     @Test
     void aValueTheModuleDeclaresIsFoundUnderItsBareName() {
-        Ast.Module solo = resolved("""
+        Hir.Module solo = resolved("""
                 module solo
 
                 let base = 1
@@ -98,7 +100,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
      * a call is the other kind of edge. So neither reading answers with one. */
     @Test
     void aHelperReachedByTheSameRouteIsStillNotAValue() {
-        Ast.Module down = resolved("""
+        Hir.Module down = resolved("""
                 module down
 
                 let twice (n: Int) : Int = n + n

@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.Compiler;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.meta.ModulePath;
@@ -58,8 +58,8 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     }
 
     /** Every stage that hands a module over, by the name of the stage. */
-    private static Map<String, Ast.Module> stagesOf(Db db, String name) {
-        Map<String, Key<Ast.Module>> keys = new LinkedHashMap<>();
+    private static Map<String, Hir.Module> stagesOf(Db db, String name) {
+        Map<String, Key<Hir.Module>> keys = new LinkedHashMap<>();
         // Resolution answers with the tree and the claim that it has been read, which the stages
         // below it hand on as an ordinary module.
         Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
@@ -68,10 +68,10 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
         keys.put("desugared", new Shapes.Desugared(name));
         keys.put("prepared", new Shapes.Prepared(name));
         keys.put("settled", new Bodies.Settled(name));
-        Map<String, Ast.Module> out = new LinkedHashMap<>();
+        Map<String, Hir.Module> out = new LinkedHashMap<>();
         out.put("resolved", resolved.value().module());
         keys.forEach((stage, key) -> {
-            Answer<Ast.Module> answer = db.ask(key);
+            Answer<Hir.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());
             out.put(stage, answer.value());
         });
@@ -101,7 +101,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     /**
      * Which of the two a fn is in is what the declaration says of it, at every stage.
      *
-     * <p>Asked of {@link Ast.FnDef#declaredBy} and not of the names. A reach name carries a dot and a
+     * <p>Asked of {@link Hir.FnDef#declaredBy} and not of the names. A reach name carries a dot and a
      * source identifier cannot, so the two key sets never meet whatever the components hold — a test
      * written over the names would pass however wrongly a pass filed one.
      */
@@ -143,7 +143,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                     | "a row applies a published helper" : (In { n = doubled(3) }) -> Out { m = 6 }
                 """), Set.of(), ModulePath.EMPTY).db();
 
-        Ast.Module prepared = db.ask(new Shapes.Prepared("app")).value();
+        Hir.Module prepared = db.ask(new Shapes.Prepared("app")).value();
         // `run` implements a behavior, which is not a helper and is lowered on its own.
         assertEquals(Set.of(), HelperInliner.helpersOf(prepared).keySet());
         assertEquals(Set.of("rules.doubled"), HelperInliner.takenOnBy(prepared).keySet());
@@ -151,7 +151,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                 "nothing here recurses, so this is the row's doing and not a recursion's");
         assertEquals(Set.of("rules.doubled"),
                 db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()
-                        .map(Ast.FnDef::name).collect(java.util.stream.Collectors.toSet()));
+                        .map(Hir.FnDef::name).collect(java.util.stream.Collectors.toSet()));
     }
 
     /**
@@ -189,13 +189,13 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     @Test
     void theTreeTheBackendEmitsFromKeepsThemApart() {
         Db db = db();
-        Ast.Module lowered = db.ask(new Bodies.Lowering("app")).value().lowered();
+        Hir.Module lowered = db.ask(new Bodies.Lowering("app")).value().lowered();
 
         lowered.fns().forEach(fn -> assertTrue(fn.declaredBy("app"),
                 "`" + fn.name() + "` is emitted as a declaration of `app`, and "
                         + fn.declaredIn() + " declared it"));
         assertEquals(Set.of("List.foldFrom", "lib.flatten"),
-                lowered.takenOn().stream().map(Ast.FnDef::name)
+                lowered.takenOn().stream().map(Hir.FnDef::name)
                         .collect(java.util.stream.Collectors.toSet()));
     }
 }
