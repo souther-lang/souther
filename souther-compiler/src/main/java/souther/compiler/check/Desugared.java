@@ -107,9 +107,11 @@ public final class Desugared {
         /**
          * The same module with every imported name written as the definition it denotes.
          *
-         * <p>An alternative representation and not a rung: the spelling a call expands against is
-         * what this settles, and what makes it this state's to answer is that expanding one reads a
-         * construction.
+         * <p>A transformation and not a projection: what comes back is desugared too — writing a
+         * name qualified does not touch a construction — and it is handed over as a tree all the
+         * same, so the claim stops here. It is the one reader's, and that reader is the state above
+         * this one: whatever holds "imports qualified" is where this belongs, and it should take
+         * this state rather than a tree when it exists.
          */
         public Hir.Module withImportsQualified() {
             return HelperNames.qualifyImports(module);
@@ -118,9 +120,10 @@ public final class Desugared {
         /**
          * The tree.
          *
-         * <p>For a reader asking about the payload rather than about the claim — the signatures the
-         * module's behaviors declare, which is a question about what it wrote and not about what its
-         * definitions came to.
+         * <p>Wider than its one reader needs. What asks for it is the behavior signatures, which
+         * read what the module declared and nothing this state says; the projection it wants is
+         * those behaviors, and this hands over everything. It goes when that reader is migrated,
+         * rather than being the way a reader gets at the payload.
          */
         public Hir.Module tree() {
             return module;
