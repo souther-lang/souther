@@ -101,7 +101,7 @@ public final class HelperNames {
     /** {@code m} with the foreign names in its invariants written qualified, and nothing else
      * changed. An invariant is read before the bodies are — settled here, classified for discharge
      * there — so this is the part of {@link #qualifyImports} that has to be available on its own. */
-    public static Hir.Module withQualifiedInvariants(Hir.Module m) {
+    static Hir.Module withQualifiedInvariants(Hir.Module m) {
         List<Hir.Def> defs = qualifiedInvariants(m);
         return defs.equals(m.defs()) ? m
                 : new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,

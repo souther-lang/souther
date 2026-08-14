@@ -2,7 +2,8 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
-import souther.compiler.check.ResolvedModule;
+import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.Resolved;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperInvariants;
 import souther.compiler.check.HelperNames;
@@ -56,18 +57,18 @@ public final class Shapes {
      * bodies — and it is the imported module's bodies it reaches, never this one's: what a module
      * imports is read off its resolved form, so nothing here is asked through itself.
      */
-    record Settling(String name) implements Key<ResolvedModule> {
+    record Settling(String name) implements Key<InvariantSettled> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<ResolvedModule> compute(Db db) {
+        public Answer<InvariantSettled> compute(Db db) {
             // The module to expand, which is the resolved one where its values are well founded.
             // Everything below here expands a body of it.
-            Answer<ResolvedModule> resolved = db.ask(new Expandable(name));
-            if (!resolved.present()) {
+            Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
+            if (!expandable.present()) {
                 return Answer.absent();
             }
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
@@ -80,32 +81,11 @@ public final class Shapes {
             // as the unknown name it then is, which is the same answer every other stage gives there.
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
-                Hir.Module declared = onlyWhatItDeclares(resolved.value().module());
-                Hir.Module derived = Deriver.derive(declared, scope.value());
-                return Answer.of(resolved.value().with(
-                        HelperInvariants.withSettledInvariants(derived, scope.value(), published)));
+                return Answer.of(
+                        InvariantSettled.settle(expandable.value(), scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
-        }
-
-        /**
-         * The module carrying only the declarations it may have. A name written twice keeps the first,
-         * reported by {@link Names.Declarations}; the second is not a declaration, so nothing below
-         * here should read it and find it disagreeing with the one that is.
-         *
-         * <p>Which those are is {@link TypeChecker#declared}'s to say, and it says it once — asking it
-         * again here rather than repeating the rule is what keeps the tree and the scope agreeing about
-         * what the module declares.
-         */
-        private Hir.Module onlyWhatItDeclares(Hir.Module m) {
-            Collection<Hir.Def> kept = TypeChecker.declared(m).defs().values();
-            if (kept.size() == m.defs().size()) {
-                return m;
-            }
-            return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                    List.copyOf(kept), m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                    m.exampleFileTarget(), m.pos());
         }
     }
 
@@ -129,26 +109,29 @@ public final class Shapes {
      * body asks for a module to expand and gets one or gets nothing; there is no answer here that
      * hands over a module without having checked it, and nothing left to remember beside it.
      *
+     * <p>What it answers with says so. The check is {@link souther.compiler.check.Expandable#check},
+     * which is the only way to that state, so this question is where the check is asked for and not
+     * where it is remembered.
+     *
      * <p>Read off the resolved module, which is the earliest form that says what each name denotes —
      * and what a name denotes is what decides whether it is an edge at all.
      */
-    public record Expandable(String name) implements Key<ResolvedModule> {
+    public record Expandable(String name) implements Key<souther.compiler.check.Expandable> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<ResolvedModule> compute(Db db) {
-            Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+        public Answer<souther.compiler.check.Expandable> compute(Db db) {
+            Answer<Resolved> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
                 return Answer.absent();
             }
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             try {
-                ValueCycles.rejectIn(resolved.value().module(),
-                        imported.present() ? imported.value() : Map.of());
-                return Answer.of(resolved.value());
+                return Answer.of(souther.compiler.check.Expandable.check(resolved.value(),
+                        imported.present() ? imported.value() : Map.of()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -203,14 +186,14 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, Hir.Def>> compute(Db db) {
-            Answer<ResolvedModule> settling = db.ask(new Settling(name));
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, Hir.Def> out = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
-            for (Hir.Def def : settling.value().module().defs()) {
+            for (Hir.Def def : settling.value().defs()) {
                 try {
                     out.put(def.name(), NewtypeDesugar.rewriteInvariantsOf(def, scope.value()));
                 } catch (CompileException e) {
@@ -238,23 +221,13 @@ public final class Shapes {
 
         @Override
         public Answer<Hir.Module> compute(Db db) {
-            Answer<ResolvedModule> settling = db.ask(new Settling(name));
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
             Answer<Map<String, Hir.Def>> declarations = db.ask(new DerivedDeclarations(name));
             if (!settling.present() || !declarations.present()) {
                 return Answer.absent();
             }
-            List<Hir.Def> defs = new ArrayList<>();
-            for (Hir.Def def : settling.value().module().defs()) {
-                Hir.Def came = declarations.value().get(def.name());
-                if (came == null) {
-                    return Answer.absent();
-                }
-                defs.add(came);
-            }
-            Hir.Module m = settling.value().module();
-            return Answer.of(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                    defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                    m.exampleFileTarget(), m.pos()));
+            Hir.Module assembled = settling.value().withEachDeclarationDerived(declarations.value());
+            return assembled == null ? Answer.absent() : Answer.of(assembled);
         }
     }
 
@@ -308,14 +281,14 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, Hir.FnDef>> compute(Db db) {
-            Answer<ResolvedModule> settling = db.ask(new Settling(name));
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.DERIVED);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
-            for (Hir.FnDef fn : settling.value().module().fns()) {
+            for (Hir.FnDef fn : settling.value().fns()) {
                 try {
                     out.put(fn.name(), NewtypeDesugar.rewriteOf(fn, scope.value()));
                 } catch (CompileException e) {
@@ -437,9 +410,9 @@ public final class Shapes {
 
         @Override
         public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
-            Answer<ResolvedModule> resolved = db.ask(new Expandable(name));
+            Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
-            if (!resolved.present() || !scope.present()) {
+            if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
@@ -447,7 +420,7 @@ public final class Shapes {
             // What the clause says is what the check reads, so an imported bound is substituted here
             // as it is where the invariant is settled. A clause left naming it would be classified as
             // a rule this analysis cannot read, and a construction the bound rejects would compile.
-            Hir.Module declaring = HelperNames.withQualifiedInvariants(resolved.value().module());
+            Hir.Module declaring = expandable.value().withQualifiedInvariants();
             try {
                 Map<TypeSymbol, List<ClauseDischarge>> out = new LinkedHashMap<>();
                 for (Hir.Def def : declaring.defs()) {
@@ -518,16 +491,16 @@ public final class Shapes {
 
         @Override
         public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
-            Answer<ResolvedModule> resolved = db.ask(new Expandable(name));
+            Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
-            if (!resolved.present() || !scope.present()) {
+            if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
                 return Answer.of(HelperInvariants.invariantsForDischarge(
-                        resolved.value().module(), scope.value(), published));
+                        expandable.value(), scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

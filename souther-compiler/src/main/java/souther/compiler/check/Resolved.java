@@ -22,17 +22,18 @@ import souther.compiler.ast.Hir;
  * still writes an arm for the one that cannot be there and refuses it. What this removes is the
  * question being asked again at every consumer, not the arm.
  *
- * <p>Minted in this package and nowhere else — the constructor is package-private, and
- * {@link Resolve} is what calls it. A pass that rewrites a resolved tree goes through
- * {@link #with(Hir.Module)}, which is the same claim made again by whoever is making it: the pass
- * mints its nodes resolved, as {@code Deriver}, {@code NewtypeDesugar}, {@code HelperInliner} and
- * {@code FixtureTemplate} already do.
+ * <p>The first rung, and the only one that hands its tree over. What it claims is what {@link Hir}
+ * itself claims, so a reader holding the tree holds the claim; the rungs above say something the
+ * payload does not carry, and those keep their trees. There is no operation here that takes a tree
+ * and answers a resolved module: a pass that rewrites one either states what it has established
+ * — {@link Expandable}, {@link InvariantSettled} — or answers a tree, which claims nothing.
  */
-public final class ResolvedModule {
+public final class Resolved {
 
     private final Hir.Module module;
 
-    ResolvedModule(Hir.Module module) {
+    /** Minted in this package and nowhere else — {@link Resolve} is what calls it. */
+    Resolved(Hir.Module module) {
         if (module == null) {
             throw new IllegalArgumentException("a resolved module is a module");
         }
@@ -49,20 +50,9 @@ public final class ResolvedModule {
         return module;
     }
 
-    /**
-     * {@code rewritten} as a resolved module, for a pass that rewrote this one.
-     *
-     * <p>Asked of the module it came from, so the claim is made where a resolved tree already is
-     * rather than anywhere a tree can be built. What a pass writes into one it mints resolved, which
-     * is what every pass after {@code Resolve} already does.
-     */
-    public ResolvedModule with(Hir.Module rewritten) {
-        return new ResolvedModule(rewritten);
-    }
-
     @Override
     public boolean equals(Object o) {
-        return o instanceof ResolvedModule other && module.equals(other.module);
+        return o instanceof Resolved other && module.equals(other.module);
     }
 
     @Override

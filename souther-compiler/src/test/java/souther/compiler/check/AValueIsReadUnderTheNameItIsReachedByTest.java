@@ -38,7 +38,7 @@ class AValueIsReadUnderTheNameItIsReachedByTest {
         Map<String, ValueName.Helper> helpers =
                 new LinkedHashMap<>(Resolve.Values.of(parsed).helpers());
         imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
-        Resolve.Resolved answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
+        Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
                 new Resolve.Values(parsed.name(), helpers, Map.of(), true, Map.of(),
                         Resolve.Elsewhere.NONE));
         if (!answered.unresolved().isEmpty()) {

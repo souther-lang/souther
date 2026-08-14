@@ -2,7 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.ResolvedModule;
+import souther.compiler.check.Resolved;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.meta.ModulePath;
 
@@ -62,7 +62,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
         Map<String, Key<Hir.Module>> keys = new LinkedHashMap<>();
         // Resolution answers with the tree and the claim that it has been read, which the stages
         // below it hand on as an ordinary module.
-        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+        Answer<Resolved> resolved = db.ask(new Names.Resolved(name));
         assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
         keys.put("derived", new Shapes.Derived(name));
         keys.put("desugared", new Shapes.Desugared(name));

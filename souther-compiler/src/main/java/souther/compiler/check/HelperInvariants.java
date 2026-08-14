@@ -45,8 +45,8 @@ public final class HelperInvariants {
      * the spelling the table is keyed by — {@link HelperNames#qualifyImports} does it again for the
      * bodies below, and says the same thing both times.
      */
-    public static Hir.Module withSettledInvariants(Hir.Module m, Symbols symbols,
-                                                   Map<String, Hir.FnDef> published) {
+    static Hir.Module withSettledInvariants(Hir.Module m, Symbols symbols,
+                                            Map<String, Hir.FnDef> published) {
         Hir.Module settled = settled(m, symbols);
         return withInlinedInvariants(HelperInliner.forModule(settled, published), settled);
     }
@@ -63,7 +63,8 @@ public final class HelperInvariants {
      * (spec §invariant-discharge).
      */
     public static Map<TypeSymbol, List<Hir.InvariantClause>> invariantsForDischarge(
-            Hir.Module m, Symbols symbols, Map<String, Hir.FnDef> published) {
+            Expandable expandable, Symbols symbols, Map<String, Hir.FnDef> published) {
+        Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
                 published, InliningPolicy.DISCHARGE);

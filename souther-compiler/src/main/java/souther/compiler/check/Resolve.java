@@ -274,9 +274,9 @@ public final class Resolve {
      * every unknown name at once instead of one per compile, and an editor can still say what the
      * names around it mean.
      */
-    public record Resolved(ResolvedModule module, ResolutionIndex index,
-                           List<CompileException> unresolved,
-                           Map<String, OfDeclaration> declarations) {}
+    public record Resolution(Resolved module, ResolutionIndex index,
+                             List<CompileException> unresolved,
+                             Map<String, OfDeclaration> declarations) {}
 
     /**
      * What resolving one declaration came to.
@@ -305,7 +305,7 @@ public final class Resolve {
 
     /** {@code m} with every name it writes resolved against {@code symbols}. */
     public static Hir.Module module(Ast.Module m, SyntaxSymbols symbols) {
-        Resolved resolved = resolving(m, symbols);
+        Resolution resolved = resolving(m, symbols);
         if (!resolved.unresolved().isEmpty()) {
             // This entry point answers with a module or not at all, which is what its one caller —
             // loading the shipped core — needs: a misspelled type in a prelude resource is a fault in
@@ -316,13 +316,13 @@ public final class Resolve {
     }
 
     /** As {@link #module(Ast.Module, SyntaxSymbols)}, keeping what each name was answered with. */
-    public static Resolved resolving(Ast.Module m, SyntaxSymbols symbols) {
+    public static Resolution resolving(Ast.Module m, SyntaxSymbols symbols) {
         return resolving(m, symbols, Values.of(m));
     }
 
     /** As {@link #resolving(Ast.Module, SyntaxSymbols)}, with what the module reaches in the value
      * namespace given rather than read off the module itself. */
-    public static Resolved resolving(Ast.Module m, SyntaxSymbols symbols, Values values) {
+    public static Resolution resolving(Ast.Module m, SyntaxSymbols symbols, Values values) {
         Resolve r = new Resolve(symbols, values);
         List<Hir.Def> defs = new ArrayList<>();
         // Which names were answered is settled per declaration: what one of them writes is nothing
@@ -394,8 +394,8 @@ public final class Resolve {
             throw new IllegalStateException(
                     "`" + m.name() + "` reached resolution having already taken helpers on");
         }
-        return new Resolved(
-                new ResolvedModule(new Hir.Module(m.name(), m.exposing(), exposedOutputs,
+        return new Resolution(
+                new Resolved(new Hir.Module(m.name(), m.exposing(), exposedOutputs,
                         r.imports(m), defs, behaviors, fns, List.of(), examples, fakes,
                         m.exampleFileTarget(), m.pos())),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),

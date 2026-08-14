@@ -3,7 +3,7 @@ package souther.compiler.query;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
-import souther.compiler.check.ResolvedModule;
+import souther.compiler.check.Resolved;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperGraph;
@@ -564,7 +564,7 @@ public final class Bodies {
             if (Names.cyclic(db, name)) {
                 return Answer.absent();
             }
-            Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+            Answer<Resolved> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
                 return Answer.absent();
             }

@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.ResolvedModule;
+import souther.compiler.check.Resolved;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.ValueCycles;
 import souther.compiler.diag.CompileException;
@@ -92,7 +92,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         Map<String, Key<Hir.Module>> stages = new LinkedHashMap<>();
         // Resolution answers with the tree and the claim that it has been read, which the stages
         // below it hand on as an ordinary module.
-        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+        Answer<Resolved> resolved = db.ask(new Names.Resolved(name));
         assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
         stages.put("derived", new Shapes.Derived(name));
         stages.put("desugared", new Shapes.Desugared(name));
@@ -158,7 +158,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                     constructs Out
                 let go (i) = Out { n = i.n + step }
                 """), Set.of(), ModulePath.EMPTY).db();
-        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved("m.a"));
+        Answer<Resolved> resolved = db.ask(new Names.Resolved("m.a"));
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 
         assertThrows(CompileException.class,
