@@ -60,6 +60,13 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                 | Missing as m -> Refused { why = m.why }
             """;
 
+    /** The same, with an invariant on the id, so that a row's answer and a row's arguments fail to
+     * build for reasons a report tells apart. */
+    private static final String BASE_WITH_AN_INVARIANT = BASE
+            .replace("module example.members", "module example.members\n\nimport String ( length )")
+            .replace("data MemberId = String",
+                    "data MemberId = String\n    invariant length(value) > 0");
+
     /** A model asking the fake for {@code m-1}, with {@code table} standing in and {@code expected}
      * what the row says the behavior answers. */
     private static String model(String table, String expected) {
@@ -212,6 +219,31 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         assertTrue(diagnosticsOf(reachable).stream().anyMatch(d -> "E1908".equals(d.code())),
                 "and the same output in a row the table can reach is the error it is: "
                         + diagnosticsOf(reachable));
+    }
+
+    /**
+     * A row is read as far as it is reached, in the order the rows are written. Reading every row's
+     * arguments first and every answer after would not build what an unreachable row answers either,
+     * and would move the fault rather than remove it: a row whose answer is wrong would be reported
+     * or not depending on what a row below it does with its arguments.
+     */
+    @Test
+    void aRowIsReadWhereItIsWritten() {
+        String source = BASE_WITH_AN_INVARIANT + """
+
+                fake findMember
+                    | (MemberId("m-1")) -> Found { id = MemberId("") }
+                    | (MemberId(String.repeat("in", 0 - 1))) -> Missing { why = "b" }
+
+                example place
+                    | "one" : (Order { by = MemberId("m-1") }) -> Refused { why = "" }
+                """;
+
+        List<Diagnostic> said = diagnosticsOf(source);
+
+        assertEquals(1, said.size(), "the first row that cannot be read is what the table is refused for");
+        assertEquals("id: must be at least 1 characters", said.get(0).values().get("why"),
+                "which is the answer of the row written first, not the arguments of the one below it");
     }
 
     // --- what is not ---------------------------------------------------------------------------

@@ -912,19 +912,34 @@ public final class ExampleStatements {
                 return null;
             }
         }
-        // Which rows the table can reach, before anything is built from what they answer. A row the
-        // dispatch never returns is a row nothing asks for what it states, so building its answer
-        // would be work done for a statement nothing reads — and, where that work is what fails or
-        // overruns, the table would be reported for a row that is not part of it. What states its
-        // arguments and will not build is another matter: there is nothing to decide the dispatch
-        // with, so it is the error it is.
+        // Which `_` the table falls through to is the last one written, and that is read off the
+        // rows rather than built: a `_` with another after it answers nothing, so nothing of it is
+        // built either.
+        Hir.FakeRow lastDefault = null;
+        for (Hir.FakeRow r : fk.rows()) {
+            if (r.isDefault()) {
+                lastDefault = r;
+            }
+        }
         List<Written> reachable = new ArrayList<>();
-        List<Written> defaults = new ArrayList<>();
+        List<Standin> explicit = new ArrayList<>();
         List<Shadowed> shadowed = new ArrayList<>();
+        Standin fallback = null;
+        // In the order the rows are written, each read as far as it is reached: what a row states,
+        // then — for a row the table can return — what it answers. A row the dispatch never returns
+        // is a row nothing asks for what it states, so building its answer would be work done for a
+        // statement nothing reads, and where that work is what fails or overruns the table would be
+        // reported for a row that is not part of it. Reading every row's arguments first and every
+        // answer after would move that fault rather than remove it: a row whose answer is wrong is
+        // wrong wherever a later row's arguments take their time.
         try {
             for (Hir.FakeRow r : fk.rows()) {
                 if (r.isDefault()) {
-                    defaults.add(new Written(null, r));
+                    if (r != lastDefault) {
+                        shadowed.add(new Shadowed(r, lastDefault));
+                        continue;
+                    }
+                    fallback = new Standin(null, r, fixtures.buildFixture(r.output(), outType));
                     continue;
                 }
                 Object[] arguments = new Object[ins.size()];
@@ -940,41 +955,16 @@ public final class ExampleStatements {
                 // rule that decides which row answers is the rule that decides which row cannot.
                 List<Written> with = new ArrayList<>(reachable);
                 with.add(written);
-                Written answers = Standins.answering(with, defaults.isEmpty() ? null
-                        : defaults.get(defaults.size() - 1), arguments);
-                if (answers == written) {
-                    reachable.add(written);
-                } else {
+                Written answers = Standins.answering(with,
+                        lastDefault == null ? null : new Written(null, lastDefault), arguments);
+                if (answers != written) {
                     shadowed.add(new Shadowed(r, answers.row()));
+                    continue;
                 }
-            }
-        } catch (FixtureException fe) {
-            out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
-            return null;
-        } catch (StackExhaustedException nt) {
-            out.add(unbuildableFake(fk.pos(), fk.target(), nt.getMessage()));
-            return null;
-        }
-        // The last `_` is the one a table falls through to, so the ones before it answer nothing —
-        // the other way round from two explicit rows, where the first answers. Each is said against
-        // the row that does answer rather than against the next one written, which for three of them
-        // would name a row that answers nothing either.
-        Written fallbackRow = defaults.isEmpty() ? null : defaults.get(defaults.size() - 1);
-        for (Written earlier : defaults.subList(0, Math.max(0, defaults.size() - 1))) {
-            shadowed.add(new Shadowed(earlier.row(), fallbackRow.row()));
-        }
-        List<Standin> explicit = new ArrayList<>();
-        Standin fallback = null;
-        try {
-            // A dependency that returns a sum has no single decoder; each row names one case, so
-            // decode the row's output against that case's type (as an expected value is).
-            for (Written written : reachable) {
-                explicit.add(new Standin(written.arguments(), written.row(),
-                        fixtures.buildFixture(written.row().output(), outType)));
-            }
-            if (fallbackRow != null) {
-                fallback = new Standin(null, fallbackRow.row(),
-                        fixtures.buildFixture(fallbackRow.row().output(), outType));
+                reachable.add(written);
+                // A dependency that returns a sum has no single decoder; each row names one case, so
+                // decode the row's output against that case's type (as an expected value is).
+                explicit.add(new Standin(arguments, r, fixtures.buildFixture(r.output(), outType)));
             }
         } catch (FixtureException fe) {
             out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
