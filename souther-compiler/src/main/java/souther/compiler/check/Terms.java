@@ -49,27 +49,31 @@ final class Terms {
     /** How the values of each atom this has named are spaced. Kept here because this is where an
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
      * anywhere else would be a second place that has to agree about which is which. */
-    private final Map<String, Granularity> atomKinds = new HashMap<>();
+    private final Map<Term, Granularity> atomKinds = new HashMap<>();
     /**
-     * Every canonical shape this has built, and the name it goes by.
+     * The terms this reading has built, each held under the one instance standing for it.
      *
      * <p>What a term is made of is a graph and not a tree: a name read twice is one value read twice,
-     * and `+let (a, b) = t+` reads `+t+` twice by itself. A shape written out in full holds a copy of
-     * each of its parts, so a part read twice is written twice, and a chain of them doubles per link —
-     * twenty-four links asked for more characters than an array can hold. Held under a name, a shape
-     * that reads another holds the name and not the shape, and what a link adds is a name.
-     *
-     * <p>The names are the identity the rest of this asks about, and two shapes are one name exactly
-     * when they are the same shape. That is the same equality the strings had — a shape is compared by
-     * its parts' names, which are compared the same way, all the way down to what a location is
-     * called. So naming an expression still answers what the expression answers, which is what makes a
-     * name an alias.
+     * and {@code let (a, b) = t} reads {@code t} twice by itself. A term holds its parts rather than
+     * a copy of them, and carries the hash they were hashed into, so a chain of them costs a link per
+     * link. Sharing is what makes the comparison stop at the first line; it is not what makes two
+     * terms equal ({@link Term}).
      */
-    private final Map<String, String> shapes = new HashMap<>();
+    private final Term.Interner interned = new Term.Interner();
 
     Terms(Symbols symbols) {
         this.symbols = symbols;
     }
+
+    /**
+     * Where a test in this package reads the shapes this had no term for, and null everywhere else.
+     *
+     * <p>Beside {@link InvariantChecker#WATCHING} and for the same reason. A shape with no term is
+     * silent, and silence is what a value nothing can be said of produces as well — so the difference
+     * between this compiler being unfinished and a value being unnameable has nowhere else to be
+     * read, and a difference nothing can read stops being true without anything failing.
+     */
+    static List<String> UNSUPPORTED;
 
     /** The operator {@code e} is, where it is a library call written as a function, or {@code e}
      * itself. Reading it as the operator is what puts it on the one path the operator already has,
@@ -100,7 +104,7 @@ final class Terms {
      * what made {@code a * b} name nothing where it is written and something where it is bound —
      * which is a name changing what can be said of an expression.
      */
-    LinearForm affine(Core raw, Denotations at, java.util.function.Function<Core, LinearForm> leaf) {
+    LinearForm<Term> affine(Core raw, Denotations at, java.util.function.Function<Core, LinearForm<Term>> leaf) {
         Core e = asOperator(raw);
         if (e instanceof Core.PreservedCall) {
             // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
@@ -112,14 +116,14 @@ final class Terms {
                 return LinearForm.constant(folded);
             }
         }
-        LinearForm composed = composed(e, at, leaf);
+        LinearForm<Term> composed = composed(e, at, leaf);
         return composed != null ? composed : leaf.apply(e);
     }
 
     /** {@code e} read as arithmetic over what {@code leaf} answers, or {@code null} where this has no
      * rule for it or the rule it has does not compose. */
-    private LinearForm composed(Core e, Denotations at,
-                                java.util.function.Function<Core, LinearForm> leaf) {
+    private LinearForm<Term> composed(Core e, Denotations at,
+                                java.util.function.Function<Core, LinearForm<Term>> leaf) {
         return switch (e) {
             case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Core.Decimal d -> LinearForm.constant(d.value());
@@ -150,7 +154,7 @@ final class Terms {
             // arithmetic helper becomes, so reading through it is reading the arithmetic the author
             // wrote.
             case Core.LetIn li -> {
-                LinearForm bound = affine(li.value(), at, leaf);
+                LinearForm<Term> bound = affine(li.value(), at, leaf);
                 yield bound == null ? null : affine(li.body(), at,
                         n -> n instanceof Core.Read r && r.binding().equals(li.binder().id())
                                 ? bound : leaf.apply(n));
@@ -177,7 +181,7 @@ final class Terms {
 
     /** A linear form scaled by a constant, when one side is a bare constant (a scalar multiply); null
      * when neither side is constant (a non-linear product). */
-    static LinearForm scale(LinearForm a, LinearForm b) {
+    static <A> LinearForm<A> scale(LinearForm<A> a, LinearForm<A> b) {
         if (a == null || b == null) {
             return null;
         }
@@ -189,12 +193,14 @@ final class Terms {
 
     /** The affine form of an expression: a numeric atom, a newtype construct's wrapped value, or
      * {@code null}. */
-    LinearForm affineOf(Core e, Denotations at, Known k) {
+    LinearForm<Term> affineOf(Core e, Denotations at, Known k) {
         return affine(e, at, n -> {
-            if (n instanceof Core.NewData nd && nd.spreads().isEmpty() && nd.inits().size() == 1
-                    && nd.inits().get(0).name().equals("value")
+            // A newtype built around a number is that number here. What makes it one is the
+            // declaration, which `affineScalarBase` asks; a construction of it has the one field the
+            // declaration gives it.
+            if (n instanceof Core.Construct nd
                     && affineScalarBase(Type.ref(nd.typeName())) != null) {
-                return affineOf(nd.inits().get(0).value(), at, k);
+                return affineOf(nd.values().get(0).value(), at, k);
             }
             Core written = writtenValue(n, at);
             if (written != null && written != n) {
@@ -209,11 +215,11 @@ final class Terms {
             // §invariant-discharge-terms). Read through it, as the `let` node above is read through:
             // the name and the expression it was given are one value, and reading one as an atom of
             // its own leaves a guard on the name saying nothing about the value it was built from.
-            LinearForm given = givenForm(n, at, k);
+            LinearForm<Term> given = givenForm(n, at, k);
             if (given != null) {
                 return given;
             }
-            String atom = atomOf(n, at);
+            Term atom = atomOf(n, at);
             return atom == null ? null : LinearForm.atom(atom);
         });
     }
@@ -223,8 +229,8 @@ final class Terms {
      * given is arithmetic this can read. A name given a location is not this — {@link #atomOf}
      * answers that with the location, which is what the seeding wrote about.
      */
-    private LinearForm givenForm(Core e, Denotations at, Known k) {
-        if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Term)
+    private LinearForm<Term> givenForm(Core e, Denotations at, Known k) {
+        if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Computed)
                 || affineScalarBase(e.type()) == null) {
             return null;
         }
@@ -262,11 +268,11 @@ final class Terms {
         return given == null || given == e ? e : listedOut(given, at);
     }
 
-    static LinearForm negate(LinearForm f) {
+    static <A> LinearForm<A> negate(LinearForm<A> f) {
         return f == null ? null : f.negate();
     }
 
-    static LinearForm add(LinearForm a, LinearForm b, boolean subtract) {
+    static <A> LinearForm<A> add(LinearForm<A> a, LinearForm<A> b, boolean subtract) {
         if (a == null || b == null) {
             return null;
         }
@@ -286,8 +292,8 @@ final class Terms {
      * have been said before a value could be an atom made the first guard about a value the one that
      * could not be read, since it was read to decide whether that value had a name at all.
      */
-    String atomOf(Core e, Denotations at) {
-        String size = sizeAtomOf(e, arg -> bodyKey(arg, at));
+    Term atomOf(Core e, Denotations at) {
+        Term size = sizeAtomOf(e, arg -> bodyKey(arg, at));
         if (size != null) {
             return size;
         }
@@ -297,15 +303,24 @@ final class Terms {
         return named(bodyKey(e, at), granularityOf(e.type()));
     }
 
-    /** {@link #sizeAtom}, with the atom it names recorded as a whole number. A size counts elements,
-     * so there is nothing to decide about it. */
-    String sizeAtomOf(Core e, java.util.function.Function<Core, String> key) {
-        return named(shared(sizeAtom(e, key)), Granularity.DISCRETE);
+    /** The atom of the size {@code e} takes of a container {@code key} can name, or null where it
+     * takes none or names none. */
+    Term sizeAtomOf(Core e, java.util.function.Function<Core, Term> key) {
+        Core container = DischargeRules.sizeArgOf(e);
+        if (container == null) {
+            return null;
+        }
+        Term arg = key.apply(DischargeRules.sizeSource(container));
+        return arg == null ? null : sizeKeyOf(((Core.PreservedCall) e).operation(), arg);
     }
 
-    /** {@link #sizeKey}, with the atom it names recorded. */
-    String sizeKeyOf(ValueName size, String container) {
-        return named(shared(sizeKey(size, container)), Granularity.DISCRETE);
+    /** The size {@code size} takes of {@code container}, named as the whole number it is. A size
+     * counts elements, so there is nothing to decide about how its values are spaced. It is the call
+     * that takes it and nothing besides, which is the term a clause reading one builds and the term a
+     * guard stating one builds — so the two are one value rather than two writings that have to keep
+     * spelling each other alike. */
+    Term sizeKeyOf(ValueName size, Term container) {
+        return named(interned.called(size, List.of(container)), Granularity.DISCRETE);
     }
 
     /**
@@ -323,41 +338,33 @@ final class Terms {
      * a field wants the name a clause already gave it, and answering with a fresh one would put an
      * atom nothing bounds into the domain and call that an answer.
      */
-    String takenAtomOf(Core e, Type type, Denotations at) {
+    Term takenAtomOf(Core e, Type type, Denotations at) {
         ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
         if (counts == null) {
             return null;
         }
-        String container = bodyKey(e, at);
-        return container == null ? null : shapes.get(sizeKey(counts, container));
-    }
-
-    /** {@code shape} under the name it goes by here, so that what reads it reads the name. */
-    private String shared(String shape) {
-        if (shape == null) {
-            return null;
-        }
-        String had = shapes.get(shape);
-        if (had != null) {
-            return had;
-        }
-        String name = "@" + shapes.size();
-        shapes.put(shape, name);
-        return name;
+        Term container = bodyKey(e, at);
+        return container == null ? null : interned.calledIfBuilt(counts, List.of(container));
     }
 
     /**
-     * One name this gave two kinds of number.
+     * One term this gave two kinds of number.
      *
      * <p>Apart from everything else the check can fall over on, and for a reason. Those are shapes it
      * has no rule for, and answering them with silence is what fail-open means. This is the check
-     * disagreeing with itself about one of its own names: two writings it called one value are not
-     * one value, so every relation recorded under that name relates the wrong things. Swallowed, it
-     * produces a body with no findings, which is what a body with nothing to report produces.
+     * disagreeing with itself about one of its own terms: a term is a value, and a value is one kind
+     * of number, so every relation recorded against a term that is two of them relates the wrong
+     * things. Swallowed, it produces a body with no findings, which is what a body with nothing to
+     * report produces.
+     *
+     * <p>What it is about has narrowed. A term was a string written out of its parts, and two values
+     * could write one — a collision this would catch only where the two happened to be numbers spaced
+     * differently. Terms are held by what they are made of now, so that route is gone and what is
+     * left is the check handing one value two spacings.
      */
-    static final class OneKeyTwoKinds extends IllegalStateException {
+    static final class OneTermTwoKinds extends IllegalStateException {
 
-        OneKeyTwoKinds(String message) {
+        OneTermTwoKinds(String message) {
             super(message);
         }
     }
@@ -365,13 +372,13 @@ final class Terms {
     /** {@code key}, with how its values are spaced recorded against it. A key is what a value is
      * called and a kind is what the value is, so one key is one kind: two would mean this named two
      * values alike, and everything recorded under the name would be about neither of them. */
-    private String named(String key, Granularity g) {
+    private Term named(Term key, Granularity g) {
         if (key == null) {
             return null;
         }
         Granularity had = atomKinds.putIfAbsent(key, g);
         if (had != null && had != g) {
-            throw new OneKeyTwoKinds("atom `" + key + "` is " + had + " and " + g);
+            throw new OneTermTwoKinds("atom `" + key.rendered() + "` is " + had + " and " + g);
         }
         return key;
     }
@@ -390,26 +397,26 @@ final class Terms {
 
     /** The spacing of every atom {@code f} is written over, for the domain to record. Every one of
      * them was named here, so one that is not is a form built somewhere this cannot answer for. */
-    Map<String, Granularity> kindsOf(LinearForm f) {
+    Map<Term, Granularity> kindsOf(LinearForm<Term> f) {
         return kindsOfAtoms(f.coefs().keySet());
     }
 
     /** The same, for a name being given a form: the name is an atom too, and its own type says how
      * its values are spaced. */
-    Map<String, Granularity> kindsOf(LinearForm f, String atom, Type type) {
-        Map<String, Granularity> out = new HashMap<>(kindsOf(f));
+    Map<Term, Granularity> kindsOf(LinearForm<Term> f, Term atom, Type type) {
+        Map<Term, Granularity> out = new HashMap<>(kindsOf(f));
         Granularity g = granularityOf(type);
         named(atom, g);
         out.put(atom, g);
         return out;
     }
 
-    private Map<String, Granularity> kindsOfAtoms(Set<String> atoms) {
-        Map<String, Granularity> out = new HashMap<>();
-        for (String atom : atoms) {
+    private Map<Term, Granularity> kindsOfAtoms(Set<Term> atoms) {
+        Map<Term, Granularity> out = new HashMap<>();
+        for (Term atom : atoms) {
             Granularity g = atomKinds.get(atom);
             if (g == null) {
-                throw new IllegalStateException("atom `" + atom + "` was not named here");
+                throw new IllegalStateException("atom `" + atom.rendered() + "` was not named here");
             }
             out.put(atom, g);
         }
@@ -418,7 +425,7 @@ final class Terms {
 
     /** An expression's canonical key: a location names itself, and everything else is read
      * structurally. */
-    String bodyKey(Core e, Denotations at) {
+    Term bodyKey(Core e, Denotations at) {
         return termKey(e, at, Map.of(), 0);
     }
 
@@ -440,33 +447,25 @@ final class Terms {
      * this check's flagging policy rather than a proof: the run-time check stands for the whole of
      * such an invariant. Widening it is a matter of naming more values here.
      */
-    String siteKey(Core e, Denotations at, Known k) {
+    Term siteKey(Core e, Denotations at, Known k) {
         // A value written out is not something a guard can be written about: there is nothing to
         // state of `"xyz"` that the text does not already say. Where a clause reading it folds it is
         // decided before this is asked, and where it does not fold there is no guard that would
         // discharge it, so naming it here would only report what the author cannot answer.
         Denotes d = denotationOf(e, at, k);
-        return readable(d, k) ? d.key() : null;
+        return readable(d, k) ? termOf(d) : null;
     }
 
-    /** The atom key of {@code SIZE_CALL(container)} when {@code key} can name the container, else
-     * {@code null}. */
-    static String sizeAtom(Core e, java.util.function.Function<Core, String> key) {
-        Core container = DischargeRules.sizeArgOf(e);
-        if (container == null) {
-            return null;
-        }
-        String arg = key.apply(DischargeRules.sizeSource(container));
-        return arg == null ? null : sizeKey(((Core.PreservedCall) e).operation(), arg);
+    /** What {@code d} is named by, or null where it is named by nothing. Said here because a place is
+     * named by the term it is, and only this holds the terms. */
+    Term termOf(Denotes d) {
+        return switch (d) {
+            case Denotes.At located -> interned.at(located.where());
+            case Denotes.Computed computed -> computed.term();
+            case Denotes.Written written -> written.term();
+            case Denotes.Nothing ignored -> null;
+        };
     }
-
-    /** How a size over a named container is written as an atom. The same string a call keys as
-     * ({@link #termKey}), said here so a guard's term and a clause's atom cannot drift apart — they
-     * meet by this key and by nothing else. */
-    static String sizeKey(ValueName size, String container) {
-        return size.name() + "(" + container + ")";
-    }
-
 
     /**
      * The canonical key of an expression as a term, or {@code null} when nothing here can be named.
@@ -479,121 +478,208 @@ final class Terms {
      * still the value it is and so is part of the term. Anything outside this grammar keys as
      * {@code null}, and the clause reading it is left opaque.
      */
-    private String termKey(Core raw, Denotations at, Map<BindingId, String> bound, int depth) {
+    private Term termKey(Core raw, Denotations at, Map<BindingId, Term> bound, int depth) {
+        return naming(raw, at, bound, depth).term();
+    }
+
+    /**
+     * What {@code raw} is called, or why it is called nothing.
+     *
+     * <p>Exhaustive over {@link Core} and carrying no default: a shape added to the language is a
+     * compile error here rather than a value the check silently has nothing to say about. Which is
+     * what the shapes below were — a call this reading kept standing fell through to nothing, so a
+     * construction over one was left to the run-time check while the same construction over the same
+     * helper expanded into the body was reported (#722).
+     *
+     * <p>A value is named by what computes it, where what computes it is a function of named parts.
+     * So the parts decide most of this, and what decides the rest is what is being called: a module's
+     * own helper is pure, the language's own operations are, and what an injected behavior answers is
+     * not. That a call is still standing here is not one of the questions — whether a helper was
+     * expanded into this body is a fact about the reading, not about the value it answers.
+     */
+    private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth) {
         Core e = asOperator(raw);
         BindingId root = rootBinding(e);
         if (root != null) {
-            String here = bound.get(root);
-            return here != null ? chainOn(here, e) : pathKey(e, at);
+            Term here = bound.get(root);
+            return here != null ? new Naming.Named(interned.on(here, chainOf(e)))
+                    : Naming.of(pathKey(e, at), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
-            case Core.Int i -> Long.toString(i.value());
-            case Core.Decimal d -> d.value().toPlainString() + "m";
-            case Core.Str s -> quoted(s.value());
-            case Core.Bool b -> Boolean.toString(b.value());
-            case Core.UnitValue u -> u.data().toString();
-            case Core.Neg n -> shared(wrap("-", termKey(n.operand(), at, bound, depth)));
-            case Core.Binary b -> {
-                String l = termKey(b.left(), at, bound, depth);
-                String r = termKey(b.right(), at, bound, depth);
-                yield l == null || r == null ? null : shared(binaryKey(b.op(), l, r));
-            }
-            case Core.ListLit l -> shared(elementsKey("[", l.elements(), at, bound, depth, "]"));
-            case Core.Tuple t -> shared(elementsKey("(", t.elements(), at, bound, depth, ")"));
-            case Core.TupleGet g -> shared(wrap("." + g.index(), termKey(g.tuple(), at, bound, depth)));
-            case Core.If iff -> shared(elementsKey("if(", List.of(iff.cond(), iff.then(), iff.els()),
-                    at, bound, depth, ")"));
+            case Core.Read _, Core.FieldAccess _ ->
+                    Naming.of(pathKey(e, at), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
+            case Core.Int i -> new Naming.Named(interned.written(i.value()));
+            case Core.Decimal d -> new Naming.Named(interned.written(d.value()));
+            case Core.Str str -> new Naming.Named(interned.written(str.value()));
+            case Core.Bool b -> new Naming.Named(interned.written(b.value()));
+            case Core.UnitValue u -> new Naming.Named(interned.unit(u.data()));
+            case Core.Neg n -> over(List.of(n.operand()), at, bound, depth,
+                    ps -> interned.negated(ps.get(0)));
+            case Core.Binary b -> over(List.of(b.left(), b.right()), at, bound, depth,
+                    ps -> interned.operator(b.op(), ps.get(0), ps.get(1)));
+            case Core.ListLit l -> over(l.elements(), at, bound, depth, interned::list);
+            case Core.Tuple t -> over(t.elements(), at, bound, depth, interned::tuple);
+            case Core.TupleGet g -> over(List.of(g.tuple()), at, bound, depth,
+                    ps -> interned.part(ps.get(0), g.index()));
+            case Core.If iff -> over(List.of(iff.cond(), iff.then(), iff.els()), at, bound, depth,
+                    ps -> interned.choice(ps.get(0), ps.get(1), ps.get(2)));
+            case Core.OptionSome s -> over(List.of(s.value()), at, bound, depth,
+                    ps -> interned.some(ps.get(0)));
+            case Core.OptionNone none -> new Naming.Named(interned.none(none.type()));
             case Core.Block b -> {
-                Map<BindingId, String> inner = binding(bound, b.params(), depth);
-                yield shared(wrap("\\" + b.params().size(), termKey(b.body(), at, inner, depth + 1)));
+                Map<BindingId, Term> inner = binding(bound, b.params(), depth);
+                yield named(naming(b.body(), at, inner, depth + 1),
+                        body -> interned.closure(b.params().size(), body));
             }
             case Core.LetIn li -> {
-                String value = termKey(li.value(), at, bound, depth);
-                Map<BindingId, String> inner = binding(bound, List.of(li.binder()), depth);
-                String body = termKey(li.body(), at, inner, depth + 1);
-                yield value == null || body == null ? null : shared("let(" + value + ", " + body + ")");
+                Naming value = naming(li.value(), at, bound, depth);
+                if (value instanceof Naming.Unnamed absent) {
+                    yield absent;
+                }
+                Map<BindingId, Term> inner = binding(bound, List.of(li.binder()), depth);
+                yield named(naming(li.body(), at, inner, depth + 1),
+                        body -> interned.let(value.term(), body));
             }
             // A construction is a pure function of its fields, and a closure that builds one is what a
-            // mapping usually is. Fields are keyed in name order, so two sites writing them in
-            // different orders write one term.
-            case Core.NewData nd when nd.spreads().isEmpty() -> {
-                List<Core.FieldInit> inits = new ArrayList<>(nd.inits());
-                inits.sort(java.util.Comparator.comparing(Core.FieldInit::name));
-                StringBuilder sb = new StringBuilder(nd.typeName().toString()).append('{');
-                for (int i = 0; i < inits.size(); i++) {
-                    String v = termKey(inits.get(i).value(), at, bound, depth);
-                    if (v == null) {
-                        yield null;
-                    }
-                    sb.append(i == 0 ? "" : ", ").append(inits.get(i).name()).append('=').append(v);
+            // mapping usually is. The fields are held in declaration order, so two sites writing them
+            // in different orders — or one of them through a spread — write one term.
+            case Core.Construct nd -> over(nd.values().stream().map(Core.FieldValue::value).toList(),
+                    at, bound, depth,
+                    ps -> interned.built(nd.typeName(),
+                            nd.values().stream().map(Core.FieldValue::field).toList(), ps));
+            case Core.Match m -> {
+                List<Core> arms = new ArrayList<>();
+                arms.add(m.scrutinee());
+                Map<BindingId, Term> outer = bound;
+                List<Naming> answers = new ArrayList<>();
+                for (Core.Case arm : m.cases()) {
+                    Map<BindingId, Term> inner = arm.binding() == null ? outer
+                            : binding(outer, List.of(arm.binding()), depth);
+                    answers.add(naming(arm.body(), at, inner, depth + 1));
                 }
-                yield shared(sb.append('}').toString());
+                Naming scrutinee = naming(m.scrutinee(), at, bound, depth);
+                yield joined(scrutinee, answers,
+                        parts -> interned.matched(parts.get(0),
+                                m.cases().stream().map(Core.Case::caseTypes).toList(),
+                                parts.subList(1, parts.size())));
             }
-            // Only the operations the representation kept standing: they are the library's own, so
-            // they are pure and one written call is one value.
-            // Named like the rest, and the one whose spelling something else reproduces: a size
-            // atom is built from the same shape by `sizeKey`, so both reach the same name.
-            case Core.PreservedCall c -> shared(
-                    elementsKey(c.operation().name() + "(", c.args(), at, bound, depth, ")"));
-            default -> null;
+            case Core.IfConstructed ic -> {
+                Naming built = naming(ic.construct(), at, bound, depth);
+                Map<BindingId, Term> inner = binding(bound, List.of(ic.binder()), depth);
+                List<Naming> answers = new ArrayList<>();
+                answers.add(naming(ic.then(), at, inner, depth + 1));
+                for (Core.ElseArm arm : ic.els()) {
+                    answers.add(naming(arm.body(), at, bound, depth));
+                }
+                yield joined(built, answers,
+                        parts -> interned.attempted(parts.get(0),
+                                ic.els().stream().map(arm -> arm.clause().orElse("")).toList(),
+                                parts.subList(1, parts.size())));
+            }
+            // What the language's own operations answer, and what a module's own helper answers, are
+            // functions of what they were given: the first because the language defines them, the
+            // second because a helper is pure (spec §fn-rules). What an injected behavior answers is
+            // neither, and a call to one is named by nothing.
+            case Core.PreservedCall c -> over(c.args(), at, bound, depth,
+                    ps -> interned.called(c.operation(), ps));
+            case Core.Call c -> switch (c.fn()) {
+                case Core.Reached reached -> switch (answersOf(reached.denotes())) {
+                    case Naming.OfAName.AnswersNothing none -> new Naming.Opaque(none.reason());
+                    case Naming.OfAName.Answers ignored -> over(c.args(), at, bound, depth,
+                            ps -> interned.called(reached.denotes(), ps));
+                };
+                // A walk this compiler minted for a shape the backend lowers as a whole. The reading
+                // this check is given keeps no such call, so one arriving is a pass having run over a
+                // tree it was not written for rather than a value nothing can be said of.
+                case Core.Emitted emitted -> unsupported(emitted.rendered());
+            };
+            case Core.Apply _ -> new Naming.Opaque(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED);
+            case Core.Unreachable _ -> new Naming.Opaque(Naming.Reason.NOTHING_IS_ANSWERED);
         };
+    }
+
+    /**
+     * Whether {@code callee} answers a value two writings of a call to it share.
+     *
+     * <p>Asked of what the name was resolved to and of nothing else. A module's own helper is pure
+     * and total, a value definition's body obeys a helper's rules, and the language's own operations
+     * are what the language says they are — so a call to any of them answers one value wherever it is
+     * written with the same arguments. Whether the reading this check is given expanded that helper
+     * into the body is a fact about the reading and not about the value, which is why it is not asked
+     * here: a helper that recurses is left standing and a helper that does not is expanded, and the
+     * two answer the same question about the same call.
+     *
+     * <p>What a behavior answered is named by nothing (spec §invariant-discharge-terms). An injected
+     * one could not be: its implementation is outside the language and may read the outside world, so
+     * two asks are two answers. What is applied through a binding is the same — the binding may hold
+     * an injected behavior, and what it holds is not a question about the name.
+     */
+    private Naming.OfAName answersOf(ValueName callee) {
+        return switch (callee) {
+            case ValueName.Behavior _ ->
+                    new Naming.OfAName.AnswersNothing(Naming.Reason.A_BEHAVIOR_ANSWERED);
+            case ValueName.Local _ ->
+                    new Naming.OfAName.AnswersNothing(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED);
+            case ValueName.Helper _, ValueName.Stdlib _, ValueName.Builtin _, ValueName.OfType _ ->
+                    new Naming.OfAName.Answers();
+        };
+    }
+
+    /** A shape this has no term for, recorded where a test can read that it happened. */
+    private static Naming unsupported(String form) {
+        List<String> watching = UNSUPPORTED;
+        if (watching != null) {
+            watching.add(form);
+        }
+        return new Naming.Unsupported(form);
+    }
+
+    /** {@code made} of what {@code first} and {@code rest} name, or the first of them that names
+     * nothing. */
+    private Naming joined(Naming first, List<Naming> rest,
+                          java.util.function.Function<List<Term>, Term> made) {
+        List<Term> terms = new ArrayList<>();
+        if (first instanceof Naming.Unnamed absent) {
+            return absent;
+        }
+        terms.add(first.term());
+        for (Naming one : rest) {
+            if (one instanceof Naming.Unnamed absent) {
+                return absent;
+            }
+            terms.add(one.term());
+        }
+        return new Naming.Named(made.apply(terms));
+    }
+
+    /** {@code made} of what {@code naming} names, or why it names nothing. */
+    private Naming named(Naming naming, java.util.function.UnaryOperator<Term> made) {
+        return naming instanceof Naming.Unnamed absent ? absent
+                : new Naming.Named(made.apply(naming.term()));
+    }
+
+    /** {@code made} of the terms {@code parts} are, or null where any of them is named by nothing. */
+    private Naming over(List<Core> parts, Denotations at, Map<BindingId, Term> bound, int depth,
+                        java.util.function.Function<List<Term>, Term> made) {
+        List<Term> terms = new ArrayList<>();
+        for (Core part : parts) {
+            Naming one = naming(part, at, bound, depth);
+            if (one instanceof Naming.Unnamed absent) {
+                return absent;
+            }
+            terms.add(one.term());
+        }
+        return new Naming.Named(made.apply(terms));
     }
 
     /** {@code bound} with each of {@code binders} keyed by where it is bound rather than by which
      * binding it is, so two expressions that differ only in what they bound are one term. */
-    static Map<BindingId, String> binding(Map<BindingId, String> bound,
-                                                  List<Hir.Binder> binders, int depth) {
-        Map<BindingId, String> inner = new HashMap<>(bound);
+    Map<BindingId, Term> binding(Map<BindingId, Term> bound, List<Hir.Binder> binders, int depth) {
+        Map<BindingId, Term> inner = new HashMap<>(bound);
         for (int i = 0; i < binders.size(); i++) {
-            inner.put(binders.get(i).id(), "#" + depth + "." + i);
+            inner.put(binders.get(i).id(), interned.bound(depth, i));
         }
         return inner;
-    }
-
-    String elementsKey(String open, List<Core> parts, Denotations at,
-                               Map<BindingId, String> bound, int depth, String close) {
-        StringBuilder sb = new StringBuilder(open);
-        for (int i = 0; i < parts.size(); i++) {
-            String part = termKey(parts.get(i), at, bound, depth);
-            if (part == null) {
-                return null;
-            }
-            sb.append(i == 0 ? "" : ", ").append(part);
-        }
-        return sb.append(close).toString();
-    }
-
-    /**
-     * A binary as a key. The six comparisons are two: {@code ==} over the pair in a settled order,
-     * since which side is written first is not part of what it says, and {@code <}, with the other
-     * three written as one of those denied. Two clauses comparing the same two terms are then one term
-     * however the author reached for it — which matters wherever the comparison is not the whole
-     * condition, since only there can the denial not be carried by the polarity instead.
-     */
-    static String binaryKey(Hir.BinOp op, String l, String r) {
-        return switch (op) {
-            case EQ -> l.compareTo(r) <= 0 ? cmp("EQ", l, r) : cmp("EQ", r, l);
-            case NE -> "!" + binaryKey(Hir.BinOp.EQ, l, r);
-            case LT -> cmp("LT", l, r);
-            case GT -> cmp("LT", r, l);
-            case GE -> "!" + cmp("LT", l, r);
-            case LE -> "!" + cmp("LT", r, l);
-            default -> cmp(op.toString(), l, r);
-        };
-    }
-
-    static String cmp(String op, String l, String r) {
-        return "(" + l + " " + op + " " + r + ")";
-    }
-
-    /** A string value written into a key with the punctuation the key itself uses escaped, so a value
-     * holding a quote or a comma cannot be read back as a different expression. */
-    static String quoted(String value) {
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
-    }
-
-    static String wrap(String prefix, String inner) {
-        return inner == null ? null : prefix + "(" + inner + ")";
     }
 
     /** The binding at the head of a {@code x}/{@code x.a.b} chain, or {@code null} if {@code e} is not
@@ -606,9 +692,18 @@ final class Terms {
         };
     }
 
-    /** The field chain of {@code e} rebuilt on {@code head}. */
-    static String chainOn(String head, Core e) {
-        return e instanceof Core.FieldAccess fa ? chainOn(head, fa.target()) + "." + fa.field() : head;
+    /** The fields read along a {@code x.a.b} chain, from the head down. */
+    static List<String> chainOf(Core e) {
+        List<String> out = new ArrayList<>();
+        chainInto(e, out);
+        return out;
+    }
+
+    private static void chainInto(Core e, List<String> out) {
+        if (e instanceof Core.FieldAccess fa) {
+            chainInto(fa.target(), out);
+            out.add(fa.field());
+        }
     }
 
     /**
@@ -619,19 +714,19 @@ final class Terms {
      * rule and is read here of a term too, so a value keyed one way through a binding and the other
      * way through a field is one value.
      */
-    String pathKey(Core e, Denotations at) {
+    Term pathKey(Core e, Denotations at) {
         Location located = locationOf(e, at);
         if (located != null) {
-            return located.toString();
+            return interned.at(located);
         }
         return switch (e) {
-            case Core.Read r -> at.of(r.binding()).key();
+            case Core.Read r -> termOf(at.of(r.binding()));
             case Core.FieldAccess fa -> {
                 if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
                     yield pathKey(fa.target(), at);
                 }
-                String base = pathKey(fa.target(), at);
-                yield base == null ? null : base + "." + fa.field();
+                Term base = pathKey(fa.target(), at);
+                yield base == null ? null : interned.on(base, List.of(fa.field()));
             }
             default -> null;
         };
@@ -658,13 +753,14 @@ final class Terms {
         if (located != null) {
             return new Denotes.At(located);
         }
-        String term = bodyKey(e, at);
-        if (term == null) {
-            return new Denotes.Nothing();
+        Naming named = naming(e, at, Map.of(), 0);
+        if (named instanceof Naming.Unnamed absent) {
+            return new Denotes.Nothing(absent);
         }
+        Term term = named.term();
         // Readable where there is something to say of it: a form the numeric domain built, or a rule
         // about how it was made. This is asked of the expression, so a name for it answers the same.
-        return new Denotes.Term(term, affineOf(e, at, k) != null || namedByRule(e, at));
+        return new Denotes.Computed(term, affineOf(e, at, k) != null || namedByRule(e, at));
     }
 
     /**
@@ -679,7 +775,7 @@ final class Terms {
     static boolean readable(Denotes d, Known k) {
         return switch (d) {
             case Denotes.At _ -> true;
-            case Denotes.Term term -> term.readable() || k.speaksOf(term.key());
+            case Denotes.Computed computed -> computed.readable() || k.speaksOf(computed.term());
             case Denotes.Written _, Denotes.Nothing _ -> false;
         };
     }
@@ -714,8 +810,8 @@ final class Terms {
             case Core.ListLit list -> list.elements().stream().allMatch(x -> isWritten(x, written));
             case Core.Tuple t -> t.elements().stream().allMatch(x -> isWritten(x, written));
             case Core.OptionSome s -> isWritten(s.value(), written);
-            case Core.NewData nd -> nd.spreads().isEmpty()
-                    && nd.inits().stream().allMatch(fi -> isWritten(fi.value(), written));
+            case Core.Construct nd ->
+                    nd.values().stream().allMatch(v -> isWritten(v.value(), written));
             case Core.LetIn li -> {
                 if (!isWritten(li.value(), written)) {
                     yield false;
@@ -750,7 +846,7 @@ final class Terms {
             return true;
         }
         if (e instanceof Core.Read r) {
-            return at.of(r.binding()) instanceof Denotes.Term t && t.readable();
+            return at.of(r.binding()) instanceof Denotes.Computed t && t.readable();
         }
         Core read = asOperator(e);
         if (read instanceof Core.PreservedCall call

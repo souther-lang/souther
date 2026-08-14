@@ -339,7 +339,7 @@ public final class CoverageSites {
                 case Core.OptionSome s -> walk(s.value(), inside);
                 case Core.Tuple t -> t.elements().forEach(el -> walk(el, inside));
                 case Core.TupleGet tg -> walk(tg.tuple(), inside);
-                case Core.NewData nd -> nd.inits().forEach(init -> walk(init.value(), inside));
+                case Core.Construct nd -> nd.values().forEach(given -> walk(given.value(), inside));
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
                     int then = armOf(Site.Kind.THEN, "then", iff, iff.origin(), 0, iff.then(), inside);
@@ -365,7 +365,7 @@ public final class CoverageSites {
                     byNode.put(m, arms);
                 }
                 case Core.IfConstructed ic -> {
-                    ic.construct().inits().forEach(init -> walk(init.value(), inside));
+                    ic.construct().values().forEach(given -> walk(given.value(), inside));
                     int[] arms = new int[1 + ic.els().size()];
                     arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.origin(), 0,
                             ic.then(), inside);

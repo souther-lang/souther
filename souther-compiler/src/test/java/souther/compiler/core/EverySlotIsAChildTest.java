@@ -51,11 +51,13 @@ class EverySlotIsAChildTest {
         return new Core.Read(name, new BindingId(OWNER, ordinal), Type.INT, POS);
     }
 
-    /** {@code Person { ..base, age: 1 }}. */
-    private static Core.NewData construction() {
-        return new Core.NewData(PERSON,
-                List.of(new Core.FieldInit("age", new Core.Int(1, Type.INT, POS), POS)),
-                List.of(read("base", 0)),
+    /** {@code Person { ...base, age = 1 }} as a construction holds it: the spread resolved into the
+     * read of the field it supplies. */
+    private static Core.Construct construction() {
+        return new Core.Construct(PERSON,
+                List.of(new Core.FieldValue("name",
+                                new Core.FieldAccess(read("base", 0), "name", Type.STRING, POS), POS),
+                        new Core.FieldValue("age", new Core.Int(1, Type.INT, POS), POS)),
                 Type.ref(PERSON), POS);
     }
 
@@ -70,9 +72,16 @@ class EverySlotIsAChildTest {
                 .map(c -> ((Core.Read) c).name()).toList();
     }
 
+    /** What each field is given is a child, and a binding one of them reads is reached through it.
+     * A pass that asks which bindings a body reaches has to be given them, or it undercounts — which
+     * is what a construction holding a spread beside its fields used to be about. */
     @Test
-    void aSpreadIsAChild() {
-        assertEquals(List.of("base"), namesIn(childrenOf(construction())));
+    void whatEachFieldIsGivenIsAChild() {
+        List<Core> children = childrenOf(construction());
+
+        assertEquals(List.of("FieldAccess", "Int"),
+                children.stream().map(c -> c.getClass().getSimpleName()).toList());
+        assertEquals(List.of("base"), namesIn(childrenOf(children.get(0))));
     }
 
     /**
@@ -99,7 +108,7 @@ class EverySlotIsAChildTest {
                 List.of(new Core.ElseArm(Optional.empty(), new Core.Int(1, Type.INT, POS))),
                 ORIGIN, Type.INT, POS);
 
-        assertTrue(childrenOf(attempt).stream().anyMatch(c -> c instanceof Core.NewData),
+        assertTrue(childrenOf(attempt).stream().anyMatch(c -> c instanceof Core.Construct),
                 "the construction itself, rather than the field values inside it");
     }
 
@@ -133,8 +142,9 @@ class EverySlotIsAChildTest {
 
     @Test
     void aWalkThatChangesNothingKeepsTheNodeItWalked() {
-        Core.NewData built = construction();
+        Core.Construct built = construction();
 
         assertSame(built, Core.mapChildren(built, c -> c, n -> n, b -> b));
+        assertSame(built, Core.mapChildren(built, c -> c));
     }
 }

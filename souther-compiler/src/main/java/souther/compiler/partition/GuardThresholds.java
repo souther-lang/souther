@@ -7,6 +7,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourceRef;
@@ -437,12 +438,12 @@ public final class GuardThresholds {
         // `Carrier` gives everywhere else.
         NumericTerm term = termOf(comparison.left(), parameters, symbols);
         Place value = constantOf(comparison.right(),
-                Carrier.ofValue(comparison.left().type(), symbols));
+                Carrier.ofValue(comparison.left().type(), symbols), symbols);
         if (term == null || value == null) {
             // `100000 >= cost` says what `cost <= 100000` says; read the position-bearing side first.
             term = termOf(comparison.right(), parameters, symbols);
             value = constantOf(comparison.left(),
-                    Carrier.ofValue(comparison.right().type(), symbols));
+                    Carrier.ofValue(comparison.right().type(), symbols), symbols);
             op = mirrored(op);
         }
         if (term == null || value == null) {
@@ -589,7 +590,7 @@ public final class GuardThresholds {
      * literal is asked, asked of the same place, so an invariant and a {@code guard} at one position
      * cannot admit different rules.
      */
-    static Place constantOf(Core e, Carrier carrier) {
+    static Place constantOf(Core e, Carrier carrier, Symbols symbols) {
         if (carrier == null) {
             return null;
         }
@@ -597,12 +598,14 @@ public final class GuardThresholds {
             case Core.Int i -> carrier.onTheGrid(Count.of(i.value()));
             case Core.Decimal d -> carrier.onTheGrid(Count.of(d.value()));
             case Core.Neg n -> {
-                Place inner = constantOf(n.operand(), carrier);
+                Place inner = constantOf(n.operand(), carrier, symbols);
                 yield inner == null ? null : Count.number(inner).negate();
             }
-            // A newtype written around a constant is that constant at this location.
-            case Core.NewData nd when nd.inits().size() == 1 && nd.spreads().isEmpty() ->
-                    constantOf(nd.inits().get(0).value(), carrier);
+            // A newtype written around a constant is that constant at this location. What makes it
+            // one is the declaration: a data of one field that is not a newtype wraps its value
+            // rather than being it.
+            case Core.Construct nd when TypeOps.numericBase(Type.ref(nd.typeName()), symbols) != null ->
+                    constantOf(nd.values().get(0).value(), carrier, symbols);
             // A temporal written the way a model writes one. Read by what the construction answers
             // with rather than by the name in front of it, so one reaches this however it is spelled.
             case Core.Call call when call.args().size() == 1

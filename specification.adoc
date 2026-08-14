@@ -1302,6 +1302,8 @@ If the business decides "return a different result when the amount is negative",
 
 An invariant is checked at run time on every construction (<<invariant-mvp>>), and inside the domain a violation aborts (<<violation-destination>>). The compiler *also* checks, per behavior, whether each construction's invariant is *established* where the value is built — so a construction that must abort is caught at compile time, and one a guard makes safe is confirmed.
 
+[[a-construction-is-judged-by-what-it-builds]]A construction is judged by what it builds. What each field is given is what the check reads, whether the source wrote that field a value, took it from another value with a `+...+` spread (<<record-literal>>), or wrote no field at all — a newtype's constructor and the arithmetic that re-wraps one (<<newtype-arithmetic>>) build a value like any other and owe its invariant where they stand. Two ways of writing one construction are one construction: they owe the same clauses, over the same values, and come to the same verdict.
+
 The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+guard+` / `+if+` guard (<<guard>>, <<if>>), and at every construction asks whether the guards prove its invariant.
 
 * *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
@@ -1350,7 +1352,9 @@ let build (rows) = {
 
 A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a behavior answered — is not a term, and a clause needing it is left to the run-time check.
 
-Beyond those, a term is any number the procedure can name by what computes it. `+List.sum(xs)+` is a term, and so is `+a * b+`, which the arithmetic below does not read. Naming a value says that two writings of it are one value, and says nothing else: nothing follows from `+List.sum+` being a sum, and nothing has to. A `+guard List.sum(xs) >= bill+` states a relation about that value, `+List.sum(xs) - bill+` is arithmetic over it, and the two meet because both mentions of the call are the same value. A term exists before anything is said about it, so the first guard to mention one states what it states, exactly as a later one does.
+Beyond those, a value is named by what computes it wherever that computation is a function of named parts. `+List.sum(xs)+` is a term, and so is `+a * b+`, which the arithmetic below does not read, and so is a value chosen by an `+if+` or opened by a `+match+`, and one built by a construction. Naming a value says that two writings of it are one value, and says nothing else: nothing follows from `+List.sum+` being a sum, and nothing has to. A `+guard List.sum(xs) >= bill+` states a relation about that value, `+List.sum(xs) - bill+` is arithmetic over it, and the two meet because both mentions of the call are the same value. A term exists before anything is said about it, so the first guard to mention one states what it states, exactly as a later one does.
+
+What is named and what is known of it are two questions, and the second is the one that has rules. A named value the procedure has no rule about is still a value a guard can be written about, and a construction from one is reported as unproven rather than left unsaid — the author is told that the invariant was read here and not established, which is a different thing from its not having been read. Giving the procedure a rule about an operation moves such a construction from unproven to discharged without anything being named differently.
 
 [,souther]
 ----
@@ -1366,7 +1370,11 @@ let settle (xs, bill) = {
 }
 ----
 
-A value the procedure cannot name all the way down is not a term. What a behavior answered is named by nothing, so neither is a size taken of it nor arithmetic over it. A value that is not a number the procedure carries is not a term either, unless a guard on the path states something about it — a string a call handed back is named by nothing a clause could be read against, and a construction from one is left to the run-time check.
+A value the procedure cannot name all the way down is not a term. What names a call is what the call was resolved to: a `+let+` of this module or of another is pure and total (<<fn-rules>>), and the language's own operations are what the language defines, so a call to either answers one value wherever it is written with the same arguments. What a `+behavior+` answered is named by nothing, and neither is what applying a function value answered — a function a body was handed may be a behavior injected from outside (<<injected-behavior>>), whose implementation is not the language's and may answer differently each time it is asked. So neither is a size taken of one, nor arithmetic over one.
+
+That a helper's body was written into the body that called it, rather than left as the call, is not one of these questions. A `+let+` that recurses cannot be written in, and answers the same value it would have answered written in; a clause about a construction from either is read the same way.
+
+A value the procedure does not carry as a number is a term all the same where what computes it is one — a string a `+let+` answered is the term that call is. What it has none of is anything said about it: the procedure carries no strings, and there is no rule about the operation, so a clause is read against such a value only where a guard on the path has stated something about that very term. Until one has, a construction from it is left to the run-time check, and the silence is that nothing could be asked rather than that the value has no name.
 
 [,souther]
 ----
@@ -1410,9 +1418,11 @@ let toQty (cart) = one(cart)
 [#invariant-discharge-representation]
 ==== What the check reads
 
-The check reads a behavior's body and the invariants around it at the level the rules above are written at: the standard library's operations are operations, and the `+let+`s a body or an invariant names are expanded into it (<<blocks>>). The two go together. The language defines what `+List.map+` does to a length, and every module has that definition, so a call to it says something on its own. A `+let+` carries no such definition, so what it says is its body — the one another module published as readily as the one written here.
+The check reads a behavior's body and the invariants around it at the level the rules above are written at: the standard library's operations are operations, and a `+let+` a body or an invariant names is read as its body where its body can be written in (<<blocks>>). The language defines what `+List.map+` does to a length, and every module has that definition, so a call to it says something on its own. A `+let+` carries no such definition, so what there is to know about it is what its body does — the body of one another module published as readily as of one written here.
 
-An invariant that arrives from another module arrives expanded (<<published-modules>>), so a clause of an imported type is read as the computation it became rather than as the operations it was written as. Such a clause is outside the statically dischargeable fragment even where the same clause written here would be inside it. A clause written here is inside it whatever it names: an imported value or helper is substituted before the check reads the clause (<<invariant-expressions>>), so the rule the check reads is the rule the author wrote.
+Reading a `+let+` as its body is how more is known, and not how it is named. A `+let+` that recurses is read as the call it is, and the value it answers is named all the same (<<invariant-discharge-terms>>): what is lost is the arithmetic inside it, so a clause is discharged there by a guard about the call rather than by the body's own steps. Nothing about a construction's verdict turns on which of the two a reading did.
+
+[[provenance-does-not-decide-the-fragment]]Where a declaration was written does not decide what can be discharged against it. A type declared in this module, one imported from a module compiled in the same run, and one imported from a module compiled separately and reached through its published classes all state the same invariant, and a construction of any of them is read against the same clauses and comes to the same verdict (<<published-modules>>). How a published declaration travels is the compiler's business; that it says what its author wrote is the language's.
 
 An operation the rules name is named as the call that survives to here, which is not every spelling an author can write: `+List.fold+` is the walk `+List.foldFrom+` from the head (<<stdlib-list>>) and is rewritten to it before any of this, so it is the second name the rules are written against. A rule under a name nothing here holds could not be reached, which is why the compiler's own tests hold each rule to a program that fires it.
 
@@ -2018,6 +2028,8 @@ PreApproved { ...request, preApprovedAt = now(), preApprover = approverId }
 To replace only some fields while keeping the same type, also write the type name and use a spread.
 
 [[a-spread-copies-a-product]]What is spread MUST be a product data, or a sum whose cases all spread one. There has to be a set of fields to copy, and a sum whose cases share nothing has none.
+
+[[a-field-is-supplied-once]]A field is supplied once. A field the literal writes takes the value written, whatever any spread carries; where several spreads carry one field, the first of them supplies it and the rest carry it no more than they carry any other field the literal does not want. So what every field of the construction is given is settled by the literal alone, and it is the same answer wherever it is asked — what runs, what the field's type is checked against, and what the invariant check reads.
 
 [[a-spread-supplies-what-the-fields-need]]What a spread provides MUST have the type the field it lands on needs. Copying by name is not copying by shape: two fields of one name and two types are two fields. If `+x+` has type `+Member+`, write `+Member { ...x, address = newAddress }+`. No dedicated update syntax is provided.
 

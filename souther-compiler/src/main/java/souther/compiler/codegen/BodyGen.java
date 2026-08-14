@@ -67,14 +67,6 @@ final class BodyGen {
         return ctx.fieldTypes(data);
     }
 
-    /** The fields a construction spread copies from a value of {@code src}: a data's own, or the part
-     * every case of a sum spreads, which the sum's sealed interface declares as accessors. */
-    private Map<String, Type> spreadableFields(TypeSymbol src) {
-        return symbols.declarations().declaration(src.key()) instanceof Hir.SumData sum
-                ? TypeOps.commonSpreadFields(sum, symbols)
-                : fieldTypes((Hir.Data) symbols.declarations().declaration(src.key()));
-    }
-
     private Type successType(Hir.RetType ret) {
         return ctx.successType(ret);
     }
@@ -436,10 +428,10 @@ final class BodyGen {
                 case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
                 case Core.Call call when tcoName != null && call.name().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
-                case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
+                case Core.Construct nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
                     Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName().key()));
-                    emitFieldValues(flds, nd.inits(), nd.spreads());
+                    emitFieldValues(flds, nd.values());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
                     code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
@@ -501,28 +493,14 @@ final class BodyGen {
             ctx.countOneStep(code);
         }
 
-        /** Pushes each field's value in declaration order: an explicit initializer, else the field
-         * carried over from a spread source (ADR-0021). */
-        void emitFieldValues(Map<String, Type> fields, List<Core.FieldInit> inits,
-                             List<Core.Read> spreads) {
-            Map<String, Core.FieldInit> byName = new HashMap<>();
-            for (Core.FieldInit init : inits) {
-                byName.put(init.name(), init);
-            }
-            for (String field : fields.keySet()) {
-                Core.FieldInit init = byName.get(field);
-                if (init != null) {
-                    // push the field's declared type so a field valued by a fold over an empty seed
-                    // materialises its step closure at the field's type (issue #70)
-                    genExpr(init.value(), fields.get(field));
-                    continue;
-                }
-                for (Core.Read sp : spreads) {
-                    if (spreadableFields(((Type.Ref) varType(sp)).name()).containsKey(field)) {
-                        spreadField(sp, field);
-                        break;
-                    }
-                }
+        /** Pushes what each field is given, in the order the construction holds them — which is
+         * declaration order, and which a construction settled when it was built (ADR-0021). Nothing
+         * is worked out here: a field a spread supplied holds the read of it, like any other value. */
+        void emitFieldValues(Map<String, Type> fields, List<Core.FieldValue> values) {
+            for (Core.FieldValue given : values) {
+                // push the field's declared type so a field valued by a fold over an empty seed
+                // materialises its step closure at the field's type (issue #70)
+                genExpr(given.value(), fields.get(given.field()));
             }
         }
 
@@ -753,7 +731,7 @@ final class BodyGen {
                     binary(bin);
                     comparisonProbe(bin);
                 }
-                case Core.NewData nd -> newData(nd);
+                case Core.Construct nd -> construct(nd);
                 case Core.Match m -> match(m, expected);
                 case Core.Call c -> call(c, expected);
                 case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
@@ -936,7 +914,7 @@ final class BodyGen {
             code.athrow();
         }
 
-        private void newData(Core.NewData nd) {
+        private void construct(Core.Construct nd) {
             Hir.Data owner = (Hir.Data) symbols.declarations().declaration(nd.typeName().key());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
@@ -948,7 +926,7 @@ final class BodyGen {
                 // construction goes through __construct just as it does in tail (see emitTail): the
                 // invariant runs and orThrow either yields the value or aborts with a
                 // ConstraintViolation. orThrow returns Object, so narrow it back to the value type.
-                emitFieldValues(flds, nd.inits(), nd.spreads());
+                emitFieldValues(flds, nd.values());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                 finishInvariantConstruct(cdType, flds);
                 return;
@@ -957,7 +935,7 @@ final class BodyGen {
             if (!walksInside(nd)) {
                 code.new_(cdType);
                 code.dup();
-                emitFieldValues(flds, nd.inits(), nd.spreads());
+                emitFieldValues(flds, nd.values());
                 code.invokespecial(cdType, "<init>", ctor);
                 return;
             }
@@ -966,7 +944,7 @@ final class BodyGen {
             // `<init>`, and the verifier will not carry one over a jump. So the fields are built first
             // and held in slots, exactly as a newtype's single field already is, and the construction
             // itself is the straight line at the end.
-            emitFieldValues(flds, nd.inits(), nd.spreads());
+            emitFieldValues(flds, nd.values());
             List<Type> fieldTypes = new ArrayList<>(flds.values());
             int[] held = new int[fieldTypes.size()];
             for (int i = fieldTypes.size() - 1; i >= 0; i--) {
@@ -1007,10 +985,10 @@ final class BodyGen {
          * value position and tail position part company.
          */
         private Attempt emitAttempt(Core.IfConstructed ic) {
-            Core.NewData nd = ic.construct();
+            Core.Construct nd = ic.construct();
             Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName().key()));
             ClassDesc cdType = cd(nd.typeName());
-            emitFieldValues(flds, nd.inits(), nd.spreads());
+            emitFieldValues(flds, nd.values());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
             code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
 
@@ -1103,38 +1081,8 @@ final class BodyGen {
             code.checkcast(cdType);
         }
 
-        /** Wraps a base value (Int/Decimal) already on the stack into a single-value newtype, running
-         * its invariant check — the closed-arithmetic counterpart of {@link #newData}. An
-         * invariant-bearing newtype goes through {@code __construct}/{@code orThrow} (aborts on
-         * violation, which a behavior's guard is meant to have discharged); a plain newtype is stashed
-         * and built with {@code new}/{@code <init>}. */
-        private Type wrapNewtypeValue(TypeSymbol ntName, Type base) {
-            Hir.Data owner = (Hir.Data) symbols.declarations().declaration(ntName.key());
-            Map<String, Type> flds = fieldTypes(owner);
-            ClassDesc cdType = cd(ntName);
-            if (DataChecker.isInvariantBearing(ntName, symbols) || symbols.scope().isForeign(ntName)) {
-                finishInvariantConstruct(cdType, flds);
-            } else {
-                int s = slot(base);
-                store(code, s, base);
-                code.new_(cdType);
-                code.dup();
-                load(code, s, base);
-                code.invokespecial(cdType, "<init>",
-                        MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds)));
-            }
-            return Type.ref(ntName);
-        }
-
         Type varType(Core.Read read) {
             return locals.get(read.binding()).type();
-        }
-
-        void spreadField(Core.Read spreadVar, String field) {
-            Var v = locals.get(spreadVar.binding());
-            TypeSymbol srcName = ((Type.Ref) v.type()).name();
-            load(code, v.slot(), v.type());
-            emitFieldRead(code, srcName, field, spreadableFields(srcName).get(field));
         }
 
         // --- the surface Intrinsics drives to emit a shipped primitive (ADR-0028) ---
@@ -1669,15 +1617,11 @@ final class BodyGen {
                 // a zero divisor; Decimal does not overflow, and its `/` rounds by the default scale/mode.
                 // Case handling for a zero divisor is the divide/remainder functions, not the operator.
                 case ADD, SUB, MUL, DIV -> {
-                    // Newtype arithmetic (closed `+`/`-`, or scalar `*`/`/` by a plain number) opens
-                    // each operand to its base, computes on the base, then re-wraps the result into the
-                    // newtype (re-checking its invariant). A non-newtype operand (a scalar) is left as
-                    // is — unwrapNewtypeValue is a no-op. `closedNewtypeArithResult` returns null when
-                    // neither operand is a newtype (plain base arithmetic), leaving the value unwrapped.
-                    Type lraw = genExpr(bin.left());
-                    Type t = unwrapNewtypeValue(lraw);
-                    Type rraw = genExpr(bin.right());
-                    unwrapNewtypeValue(rraw);
+                    // The operands are numbers here: newtype arithmetic is a construction over the
+                    // values its operands wrap, and it was written as one where the tree was built
+                    // (spec §newtype-arithmetic), so nothing is opened or re-wrapped at the operator.
+                    Type t = genExpr(bin.left());
+                    genExpr(bin.right());
                     if (t == Type.DECIMAL) {
                         switch (bin.op()) {
                             case ADD -> code.invokevirtual(CD_BigDecimal, "add", MTD_bdArith);
@@ -1693,11 +1637,6 @@ final class BodyGen {
                             default  -> "divideExact";
                         };
                         code.invokestatic(CD_IntMath, m, MTD_intExact);
-                    }
-                    // Closed `+`/`-` and scalar `*`/`/` stay in the newtype: when the checker typed
-                    // this expression as one, re-wrap the base value it left on the stack.
-                    if (bin.type() instanceof Type.Ref ref) {
-                        wrapNewtypeValue(ref.name(), t);
                     }
                 }
                 case CONCAT -> {
@@ -2010,10 +1949,8 @@ final class BodyGen {
                     collectFree(bin.right(), bound, free);
                 }
                 case Core.Neg neg -> collectFree(neg.operand(), bound, free);
-                case Core.NewData nd -> {
-                    nd.inits().forEach(i -> collectFree(i.value(), bound, free));
-                    nd.spreads().forEach(sp -> reaches(sp, bound, free));
-                }
+                case Core.Construct nd ->
+                        nd.values().forEach(v -> collectFree(v.value(), bound, free));
                 case Core.If iff -> {
                     collectFree(iff.cond(), bound, free);
                     collectFree(iff.then(), bound, free);

@@ -66,7 +66,7 @@ import java.util.Set;
  * <p>The walk mirrors {@link TotalityChecker}: a {@code switch} over {@link Core} threading an
  * immutable environment. It is fail-open for what it cannot analyze — an expression or a shape it
  * has no rule for is swallowed, so a limit of this analysis can never reject a valid program. It is
- * not fail-open for this analysis disagreeing with itself: {@link Terms.OneKeyTwoKinds} says one
+ * not fail-open for this analysis disagreeing with itself: {@link Terms.OneTermTwoKinds} says one
  * name was given two values, and swallowing it produces a behavior with no findings, which is what a
  * behavior whose invariants all discharge produces. That one is rethrown ({@link #gaveUp}).
  */
@@ -120,9 +120,12 @@ public final class InvariantChecker {
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
      * one the backend emits from.
      *
-     * <p>{@code invariants} holds the declarations of the module being checked. A type another module
-     * declares is absent, and its clause is read off the declaration in the settled form — where the
-     * operations have already become the folds they are, so it falls outside the fragment.
+     * <p>{@code invariants} holds the clauses of the module being checked. A type another module
+     * declares is not among them and its clauses are read off its declaration, which for a module
+     * reached through its published classes is the declaration that module published, read back by
+     * this front end (spec §published-modules). Either way the clause read here is the rule its
+     * author wrote, so where a declaration was written does not decide what can be discharged
+     * against it (spec §invariant-discharge-representation).
      */
     public record Source(Hir.Expr body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants) {}
 
@@ -246,12 +249,12 @@ public final class InvariantChecker {
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
      */
-    record Seeded(NumericDomain numbers, Map<String, String> atoms, Map<String, String> held,
+    record Seeded(NumericDomain<Term> numbers, Map<String, Term> atoms, Map<String, Term> held,
                   Reading reading, boolean everyClauseRead) {}
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
-     * declaration throws. {@link Terms.OneKeyTwoKinds} is not about the declaration and is not
+     * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
      * caught ({@link #gaveUp}). */
     /**
      * How far a seeding reads at each name it meets.
@@ -355,10 +358,10 @@ public final class InvariantChecker {
             return new Seeded(NumericDomain.top(), Map.of(), Map.of(),
                     new Reading(List.of(), Map.of()), false);
         }
-        Map<String, String> atoms = new LinkedHashMap<>();
+        Map<String, Term> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
-        Map<String, String> held = new LinkedHashMap<>();
-        Map<String, String> keys = new LinkedHashMap<>();
+        Map<String, Term> held = new LinkedHashMap<>();
+        Map<String, Term> keys = new LinkedHashMap<>();
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
             if (type != null) {
@@ -373,9 +376,9 @@ public final class InvariantChecker {
         // Which of the clauses place an edge, asked once the positions have names to be recognised
         // by.
         Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt);
-        NumericDomain numbers = k.numbers();
+        NumericDomain<Term> numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
-            String atom = atoms.get(each.getKey());
+            Term atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());
             if (atom == null || type == null) {
                 continue;
@@ -405,16 +408,16 @@ public final class InvariantChecker {
      * ask for what they left.
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
-                      int depth, Map<String, String> atoms, Map<String, Type> typeAt,
-                      Map<String, String> held, Map<String, String> keys) {
-        String atom = terms.atomOf(value, at);
+                      int depth, Map<String, Term> atoms, Map<String, Type> typeAt,
+                      Map<String, Term> held, Map<String, Term> keys) {
+        Term atom = terms.atomOf(value, at);
         if (atom != null) {
             atoms.put(path, atom);
         }
         // What the position is called, which every position has and only some are numbers. An
         // enumeration is ordered and carries no atom, so a clause bounding one is recognised by this
         // and by nothing above it.
-        String key = terms.bodyKey(value, at);
+        Term key = terms.bodyKey(value, at);
         if (key != null) {
             keys.put(path, key);
         }
@@ -424,7 +427,7 @@ public final class InvariantChecker {
         // And what a rule counting this position spoke about, which is not what the position is. A
         // list is no number and has no atom above; the count of it has one, and a reader asking how
         // much the position holds is asking about that one.
-        String counted = terms.takenAtomOf(value, type, at);
+        Term counted = terms.takenAtomOf(value, type, at);
         if (counted != null) {
             held.put(path, counted);
         }
@@ -495,14 +498,14 @@ public final class InvariantChecker {
     record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
-                                   Map<String, String> atoms, Map<String, String> keys,
-                                   Map<String, String> held, Map<String, Type> typeAt) {
-        Map<String, Coordinate> byName = new LinkedHashMap<>();
+                                   Map<String, Term> atoms, Map<String, Term> keys,
+                                   Map<String, Term> held, Map<String, Type> typeAt) {
+        Map<Term, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
             if (carrier != null) {
                 byName.put(key, new Coordinate(path, false, carrier));
-                String atom = atoms.get(path);
+                Term atom = atoms.get(path);
                 if (atom != null) {
                     byName.put(atom, new Coordinate(path, false, carrier));
                 }
@@ -527,7 +530,7 @@ public final class InvariantChecker {
      * comparisons it had already accounted for.
      */
     private void direct(Core clause, TypeSymbol from, Denotations at,
-                        Map<String, Coordinate> byName, List<Direct> out,
+                        Map<Term, Coordinate> byName, List<Direct> out,
                         Map<String, List<TypeSymbol>> narrowers) {
         if (!(clause instanceof Core.Binary bin)) {
             return;
@@ -565,13 +568,6 @@ public final class InvariantChecker {
         end.ifPresent(read -> out.add(new Direct(on.path(), on.measured(), from, read)));
     }
 
-    /** Whether both sides of {@code bin} reach a coordinate, which is what makes it a relation
-     * rather than a bound. */
-    private boolean relates(Core.Binary bin, Map<String, Coordinate> byName, Denotations at) {
-        return byName.containsKey(nameOf(bin.left(), at))
-                && byName.containsKey(nameOf(bin.right(), at));
-    }
-
     /**
      * Files {@code from} under every coordinate this comparison could carry a bound to.
      *
@@ -580,9 +576,9 @@ public final class InvariantChecker {
      * moved even where the number came from somewhere further off.
      */
     private void relating(Core clause, TypeSymbol from, Denotations at,
-                          Map<String, Coordinate> byName,
+                          Map<Term, Coordinate> byName,
                           Map<String, List<TypeSymbol>> narrowers) {
-        String named = nameOf(clause, at);
+        Term named = nameOf(clause, at);
         Coordinate found = named == null ? null : byName.get(named);
         if (found != null) {
             List<TypeSymbol> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
@@ -604,8 +600,8 @@ public final class InvariantChecker {
      * <p>Then what the position is called, for the positions that are ordered and are not numbers. An
      * enumeration has no atom and a clause can still say where its values stop.
      */
-    private String nameOf(Core e, Denotations at) {
-        String atom = terms.atomOf(e, at);
+    private Term nameOf(Core e, Denotations at) {
+        Term atom = terms.atomOf(e, at);
         return atom != null ? atom : terms.bodyKey(e, at);
     }
 
@@ -718,7 +714,7 @@ public final class InvariantChecker {
 
     /**
      * Analyzes one behavior body against the bindings its inputs are. Nothing the body is throws:
-     * a walk that cannot get through one comes back {@code ABANDONED}. {@link Terms.OneKeyTwoKinds}
+     * a walk that cannot get through one comes back {@code ABANDONED}. {@link Terms.OneTermTwoKinds}
      * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
      * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
@@ -749,12 +745,12 @@ public final class InvariantChecker {
      * <p>Every place this check swallows a failure comes through here, so what must not be swallowed
      * is refused in one place. A shape the walk has no rule for is what fail-open is for: the
      * run-time check stands for the clause, and reporting the walk's limit as the author's problem is
-     * what the policy avoids. {@link Terms.OneKeyTwoKinds} is not that. It says this check called two
+     * what the policy avoids. {@link Terms.OneTermTwoKinds} is not that. It says this check called two
      * values one value, and what it would produce if caught is a behavior with no findings — which
      * is exactly what a behavior whose invariants all discharge produces.
      */
     static void gaveUp(String where, RuntimeException why) {
-        if (why instanceof Terms.OneKeyTwoKinds) {
+        if (why instanceof Terms.OneTermTwoKinds) {
             throw why;
         }
         List<GaveUp> watching = GAVE_UP;
@@ -809,8 +805,11 @@ public final class InvariantChecker {
                             predicates.assumeCond(value.cond(), within, there, false), there, depth));
             return;
         }
-        checkIfConstruction(e, k, at, false);
         switch (e) {
+            case Core.Construct made -> {
+                judge(made, k, at, false);
+                Core.forEachChild(made, child -> walk(child, k, at, depth));
+            }
             case Core.If iff -> {
                 walk(iff.cond(), k, at, depth);
                 walk(iff.then(), predicates.assumeCond(iff.cond(), k, at, true), at, depth);
@@ -821,7 +820,7 @@ public final class InvariantChecker {
                 // branch — so it is checked for a decided violation and never warned about as a
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
-                checkIfConstruction(ic.construct(), k, at, true);
+                judge(ic.construct(), k, at, true);
                 Core.forEachChild(ic.construct(), child -> walk(child, k, at, depth));
                 // Reaching `then` is the construction having held, so the binding carries the type's
                 // invariant exactly as an input of that type does — which is a location, and not the
@@ -925,25 +924,16 @@ public final class InvariantChecker {
         return out;
     }
 
-    // --- construction detection & discharge check ----------------------------------------------
+    // --- the discharge check -------------------------------------------------------------------
 
-    private void checkIfConstruction(Core e, Known k, Denotations at, boolean attempted) {
-        if (e instanceof Core.NewData nd && nd.spreads().isEmpty()) {
-            if (symbols.declarations().declaration(nd.typeName().key()) instanceof Hir.Data type) {
-                report(nd, type, nd.pos(), attempted, verdictOf(nd, type, k, at));
-            }
-            return;
-        }
-        // Closed arithmetic over a newtype builds one where it stands: the operands are unwrapped,
-        // the operator applied, and the result constructed again, so the invariant is owed here.
-        if (Terms.asOperator(e) instanceof Core.Binary bin && Terms.isArith(bin.op())
-                && bin.type() instanceof Type.Ref r
-                && symbols.declarations().declaration(r.name().key()) instanceof Hir.Data type && type.newtype()) {
-            BindingId value = clauses.bindingsOf(r.name(), type).get("value");
-            if (value != null && terms.affineOf(bin, at, k) != null) {
-                report(bin, type, bin.pos(), attempted,
-                        verdictOf(r.name(), type, Map.of(value, bin), k, at, true));
-            }
+    /**
+     * What this check says about one construction. Every value a body makes is one of these, so
+     * there is nothing to recognise here: a construction was settled where the tree was built, and
+     * what it builds and what each of its fields is given came with it.
+     */
+    private void judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
+        if (symbols.declarations().declaration(made.typeName().key()) instanceof Hir.Data type) {
+            report(made, type, made.pos(), attempted, verdictOf(made, type, k, at));
         }
     }
 
@@ -952,18 +942,18 @@ public final class InvariantChecker {
      * reaches here: the walk opens it before anything is checked, so what a field is given is a
      * value and not a choice of two.
      */
-    private Judgment verdictOf(Core.NewData nd, Hir.Data type, Known k, Denotations at) {
+    private Judgment verdictOf(Core.Construct nd, Hir.Data type, Known k, Denotations at) {
         Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName(), type);
         Map<BindingId, Core> given = new HashMap<>();
-        for (Core.FieldInit fi : nd.inits()) {
-            BindingId field = fields.get(fi.name());
+        for (Core.FieldValue fv : nd.values()) {
+            BindingId field = fields.get(fv.field());
             if (field == null) {
                 continue;
             }
             // A name given a value written out hands over that value: the clause folds over what
             // was written, wherever the writing was done.
-            Core written = Terms.writtenValue(fi.value(), at);
-            given.put(field, written != null ? written : fi.value());
+            Core written = Terms.writtenValue(fv.value(), at);
+            given.put(field, written != null ? written : fv.value());
         }
         return verdictOf(nd.typeName(), type, given, k, at, !constantlyBuilt(type, nd));
     }
@@ -1081,14 +1071,14 @@ public final class InvariantChecker {
             return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED,
                     unsettled, settled);
         }
-        NumericDomain dom = k.numbers();
+        NumericDomain<Term> dom = k.numbers();
         // The same clauses read against the same site, under what would be known here had no
         // condition on the path settled anything. What each clause states of the sizes it names holds
         // either way, so both readings take it.
-        NumericDomain alone = k.unguarded().numbers();
+        NumericDomain<Term> alone = k.unguarded().numbers();
         for (Owing owing : owed) {
             for (Predicates.Constraint known : owing.clause().known()) {
-                Map<String, Granularity> kinds = terms.kindsOf(known.form());
+                Map<Term, Granularity> kinds = terms.kindsOf(known.form());
                 dom = dom.assume(known.form(), known.rel(), kinds);
                 alone = alone.assume(known.form(), known.rel(), kinds);
             }
@@ -1173,8 +1163,8 @@ public final class InvariantChecker {
     /** Whether the constant check reads this construction: a newtype's, over a value written where
      * it is built. That check names the clause that failed, so it is left to say it — and it reads
      * the construction as written, so a name given the value is not one it sees. */
-    private static boolean constantlyBuilt(Hir.Data type, Core.NewData nd) {
-        return type.newtype() && nd.inits().size() == 1 && Terms.isWritten(nd.inits().get(0).value());
+    private static boolean constantlyBuilt(Hir.Data type, Core.Construct nd) {
+        return type.newtype() && Terms.isWritten(nd.values().get(0).value());
     }
 
     /** Says what {@code verdict} found. A definite violation is an error and an unproven one a
@@ -1506,14 +1496,14 @@ public final class InvariantChecker {
     private Set<Core> sameConditional(Core e, Core.If value, Denotations at) {
         Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
         alike.add(value);
-        String key = terms.bodyKey(value, at);
+        Term key = terms.bodyKey(value, at);
         if (key != null) {
             collectAlike(e, key, at, alike);
         }
         return alike;
     }
 
-    private void collectAlike(Core e, String key, Denotations at, Set<Core> alike) {
+    private void collectAlike(Core e, Term key, Denotations at, Set<Core> alike) {
         if (e instanceof Core.Block) {
             return;
         }

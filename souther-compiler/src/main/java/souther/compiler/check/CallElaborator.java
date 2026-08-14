@@ -115,7 +115,7 @@ public final class CallElaborator {
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
-        return new Core.Call(new ReachName.OfLibrary(lib), List.of(),
+        return new Core.Call(new ReachName.OfLibrary(lib), lib, List.of(),
                 TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
@@ -143,7 +143,7 @@ public final class CallElaborator {
                     new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
-        return new Core.Call(call.reachedAs(), ca.cores(), result, call.pos());
+        return new Core.Call(call.reachedAs(), call.denotes(), ca.cores(), result, call.pos());
     }
 
     /**

@@ -20,10 +20,10 @@ final class PredicateFacts {
     private static final PredicateFacts BOTTOM = new PredicateFacts(true, Set.of(), Set.of());
 
     private final boolean bottom;    // contradictory guards — this path is not taken
-    private final Set<String> holds;
-    private final Set<String> fails;
+    private final Set<Term> holds;
+    private final Set<Term> fails;
 
-    private PredicateFacts(boolean bottom, Set<String> holds, Set<String> fails) {
+    private PredicateFacts(boolean bottom, Set<Term> holds, Set<Term> fails) {
         this.bottom = bottom;
         this.holds = holds;
         this.fails = fails;
@@ -34,14 +34,14 @@ final class PredicateFacts {
     }
 
     /** The facts with {@code key} settled. Settling it both ways makes the path infeasible. */
-    PredicateFacts assume(String key, boolean positive) {
+    PredicateFacts assume(Term key, boolean positive) {
         if (bottom) {
             return this;
         }
         if ((positive ? fails : holds).contains(key)) {
             return BOTTOM;
         }
-        Set<String> next = new HashSet<>(positive ? holds : fails);
+        Set<Term> next = new HashSet<>(positive ? holds : fails);
         next.add(key);
         return positive
                 ? new PredicateFacts(false, Set.copyOf(next), fails)
@@ -49,12 +49,12 @@ final class PredicateFacts {
     }
 
     /** Whether the guards prove {@code key} (or its negation, when {@code positive} is false). */
-    boolean entails(String key, boolean positive) {
+    boolean entails(Term key, boolean positive) {
         return bottom || (positive ? holds : fails).contains(key);
     }
 
     /** Whether the guards prove the opposite of what {@code positive} asks of {@code key}. */
-    boolean refutes(String key, boolean positive) {
+    boolean refutes(Term key, boolean positive) {
         return !bottom && (positive ? fails : holds).contains(key);
     }
 

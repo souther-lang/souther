@@ -642,14 +642,23 @@ public final class DataChecker {
         checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(), fields, env, ctx);
     }
 
-    static List<Core.FieldInit> checkConstruction(String typeName, List<Hir.FieldInit> inits,
+    /**
+     * What each declared field of a construction is given, in declaration order — the one place that
+     * answers it. A field written out is given what was written; one no field init names is given the
+     * read of that field off the value spread into the construction, which is a field read like the
+     * one an author writes. So a construction carries no spread past here, and every reader of it
+     * asks the same values in the same order rather than working the spread out again.
+     *
+     * <p>Where several spreads carry one field, the first of them supplies it — one field is given
+     * one value, and which is decided here and not by whichever reader looks.
+     */
+    static List<Core.FieldValue> checkConstruction(String typeName, List<Hir.FieldInit> inits,
                                           List<Core.Read> spreads,
                                           SourcePos pos, Map<String, Type> fields, Scope env,
                                           CheckContext ctx) {
-        Map<String, Hir.FieldInit> byName = new HashMap<>();
-        List<Core.FieldInit> elaborated = new ArrayList<>();
+        Map<String, Core.FieldValue> written = new LinkedHashMap<>();
         for (Hir.FieldInit init : inits) {
-            if (byName.put(init.name(), init) != null) {
+            if (written.containsKey(init.name())) {
                 throw CompileException.of(Diagnostic.at(init.pos())
                         .say(new DataMessage.FieldIsDefinedMoreThanOnce(init.name()))
                         .build());
@@ -668,7 +677,7 @@ public final class DataChecker {
             CheckContext making = ctx.makingAnOptional(ft instanceof Type.OptionOf);
             Core value = Elaborator.liftIntoOption(
                     Elaborator.elaborate(init.value(), env, making, ft), ft, ctx.symbols());
-            elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
+            written.put(init.name(), new Core.FieldValue(init.name(), value, init.pos()));
             Type vt = value.type();
             // a case value widens to its sum-typed field (spec §sum-data)
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {
@@ -678,21 +687,21 @@ public final class DataChecker {
                                 .diff(Type.show(vt, ft), Type.show(ft, vt)).say(new DataMessage.AFieldExpectsAnotherType(init.name(), Type.show(ft), Type.show(vt))).build());
             }
         }
-        Map<String, Type> provided = new HashMap<>();
         // the sums spread here, which a field the construction still wants was not in the shared part
         // of — all of them, because naming one of several would pick by position and send the author
         // to open a sum whose cases never had the field
         Set<String> fromSums = new LinkedHashSet<>();
-        for (Core.Read spread : spreads) {
-            String sp = spread.name();
-            Type bound = env.typeOf(spread.binding());
+        List<Spread> spread = new ArrayList<>();
+        for (Core.Read read : spreads) {
+            String sp = read.name();
+            Type bound = env.typeOf(read.binding());
             if (bound instanceof Type.Ref ref
                     && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
                 fromSums.add(Type.show(bound));
-                provided.putAll(spreadOfSum(sp, sum, bound, pos, ctx));
+                spread.add(new Spread(read, spreadOfSum(sp, sum, bound, pos, ctx)));
             } else if (bound instanceof Type.Ref ref
                     && ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.Data sd) {
-                provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
+                spread.add(new Spread(read, TypeOps.fieldTypes(sd, ctx.symbols())));
             } else {
                 Diagnostic.Builder d = Diagnostic.at(pos)
                         .say(new DataMessage.SpreadIsNotADataValue(sp));
@@ -702,12 +711,15 @@ public final class DataChecker {
                 throw CompileException.of(d.build());
             }
         }
+        List<Core.FieldValue> values = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
-            if (byName.containsKey(f.getKey())) {
+            Core.FieldValue own = written.get(f.getKey());
+            if (own != null) {
+                values.add(own);
                 continue;
             }
-            Type pv = provided.get(f.getKey());
-            if (pv == null) {
+            Spread from = supplying(spread, f.getKey());
+            if (from == null) {
                 Diagnostic.Builder d = Diagnostic.at(pos)
                         .say(new DataMessage.ConstructionIsMissingAField(typeName, f.getKey()));
                 // one rule broken in one of several ways, and the hint is where the way is said. What
@@ -727,14 +739,33 @@ public final class DataChecker {
                 }
                 throw CompileException.of(d.build());
             }
+            Type pv = from.fields().get(f.getKey());
             if (!TypeOps.assignable(pv, f.getValue(), ctx.symbols())) {
                 throw CompileException.of(Diagnostic.at(pos)
                         .say(new DataMessage.SpreadSuppliesTheWrongType(f.getKey(), Type.show(pv),
                                 typeName, Type.show(f.getValue())))
                         .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build());
             }
+            // The value is read at the type the source declares the field, which is the type the
+            // backend loads it at; that it fits the field being given it was decided just above.
+            values.add(new Core.FieldValue(f.getKey(),
+                    new Core.FieldAccess(from.read(), f.getKey(), pv, from.read().pos()),
+                    from.read().pos()));
         }
-        return elaborated;
+        return values;
+    }
+
+    /** A value a construction spreads, and the fields it carries. */
+    private record Spread(Core.Read read, Map<String, Type> fields) {}
+
+    /** The first of {@code spreads} carrying {@code field}, or null where none does. */
+    private static Spread supplying(List<Spread> spreads, String field) {
+        for (Spread s : spreads) {
+            if (s.fields().containsKey(field)) {
+                return s;
+            }
+        }
+        return null;
     }
 
     /** What a spread of a sum copies: the fields of the data every one of its cases spreads. This is

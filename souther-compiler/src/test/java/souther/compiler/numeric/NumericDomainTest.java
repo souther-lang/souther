@@ -30,16 +30,16 @@ class NumericDomainTest {
     private static final String A = "a";
     private static final String B = "b";
 
-    private static LinearForm atom(String a) {
-        return LinearForm.atom(a);
+    private static LinearForm<String> atom(String a) {
+        return LinearForm.<String>atom(a);
     }
 
-    private static LinearForm num(long n) {
-        return LinearForm.constant(BigDecimal.valueOf(n));
+    private static LinearForm<String> num(long n) {
+        return LinearForm.<String>constant(BigDecimal.valueOf(n));
     }
 
     /** {@code coefficient · atom}, which is how a bound with a divisor is written. */
-    private static LinearForm times(long coefficient, String a) {
+    private static LinearForm<String> times(long coefficient, String a) {
         return atom(a).times(BigDecimal.valueOf(coefficient));
     }
 
@@ -60,12 +60,12 @@ class NumericDomainTest {
     }
 
     /** Whether the domain proves {@code a <= n}. */
-    private static boolean provesAtMost(NumericDomain d, String a, long n) {
+    private static boolean provesAtMost(NumericDomain<String> d, String a, long n) {
         return d.entails(atom(a).minus(num(n)), Rel.LE);
     }
 
     /** Whether the domain proves {@code a >= n}. */
-    private static boolean provesAtLeast(NumericDomain d, String a, long n) {
+    private static boolean provesAtLeast(NumericDomain<String> d, String a, long n) {
         return d.entails(atom(a).minus(num(n)), Rel.GE);
     }
 
@@ -75,7 +75,7 @@ class NumericDomainTest {
      * refuses {@code a = 2.5} — a value the constraint admits. */
     @Test
     void anUpperBoundWithARemainderIsNeverRoundedDown() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(times(2, A).minus(num(5)), Rel.LE, dense(A));
 
         assertTrue(provesAtMost(d, A, 3), "2a <= 5 gives a <= 2.5, so a <= 3 follows");
@@ -85,7 +85,7 @@ class NumericDomainTest {
     /** The mirror: {@code -2a <= -5} is {@code a >= 2.5}, and rounding up would refuse 2.5. */
     @Test
     void aLowerBoundWithARemainderIsNeverRoundedUp() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(times(-2, A).plus(num(5)), Rel.LE, dense(A));
 
         assertTrue(provesAtLeast(d, A, 2), "-2a + 5 <= 0 gives a >= 2.5, so a >= 2 follows");
@@ -96,7 +96,7 @@ class NumericDomainTest {
      * bound: a remainder under an integer atom is a value the atom cannot take. */
     @Test
     void aWholeNumberBoundIsSharpenedByItsSpacing() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(times(2, A).minus(num(5)), Rel.LE, whole(A));
 
         assertTrue(provesAtMost(d, A, 2), "no integer over two satisfies 2a <= 5");
@@ -105,7 +105,7 @@ class NumericDomainTest {
 
     @Test
     void aWholeNumberLowerBoundIsSharpenedTheOtherWay() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(times(-2, A).plus(num(5)), Rel.LE, whole(A));
 
         assertTrue(provesAtLeast(d, A, 3), "no integer under three satisfies a >= 2.5");
@@ -117,7 +117,7 @@ class NumericDomainTest {
     /** {@code a < 3} over the reals bounds nothing below 3, and that is the whole of it. */
     @Test
     void aStrictBoundOnADenseAtomGivesNothingTighterThanTheValue() {
-        NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, dense(A));
+        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
         assertTrue(provesAtMost(d, A, 3));
         assertFalse(provesAtMost(d, A, 2), "2.5 is under three and over two");
@@ -126,7 +126,7 @@ class NumericDomainTest {
     /** {@code a < 3} over the integers is {@code a <= 2}. */
     @Test
     void aStrictBoundOnAWholeNumberStepsDownToTheNextValue() {
-        NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
+        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
         assertTrue(provesAtMost(d, A, 2));
         assertFalse(provesAtMost(d, A, 1), "a = 2 satisfies it");
@@ -135,7 +135,7 @@ class NumericDomainTest {
     /** And {@code a > 3} is {@code a >= 4}. */
     @Test
     void aStrictLowerBoundOnAWholeNumberStepsUp() {
-        NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.GT, whole(A));
+        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.GT, whole(A));
 
         assertTrue(provesAtLeast(d, A, 4));
         assertFalse(provesAtLeast(d, A, 5), "a = 4 satisfies it");
@@ -150,7 +150,7 @@ class NumericDomainTest {
      */
     @Test
     void aStrictLowerBoundOnADenseAtomKeepsTheValueOutOfItsOwnRange() {
-        NumericDomain d = NumericDomain.top().assume(atom(A), Rel.GT, dense(A));
+        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A), Rel.GT, dense(A));
 
         assertEquals(Endpoint.exclusive(Count.of(BigDecimal.ZERO)), d.boundsOf(A).min());
     }
@@ -166,7 +166,7 @@ class NumericDomainTest {
      */
     @Test
     void aStrictDifferenceBetweenWholeNumbersStepsTheBoundThrough() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B));
 
@@ -180,7 +180,7 @@ class NumericDomainTest {
     void aStrictDifferenceWithOneDenseSideTakesNoStep() {
         Map<String, Granularity> mixed = new LinkedHashMap<>(whole(A));
         mixed.putAll(dense(B));
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, mixed)
                 .assume(atom(B).minus(num(1440)), Rel.LE, dense(B));
 
@@ -192,7 +192,7 @@ class NumericDomainTest {
      * 1439.5} satisfies {@code a < b <= 1440}. */
     @Test
     void aStrictDifferenceOverDecimalsHasNoStepToTake() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, dense(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, dense(B));
 
@@ -204,7 +204,7 @@ class NumericDomainTest {
      * every relational invariant in {@code souther-examples} is, and why they move nothing. */
     @Test
     void aNonStrictDifferenceBetweenEqualDomainsNarrowsNothing() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LE, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
@@ -217,7 +217,7 @@ class NumericDomainTest {
 
     @Test
     void aBoundReachesAnAtomThroughAChainOfDifferences() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LE, whole(A, B))
                 .assume(atom(B).minus(atom("c")), Rel.LE, whole(B, "c"))
                 .assume(atom("c").minus(num(10)), Rel.LE, whole("c"));
@@ -227,7 +227,7 @@ class NumericDomainTest {
 
     @Test
     void contradictingBoundsMakeThePathInfeasible() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(num(1)), Rel.GE, whole(A))
                 .assume(atom(A), Rel.LE, whole(A));
 
@@ -238,7 +238,7 @@ class NumericDomainTest {
 
     @Test
     void anIntervalAndADifferenceOverWholeNumbersLoseNothing() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
@@ -249,7 +249,7 @@ class NumericDomainTest {
     /** A loss names the atoms the rule was written about, which is what a reader of it is told. */
     @Test
     void aLossNamesTheAtomsTheRuleWasWrittenAbout() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A), Rel.NE, whole(A))
                 .assume(atom(B).minus(num(10)), Rel.LE, whole(B));
 
@@ -261,7 +261,7 @@ class NumericDomainTest {
      * the whole of what was asserted and so no loss. */
     @Test
     void aStrictBoundOnADenseAtomIsKeptAsAnEndTheRangeDoesNotReach() {
-        NumericDomain interval = NumericDomain.top()
+        NumericDomain<String> interval = NumericDomain.<String>top()
                 .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
         assertEquals(Endpoint.exclusive(Count.of(3)), interval.boundsOf(A).max());
@@ -272,7 +272,7 @@ class NumericDomainTest {
      * value it steps onto is one the rule admits. */
     @Test
     void aStrictBoundOnAWholeNumberIsNoLoss() {
-        NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
+        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
         assertEquals(Endpoint.inclusive(Count.of(2)), d.boundsOf(A).max());
         assertTrue(d.projectionIsLossless());
@@ -281,7 +281,7 @@ class NumericDomainTest {
     /** A disequality is a hole in a range, and a range is all this holds. */
     @Test
     void aDisequalityIsRecordedAsALoss() {
-        NumericDomain d = NumericDomain.top().assume(atom(A), Rel.NE, whole(A));
+        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A), Rel.NE, whole(A));
 
         assertEquals(Set.of(NumericDomain.Loss.DROPPED_DISEQUALITY), d.lossesAt(A));
     }
@@ -289,7 +289,7 @@ class NumericDomainTest {
     /** A form of neither shape proves things and no bound is derived through it. */
     @Test
     void aFormOfNeitherShapeIsRecordedAsALoss() {
-        NumericDomain d = NumericDomain.top()
+        NumericDomain<String> d = NumericDomain.<String>top()
                 .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
 
         assertEquals(Set.of(A, B), d.lossyAtoms());
@@ -304,7 +304,7 @@ class NumericDomainTest {
      * naming and the typing disagree, and the answer is to stop rather than to take the safer one. */
     @Test
     void oneAtomIsOneKindOfNumber() {
-        NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LE, whole(A));
+        NumericDomain<String> d = NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LE, whole(A));
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
                 () -> d.assume(atom(A).minus(num(1)), Rel.GE, dense(A)));
@@ -316,13 +316,13 @@ class NumericDomainTest {
     @Test
     void anAtomWithNoSpacingIsRefusedRatherThanAssumed() {
         assertThrows(IllegalStateException.class,
-                () -> NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LE, Map.of()));
+                () -> NumericDomain.<String>top().assume(atom(A).minus(num(3)), Rel.LE, Map.of()));
     }
 
     /** A form over no atoms needs none: {@code 1 <= 0} is decided by arithmetic. */
     @Test
     void aConstantFormNeedsNoSpacingAtAll() {
-        assertTrue(NumericDomain.top().assume(num(1), Rel.LE, Map.of()).isBottom());
-        assertFalse(NumericDomain.top().assume(num(-1), Rel.LE, Map.of()).isBottom());
+        assertTrue(NumericDomain.<String>top().assume(num(1), Rel.LE, Map.of()).isBottom());
+        assertFalse(NumericDomain.<String>top().assume(num(-1), Rel.LE, Map.of()).isBottom());
     }
 }

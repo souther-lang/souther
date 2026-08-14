@@ -1,17 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
-import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -38,48 +32,48 @@ public final class UnreachableReasons {
 
     /** Every reason reached along the paths that answer nothing, in the order they are evaluated and
      * without repeats. Empty where the expression answers a value. */
-    public static List<String> of(Core e, Symbols symbols) {
+    public static List<String> of(Core e) {
         Set<String> found = new LinkedHashSet<>();
-        collect(e, symbols, found);
+        collect(e, found);
         return List.copyOf(found);
     }
 
-    private static void collect(Core e, Symbols symbols, Set<String> into) {
+    private static void collect(Core e, Set<String> into) {
         if (NormalReturn.of(e)) {
             return;
         }
         switch (e) {
             case Core.Unreachable u -> into.add(u.reason());
             case Core.LetIn li -> collect(
-                    NormalReturn.of(li.value()) ? li.body() : li.value(), symbols, into);
+                    NormalReturn.of(li.value()) ? li.body() : li.value(), into);
             case Core.If iff -> {
                 if (!NormalReturn.of(iff.cond())) {
-                    collect(iff.cond(), symbols, into);
+                    collect(iff.cond(), into);
                 } else {
-                    collect(iff.then(), symbols, into);
-                    collect(iff.els(), symbols, into);
+                    collect(iff.then(), into);
+                    collect(iff.els(), into);
                 }
             }
             case Core.Match m -> {
                 if (!NormalReturn.of(m.scrutinee())) {
-                    collect(m.scrutinee(), symbols, into);
+                    collect(m.scrutinee(), into);
                 } else {
-                    m.cases().forEach(arm -> collect(arm.body(), symbols, into));
+                    m.cases().forEach(arm -> collect(arm.body(), into));
                 }
             }
-            case Core.NewData nd -> {
-                Core stops = evaluated(nd, symbols);
+            case Core.Construct nd -> {
+                Core stops = evaluated(nd);
                 if (stops != null) {
-                    collect(stops, symbols, into);
+                    collect(stops, into);
                 }
             }
             case Core.IfConstructed ic -> {
-                Core stops = evaluated(ic.construct(), symbols);
+                Core stops = evaluated(ic.construct());
                 if (stops != null) {
-                    collect(stops, symbols, into);
+                    collect(stops, into);
                 } else {
-                    collect(ic.then(), symbols, into);
-                    ic.els().forEach(arm -> collect(arm.body(), symbols, into));
+                    collect(ic.then(), into);
+                    ic.els().forEach(arm -> collect(arm.body(), into));
                 }
             }
             // Anything else answers nothing because something it evaluates first does, and the rest
@@ -87,41 +81,21 @@ public final class UnreachableReasons {
             default -> {
                 Core stops = firstThatAborts(children(e));
                 if (stops != null) {
-                    collect(stops, symbols, into);
+                    collect(stops, into);
                 }
             }
         }
     }
 
     /**
-     * The initializer a construction stops at, or null where every one of them answers.
+     * The value a construction stops at, or null where every one of them answers.
      *
-     * <p>Read in declaration order, which is the order the fields are pushed. Written order would
-     * name whichever {@code unreachable} the author put uppermost, and a construction that names its
-     * fields in another order than the data declares them is ordinary.
+     * <p>Read in the order the construction holds its fields, which is the order they are pushed:
+     * the construction settled that when it was built, so what stops it is asked here rather than
+     * worked out again from how the fields were written.
      */
-    private static Core evaluated(Core.NewData nd, Symbols symbols) {
-        Map<String, Core> byName = new LinkedHashMap<>();
-        nd.inits().forEach(init -> byName.put(init.name(), init.value()));
-        List<Core> inOrder = new ArrayList<>();
-        for (String field : declaredFields(nd, symbols)) {
-            Core value = byName.remove(field);
-            if (value != null) {
-                inOrder.add(value);
-            }
-        }
-        inOrder.addAll(byName.values());   // a field the declaration does not have, if one ever is
-        return firstThatAborts(inOrder);
-    }
-
-    /** The fields as the data declares them, or nothing where this construction's type cannot be
-     * read — in which case the initializers keep the order they were written in. */
-    private static List<String> declaredFields(Core.NewData nd, Symbols symbols) {
-        if (symbols == null || !(symbols.declarations().declaration(nd.typeName().key()) instanceof Hir.Data data)) {
-            return List.of();
-        }
-        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
-        return List.copyOf(fields.keySet());
+    private static Core evaluated(Core.Construct nd) {
+        return firstThatAborts(nd.values().stream().map(Core.FieldValue::value).toList());
     }
 
     /** The first of a run of strict positions that does not answer, which is where evaluation stops

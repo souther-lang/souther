@@ -86,8 +86,18 @@ public sealed interface Core {
         String rendered();
     }
 
-    /** A callee some module named, under the name that module reaches it by. */
-    record Reached(ReachName name) implements CallTarget {
+    /**
+     * A callee some module named: the name that module reaches it by, and what that name was
+     * resolved to.
+     *
+     * <p>Both, because they answer different questions and neither is derived from the other. The
+     * backend emits the method the reach name spells; a reader asking what kind of thing was called —
+     * a module's own helper, one of the language's operations, a behavior whose implementation comes
+     * from outside — asks what the name denotes. Working the second out of the first would be
+     * resolving a name this compiler resolved already, and a bare spelling reaches a helper and an
+     * injected behavior alike.
+     */
+    record Reached(ReachName name, ValueName denotes) implements CallTarget {
 
         @Override
         public String rendered() {
@@ -148,9 +158,9 @@ public sealed interface Core {
      */
     record Call(CallTarget fn, List<Core> args, Type type, SourcePos pos) implements Core {
 
-        /** A call to a name, as the name it reaches. */
-        public Call(ReachName fn, List<Core> args, Type type, SourcePos pos) {
-            this(new Reached(fn), args, type, pos);
+        /** A call to a name, as the name it reaches and what that name denotes. */
+        public Call(ReachName fn, ValueName denotes, List<Core> args, Type type, SourcePos pos) {
+            this(new Reached(fn, denotes), args, type, pos);
         }
 
         /** The callee as it renders — the reach name for a call to one, the operation's own
@@ -221,7 +231,7 @@ public sealed interface Core {
      * the {@code Result} carries selects one; the checker has already established that every named
      * clause is answered, so one always matches.
      */
-    record IfConstructed(NewData construct, Hir.Binder binder, Core then, List<ElseArm> els,
+    record IfConstructed(Construct construct, Hir.Binder binder, Core then, List<ElseArm> els,
                          CoverageOrigin origin, Type type, SourcePos pos) implements Core {}
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
@@ -268,18 +278,24 @@ public sealed interface Core {
      * pattern's name count, checked against the tuple's size (ADR-0036). */
     record TupleGet(Core tuple, int index, int arity, Type type, SourcePos pos) implements Core {}
 
-    record FieldInit(String name, Core value, SourcePos pos) {}
+    /** What one field of a construction is given. {@code pos} is where the value was written, which
+     * for a field a spread supplies is the spread. */
+    record FieldValue(String field, Core value, SourcePos pos) {}
 
-    /** {@code spreads} are the bindings the construction copies fields from — reads, not binders:
-     * a spread names a value in force, it does not introduce one. */
-    record NewData(TypeSymbol typeName, List<FieldInit> inits, List<Read> spreads, Type type,
-                   SourcePos pos) implements Core {
-
-        /** How each spread source was written, in order. */
-        public List<String> spreadNames() {
-            return spreads.stream().map(Read::name).toList();
-        }
-    }
+    /**
+     * Making a value of a declared type — the one node a body creates a representation with. Every
+     * way a source writes one is this: a record literal, a literal spreading another value's fields,
+     * a newtype's constructor, and the arithmetic that re-wraps a newtype (spec §newtype-arithmetic).
+     * What a construction builds is therefore settled once, where this is built, rather than worked
+     * out again by each reader from the shape it was written in.
+     *
+     * <p>{@code values} is every declared field, in declaration order, and holds no spread: the
+     * value a spread supplies is the read of that field off the spread source, resolved here. A
+     * reader asking what this builds asks {@code values}, and the order it asks in is the order the
+     * fields are evaluated.
+     */
+    record Construct(TypeSymbol typeName, List<FieldValue> values, Type type,
+                     SourcePos pos) implements Core {}
 
     /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
      * narrows to, or the element a {@code Some x} opens. */
@@ -308,11 +324,12 @@ public sealed interface Core {
      *
      * <ul>
      *   <li>An expression slot takes any Core expression.</li>
-     *   <li>A name slot takes only a {@link Read}: a construction's spread copies the fields of a
-     *       binding and an applied function is a binding holding one, and the backend loads that
-     *       binding's slot, so an expression there would have nothing to be loaded from.</li>
-     *   <li>A construction slot takes only a {@link NewData}: an attempt tests whether a construction
-     *       holds, and there is no other kind of expression whose invariant could fail.</li>
+     *   <li>A name slot takes only a {@link Read}: an applied function is a binding holding one, and
+     *       the backend loads that binding's slot, so an expression there would have nothing to be
+     *       loaded from.</li>
+     *   <li>A construction slot takes only a {@link Construct}: an attempt tests whether a
+     *       construction holds, and there is no other kind of expression whose invariant could
+     *       fail.</li>
      * </ul>
      *
      * <p>This is the one place that says which slots a node has, and both {@link #mapChildren} and
@@ -321,7 +338,7 @@ public sealed interface Core {
      */
     private static Core atSlots(Core e, java.util.function.UnaryOperator<Core> atExpr,
                                 java.util.function.UnaryOperator<Read> atName,
-                                java.util.function.UnaryOperator<NewData> atConstruction) {
+                                java.util.function.UnaryOperator<Construct> atConstruction) {
         return switch (e) {
             case Int x -> x;
             case Decimal x -> x;
@@ -357,7 +374,7 @@ public sealed interface Core {
                 yield args == p.args() ? p
                         : new PreservedCall(p.operation(), args, p.type(), p.pos());
             }
-            // what is applied is a binding holding a function: a name slot, the same kind a spread is
+            // what is applied is a binding holding a function, which the backend loads: a name slot
             case Apply a -> {
                 Read fn = atName.apply(a.fn());
                 List<Core> args = each(a.args(), atExpr);
@@ -372,7 +389,7 @@ public sealed interface Core {
                         : new If(cond, then, els, iff.origin(), iff.type(), iff.pos());
             }
             case IfConstructed ic -> {
-                NewData construct = atConstruction.apply(ic.construct());
+                Construct construct = atConstruction.apply(ic.construct());
                 Core then = atExpr.apply(ic.then());
                 List<ElseArm> els = each(ic.els(), arm -> {
                     Core body = atExpr.apply(arm.body());
@@ -410,7 +427,7 @@ public sealed interface Core {
                 yield tuple == tg.tuple() ? tg
                         : new TupleGet(tuple, tg.index(), tg.arity(), tg.type(), tg.pos());
             }
-            case NewData nd -> atSlots(nd, atExpr, atName);
+            case Construct nd -> atSlots(nd, atExpr);
             case Match m -> {
                 Core scrutinee = atExpr.apply(m.scrutinee());
                 List<Case> cases = each(m.cases(), c -> {
@@ -425,23 +442,22 @@ public sealed interface Core {
     }
 
     /**
-     * The same for a construction, whose type is kept: it has an expression slot per field and a name
-     * slot per spread, and no others.
+     * The same for a construction, whose type is kept: it has an expression slot per declared field
+     * and no others. What a spread supplied is one of those slots, resolved before this is built, so
+     * a pass rewrites it as it rewrites any other value a field is given.
      *
      * <p>Said once and read twice — by the walk above, where a construction is an expression like any
-     * other, and by {@link #mapChildren(NewData, java.util.function.UnaryOperator,
+     * other, and by {@link #mapChildren(Construct, java.util.function.UnaryOperator,
      * java.util.function.UnaryOperator)}, which is how a pass recurses through the one an attempt
      * holds.
      */
-    private static NewData atSlots(NewData nd, java.util.function.UnaryOperator<Core> atExpr,
-                                   java.util.function.UnaryOperator<Read> atName) {
-        List<Read> spreads = each(nd.spreads(), atName);
-        List<FieldInit> inits = each(nd.inits(), i -> {
-            Core value = atExpr.apply(i.value());
-            return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
+    private static Construct atSlots(Construct nd, java.util.function.UnaryOperator<Core> atExpr) {
+        List<FieldValue> values = each(nd.values(), v -> {
+            Core value = atExpr.apply(v.value());
+            return value == v.value() ? v : new FieldValue(v.field(), value, v.pos());
         });
-        return spreads == nd.spreads() && inits == nd.inits() ? nd
-                : new NewData(nd.typeName(), inits, spreads, nd.type(), nd.pos());
+        return values == nd.values() ? nd
+                : new Construct(nd.typeName(), values, nd.type(), nd.pos());
     }
 
     /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */
@@ -470,7 +486,7 @@ public sealed interface Core {
      */
     static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
                             java.util.function.UnaryOperator<Read> onNameSlot,
-                            java.util.function.UnaryOperator<NewData> onConstructionSlot) {
+                            java.util.function.UnaryOperator<Construct> onConstructionSlot) {
         return atSlots(e, onExprSlot, onNameSlot, onConstructionSlot);
     }
 
@@ -481,8 +497,7 @@ public sealed interface Core {
      */
     static Core mapAll(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
                        java.util.function.UnaryOperator<Read> onNameSlot) {
-        return atSlots(e, onExprSlot, onNameSlot,
-                nd -> atSlots(nd, onExprSlot, onNameSlot));
+        return atSlots(e, onExprSlot, onNameSlot, nd -> atSlots(nd, onExprSlot));
     }
 
     /**
@@ -491,18 +506,18 @@ public sealed interface Core {
      *
      * <p>A construction slot is not a leaf the way a name slot is, so a pass that recurses has to say
      * how it recurses into one. Handing it back unchanged stops the pass at an attempt, which no pass
-     * means: what an attempt tries to build is as much part of the body as anything else.
+     * means: what an attempt tries to build is as much part of the body as anything else. It takes
+     * only the expression operator, a construction having none of the other slot kinds.
      */
-    static NewData mapChildren(NewData nd, java.util.function.UnaryOperator<Core> onExprSlot,
-                               java.util.function.UnaryOperator<Read> onNameSlot) {
-        return atSlots(nd, onExprSlot, onNameSlot);
+    static Construct mapChildren(Construct nd, java.util.function.UnaryOperator<Core> onExprSlot) {
+        return atSlots(nd, onExprSlot);
     }
 
     /**
      * Applies {@code f} to each direct child of {@code e} — the read-only counterpart of
      * {@link #mapChildren}. Every slot is a child whatever kind it is, so a pass that asks what a
-     * body reads reaches the binding a spread copies and the binding an application invokes without
-     * knowing that either position exists.
+     * body reads reaches the binding an application invokes, and the construction an attempt tests,
+     * without knowing that either position exists.
      */
     static void forEachChild(Core e, java.util.function.Consumer<Core> f) {
         atSlots(e, child -> {
