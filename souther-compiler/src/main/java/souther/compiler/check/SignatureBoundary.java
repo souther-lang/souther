@@ -127,13 +127,38 @@ final class SignatureBoundary {
         return admitted;
     }
 
-    /** The members of the union a behavior answers with, each a name in what crosses. */
+    /**
+     * The members of the union a behavior answers with, each a name in what crosses.
+     *
+     * <p>The one position where a name may be a scalar's. {@code Int | DivisionByZero} answers a
+     * primitive beside a case, and a union holds its members as names, so the primitive arrives
+     * spelled like a declaration. Which of the two a member is decides which rule it is held to —
+     * a scalar the boundary writes, or a name a model declares — and neither answers for the other.
+     */
     private static List<TypeSymbol> members(Type.Union union, Where where, Symbols symbols) {
         List<TypeSymbol> members = new ArrayList<>(union.members().size());
         for (TypeSymbol member : union.members()) {
-            members.add(nominal(member, where, symbols).name());
+            members.add(member.isPrimitive()
+                    ? scalarMember(member, where)
+                    : nominal(member, where, symbols).name());
         }
         return members;
+    }
+
+    /**
+     * A member written in the language's own namespace, which crosses when it is a scalar the
+     * boundary writes.
+     *
+     * <p>{@code Raw} is spelled like a primitive and stands for no scalar, and {@code Some} and
+     * {@code None} are names of that namespace standing for no primitive at all. Each is the
+     * language's own word rather than a model's, which is what the report says.
+     */
+    private static TypeSymbol scalarMember(TypeSymbol member, Where where) {
+        Type.Prim prim = member.primitiveKind();
+        if (prim == null || LeafScalar.of(prim) == null) {
+            throw foreignName(member, where);
+        }
+        return member;
     }
 
     /**

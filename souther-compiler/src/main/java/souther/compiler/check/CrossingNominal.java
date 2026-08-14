@@ -42,20 +42,23 @@ public final class CrossingNominal {
     }
 
     /**
-     * The name where a model declares it, or null where the language does.
+     * The name where a model declares it, and null everywhere else.
      *
-     * <p>A primitive is neither declared nor refused for whose it is: it is a scalar the boundary
-     * writes, with no declaration anywhere, so it is answered without asking the model anything.
-     * {@code Raw} is spelled like one and is not one — no stage produces it and no class exists for
-     * it — so it answers null, whichever way the spelling reached this.
+     * <p>The language's own namespace answers null throughout, and not only for the names that stand
+     * for something. A primitive's name is not a declaration to admit: it is how a scalar sits in a
+     * union ({@code Int | DivisionByZero}), and a position that can meet one admits it as the scalar
+     * it is — which is also where {@code Raw} is refused, having no scalar to be. {@code Some} and
+     * {@code None} live in that namespace and stand for no primitive at all, and any spelling can be
+     * minted into it, so admitting the namespace would put this type's domain wider than the rule it
+     * is named for.
      *
-     * <p>Everything else is asked of the declaration world, which tells a module's declarations from
-     * the language's: the prelude's runtime-backed data resolves and types like any other and belongs
-     * to no module here.
+     * <p>A name outside it is asked of the declaration world, which tells a module's declarations
+     * from the language's: the prelude's runtime-backed data resolves and types like any other and
+     * belongs to no module here.
      */
     public static CrossingNominal admitted(TypeSymbol name, Symbols symbols) {
         if (name.isPrimitive()) {
-            return "Raw".equals(name.name()) ? null : new CrossingNominal(name);
+            return null;
         }
         return symbols.declarations().declaredByCompilation(name.key())
                 ? new CrossingNominal(name)

@@ -76,6 +76,14 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
     }
 
     @Test
+    void aUnionMemberSpelledLikeAPrimitiveIsHeldToTheScalarRule() {
+        // The one position a name may be a scalar's. `Int | DivisionByZero` is a primitive beside a
+        // case, so a member is asked which of the two it is; `Raw` is spelled like a primitive and
+        // stands for no scalar, which is the language's word rather than a model's either way.
+        refuses("behavior f : (n: Int) -> Int | Raw", "let f (n) = n", "Raw");
+    }
+
+    @Test
     void aParseFailureCaseIsAskedToo() {
         refuses("behavior f : (x: NotANumber) -> Int", "let f (x) = 1", "NotANumber");
     }
