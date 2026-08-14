@@ -170,6 +170,9 @@ public final class PipelineSigs {
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
         // accepted.
         if (pipe.declaredOut() != null) {
+            if (TypeOps.restsOnAnUnresolvedName(pipe.declaredOut())) {
+                throw new Unanswerable(pipe.declaredOut().pos());
+            }
             Set<TypeSymbol> inferred = TypeOps.leafCases(out, symbols);
             Set<TypeSymbol> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut()), symbols);
             if (!inferred.equals(declared)) {

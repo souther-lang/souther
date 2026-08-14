@@ -203,7 +203,14 @@ public final class TypeOps {
         };
     }
 
-    /** The output type of a behavior return: a single case, or a union of two or more cases. */
+    /**
+     * The output type of a behavior return: a single case, or a union of two or more cases.
+     *
+     * <p>An output with a member resting on a name that denotes nothing has no case set, and is the
+     * type that absorbs — the same answer a single such case already gives, so one mistake has one
+     * recovery wherever it is written. A check that would hold such an output against what is
+     * produced asks {@link #restsOnAnUnresolvedName} first and abandons.
+     */
     public static Type successType(Hir.RetType ret) {
         List<Type> members = new ArrayList<>();
         for (Hir.TypeTerm t : ret.cases()) {
@@ -212,22 +219,52 @@ public final class TypeOps {
         if (members.size() == 1) {
             return members.get(0);
         }
+        // Every member is read before anything is said, because the two ways a member can fail to
+        // be one are different mistakes and the author owns only one of them. A member that cannot
+        // be written in an arm is theirs, and is reported wherever it stands. A member whose name
+        // denotes nothing was reported where that name was written, and what this reading finds
+        // there is that same mistake: the output has no case set at all, so it takes the type that
+        // absorbs and this says nothing further.
         Set<TypeSymbol> names = new LinkedHashSet<>();
+        boolean unknown = false;
         for (Type m : members) {
-            TypeSymbol name = memberName(m);
-            if (name == null) {
-                throw CompileException.of(Diagnostic
+            switch (memberName(m)) {
+                case MemberName.Named named -> names.add(named.name());
+                case MemberName.NoType _ -> unknown = true;
+                case MemberName.NotAMember _ -> throw CompileException.of(Diagnostic
                                 .at(ret.pos()).say(new TypeMessage.NotAUnionMember(Type.show(m))).build());
             }
-            names.add(name);
         }
-        return Type.union(names);
+        return unknown ? Type.ERRONEOUS : Type.union(names);
     }
 
     /**
+     * What a union member goes by, which is three answers and not two.
+     *
+     * <p>A member the compiler could not work out a type for and a member whose type cannot be one
+     * are not the same finding, and a reader that gets one answer for both reports the second
+     * sentence about the first: that a name denoting nothing is not the kind of thing an arm can
+     * name. Kept apart here so that a reader has to say which of the two it is acting on, and a
+     * reader added later cannot decide it by not noticing.
+     */
+    sealed interface MemberName {
+
+        /** The case name this member is written and dispatched under. */
+        record Named(TypeSymbol name) implements MemberName {}
+
+        /** A type no arm can name, so no union can carry it. */
+        record NotAMember() implements MemberName {}
+
+        /** A member resting on a name that denotes nothing, reported where that name was written. */
+        record NoType() implements MemberName {}
+    }
+
+    private static final MemberName NOT_A_MEMBER = new MemberName.NotAMember();
+    private static final MemberName NO_TYPE = new MemberName.NoType();
+
+    /**
      * The case name a union member goes by: a data type's own name, or the name a primitive is
-     * written under in a match arm ({@code Int} in {@code Int | NoAnswer}). Null for a type that
-     * cannot be a member.
+     * written under in a match arm ({@code Int} in {@code Int | NoAnswer}).
      *
      * <p>A member has to be nominal and has to tell itself apart from the other members at run time,
      * because that is what a {@code match} arm and a Java {@code switch} both dispatch on. A
@@ -236,22 +273,28 @@ public final class TypeOps {
      * {@code Option} and a function fail it the same way. That they also have no arm form to write
      * is the surface showing the same fact.
      */
-    static TypeSymbol memberName(Type m) {
+    static MemberName memberName(Type m) {
+        // The type that absorbs stands where the compiler could not work one out. It is not a shape
+        // this question has an answer about, and reading it as one is how the name that denotes
+        // nothing came to be reported a second time as a member an arm could not name.
+        if (m instanceof Type.Erroneous) {
+            return NO_TYPE;
+        }
         if (m instanceof Type.Ref r) {
-            return r.name();
+            return new MemberName.Named(r.name());
         }
         // Exhaustive over the primitives rather than a chain of comparisons, and reading the one
-        // spelling table rather than repeating it. A chain answers null for a primitive added later
-        // without asking anyone, and null here reads as "this is not a name a member can be written
-        // as" — which is the truth about Raw and about nothing else.
+        // spelling table rather than repeating it. A chain answers "not a member" for a primitive
+        // added later without asking anyone, and that answer is the truth about Raw and about
+        // nothing else.
         if (m instanceof Type.Prim p) {
             return switch (p) {
                 case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT ->
-                        TypeSymbol.primitive(p.shown());
-                case RAW -> null;
+                        new MemberName.Named(TypeSymbol.primitive(p.shown()));
+                case RAW -> NOT_A_MEMBER;
             };
         }
-        return null;
+        return NOT_A_MEMBER;
     }
 
     /** Builds a Ref (one name) or Union (two or more) from a set of case names. */
@@ -266,12 +309,23 @@ public final class TypeOps {
         return t instanceof Type.Ref || t instanceof Type.Union;
     }
 
+    /**
+     * The case names {@code t} carries, which is none for a type that carries no name.
+     *
+     * <p>Both ways of carrying none are none here, on purpose: this asks which names are on a type
+     * and nothing about why a type has none. Where the difference matters is a declaration held
+     * against what is produced — an output resting on a name that denotes nothing has no case set
+     * rather than the empty one — and that is asked at those checks by
+     * {@link #restsOnAnUnresolvedName}, before either side is turned into names.
+     */
     public static Set<TypeSymbol> namesOf(Type t) {
         if (t instanceof Type.Union u) {
             return u.members();
         }
-        TypeSymbol name = memberName(t);
-        return name == null ? Set.of() : Set.of(name);
+        return switch (memberName(t)) {
+            case MemberName.Named named -> Set.of(named.name());
+            case MemberName.NotAMember _, MemberName.NoType _ -> Set.of();
+        };
     }
 
     /** Case names of a stage output, treating a {@code Raw} encoder output as the case {@code "Raw"}
@@ -473,6 +527,22 @@ public final class TypeOps {
 
     private static boolean erroneous(Hir.RetType ret) {
         return ret != null && ret.cases().stream().anyMatch(TypeOps::erroneous);
+    }
+
+    /**
+     * Whether a written output rests on a name that denotes nothing.
+     *
+     * <p>Asked by the two checks that hold a declared output against what is produced. The case set
+     * of such an output is not the empty set — there is no answer to take a set from — and comparing
+     * against it says the declaration names nothing of what the body or the composition builds,
+     * which is the unresolved name arriving a second time under a sentence about the declaration.
+     * Those checks abandon instead, and the name is reported where it was written.
+     *
+     * <p>Read off what was written rather than off the type it stands for, because that is where
+     * the reference sits and there is nothing to lose on the way.
+     */
+    static boolean restsOnAnUnresolvedName(Hir.RetType ret) {
+        return erroneous(ret);
     }
 
     private static boolean erroneous(Hir.TypeTerm term) {

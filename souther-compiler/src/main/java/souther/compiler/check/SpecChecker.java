@@ -214,6 +214,9 @@ public final class SpecChecker {
                                 .hint(new DeclarationMessage.WriteTheOutputSignature(pipe.name(), PipelineSigs.caseList(inferred)))
                                 .say(new DeclarationMessage.AnExposedCompositionDeclaresItsOutput(pipe.name())).build());
             }
+            if (TypeOps.restsOnAnUnresolvedName(declared)) {
+                throw new Unanswerable(declared.pos());
+            }
             Set<TypeSymbol> declaredCases = TypeOps.leafCases(TypeOps.successType(declared), symbols);
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
