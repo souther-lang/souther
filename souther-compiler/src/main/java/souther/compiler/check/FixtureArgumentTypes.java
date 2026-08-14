@@ -9,16 +9,17 @@ import java.util.List;
 /**
  * What each argument a fixture wrote is already known to be.
  *
- * <p>Evidence, not inference. Every answer here is one something else settled — the language reads a
- * written integer as an {@code Int} wherever it stands, and {@link Elaborator} is where that is said
- * — and a writing that settles nothing answers null. Null is an answer: what to make of a call whose
- * variables nothing settled is {@link FixtureApplication}'s, and this walk refuses nothing.
+ * <p>Evidence, not inference. An argument's type is one something else settled — a declaration
+ * ({@link FixtureEvidence}: a construction names its type, a field is declared one, a name stands
+ * for a body that is), or the language's reading of a written literal, which {@link Elaborator}
+ * makes an {@code Int} of {@code 1} wherever it stands. Nothing here works a type out.
  *
- * <p>An application is not read here. What a helper answers with is its answer's to say, and working
- * it out from the declaration would be a second reading of a call the language already elaborates
- * one way. The two would then be free to come apart, which is what makes a fixture's own type
- * checker out of a walk like this one. What widens the range read here is a fixture expression that
- * can be asked what elaboration made of it, and nothing short of that.
+ * <p>An application is not read, and that is the one exclusion worth stating: a construction written
+ * in call form <em>is</em> read, because a newtype's name is its declaration and no answer is being
+ * predicted. What a helper answers with is its answer's to say, and deriving it from the declaration
+ * here would be a second reading of a call the language already elaborates one way. What widens the
+ * range read here is a fixture expression that can be asked what elaboration made of it, and nothing
+ * short of that.
  */
 public final class FixtureArgumentTypes {
 
@@ -35,15 +36,20 @@ public final class FixtureArgumentTypes {
      * Telling them apart is worth a type of its own only when a reader would do something different
      * with each.
      */
-    public static List<Type> of(Hir.Apply call) {
+    public static List<Type> of(Hir.Apply call, FixtureEvidence evidence) {
         List<Type> stated = new ArrayList<>();
         for (Hir.Expr arg : call.args()) {
-            stated.add(stated(arg));
+            stated.add(stated(arg, evidence));
         }
         return stated;
     }
 
-    private static Type stated(Hir.Expr e) {
+    /** The type one written value states. */
+    public static Type stated(Hir.Expr e, FixtureEvidence evidence) {
+        Type declared = evidence.declaredTypeOf(e);
+        if (declared != null) {
+            return declared;
+        }
         return switch (e) {
             case Hir.IntLit _ -> Type.INT;
             case Hir.DecimalLit _ -> Type.DECIMAL;
@@ -53,7 +59,7 @@ public final class FixtureArgumentTypes {
             // are none, nothing was stated: `[]` says what it holds nowhere, and a call that needed
             // it to is refused for the variable that stayed open rather than for the empty list.
             case Hir.ListLit l -> {
-                Type element = agreedOn(l.elements());
+                Type element = agreedOn(l.elements(), evidence);
                 yield element == null ? null : Type.list(element);
             }
             case null, default -> null;
@@ -61,10 +67,10 @@ public final class FixtureArgumentTypes {
     }
 
     /** The one type every element states, or null where they state none or state several. */
-    private static Type agreedOn(List<Hir.Expr> elements) {
+    private static Type agreedOn(List<Hir.Expr> elements, FixtureEvidence evidence) {
         Type agreed = null;
         for (Hir.Expr e : elements) {
-            Type stated = stated(e);
+            Type stated = stated(e, evidence);
             if (stated == null || (agreed != null && !agreed.equals(stated))) {
                 return null;
             }

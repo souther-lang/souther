@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
@@ -387,20 +388,7 @@ final class NeutralForm {
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
     Map<String, Hir.TypeRef> fieldTypes(TypeSymbol typeName) {
-        Map<String, Hir.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.declarations().declaration(typeName.key()) instanceof Hir.Data d) {
-            for (Hir.Name inc : d.includes()) {
-                out.putAll(fieldTypes(inc.denotes()));
-            }
-            for (Hir.Field f : d.fields()) {
-                // an example builds its input through a decoder, so a field with no external
-                // representation is not one it can state; the data declaration refused it already
-                if (f.type() instanceof Hir.TypeRef ref) {
-                    out.put(f.name(), ref);
-                }
-            }
-        }
-        return out;
+        return FixtureEvidence.fieldTypes(typeName, symbols);
     }
 
     /**
@@ -411,22 +399,20 @@ final class NeutralForm {
      * declaring file's position).
      */
     Type shapeOf(Hir.TypeRef declaredType) {
-        return declaredType == null ? null : declaredType.denotes();
+        return FixtureEvidence.shapeOf(declaredType);
     }
 
     /** Whether {@code name} is a newtype — asked of a name resolution settled, never of a spelling:
      * an imported value's body names its own module's types, which the module reading the row need
      * not have imported, and a module of its own may declare something else of that spelling. */
     boolean isNewtype(TypeSymbol name) {
-        return name != null && symbols.declarations().declaration(name.key()) instanceof Hir.Data d && d.newtype();
+        return FixtureEvidence.isNewtype(name, symbols);
     }
 
     /** The written form of what a newtype wraps, kept whole so a generic base
      * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
     Hir.TypeRef newtypeBaseType(TypeSymbol name) {
-        return name != null && symbols.declarations().declaration(name.key()) instanceof Hir.Data d && d.newtype()
-                && d.fields().size() == 1 && d.fields().get(0).type() instanceof Hir.TypeRef base
-                ? base : null;
+        return FixtureEvidence.newtypeBaseType(name, symbols);
     }
 
     // --- reading a position's type ----------------------------------------------------------------

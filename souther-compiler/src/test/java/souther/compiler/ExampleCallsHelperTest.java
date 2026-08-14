@@ -464,6 +464,70 @@ class ExampleCallsHelperTest {
     }
 
     /**
+     * A variable is settled by what the arguments are declared to be, and not only by what a literal
+     * spells. `+Amount(1)+` is a construction of a declared type, so the list it is written in is a
+     * list of that type — nothing about the helper's answer is being worked out here.
+     */
+    @Test
+    void aRowSettlesAVariableFromAConstructionItWrote() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | (Amount(List.length([ Amount(1) ]))) -> Amount(1)
+                """));
+    }
+
+    /** And by what a value or a field is declared to be, which is the other half of what a written
+     * argument can already be known to be. */
+    @Test
+    void aRowSettlesAVariableFromANameAndFromAField() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+                data Basket = { items: List<Amount> }
+
+                let sample = Basket { items = [ Amount(1), Amount(2) ] }
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | (Amount(List.length(sample.items))) -> Amount(2)
+                """));
+    }
+
+    /**
+     * And by what a name a {@code let} binds stands for. The pass that emits the methods a row's
+     * calls need reads the same evidence as the row does, so a call under a {@code let} settles in
+     * both or in neither — one that settled only where the row is read would be applied through a
+     * method nothing emitted.
+     */
+    @Test
+    void aRowSettlesAVariableFromANameALetBinds() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | ({ let one = Amount(1) Amount(List.length([ one ])) }) -> Amount(1)
+                """));
+    }
+
+    /**
      * A call the row's arguments do not settle is refused for the variable that stayed open, and not
      * for the declaration being written with one. What the row wrote is what settles a call, so what
      * it is told is which variable nothing it wrote settled.

@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.FixtureApplication;
 import souther.compiler.check.FixtureArgumentTypes;
+import souther.compiler.check.FixtureEvidence;
 import souther.compiler.check.FixtureCallable;
 import souther.compiler.check.Prelude;
 import souther.compiler.check.Symbols;
@@ -1615,16 +1616,14 @@ public final class FixtureReader {
      * different answers about which field of what is being read.
      */
     private Type fieldTypeOf(Type record, String field) {
-        if (!(record instanceof Type.Ref r)) {
-            return null;
-        }
-        TypeSymbol named = r.name();
-        if (neutral.isNewtype(named)) {
-            // A newtype declares one field, and it is what it wraps (ADR-0032).
-            return "value".equals(field) ? neutral.shapeOf(neutral.newtypeBaseType(named)) : null;
-        }
-        Hir.TypeRef declared = neutral.fieldTypes(named).get(field);
-        return declared == null ? null : neutral.shapeOf(declared);
+        return evidence().fieldTypeOf(record, field);
+    }
+
+    /** What declarations say about what this row wrote, with what a {@code let} has in force here.
+     *  The pass that emits the methods a row's calls need reads the same walk, so what settles a
+     *  call there is what settles it here. */
+    private FixtureEvidence evidence() {
+        return new FixtureEvidence(symbols, values, bindings);
     }
 
     /**
@@ -1636,55 +1635,11 @@ public final class FixtureReader {
      * costs no helper a second application against the row's one budget.
      */
     private Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen) {
-        return declaredTypeOf(e, seen, new HashMap<>());
-    }
-
-    /**
-     * As above. {@code bound} is this walk's own binding environment: a {@code let} the walk enters
-     * has to be in force for the name it binds, and the reading that takes the value keeps its
-     * bindings in a table of its own. Two walks over one expression that disagree about what is in
-     * scope disagree about what is admitted, and the one that answers nothing admits nothing.
-     */
-    private Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen, Map<BindingId, Hir.Expr> bound) {
-        return switch (e) {
-            case Hir.NewData nd -> Type.ref(nd.typeName().denotes());
-            // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
-            case Hir.Apply c when constructsANewtype(c) -> Type.ref(constructs(c));
-            case Hir.FieldAccess fa -> {
-                Type target = declaredTypeOf(fa.target(), seen, bound);
-                yield target == null ? null : fieldTypeOf(target, fa.field());
-            }
-            case Hir.LetIn let -> {
-                BindingId binding = let.binder().id();
-                Hir.Expr outer = bound.put(binding, let.value());
-                try {
-                    yield declaredTypeOf(let.body(), seen, bound);
-                } finally {
-                    if (outer == null) {
-                        bound.remove(binding);
-                    } else {
-                        bound.put(binding, outer);
-                    }
-                }
-            }
-            case Hir.Var v -> {
-                ValueName denotes = v.denotes();
-                // A name reached twice is the cycle the reading itself reports; this walk only stops.
-                if (denotes == null || !seen.add(denotes)) {
-                    yield null;
-                }
-                Hir.Expr body;
-                if (denotes instanceof ValueName.Local local) {
-                    // What this walk bound, then what the reading around it has in force.
-                    body = bound.containsKey(local.id()) ? bound.get(local.id())
-                            : bindings.get(local.id());
-                } else {
-                    body = valueBody(v.name());
-                }
-                yield body == null ? null : declaredTypeOf(body, seen, bound);
-            }
-            case null, default -> null;
-        };
+        // The walk's own binding environment starts from what the reading around it has in force: a
+        // `let` the walk enters has to be in force for the name it binds, and so does one the
+        // reading entered before it got here. Two walks over one expression that disagree about
+        // what is in scope disagree about what is admitted.
+        return evidence().declaredTypeOf(e, seen, new HashMap<>(bindings));
     }
 
     /** A name resolved to a case, or a value under no name where this module has no such case — the
@@ -2064,7 +2019,7 @@ public final class FixtureReader {
      */
     private FixtureApplication.SettledCall settled(Hir.Apply c, Applied helper) {
         return switch (FixtureApplication.settle(helper.reached(), helper.def(),
-                FixtureArgumentTypes.of(c), symbols)) {
+                FixtureArgumentTypes.of(c, evidence()), symbols)) {
             case FixtureApplication.Settled(FixtureApplication.SettledCall call) -> call;
             case FixtureApplication.Miscalled(int written, int declared) ->
                     throw new FixtureException("`" + c.written() + "` takes " + declared

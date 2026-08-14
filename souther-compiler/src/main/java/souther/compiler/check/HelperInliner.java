@@ -439,7 +439,8 @@ public final class HelperInliner {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         Deque<Hir.Expr> kernels = new ArrayDeque<>();
         forEachExampleExpr(module, kernels::add);
-        followingValues(kernels, table, e -> kernelCallsIn(e, symbols, out));
+        FixtureEvidence evidence = new FixtureEvidence(symbols, table);
+        followingValues(kernels, table, e -> kernelCallsIn(e, evidence, out));
         return out;
     }
 
@@ -462,14 +463,15 @@ public final class HelperInliner {
      * the reading that found it — so nothing is admitted here and refused there, or the other way
      * about.
      */
-    private static void kernelCallsIn(Hir.Expr e, Symbols symbols, Map<String, Hir.FnDef> out) {
+    private static void kernelCallsIn(Hir.Expr e, FixtureEvidence evidence,
+                                      Map<String, Hir.FnDef> out) {
         if (e instanceof Hir.Apply call && call.answered() != null
                 && call.denotes() instanceof ValueName.Stdlib) {
             Prelude.PreludeEntry entry = Prelude.entry(call.reaches());
             if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic
                     && !entry.declaration().params().isEmpty()
                     && FixtureApplication.settle(call.reaches(), entry.declaration(),
-                            FixtureArgumentTypes.of(call), symbols)
+                            FixtureArgumentTypes.of(call, evidence), evidence.symbols())
                             instanceof FixtureApplication.Settled(var settled)) {
                 FixtureCallable.Realization realization = FixtureCallable.resolve(settled);
                 if (realization.synthesized() != null) {
@@ -477,7 +479,16 @@ public final class HelperInliner {
                 }
             }
         }
-        Hir.forEachChild(e, c -> kernelCallsIn(c, symbols, out));
+        // A `let` is entered with what it binds in force, as the reading that builds the row enters
+        // it: a call under one settles from what its name stands for there, and a walk that did not
+        // carry the binding would settle fewer calls than the row does — leaving one with no method.
+        if (e instanceof Hir.LetIn let) {
+            FixtureEvidence inside = evidence.with(let.binder().id(), let.value());
+            kernelCallsIn(let.value(), evidence, out);
+            kernelCallsIn(let.body(), inside, out);
+            return;
+        }
+        Hir.forEachChild(e, c -> kernelCallsIn(c, evidence, out));
     }
 
     /** As {@link #exampleHelpers(Hir.Module, Map)}, for the module this inliner reads: the ones it must
