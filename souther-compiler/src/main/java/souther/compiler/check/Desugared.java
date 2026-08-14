@@ -110,12 +110,23 @@ public final class Desugared {
         }
 
         /**
-         * The tree.
+         * The behaviors this module declares.
          *
-         * <p>Wider than its one reader needs. What asks for it is the behavior signatures, which
-         * read what the module declared and nothing this state says; the projection it wants is
-         * those behaviors, and this hands over everything. It goes when that reader is migrated,
-         * rather than being the way a reader gets at the payload.
+         * <p>What the signatures are made from, and the whole of what that reader wanted. It read
+         * the module before, which handed it everything this state says about the definitions as
+         * well — a claim it does not use and could drop without anything saying so.
+         */
+        public List<Hir.BehaviorDef> behaviors() {
+            return module.behaviors();
+        }
+
+        /**
+         * The tree at this stage.
+         *
+         * <p>No reader in the compiler asks for this. What is left is the two tests that audit the
+         * payload at each stage — whether every tree a compile makes is still well founded, and
+         * whether what a module declares changes as the stages rewrite it — and neither leans on
+         * what this state claims; they ask about the tree, which is what they are for.
          */
         public Hir.Module tree() {
             return module;

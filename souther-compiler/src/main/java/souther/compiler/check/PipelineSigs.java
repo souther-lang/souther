@@ -29,19 +29,15 @@ public final class PipelineSigs {
     private PipelineSigs() {}
 
     /** Builds the input/output signature of every behavior, checking pipeline composition. */
-    public static Map<String, Sig> signatures(Hir.Module module, Symbols symbols) {
-        return signatures(module, symbols, Map.of());
-    }
-
     /**
      * Builds the input/output signature of every behavior, checking pipeline composition. The
      * {@code imported} map seeds the resolvable behaviors with those imported from other modules
      * (spec §modules, §composition), so a stage naming an imported behavior resolves through {@link #stageSig}.
      */
-    public static Map<String, Sig> signatures(Hir.Module module, Symbols symbols,
+    public static Map<String, Sig> signatures(List<Hir.BehaviorDef> behaviors, Symbols symbols,
                                               Map<String, Sig> imported) {
         Map<String, Sig> sigs = new HashMap<>(imported);
-        for (Hir.BehaviorDef b : module.behaviors()) {
+        for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec) {
                 // A behavior's signature is what it declares, whether a `let` implements it here or the Java
                 // side is injected (spec §injected-behavior): both are named the same way from a `>->` or a
@@ -58,8 +54,8 @@ public final class PipelineSigs {
                 }
             }
         }
-        Map<String, List<Hir.Var>> pipeStages = pipelineStages(module);
-        for (Hir.BehaviorDef b : module.behaviors()) {
+        Map<String, List<Hir.Var>> pipeStages = pipelineStages(behaviors);
+        for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.PipeBehavior pipe) {
                 try {
                     sigs.put(pipe.name(), pipeSig(pipe, sigs, symbols, pipeStages));
@@ -76,8 +72,14 @@ public final class PipelineSigs {
 
     /** Maps each pipeline behavior's name to its declared stages (for flattening, spec §type-routing). */
     public static Map<String, List<Hir.Var>> pipelineStages(Hir.Module module) {
+        return pipelineStages(module.behaviors());
+    }
+
+    /** The same, of the behaviors themselves — what a reader holding them rather than a module
+     * asks. */
+    public static Map<String, List<Hir.Var>> pipelineStages(List<Hir.BehaviorDef> behaviors) {
         Map<String, List<Hir.Var>> stages = new HashMap<>();
-        for (Hir.BehaviorDef b : module.behaviors()) {
+        for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.PipeBehavior pipe) {
                 stages.put(pipe.name(), pipe.stages());
             }

@@ -229,10 +229,8 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                // What a behavior declares, which is what the module wrote — nothing this state says
-                // about its definitions is read here.
-                return Answer.of(PipelineSigs.signatures(desugared.value().tree(), scope.value(),
-                        imported.value()));
+                return Answer.of(PipelineSigs.signatures(desugared.value().behaviors(),
+                        scope.value(), imported.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
