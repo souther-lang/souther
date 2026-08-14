@@ -131,26 +131,14 @@ public final class Derived {
             return module.fns();
         }
 
-        /**
-         * The tree with each definition replaced by the one of {@code desugared} that answers to its
-         * name, or null where one of them has no answer.
-         *
-         * <p>What it answers with is a tree: what a definition came to is that definition's answer,
-         * and a module put back together from them claims nothing this one claims. The state that
-         * would is the fn family's, which does not exist yet.
-         */
-        public Hir.Module withEachFnDesugared(Map<String, Hir.FnDef> desugared) {
-            List<Hir.FnDef> fns = new ArrayList<>();
-            for (Hir.FnDef fn : module.fns()) {
-                Hir.FnDef came = desugared.get(fn.name());
-                if (came == null) {
-                    return null;
-                }
-                fns.add(came);
-            }
+        /** This module's declarations with {@code desugared} standing where its definitions were —
+         * what {@link Desugared.Module} is assembled from, which is why it is that state's to ask
+         * for rather than anyone's to build. */
+        Hir.Module withEachFnDesugared(List<Hir.FnDef> desugared) {
             return new Hir.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                    module.imports(), module.defs(), module.behaviors(), fns, module.takenOn(),
-                    module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
+                    module.imports(), module.defs(), module.behaviors(), desugared,
+                    module.takenOn(), module.examples(), module.fakes(), module.exampleFileTarget(),
+                    module.pos());
         }
 
         /**

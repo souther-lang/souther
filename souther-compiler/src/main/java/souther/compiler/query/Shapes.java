@@ -242,20 +242,22 @@ public final class Shapes {
      * that type. Only the module's fns change; what it declares is what {@link Derived} left, which
      * is why every stage below reads its declarations from there and not from here.
      */
-    public record Desugared(String name) implements Key<Hir.Module> {
+    public record Desugared(String name) implements Key<souther.compiler.check.Desugared.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Hir.Module> compute(Db db) {
+        public Answer<souther.compiler.check.Desugared.Module> compute(Db db) {
             Answer<souther.compiler.check.Derived.Module> derived = db.ask(new Derived(name));
-            Answer<Map<String, Hir.FnDef>> fns = db.ask(new DesugaredFns(name));
+            Answer<Map<String, souther.compiler.check.Desugared.Fn>> fns =
+                    db.ask(new DesugaredFns(name));
             if (!derived.present() || !fns.present()) {
                 return Answer.absent();
             }
-            Hir.Module assembled = derived.value().withEachFnDesugared(fns.value());
+            souther.compiler.check.Desugared.Module assembled =
+                    souther.compiler.check.Desugared.Module.assemble(derived.value(), fns.value());
             return assembled == null ? Answer.absent() : Answer.of(assembled);
         }
     }
@@ -269,24 +271,26 @@ public final class Shapes {
      * too, so a declaration that did not come out leaves the definitions that do not name it with
      * their answers.
      */
-    public record DesugaredFns(String name) implements Key<Map<String, Hir.FnDef>> {
+    public record DesugaredFns(String name)
+            implements Key<Map<String, souther.compiler.check.Desugared.Fn>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
+        public Answer<Map<String, souther.compiler.check.Desugared.Fn>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.DERIVED);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Map<String, Hir.FnDef> out = new LinkedHashMap<>();
+            Map<String, souther.compiler.check.Desugared.Fn> out = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             for (Hir.FnDef fn : settling.value().fns()) {
                 try {
-                    out.put(fn.name(), NewtypeDesugar.rewriteOf(fn, scope.value()));
+                    out.put(fn.name(),
+                            souther.compiler.check.Desugared.Fn.desugar(fn, scope.value()));
                 } catch (CompileException e) {
                     reports.addAll(Report.of(e));
                 }
@@ -301,19 +305,21 @@ public final class Shapes {
      * {@link DesugaredFns}, which works every definition out, so what it depends on is still the
      * module; what it is about is the one definition.
      */
-    public record DesugaredFn(String module, String fn) implements Key<Hir.FnDef> {
+    public record DesugaredFn(String module, String fn)
+            implements Key<souther.compiler.check.Desugared.Fn> {
         @Override
         public String module() {
             return module;
         }
 
         @Override
-        public Answer<Hir.FnDef> compute(Db db) {
-            Answer<Map<String, Hir.FnDef>> fns = db.ask(new DesugaredFns(module));
+        public Answer<souther.compiler.check.Desugared.Fn> compute(Db db) {
+            Answer<Map<String, souther.compiler.check.Desugared.Fn>> fns =
+                    db.ask(new DesugaredFns(module));
             if (!fns.present()) {
                 return Answer.absent();
             }
-            Hir.FnDef came = fns.value().get(fn);
+            souther.compiler.check.Desugared.Fn came = fns.value().get(fn);
             return came == null ? Answer.absent() : Answer.of(came);
         }
     }
@@ -339,7 +345,7 @@ public final class Shapes {
 
         @Override
         public Answer<Hir.Module> compute(Db db) {
-            Answer<Hir.Module> desugared = db.ask(new Desugared(name));
+            Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             if (!desugared.present()) {
                 return Answer.absent();
@@ -353,7 +359,7 @@ public final class Shapes {
             // is called. It settles nothing about where the definition came from: the fns below hold
             // declarations of several modules under names of one shape, and which module wrote each is
             // carried on the declaration (Hir.FnDef.declaredIn).
-            Hir.Module m = HelperNames.qualifyImports(desugared.value());
+            Hir.Module m = desugared.value().withImportsQualified();
             try {
                 HelperInliner inliner = HelperInliner.forModule(m, published);
                 Map<String, Hir.FnDef> injected =

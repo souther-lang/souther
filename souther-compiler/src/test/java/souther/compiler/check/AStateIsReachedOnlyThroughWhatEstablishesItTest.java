@@ -41,7 +41,8 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
     private static final List<Class<?>> STATES =
             List.of(Expandable.class, InvariantSettled.class, InvariantSettled.Def.class,
-                    Derived.Def.class, Derived.Module.class);
+                    Derived.Def.class, Derived.Module.class, Desugared.Fn.class,
+                    Desugared.Module.class);
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
@@ -82,6 +83,45 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 "a settled declaration is projected from the module it is one of");
         assertEquals(Set.of("derive(Def, Symbols)"), waysInto(Derived.Def.class));
         assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
+        assertEquals(Set.of("desugar(FnDef, Symbols)"), waysInto(Desugared.Fn.class));
+        assertEquals(Set.of("assemble(Module, Map)"), waysInto(Desugared.Module.class));
+    }
+
+    /**
+     * A definition that has been desugared says that and no more.
+     *
+     * <p>The helper parameter types it carries were settled before it, by a pass whose contract is
+     * best effort: a parameter its body does not determine is left as it was, for the check below to
+     * report. So a state claiming they are settled would be claiming something no pass established —
+     * naming a pass that ran rather than a fact a reader may lean on. What is asserted here is the
+     * shape of the claim: the way in takes a definition and the symbols, and asks nothing about what
+     * the definition has been through.
+     */
+    @Test
+    void desugaringClaimsNothingAboutTheTypesADefinitionCarries() {
+        Hir.Module resolved = resolved("""
+                module m exposing ( Wrapped, go )
+
+                data Wrapped = Int
+
+                behavior go : (n: Int) -> Wrapped
+                    constructs Wrapped
+                let go (n) = wrap(n)
+                let wrap (n) = Wrapped(n)
+                """);
+        Symbols scope = TypeChecker.symbols(resolved);
+        Hir.FnDef unsettled = resolved.fns().stream()
+                .filter(f -> f.name().equals("wrap")).findFirst().orElseThrow();
+
+        assertTrue(unsettled.params().get(0).type() == null,
+                "the parameter is open, which is a definition this state admits");
+        Desugared.Fn desugared = Desugared.Fn.desugar(unsettled, scope);
+        assertEquals(0, applications(bodyOf(desugared.fn())),
+                "and its constructions are constructions all the same");
+    }
+
+    private static Hir.Expr bodyOf(Hir.FnDef fn) {
+        return fn.body() instanceof Hir.FnBody.Written written ? written.expr() : null;
     }
 
     /**

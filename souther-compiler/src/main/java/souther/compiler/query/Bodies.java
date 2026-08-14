@@ -221,14 +221,17 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, Sig>> compute(Db db) {
-            Answer<Hir.Module> desugared = db.ask(new Shapes.Desugared(name));
+            Answer<souther.compiler.check.Desugared.Module> desugared =
+                    db.ask(new Shapes.Desugared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
             if (!desugared.present() || !scope.present() || !imported.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(PipelineSigs.signatures(desugared.value(), scope.value(),
+                // What a behavior declares, which is what the module wrote — nothing this state says
+                // about its definitions is read here.
+                return Answer.of(PipelineSigs.signatures(desugared.value().tree(), scope.value(),
                         imported.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);

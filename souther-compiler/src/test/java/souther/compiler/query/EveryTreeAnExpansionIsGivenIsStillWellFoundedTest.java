@@ -97,12 +97,15 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         // about here is the tree it holds, which is a question about the payload and not about that.
         Answer<souther.compiler.check.Derived.Module> derived = db.ask(new Shapes.Derived(name));
         assertTrue(derived.present(), "derived of " + name + ": " + derived.reports());
-        stages.put("desugared", new Shapes.Desugared(name));
+        Answer<souther.compiler.check.Desugared.Module> desugared =
+                db.ask(new Shapes.Desugared(name));
+        assertTrue(desugared.present(), "desugared of " + name + ": " + desugared.reports());
         stages.put("prepared", new Shapes.Prepared(name));
         stages.put("settled", new Bodies.Settled(name));
         Map<String, Hir.Module> out = new LinkedHashMap<>();
         out.put("resolved", resolved.value());
         out.put("derived", derived.value().tree());
+        out.put("desugared", desugared.value().tree());
         stages.forEach((stage, key) -> {
             Answer<Hir.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());
