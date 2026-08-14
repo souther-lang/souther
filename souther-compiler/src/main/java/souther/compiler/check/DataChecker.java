@@ -579,15 +579,44 @@ public final class DataChecker {
         }
     }
 
+    /**
+     * Whether a codec is there to be reached for (spec {@code [#a-codec-reached-for-exists]}).
+     *
+     * <p>Read of the declaration and not of a node on it. A unit data carries no derived decoder — it
+     * has no field for one to read — and is decoded all the same, by the one its class is generated
+     * with, which ignores its input and answers the single value there is. Reading the node refused a
+     * field written from a unit data while the same type crossed a behavior's boundary, which is a
+     * disagreement about the compiler's representation rather than about the model.
+     *
+     * <p>Whose vocabulary the name is, is asked before this and elsewhere
+     * ({@code CrossingNominal}), so what is left here is the specification's other rule: a codec
+     * named where none was derived and none was given.
+     */
+    private static boolean hasDecoder(Hir.Def def) {
+        return switch (def) {
+            case Hir.Data d -> d.decoder().isPresent();
+            case Hir.SumData s -> s.decoder().isPresent();
+            case Hir.UnitData _ -> true;
+            case null -> false;
+        };
+    }
+
+    /** As {@link #hasDecoder}, for the other direction. */
+    private static boolean hasEncoder(Hir.Def def) {
+        return switch (def) {
+            case Hir.Data d -> d.encoder().isPresent();
+            case Hir.SumData s -> s.encoder().isPresent();
+            case Hir.UnitData _ -> true;
+            case null -> false;
+        };
+    }
+
     private static Type decRefType(Hir.DecRef ref, Symbols symbols) {
         return switch (ref) {
             case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
             case Hir.DataDecRef d -> {
-                Hir.Def def = symbols.declarations().declaration(d.typeName().denotes().key());
-                boolean hasDecoder = (def instanceof Hir.Data dd && dd.decoder().isPresent())
-                        || (def instanceof Hir.SumData s && s.decoder().isPresent());
-                if (!hasDecoder) {
+                if (!hasDecoder(symbols.declarations().declaration(d.typeName().denotes().key()))) {
                     throw CompileException.of(Diagnostic.at(d.pos())
                             .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
                             .build());
@@ -769,10 +798,8 @@ public final class DataChecker {
                 }
             }
             case Hir.EncodeRaw e -> {
-                Hir.Def encDef = ctx.symbols().declarations().declaration(e.typeName().denotes().key());
-                boolean hasEncoder = (encDef instanceof Hir.Data ed && ed.encoder().isPresent())
-                        || (encDef instanceof Hir.SumData sd && sd.encoder().isPresent());
-                if (!hasEncoder) {
+                if (!hasEncoder(ctx.symbols().declarations()
+                        .declaration(e.typeName().denotes().key()))) {
                     throw CompileException.of(Diagnostic.at(e.pos())
                             .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
                             .build());

@@ -1226,7 +1226,7 @@ public final class TypeOps {
      * given position is the position's own question — a behavior's boundary refuses a name the
      * language declares of its own operations, and a fixture's position asks something else again —
      * so what comes back says what the key converts through and nothing about where it may be
-     * written. A boundary turns one into a {@link BoundaryMapKey} once it has admitted the name.
+     * written. A boundary turns one into a {@link CrossingMapKey} once it has admitted the name.
      *
      * <p>The classification itself is this function's alone. A reader that builds a decoder, renders
      * an encoder's keys or lowers a key into the codec IR takes what it needs from the result; none
@@ -1314,22 +1314,6 @@ public final class TypeOps {
         };
     }
 
-
-    /**
-     * Whether {@code name} is a type a model declares, as against one the language declares of its own
-     * operations. The two are already told apart where construction is governed — what a compilation
-     * declares answers to {@code constructs} and the language's vocabulary does not — and the same
-     * line decides what a boundary may carry.
-     *
-     * <p>A primitive is neither: it is a scalar the boundary writes, with no declaration anywhere.
-     * {@code Raw} is spelled as one and answers no, having no declaration to be found.
-     */
-    static boolean declaredByAModel(TypeSymbol name, Symbols symbols) {
-        if (name.isPrimitive()) {
-            return !"Raw".equals(name.name());
-        }
-        return symbols.declarations().declaredByCompilation(name.key());
-    }
 
     public static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref

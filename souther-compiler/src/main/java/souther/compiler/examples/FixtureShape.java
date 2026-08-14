@@ -167,7 +167,7 @@ public sealed interface FixtureShape {
     }
 
     /** A key a boundary map carries, as the position a fixture writes it at. */
-    private static FixtureShape key(souther.compiler.check.BoundaryMapKey key) {
+    private static FixtureShape key(souther.compiler.check.CrossingMapKey key) {
         return switch (key.representation()) {
             case MapKeyRepresentation.Lexical l -> new Scalar(l.leaf());
             case MapKeyRepresentation.NamedKey n -> new Nominal(n.name());

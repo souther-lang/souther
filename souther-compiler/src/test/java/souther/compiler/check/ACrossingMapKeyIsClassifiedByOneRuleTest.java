@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Admitting a boundary Map key establishes what its text representation is, and that is what the
+ * Admitting a Map key where a representation crosses establishes what its text representation is, and that is what the
  * checker answers with: a witness, not a yes. Every reader that has to build a codec asks this one
  * rule which representation it has, rather than writing the kinds out again.
  *
@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * as a key in a signature admits a type variable, which the core's generic signatures are written
  * with; whether a concrete key can be converted does not, because a variable is evidence of nothing.
  */
-class ABoundaryMapKeyIsClassifiedByOneRuleTest {
+class ACrossingMapKeyIsClassifiedByOneRuleTest {
 
     private static final String MODULE = """
             module demo
