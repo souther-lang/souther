@@ -137,11 +137,15 @@ public final class Names {
     /**
      * A registry over this compilation, reading each module's declarations as they were derived.
      *
-     * <p>Where a derived declaration stops being one and becomes a node. What the derived stage
-     * answers with says that the constructions in what a declaration says are constructions; this
-     * hands over {@link Hir.Def}, because that is what a registry is over and what every check below
-     * reads. It is the seam the declaration world has yet to close, and it is here rather than
-     * anywhere a reader felt like unwrapping.
+     * <p>Where a derived declaration becomes a node, and the only place it does. What the derived
+     * stage answers with says that the constructions in what a declaration says are constructions;
+     * this hands over {@link Hir.Def}, and what settles that is the other source a reader is
+     * answered from rather than a step nobody has taken. {@link souther.compiler.check.Declarations}
+     * answers an identity from this registry and from the language's own vocabulary, and the
+     * prelude's declarations are loaded resolved and kept out of derivation — so there is no derived
+     * declaration for the second source to hand over, and the representation both can be in is the
+     * node. What says a reader is at the derived world is which query it asked: {@code Shapes.Scope}
+     * is built over this one and {@code Names.NameScope} over the resolved one.
      */
     static Registry<Hir.Def> derivedRegistry(Db db) {
         return new Registry<Hir.Def>() {

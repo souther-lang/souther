@@ -13,9 +13,13 @@ import java.util.Map;
  * identity and never a spelling, so nothing here has to know which module is being compiled. A
  * reader holding one of these has already resolved whatever it is asking about.
  *
- * <p>{@code D} is the representation the declarations are in. Everything below {@code Resolve} holds
- * {@link Hir}; {@code Resolve} reads the declarations of the modules it resolves against as they
- * were written, because a name written there is that module's to resolve and not this one's.
+ * <p>{@code D} is the representation the declarations are in, and a representation is all it is.
+ * Everything below {@code Resolve} holds {@link Hir}; {@code Resolve} reads the declarations of the
+ * modules it resolves against as they were written, because a name written there is that module's to
+ * resolve and not this one's. What {@code D} does not say is how far the declarations have got,
+ * because the two sources below have got different distances — the language's vocabulary is loaded
+ * resolved and derivation never runs over it — so a {@code D} naming a rung would be false of one of
+ * them. Which rung a reader is at is which of these it was handed.
  *
  * <p>Two sources, kept apart. {@link Registry} is what this compilation declares, read one
  * declaration at a time; the language's own vocabulary — the prelude's runtime-backed data — is

@@ -63,10 +63,12 @@ public final class Derived {
         /**
          * The node.
          *
-         * <p>The seam the declaration world has yet to close. {@link Registry} answers with
-         * {@link Hir.Def}, so the one reader outside this package unwraps here and every check below
-         * reads a node — which is the state this issue is taking apart, one level further down than
-         * it has reached. It stays public until the registry holds the family.
+         * <p>What a registry hands over, and what settles that is the second source it is read
+         * beside. {@link Declarations} answers an identity from the compilation's registry and from
+         * the language's own vocabulary, and the prelude's declarations are loaded resolved and kept
+         * out of derivation — so a vocabulary of these could only be made by claiming of a
+         * declaration nothing derived what deriving it would have established. The representation
+         * both sources can be in is the node, and this is where the compilation's side reaches it.
          */
         public Hir.Def read() {
             return def;
