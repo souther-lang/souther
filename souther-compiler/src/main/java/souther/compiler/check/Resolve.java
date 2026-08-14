@@ -18,7 +18,6 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
-import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
 
@@ -329,21 +328,21 @@ public final class Resolve {
         // Which names were answered is settled per declaration: what one of them writes is nothing
         // the one beside it wrote, and the names met while it was being read are its own.
         Map<String, OfDeclaration> declarations = new LinkedHashMap<>();
-        for (Ast.Def def : m.defs()) {
+        // What the module declares, rather than what its text writes. A second declaration of a name
+        // and a built-in case name are refused where declarations are indexed, and this pass is not
+        // where that is decided again: reading them here would mean answering for a declaration
+        // nothing else in the compilation has, which can only be done by making up an identity for
+        // it.
+        for (Map.Entry<TypeName, Ast.Def> declared : symbols.declaredHere().entrySet()) {
             int failedBefore = r.failed;
             int denotedBefore = r.denotations.size();
-            Hir.Def resolved = r.def(def);
+            Hir.Def resolved = r.def(declared.getKey(), declared.getValue());
             defs.add(resolved);
             Set<TypeName> reaches = new LinkedHashSet<>();
             for (TypeUse d : r.denotations.subList(denotedBefore, r.denotations.size())) {
                 reaches.add(d.denotes());
             }
-            // The first of a name is what the module declares and the second is reported and left
-            // out, which `TypeChecker.declared` settles and every stage reads from there. Whether a
-            // declaration came out is about the same one: read off the second, it answers about a
-            // declaration nothing else is holding, and the one the module has is told it has no
-            // meaning because of a mistake in the copy below it.
-            declarations.putIfAbsent(resolved.name(),
+            declarations.put(resolved.name(),
                     new OfDeclaration(r.failed == failedBefore, Set.copyOf(reaches)));
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
@@ -703,28 +702,9 @@ public final class Resolve {
 
     // --- definitions ---
 
-    /**
-     * The identity of a declaration this module wrote.
-     *
-     * <p>The scope this module is resolved against was built from what it declares, so for a
-     * declaration the module has, the answer is already there and is taken rather than made. For one
-     * it wrote and does not have, there is nothing to take: this pass meets it all the same, because
-     * it walks the text rather than the declarations, and gives it the identity its own two facts
-     * say it is.
-     */
-    private TypeName declaredHere(Ast.Def def) {
-        return symbols.scope().resolve(def.written()) instanceof Denotation.Denotes d
-                ? d.type() : TypeSymbols.declared(def.declaredKey());
-    }
-
-    private Hir.Def def(Ast.Def def) {
-        // Asked of the declaration world where it can answer, and minted where it cannot. This pass
-        // walks every declaration the module wrote; the index holds the ones the module has, which
-        // is fewer — a name declared twice keeps the first, `Some` and `None` are refused outright,
-        // and a module in an import cycle is indexed not at all. Reading the tree rather than the
-        // declarations it settled is #708's, and until that is done a lookup here would have
-        // nothing to answer with for the declarations this pass still meets.
-        TypeName declared = declaredHere(def);
+    /** {@code def} resolved as {@code declared}, which is the identity the module's declarations
+     * were indexed under and is handed in rather than worked out here. */
+    private Hir.Def def(TypeName declared, Ast.Def def) {
         owner = new BindingOwner.OfData(declared);
         return switch (def) {
             case Ast.UnitData u -> new Hir.UnitData(u.written(), declared, u.pos());

@@ -7,6 +7,7 @@ import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -27,11 +28,13 @@ import java.util.Set;
 public final class SyntaxSymbols implements NameSense {
 
     private final TypeScope scope;
+    private final Registry<Ast.Def> registry;
     private final Declarations<Ast.Def> declarations;
 
     private SyntaxSymbols(String module, Registry<Ast.Def> registry,
                           Map<String, Denotation> names, Map<String, String> aliases) {
         this.scope = new TypeScope(module, names, aliases, registry);
+        this.registry = registry;
         this.declarations = new Declarations<>(registry, Declarations.Vocabulary.ofNothing());
     }
 
@@ -66,6 +69,29 @@ public final class SyntaxSymbols implements NameSense {
     /** What an identity is a declaration of, as it was written. */
     public Declarations<Ast.Def> declarations() {
         return declarations;
+    }
+
+    /**
+     * The declarations this module has, each under the identity it is resolved as.
+     *
+     * <p>What {@code Resolve} reads, and the identity comes with the declaration because they are
+     * one fact. Not the declarations the source wrote: a name written twice keeps the first and a
+     * built-in case name is refused, both where declarations are indexed, and what is left is what
+     * the module declares. A source declaration the module does not have is not one of these, so
+     * nothing here has an identity to be resolved under that nothing else would answer with.
+     */
+    public Map<TypeName, Ast.Def> declaredHere() {
+        Map<TypeName, Ast.Def> declared = new LinkedHashMap<>();
+        for (Ast.Def def : registry.declaredIn(module()).values()) {
+            if (!(scope.resolve(def.written()) instanceof Denotation.Denotes denotes)) {
+                // The scope is built from these same declarations, so a module that declares a name
+                // and cannot say what it denotes is two answers to one question.
+                throw new IllegalStateException("`" + module() + "` declares `" + def.name()
+                        + "`, and the scope it is resolved against does not say what it denotes");
+            }
+            declared.put(denotes.type(), def);
+        }
+        return declared;
     }
 
     /** The module being resolved. */
