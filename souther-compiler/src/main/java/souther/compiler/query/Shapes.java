@@ -71,7 +71,7 @@ public final class Shapes {
             if (!expandable.present()) {
                 return Answer.absent();
             }
-            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
+            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
             if (!scope.present()) {
                 return Answer.absent();
             }
@@ -189,7 +189,7 @@ public final class Shapes {
         @Override
         public Answer<Map<String, souther.compiler.check.Derived.Def>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
+            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -281,7 +281,7 @@ public final class Shapes {
         @Override
         public Answer<Map<String, souther.compiler.check.Desugared.Fn>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.DERIVED);
+            Answer<Symbols> scope = db.ask(new Scope(name));
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -371,7 +371,7 @@ public final class Shapes {
 
         @Override
         public Answer<Symbols> compute(Db db) {
-            return Names.symbols(db, name, Names.Stage.DERIVED);
+            return Names.derivedSymbols(db, name);
         }
     }
 
@@ -392,7 +392,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
+            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -473,7 +473,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
+            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }

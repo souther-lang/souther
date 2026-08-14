@@ -61,53 +61,27 @@ public final class Names {
      * representation rather than an earlier stage of this one, and {@link #writtenRegistry} is what
      * answers with them — so a reader holding one of these cannot be handed a declaration nothing
      * has resolved. */
-    public enum Stage { RESOLVED, DERIVED }
-
     /**
-     * A registry over this compilation, reading each module's declarations at {@code stage}.
+     * A registry over this compilation, reading each module's declarations as resolution left them.
      *
-     * <p>Where a derived declaration stops being one and becomes a node. What the derived stage
-     * answers with says that the constructions in what a declaration says are constructions; this
-     * hands over {@link Hir.Def}, because that is what a registry is over and what every check below
-     * reads. It is the seam the declaration world has yet to close, and it is here rather than
-     * anywhere a reader felt like unwrapping.
+     * <p>One of the two declaration worlds a module can be read against, and which one a reader gets
+     * is which question it asked: this one answers {@link NameScope}, and the derived one answers
+     * {@link Shapes.Scope}. Neither is chosen by a value handed in — a reader that could pass which
+     * world it wanted is a reader that could pass the wrong one, and nothing in what it was holding
+     * would say so.
      */
-    public static Registry<Hir.Def> registry(Db db, Stage stage) {
+    static Registry<Hir.Def> resolvedRegistry(Db db) {
         return new Registry<Hir.Def>() {
             @Override
             public Hir.Def declaration(TypeKey address) {
-                return switch (stage) {
-                    case RESOLVED -> {
-                        Answer<Hir.Def> def = db.ask(new ResolvedDeclaration(address));
-                        yield def.present() ? def.value() : null;
-                    }
-                    case DERIVED -> {
-                        Answer<souther.compiler.check.Derived.Def> def =
-                                db.ask(new Shapes.DerivedDef(address));
-                        yield def.present() ? def.value().read() : null;
-                    }
-                };
+                Answer<Hir.Def> def = db.ask(new ResolvedDeclaration(address));
+                return def.present() ? def.value() : null;
             }
 
             @Override
             public Map<String, Hir.Def> declaredIn(String moduleName) {
-                return switch (stage) {
-                    case RESOLVED -> {
-                        Answer<Map<String, Hir.Def>> defs =
-                                db.ask(new ResolvedDeclarations(moduleName));
-                        yield defs.present() ? defs.value() : Map.of();
-                    }
-                    case DERIVED -> {
-                        Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
-                                db.ask(new Shapes.DerivedDeclarations(moduleName));
-                        if (!defs.present()) {
-                            yield Map.of();
-                        }
-                        Map<String, Hir.Def> out = new LinkedHashMap<>();
-                        defs.value().forEach((name, def) -> out.put(name, def.read()));
-                        yield Map.copyOf(out);
-                    }
-                };
+                Answer<Map<String, Hir.Def>> defs = db.ask(new ResolvedDeclarations(moduleName));
+                return defs.present() ? defs.value() : Map.of();
             }
 
             @Override
@@ -144,6 +118,50 @@ public final class Names {
             public Map<String, Ast.Def> declaredIn(String moduleName) {
                 Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(moduleName));
                 return defs.present() ? defs.value() : Map.of();
+            }
+
+            @Override
+            public Set<String> exposedBy(String moduleName) {
+                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                return exposed == null ? Set.of() : exposed;
+            }
+
+            @Override
+            public Set<String> moduleNames() {
+                Set<String> names = db.ask(new Front.ModuleNames()).value();
+                return names == null ? Set.of() : names;
+            }
+        };
+    }
+
+    /**
+     * A registry over this compilation, reading each module's declarations as they were derived.
+     *
+     * <p>Where a derived declaration stops being one and becomes a node. What the derived stage
+     * answers with says that the constructions in what a declaration says are constructions; this
+     * hands over {@link Hir.Def}, because that is what a registry is over and what every check below
+     * reads. It is the seam the declaration world has yet to close, and it is here rather than
+     * anywhere a reader felt like unwrapping.
+     */
+    static Registry<Hir.Def> derivedRegistry(Db db) {
+        return new Registry<Hir.Def>() {
+            @Override
+            public Hir.Def declaration(TypeKey address) {
+                Answer<souther.compiler.check.Derived.Def> def =
+                        db.ask(new Shapes.DerivedDef(address));
+                return def.present() ? def.value().read() : null;
+            }
+
+            @Override
+            public Map<String, Hir.Def> declaredIn(String moduleName) {
+                Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
+                        db.ask(new Shapes.DerivedDeclarations(moduleName));
+                if (!defs.present()) {
+                    return Map.of();
+                }
+                Map<String, Hir.Def> out = new LinkedHashMap<>();
+                defs.value().forEach((name, def) -> out.put(name, def.read()));
+                return Map.copyOf(out);
             }
 
             @Override
@@ -450,14 +468,25 @@ public final class Names {
         }
     }
 
-    /** What names mean in a module, over declarations at {@code stage}. */
-    static Answer<Symbols> symbols(Db db, String name, Stage stage) {
+    /** What names mean in a module, over the declaration world {@code registry} reads. */
+    private static Answer<Symbols> symbols(Db db, String name, Registry<Hir.Def> registry) {
         Answer<Imports.Of> imports = db.ask(new Imports(name));
         if (!imports.present()) {
             return Answer.absent();
         }
-        return Answer.of(Symbols.of(name, registry(db, stage), imports.value().scope(),
+        return Answer.of(Symbols.of(name, registry, imports.value().scope(),
                 imports.value().aliases()));
+    }
+
+    /** What names mean in a module over the declarations as resolution left them — what
+     * {@link NameScope} answers with, and what a reader asks for by asking that. */
+    static Answer<Symbols> resolvedSymbols(Db db, String name) {
+        return symbols(db, name, resolvedRegistry(db));
+    }
+
+    /** The same over the derived declarations — {@link Shapes.Scope}'s answer. */
+    static Answer<Symbols> derivedSymbols(Db db, String name) {
+        return symbols(db, name, derivedRegistry(db));
     }
 
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
@@ -481,7 +510,7 @@ public final class Names {
 
         @Override
         public Answer<Symbols> compute(Db db) {
-            return symbols(db, name, Stage.RESOLVED);
+            return resolvedSymbols(db, name);
         }
     }
 
