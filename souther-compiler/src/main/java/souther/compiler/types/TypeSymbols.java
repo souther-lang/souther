@@ -16,10 +16,13 @@ package souther.compiler.types;
  * <p>Two ways a declaration enters, and they are the whole of the list:
  *
  * <ul>
- *   <li>{@link #declared} — a module of this compilation wrote it. The implicit unit data a module
- *       only names comes in this way too: it is written into the tree while the source is parsed,
- *       so by the time declarations are indexed it is one of them. A module read off the path
- *       comes in this way as well, because its published text is parsed like any other source.</li>
+ *   <li>{@link #declared} — a declaration world says one is at this address. Nearly always a module
+ *       of this compilation wrote it: the implicit unit data a module only names comes in this way
+ *       too, because it is written into the tree while the source is parsed, and so does a module
+ *       read off the path, because its published text is parsed like any other source. An address
+ *       answered for by the language's own vocabulary comes in the same way, since which of the two
+ *       declared it is its own question and {@code Declarations.declaredByCompilation} is where it
+ *       is asked.</li>
  *   <li>{@link #ofLanguage} — the language declares it and no module does: a primitive standing in a
  *       union, {@code Option}'s two cases, the prelude's runtime-backed data.</li>
  * </ul>
@@ -36,11 +39,18 @@ public final class TypeSymbols {
     }
 
     /**
-     * The identity of a declaration a module of this compilation wrote.
+     * The identity of a declaration a declaration world has said is at this address.
      *
      * <p>Asked where declarations are indexed, which is the one place that has the declaration and
-     * the module that wrote it together. A reader that pairs a name with the module it happens to
-     * be compiling answers for a declaration here whatever the name came from.
+     * the module that wrote it together, and by the two {@code identify} calls, which have just been
+     * answered for the address by a registry or by the language's own vocabulary. A reader that pairs
+     * a name with the module it happens to be compiling answers for a declaration here whatever the
+     * name came from, which is why what may be handed to this is held from the source: a
+     * declaration's own key, or an address something was found at.
+     *
+     * <p>Which of the two worlds declared it is a separate question and has its own answer
+     * ({@code Declarations.declaredByCompilation}), because what a compilation may construct is
+     * governed by {@code constructs} and the language's vocabulary is not.
      */
     public static TypeSymbol declared(TypeKey key) {
         return new TypeSymbol(key.module(), key.name());

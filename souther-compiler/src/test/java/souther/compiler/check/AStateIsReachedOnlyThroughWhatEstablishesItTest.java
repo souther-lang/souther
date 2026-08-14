@@ -4,10 +4,15 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
 import souther.compiler.frontend.CstFrontend;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -225,6 +230,32 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(0, applications(clauseOf(List.of(Derived.Def.derive(amount, scope).read()),
                         "Amount")),
                 "and none is left as one afterwards");
+    }
+
+    /**
+     * And nothing the compiler does reads a state's payload instead of asking it.
+     *
+     * <p>{@code Prepared.tree}, {@code Derived.Module.tree} and {@code Desugared.Module.tree} are
+     * public and stay so: a test auditing what a module carries at each stage is asking about the
+     * tree, which is what those are for. What must not appear is a reader in the compiler, because
+     * one that writes {@code prepared.tree().behaviors()} has thrown the claim away rather than
+     * asked for the part — and the accessor beside it says nothing about which it did.
+     *
+     * <p>Held from the source and not from the API, because the accessor is not what is banned. The
+     * failure is a production reader choosing the payload, and the moment to decide against it is
+     * the change that adds one.
+     */
+    @Test
+    void noReaderInTheCompilerTakesAStatesPayloadInsteadOfItsParts() throws IOException {
+        List<String> reading = new ArrayList<>();
+        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            String text = Files.readString(source);
+            if (text.contains(".tree()")) {
+                reading.add(String.valueOf(source.getFileName()));
+            }
+        }
+        assertEquals(List.of(), reading,
+                "a state answers the part a reader wants; ask it for that rather than for the tree");
     }
 
     /**
