@@ -33,6 +33,7 @@
         <module>souther-runtime</module>
         <module>souther-syntax</module>
         <module>souther-compiler</module>
+        <module>souther-build-driver</module>
         <module>souther-fmt</module>
         <module>souther-lsp</module>
         <module>souther-cli</module>
@@ -64,6 +65,11 @@
              twenty-six, which is too much to spend on every compile while writing code. So a
              development build runs the gate, and the `lint` profile below runs the rest. -->
         <errorprone.checks>-XepDisableAllChecks</errorprone.checks>
+        <!-- The build protocol souther-build-driver implements. Not this project's version and not
+             tracked to it: it moves when the interface between a build plugin and a driver moves,
+             which is why it is released from souther-lang/souther-build-api and named here like any
+             other outside dependency. -->
+        <souther.build.api.version>1.0.0</souther.build.api.version>
         <junit.version>6.1.2</junit.version>
         <!-- A JVM per two cores. Named here so -DforkCount=N reaches it: a literal in the plugin's
              configuration outranks the property surefire declares, so the override the comment
@@ -95,6 +101,11 @@
                 <groupId>org.jspecify</groupId>
                 <artifactId>jspecify</artifactId>
                 <version>${jspecify.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.souther-lang</groupId>
+                <artifactId>souther-build-api</artifactId>
+                <version>${souther.build.api.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.souther-lang</groupId>
