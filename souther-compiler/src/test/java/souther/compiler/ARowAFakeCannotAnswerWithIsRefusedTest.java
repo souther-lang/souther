@@ -184,6 +184,36 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                 "which row answers is decided by the table's rule, so this is refused rather than measured");
     }
 
+    /**
+     * Nothing of an unreachable row is built, so nothing about what it answers can be reported in
+     * place of the row being unreachable. A dead row whose output breaks the invariant it is built
+     * against would otherwise be the table refused for a row that is not part of it (E1908), and a
+     * dead row whose output is slow would be a warning that the table could not be read (E1921) —
+     * a rule that decides what compiles losing to one that decides what a build is told.
+     */
+    @Test
+    void whatAnUnreachableRowAnswersIsNotBuilt() {
+        String source = model("""
+                fake findMember
+                    | (MemberId("m-1")) -> Found { id = MemberId("m-1") }
+                    | (MemberId("m-1")) -> Missing { why = String.repeat("x", 0 - 1) }
+                """, "Placed { by = MemberId(\"m-1\") }");
+
+        List<Diagnostic> said = diagnosticsOf(source);
+
+        assertEquals(List.of("E1926"), said.stream().map(Diagnostic::code).toList(),
+                "the row is unreachable, and what it would have answered was never asked for");
+
+        String reachable = model("""
+                fake findMember
+                    | (MemberId("m-1")) -> Missing { why = String.repeat("x", 0 - 1) }
+                """, "Refused { why = \"\" }");
+
+        assertTrue(diagnosticsOf(reachable).stream().anyMatch(d -> "E1908".equals(d.code())),
+                "and the same output in a row the table can reach is the error it is: "
+                        + diagnosticsOf(reachable));
+    }
+
     // --- what is not ---------------------------------------------------------------------------
 
     @Test
