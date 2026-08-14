@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
@@ -152,21 +153,34 @@ class CompileConstructionInInvariantTest {
         assertInstanceOf(InvariantMessage.TheInvariantConstructsAData.class, e.diagnostic().said());
     }
 
-    /** The construction and the clause that reaches it are two places, so the diagnostic carries
-     *  both: the error where the data is built, the clause labelled where the rule is written. */
+    /**
+     * The construction and the clause that reaches it are two places, so the diagnostic carries
+     * both: the error where the data is built, the clause labelled where the rule is written.
+     *
+     * <p>The label covers the clause, which the clause has held since it was parsed. A marker at the
+     * one point the clause is anchored at leaves a reader looking for what about that line the
+     * report means, on a line the report is about the whole of.
+     */
     @Test
     void theClauseIsLabelledWhereItIsWritten() {
-        CompileException e = err("""
+        String source = """
                 module m
                 data Yen = Int invariant value >= 0
                 let atLeastZero (x: Int): Bool = Yen(0).value <= x
                 data Table = Int
                     invariant ok = atLeastZero(value)
-                """);
+                """;
+        CompileException e = err(source);
         assertEquals(1, e.diagnostic().secondary().size());
         assertInstanceOf(InvariantMessage.TheClauseReachesThatConstruction.class,
                 e.diagnostic().secondary().get(0).said());
-        assertEquals(5, e.diagnostic().secondary().get(0).region().start().line());
+
+        Region marked = e.diagnostic().secondary().get(0).region();
+        assertEquals(5, marked.start().line());
+        assertEquals("invariant ok = atLeastZero(value)",
+                source.split("\n", -1)[marked.start().line() - 1]
+                        .substring(marked.start().column() - 1, marked.end().column() - 1),
+                "the clause as it was written, and not the point it is anchored at");
     }
 
     /**

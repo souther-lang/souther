@@ -7,7 +7,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.InvariantMessage;
-import souther.compiler.diag.Region;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
@@ -415,8 +415,8 @@ public final class HelperTyping {
                             ? new InvariantMessage.TheInvariantConstructsAData(data, constructed)
                             : new InvariantMessage.TheNamedClauseConstructsAData(data, constructed,
                                     named));
-            if (nd.pos().line() != clause.pos().line()) {
-                b.secondary(Region.point(clause.pos()),
+            if (!onOneLine(nd.pos(), clause.pos())) {
+                b.secondary(clause.reportedAt(),
                         named == null
                                 ? new InvariantMessage.ThisClauseReachesThatConstruction()
                                 : new InvariantMessage.TheClauseReachesThatConstruction(named));
@@ -424,6 +424,19 @@ public final class HelperTyping {
             throw CompileException.of(b.build());
         }
         TypeChecker.forEachChild(e, c -> rejectConstructionInInvariant(c, data, clause));
+    }
+
+    /**
+     * Whether two places are the one line a reader is being shown.
+     *
+     * <p>A line number on its own is not a place. Line 10 of the file a helper is written in and line
+     * 10 of the file the declaration is in are two lines, and reading the numbers alone drops the
+     * second marker from a report whose whole point is that the two are far apart. A position that
+     * was read from no source is nowhere and shares a line with nothing.
+     */
+    private static boolean onOneLine(SourcePos here, SourcePos there) {
+        return here.sourceId() != null && here.sourceId().equals(there.sourceId())
+                && here.line() == there.line();
     }
 
     /**
