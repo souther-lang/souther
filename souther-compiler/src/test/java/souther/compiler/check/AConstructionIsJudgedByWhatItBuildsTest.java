@@ -148,6 +148,37 @@ class AConstructionIsJudgedByWhatItBuildsTest {
                 """.formatted(constructs == null ? "" : "Money,", body));
     }
 
+    /**
+     * A value opened is judged as a value chosen is.
+     *
+     * <p>Two ways of writing one choice: a {@code match} over a sum, and an {@code if} over what
+     * decides it. The check named the second and not the first, so a construction over what a
+     * {@code match} answered was left to the run-time check while the same construction over an
+     * {@code if} was reported — the same spelling difference this issue is about, at another node.
+     */
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {
+            "match i.s with | A -> i.n | B -> 0 - i.n",
+            "if i.flag then i.n else 0 - i.n",
+    })
+    void aChoiceIsJudgedHoweverItIsWritten(String chosen) {
+        reads(Verdict.UNKNOWN, """
+                module demo
+
+                data A
+                data B
+                data S = A | B
+                data In = { s: S, flag: Bool, n: Int }
+
+                data NonNeg = Int
+                    invariant nonNegative = value >= 0
+
+                behavior make : (i: In) -> NonNeg
+                    constructs NonNeg
+                let make (i) = NonNeg(%s)
+                """.formatted(chosen));
+    }
+
     /** A construction the values themselves refute is refuted whichever way it is written. */
     @Test
     void aRefutedConstructionIsRefutedInEitherSpelling() {

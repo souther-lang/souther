@@ -122,24 +122,30 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
     }
 
     /**
-     * A link's term is told apart from every other link's by its hash alone.
+     * This chain does not hash into one bucket.
      *
-     * <p>Which is what a term being held in a map asks of it. A term reading one part twice folds
-     * that part in twice, so a chain of them multiplies the hash it carries up by a fixed amount at
-     * every link; where that amount is a power of two, the bits of a level's own hash are gone a few
-     * links later and every link from there hashes alike. Nothing about the terms says so — they are
-     * distinct, they compare distinct, and the map holding them turns into a list, so a chain of a
-     * thousand links takes what a chain of a hundred took cubed.
+     * <p>Not a law about hashing. Two values may share a hash and nothing is wrong; what is held is
+     * that <em>this family</em> does not collapse, because it is the family the sharing exists for
+     * and it collapsed. A term reading one part twice folds that part in twice, so a chain of them
+     * multiplies the hash it carries up by a fixed amount per link, and with a multiplier of 31 that
+     * amount is thirty-two — two to the fifth, so seven links shift a level's own hash out and every
+     * link past that hashes alike. Nothing about the terms says so: they are distinct, they compare
+     * distinct, and only the table holding them turns into a list. A thousand links took 8.7 seconds
+     * where a hundred took 20 milliseconds.
+     *
+     * <p>Held as a spread and not as a time, since a time is a fact about the machine. A mixing that
+     * ties a few of these together is not this defect; one that ties most of them together is.
      */
     @Test
-    void eachLinkHashesApartFromTheOthers() {
-        List<Term> along = chain(new Terms(Symbols.none()), 64);
+    void theChainDoesNotHashIntoOneBucket() {
+        List<Term> along = chain(new Terms(Symbols.none()), 1000);
         java.util.Set<Term> terms = new java.util.HashSet<>(along);
         java.util.Set<Integer> hashes = new java.util.HashSet<>();
         along.forEach(term -> hashes.add(term.hashCode()));
 
-        assertEquals(65, terms.size(), "sixty-five links are sixty-five terms");
-        assertEquals(terms.size(), hashes.size(), "and each is hashed apart from the rest");
+        assertEquals(1001, terms.size(), "a thousand links are a thousand terms");
+        assertTrue(hashes.size() > terms.size() * 0.9,
+                "and they are spread over hashes: " + hashes.size() + " of " + terms.size());
     }
 
     /**

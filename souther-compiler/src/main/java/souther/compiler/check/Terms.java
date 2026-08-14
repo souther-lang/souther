@@ -65,6 +65,16 @@ final class Terms {
         this.symbols = symbols;
     }
 
+    /**
+     * Where a test in this package reads the shapes this had no term for, and null everywhere else.
+     *
+     * <p>Beside {@link InvariantChecker#WATCHING} and for the same reason. A shape with no term is
+     * silent, and silence is what a value nothing can be said of produces as well — so the difference
+     * between this compiler being unfinished and a value being unnameable has nowhere else to be
+     * read, and a difference nothing can read stops being true without anything failing.
+     */
+    static List<String> UNSUPPORTED;
+
     /** The operator {@code e} is, where it is a library call written as a function, or {@code e}
      * itself. Reading it as the operator is what puts it on the one path the operator already has,
      * rather than on a second path that would have to be kept saying the same thing. */
@@ -469,18 +479,40 @@ final class Terms {
      * {@code null}, and the clause reading it is left opaque.
      */
     private Term termKey(Core raw, Denotations at, Map<BindingId, Term> bound, int depth) {
+        return naming(raw, at, bound, depth).term();
+    }
+
+    /**
+     * What {@code raw} is called, or why it is called nothing.
+     *
+     * <p>Exhaustive over {@link Core} and carrying no default: a shape added to the language is a
+     * compile error here rather than a value the check silently has nothing to say about. Which is
+     * what the shapes below were — a call this reading kept standing fell through to nothing, so a
+     * construction over one was left to the run-time check while the same construction over the same
+     * helper expanded into the body was reported (#722).
+     *
+     * <p>A value is named by what computes it, where what computes it is a function of named parts.
+     * So the parts decide most of this, and what decides the rest is what is being called: a module's
+     * own helper is pure, the language's own operations are, and what an injected behavior answers is
+     * not. That a call is still standing here is not one of the questions — whether a helper was
+     * expanded into this body is a fact about the reading, not about the value it answers.
+     */
+    private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth) {
         Core e = asOperator(raw);
         BindingId root = rootBinding(e);
         if (root != null) {
             Term here = bound.get(root);
-            return here != null ? interned.on(here, chainOf(e)) : pathKey(e, at);
+            return here != null ? new Naming.Named(interned.on(here, chainOf(e)))
+                    : Naming.of(pathKey(e, at), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
-            case Core.Int i -> interned.written(i.value());
-            case Core.Decimal d -> interned.written(d.value());
-            case Core.Str str -> interned.written(str.value());
-            case Core.Bool b -> interned.written(b.value());
-            case Core.UnitValue u -> interned.unit(u.data());
+            case Core.Read _, Core.FieldAccess _ ->
+                    Naming.of(pathKey(e, at), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
+            case Core.Int i -> new Naming.Named(interned.written(i.value()));
+            case Core.Decimal d -> new Naming.Named(interned.written(d.value()));
+            case Core.Str str -> new Naming.Named(interned.written(str.value()));
+            case Core.Bool b -> new Naming.Named(interned.written(b.value()));
+            case Core.UnitValue u -> new Naming.Named(interned.unit(u.data()));
             case Core.Neg n -> over(List.of(n.operand()), at, bound, depth,
                     ps -> interned.negated(ps.get(0)));
             case Core.Binary b -> over(List.of(b.left(), b.right()), at, bound, depth,
@@ -491,16 +523,22 @@ final class Terms {
                     ps -> interned.part(ps.get(0), g.index()));
             case Core.If iff -> over(List.of(iff.cond(), iff.then(), iff.els()), at, bound, depth,
                     ps -> interned.choice(ps.get(0), ps.get(1), ps.get(2)));
+            case Core.OptionSome s -> over(List.of(s.value()), at, bound, depth,
+                    ps -> interned.some(ps.get(0)));
+            case Core.OptionNone none -> new Naming.Named(interned.none(none.type()));
             case Core.Block b -> {
                 Map<BindingId, Term> inner = binding(bound, b.params(), depth);
-                Term body = termKey(b.body(), at, inner, depth + 1);
-                yield body == null ? null : interned.closure(b.params().size(), body);
+                yield named(naming(b.body(), at, inner, depth + 1),
+                        body -> interned.closure(b.params().size(), body));
             }
             case Core.LetIn li -> {
-                Term value = termKey(li.value(), at, bound, depth);
+                Naming value = naming(li.value(), at, bound, depth);
+                if (value instanceof Naming.Unnamed absent) {
+                    yield absent;
+                }
                 Map<BindingId, Term> inner = binding(bound, List.of(li.binder()), depth);
-                Term body = termKey(li.body(), at, inner, depth + 1);
-                yield value == null || body == null ? null : interned.let(value, body);
+                yield named(naming(li.body(), at, inner, depth + 1),
+                        body -> interned.let(value.term(), body));
             }
             // A construction is a pure function of its fields, and a closure that builds one is what a
             // mapping usually is. The fields are held in declaration order, so two sites writing them
@@ -509,28 +547,127 @@ final class Terms {
                     at, bound, depth,
                     ps -> interned.built(nd.typeName(),
                             nd.values().stream().map(Core.FieldValue::field).toList(), ps));
-            // Only the operations the representation kept standing: they are the library\'s own, so
-            // they are pure and one written call is one value. A size taken of a container is one of
-            // these, built by the same call this builds, so a clause\'s size and a guard\'s size are
-            // one term rather than two spellings that meet.
+            case Core.Match m -> {
+                List<Core> arms = new ArrayList<>();
+                arms.add(m.scrutinee());
+                Map<BindingId, Term> outer = bound;
+                List<Naming> answers = new ArrayList<>();
+                for (Core.Case arm : m.cases()) {
+                    Map<BindingId, Term> inner = arm.binding() == null ? outer
+                            : binding(outer, List.of(arm.binding()), depth);
+                    answers.add(naming(arm.body(), at, inner, depth + 1));
+                }
+                Naming scrutinee = naming(m.scrutinee(), at, bound, depth);
+                yield joined(scrutinee, answers,
+                        parts -> interned.matched(parts.get(0),
+                                m.cases().stream().map(Core.Case::caseTypes).toList(),
+                                parts.subList(1, parts.size())));
+            }
+            case Core.IfConstructed ic -> {
+                Naming built = naming(ic.construct(), at, bound, depth);
+                Map<BindingId, Term> inner = binding(bound, List.of(ic.binder()), depth);
+                List<Naming> answers = new ArrayList<>();
+                answers.add(naming(ic.then(), at, inner, depth + 1));
+                for (Core.ElseArm arm : ic.els()) {
+                    answers.add(naming(arm.body(), at, bound, depth));
+                }
+                yield joined(built, answers,
+                        parts -> interned.attempted(parts.get(0),
+                                ic.els().stream().map(arm -> arm.clause().orElse("")).toList(),
+                                parts.subList(1, parts.size())));
+            }
+            // What the language's own operations answer, and what a module's own helper answers, are
+            // functions of what they were given: the first because the language defines them, the
+            // second because a helper is pure (spec §fn-rules). What an injected behavior answers is
+            // neither, and a call to one is named by nothing.
             case Core.PreservedCall c -> over(c.args(), at, bound, depth,
                     ps -> interned.called(c.operation(), ps));
-            default -> null;
+            case Core.Call c -> switch (c.fn()) {
+                case Core.Reached reached -> callNaming(reached.denotes()) instanceof Naming.Unnamed absent
+                        ? absent
+                        : over(c.args(), at, bound, depth,
+                                ps -> interned.called(reached.denotes(), ps));
+                // A walk this compiler minted for a shape the backend lowers as a whole. The reading
+                // this check is given keeps no such call, so one arriving is a pass having run over a
+                // tree it was not written for rather than a value nothing can be said of.
+                case Core.Emitted emitted -> unsupported(emitted.rendered());
+            };
+            case Core.Apply _ -> new Naming.Opaque(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED);
+            case Core.Unreachable _ -> new Naming.Opaque(Naming.Reason.NOTHING_IS_ANSWERED);
         };
     }
 
+    /**
+     * Whether a call to {@code callee} answers a value two writings of the call share.
+     *
+     * <p>Asked of what the name was resolved to and of nothing else. A module's own helper is pure
+     * and total, a value definition's body obeys a helper's rules, and the language's own operations
+     * are what the language says they are — so a call to any of them answers one value wherever it is
+     * written with the same arguments. Whether the reading this check is given expanded that helper
+     * into the body is a fact about the reading and not about the value, which is why it is not asked
+     * here: a helper that recurses is left standing and a helper that does not is expanded, and the
+     * two answer the same question about the same call.
+     *
+     * <p>What a behavior answered is named by nothing (spec §invariant-discharge-terms). An injected
+     * one could not be: its implementation is outside the language and may read the outside world, so
+     * two asks are two answers. What is applied through a binding is the same — the binding may hold
+     * an injected behavior, and what it holds is not a question about the name.
+     */
+    private Naming callNaming(ValueName callee) {
+        return switch (callee) {
+            case ValueName.Behavior _ -> new Naming.Opaque(Naming.Reason.A_BEHAVIOR_ANSWERED);
+            case ValueName.Local _ ->
+                    new Naming.Opaque(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED);
+            case ValueName.Helper _, ValueName.Stdlib _, ValueName.Builtin _, ValueName.OfType _ ->
+                    new Naming.Named(null);
+        };
+    }
+
+    /** A shape this has no term for, recorded where a test can read that it happened. */
+    private static Naming unsupported(String form) {
+        List<String> watching = UNSUPPORTED;
+        if (watching != null) {
+            watching.add(form);
+        }
+        return new Naming.Unsupported(form);
+    }
+
+    /** {@code made} of what {@code first} and {@code rest} name, or the first of them that names
+     * nothing. */
+    private Naming joined(Naming first, List<Naming> rest,
+                          java.util.function.Function<List<Term>, Term> made) {
+        List<Term> terms = new ArrayList<>();
+        if (first instanceof Naming.Unnamed absent) {
+            return absent;
+        }
+        terms.add(first.term());
+        for (Naming one : rest) {
+            if (one instanceof Naming.Unnamed absent) {
+                return absent;
+            }
+            terms.add(one.term());
+        }
+        return new Naming.Named(made.apply(terms));
+    }
+
+    /** {@code made} of what {@code naming} names, or why it names nothing. */
+    private Naming named(Naming naming, java.util.function.UnaryOperator<Term> made) {
+        return naming instanceof Naming.Unnamed absent ? absent
+                : new Naming.Named(made.apply(naming.term()));
+    }
+
     /** {@code made} of the terms {@code parts} are, or null where any of them is named by nothing. */
-    private Term over(List<Core> parts, Denotations at, Map<BindingId, Term> bound, int depth,
-                      java.util.function.Function<List<Term>, Term> made) {
+    private Naming over(List<Core> parts, Denotations at, Map<BindingId, Term> bound, int depth,
+                        java.util.function.Function<List<Term>, Term> made) {
         List<Term> terms = new ArrayList<>();
         for (Core part : parts) {
-            Term term = termKey(part, at, bound, depth);
-            if (term == null) {
-                return null;
+            Naming one = naming(part, at, bound, depth);
+            if (one instanceof Naming.Unnamed absent) {
+                return absent;
             }
-            terms.add(term);
+            terms.add(one.term());
         }
-        return made.apply(terms);
+        return new Naming.Named(made.apply(terms));
     }
 
     /** {@code bound} with each of {@code binders} keyed by where it is bound rather than by which
@@ -614,10 +751,11 @@ final class Terms {
         if (located != null) {
             return new Denotes.At(located);
         }
-        Term term = bodyKey(e, at);
-        if (term == null) {
-            return new Denotes.Nothing();
+        Naming named = naming(e, at, Map.of(), 0);
+        if (named instanceof Naming.Unnamed absent) {
+            return new Denotes.Nothing(absent);
         }
+        Term term = named.term();
         // Readable where there is something to say of it: a form the numeric domain built, or a rule
         // about how it was made. This is asked of the expression, so a name for it answers the same.
         return new Denotes.Computed(term, affineOf(e, at, k) != null || namedByRule(e, at));

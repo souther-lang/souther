@@ -66,8 +66,16 @@ final class Term {
         LET,
         /** A construction, over the values its fields are given in declaration order. */
         BUILT,
-        /** A call the representation kept standing, over its arguments. */
-        CALLED
+        /** A call, over its arguments. */
+        CALLED,
+        /** A value given to an optional position. */
+        SOME,
+        /** The empty optional, at the type of the position it fills. */
+        NONE,
+        /** A value opened, over the scrutinee and each arm's body. */
+        MATCHED,
+        /** An attempted construction, over what it builds and what each of its departures answers. */
+        ATTEMPTED
     }
 
     /** What a shape holds beside its parts: a location, a written value, an operator, the name of an
@@ -172,6 +180,10 @@ final class Term {
                 sb.append('}');
             }
             case CALLED -> joined(sb.append(((ValueName) of).name()).append('('), ", ").append(')');
+            case SOME -> sb.append("Some(").append(parts.get(0).rendered()).append(')');
+            case NONE -> sb.append("None:").append(of);
+            case MATCHED -> joined(sb.append("match("), ", ").append(')');
+            case ATTEMPTED -> joined(sb.append("attempt("), ", ").append(')');
         }
         return sb.toString();
     }
@@ -366,6 +378,35 @@ final class Term {
         Term calledIfBuilt(ValueName operation, List<Term> args) {
             Term made = new Term(Shape.CALLED, operation, args);
             return shared.containsKey(made) ? made : null;
+        }
+
+        /** A value given to an optional position. */
+        Term some(Term value) {
+            return of(Shape.SOME, null, List.of(value));
+        }
+
+        /** The empty optional. Held at the type of the position, since the absent value of one
+         * optional is not the absent value of another. */
+        Term none(souther.compiler.types.Type type) {
+            return of(Shape.NONE, type, List.of());
+        }
+
+        /** A value opened: the scrutinee, and what each arm answers, under the cases that arm takes.
+         * An arm's binding is a parameter of the arm, keyed by where it is bound as a closure's is. */
+        Term matched(Term scrutinee, List<List<TypeSymbol>> cases, List<Term> arms) {
+            List<Term> parts = new ArrayList<>();
+            parts.add(scrutinee);
+            parts.addAll(arms);
+            return of(Shape.MATCHED, List.copyOf(cases), parts);
+        }
+
+        /** An attempted construction: what it builds, what its success answers, and what each of its
+         * departures answers, under the clauses those departures name. */
+        Term attempted(Term built, List<String> clauses, List<Term> answers) {
+            List<Term> parts = new ArrayList<>();
+            parts.add(built);
+            parts.addAll(answers);
+            return of(Shape.ATTEMPTED, List.copyOf(clauses), parts);
         }
 
         /** How many distinct terms this has been asked for — what a test measuring the sharing

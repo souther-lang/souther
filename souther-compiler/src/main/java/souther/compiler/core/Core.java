@@ -86,8 +86,18 @@ public sealed interface Core {
         String rendered();
     }
 
-    /** A callee some module named, under the name that module reaches it by. */
-    record Reached(ReachName name) implements CallTarget {
+    /**
+     * A callee some module named: the name that module reaches it by, and what that name was
+     * resolved to.
+     *
+     * <p>Both, because they answer different questions and neither is derived from the other. The
+     * backend emits the method the reach name spells; a reader asking what kind of thing was called —
+     * a module's own helper, one of the language's operations, a behavior whose implementation comes
+     * from outside — asks what the name denotes. Working the second out of the first would be
+     * resolving a name this compiler resolved already, and a bare spelling reaches a helper and an
+     * injected behavior alike.
+     */
+    record Reached(ReachName name, ValueName denotes) implements CallTarget {
 
         @Override
         public String rendered() {
@@ -148,9 +158,9 @@ public sealed interface Core {
      */
     record Call(CallTarget fn, List<Core> args, Type type, SourcePos pos) implements Core {
 
-        /** A call to a name, as the name it reaches. */
-        public Call(ReachName fn, List<Core> args, Type type, SourcePos pos) {
-            this(new Reached(fn), args, type, pos);
+        /** A call to a name, as the name it reaches and what that name denotes. */
+        public Call(ReachName fn, ValueName denotes, List<Core> args, Type type, SourcePos pos) {
+            this(new Reached(fn, denotes), args, type, pos);
         }
 
         /** The callee as it renders — the reach name for a call to one, the operation's own
