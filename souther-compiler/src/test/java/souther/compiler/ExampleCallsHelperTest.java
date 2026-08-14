@@ -397,13 +397,13 @@ class ExampleCallsHelperTest {
             """;
 
     /**
-     * A library function whose parameter type is decided by each call is refused for that, whether it
-     * is an intrinsic or written in Souther. The rule is the fixture's and reads the declaration, so
-     * how the function is compiled does not enter (#692).
+     * A row applying a polymorphic library function is applied at the one instance its arguments
+     * determine: {@code [ 1, 2 ]} settles {@code 'a := Int}, so what the row runs is
+     * {@code List.length} at that instance and nothing about the call is left for a caller to decide.
      */
     @Test
-    void aPolymorphicIntrinsicIsRefusedForItsTypeVariable() {
-        CompileException e = err("""
+    void aRowSettlesAKernelsTypeVariablesFromTheArgumentsItWrote() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 data Amount = Int
@@ -416,11 +416,28 @@ class ExampleCallsHelperTest {
 
                 example bill
                   | (Amount(List.length([ 1, 2 ]))) -> Receipt { total = Amount(2) }
+                """));
+    }
+
+    /** And what it answers with is the kernel's answer, not a number the row was let state for
+     * itself: the instance runs, and a row expecting another number reports the disagreement. */
+    @Test
+    void aRowApplyingASettledKernelStillCatchesAMismatch() {
+        CompileException e = err("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+
+                example bill
+                  | (Amount(List.length([ 1, 2 ]))) -> Receipt { total = Amount(3) }
                 """);
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("decided by each call"),
-                "the type variable is the reason, not how `List.length` is compiled: " + e.getMessage());
-        assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
+        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
     }
 
     /**
@@ -446,12 +463,73 @@ class ExampleCallsHelperTest {
         assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
     }
 
+    /**
+     * A call the row's arguments do not settle is refused for the variable that stayed open, and not
+     * for the declaration being written with one. What the row wrote is what settles a call, so what
+     * it is told is which variable nothing it wrote settled.
+     */
     @Test
-    void aHelperWhoseElementEachCallDecidesCannotBuildAFixture() {
-        // `count` compiles and runs at every element type, but a fixture is built before
-        // there is a call to say which one — so the row is refused for the order, not for the type
-        // being one the compiler does not support.
+    void aRowIsRefusedForTheVariableItsArgumentsLeftOpen() {
         CompileException e = err("""
+                module demo
+
+                behavior echo : (b: Bool) -> Bool
+
+                let echo (b) = b
+
+                example echo
+                  | (List.isEmpty([ ])) -> true
+                """);
+        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
+        assertTrue(e.getMessage().contains("'a"),
+                "the report names the variable that stayed open: " + e.getMessage());
+        assertTrue(!e.getMessage().contains("decided by each call"),
+                "a declaration being polymorphic is not the reason: " + e.getMessage());
+    }
+
+    /** And the same kernel with an element written for it is applied. The two rows differ in what
+     * the row wrote, which is what the rule is about. */
+    @Test
+    void aRowThatWroteAnElementAppliesTheSameKernel() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                behavior echo : (b: Bool) -> Bool
+
+                let echo (b) = b
+
+                example echo
+                  | (List.isEmpty([ 1 ])) -> false
+                """));
+    }
+
+    /**
+     * A kernel whose lowering reads the type it is applied at is applied too: {@code List.sum}
+     * chooses between summing {@code Int} and summing {@code Decimal} by what it is summing, and the
+     * method emitted for the row is written at the instance the row settled, so there is something
+     * for it to choose by.
+     */
+    @Test
+    void aRowAppliesAKernelWhoseLoweringReadsTheTypeItIsAppliedAt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Amount = Int
+
+                behavior billed : (a: Amount) -> Amount
+
+                let billed (a) = a
+
+                example billed
+                  | (Amount(List.sum([ 1, 2 ]))) -> Amount(3)
+                """));
+    }
+
+    /** A helper written in Souther is settled by the same rule as a kernel: {@code count} runs at
+     * every element type, and the row wrote which one. */
+    @Test
+    void aHelperWhoseElementTheRowDecidesIsAppliedAtThatElement() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 data Amount = Int
@@ -465,10 +543,7 @@ class ExampleCallsHelperTest {
 
                 example bill
                   | (Amount(count([ 1, 2 ]))) -> Receipt { total = Amount(2) }
-                """);
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("decided by each call"),
-                "the report says why a call works where a fixture does not: " + e.getMessage());
+                """));
     }
 
     @Test

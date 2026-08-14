@@ -809,10 +809,18 @@ public final class Bodies {
         public Answer<Set<String>> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<Map<String, Hir.FnDef>> helpers = db.ask(new ModuleDefinitions(name));
-            if (!settled.present() || !helpers.present()) {
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            if (!settled.present() || !helpers.present() || !scope.present()) {
                 return Answer.absent();
             }
-            return Answer.of(HelperInliner.exampleHelpers(settled.value(), helpers.value()));
+            Set<String> emitted =
+                    new LinkedHashSet<>(HelperInliner.exampleHelpers(settled.value(), helpers.value()));
+            // The kernels too, under the names their methods are emitted with: this set is what
+            // decides which fns survive lowering, and what has to survive for a kernel is the method
+            // written for the instance the row settled.
+            emitted.addAll(HelperInliner.fixtureKernels(
+                    settled.value(), helpers.value(), scope.value()).keySet());
+            return Answer.of(emitted);
         }
     }
 

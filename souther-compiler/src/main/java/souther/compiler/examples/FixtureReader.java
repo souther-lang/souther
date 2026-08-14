@@ -3,7 +3,9 @@ package souther.compiler.examples;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CallElaborator;
-import souther.compiler.check.HelperInliner;
+import souther.compiler.check.FixtureApplication;
+import souther.compiler.check.FixtureArgumentTypes;
+import souther.compiler.check.FixtureCallable;
 import souther.compiler.check.Prelude;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -2034,46 +2036,47 @@ public final class FixtureReader {
         return neutral.of(answer, at, c.written());
     }
 
-    /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
-     * built against its parameter types, so an argument breaking one of those types' invariants is
-     * reported as the fixture it is. */
+    /**
+     * The value a helper answers with, run as the method its module emits.
+     *
+     * <p>What the row applies is one instance of the declaration, settled from the arguments the row
+     * wrote ({@link FixtureApplication}). Its arguments are then fixtures built against that
+     * instance's parameter types — a `List<Int>` where the declaration wrote `List<'a>` — so an
+     * argument breaking one of those types' invariants is reported as the fixture it is.
+     */
     private Object answered(Hir.Apply c, Applied helper) {
-        List<Hir.FnParam> params = helper.def().params();
-        if (c.args().size() != params.size()) {
-            throw new FixtureException("`" + c.written() + "` takes " + params.size()
-                    + " argument(s) but is called with " + c.args().size());
-        }
+        FixtureApplication.SettledCall settled = settled(c, helper);
+        List<Type> params = settled.params();
         Object[] args = new Object[params.size()];
         for (int i = 0; i < args.length; i++) {
-            Hir.FnParam p = params.get(i);
-            if (p.type() == null) {
-                throw new FixtureException("`" + c.written() + "` parameter `" + p.name()
-                        + "` has no type a fixture can be built against");
-            }
-            Type paramType = TypeOps.resolveParamType(p.type());
-            // A parameter whose element each call decides has no one type here. A call settles it
-            // from the argument it is given; a fixture is built before there is a call to settle it,
-            // so the order is what refuses this rather than the type being unsupported. Asked of the
-            // reading that also decides which kernels a method is emitted for, so a call this admits
-            // is one there is a method for (#680).
-            if (HelperInliner.decidedByEachCall(paramType)) {
-                throw new FixtureException("`" + c.written() + "` parameter `" + p.name() + "` is "
-                        + Type.show(paramType) + "; what it holds is decided by each call, and a"
-                        + " fixture is built before a call can decide it");
-            }
-            args[i] = built(c.args().get(i), paramType);
+            args[i] = built(c.args().get(i), params.get(i));
         }
-        return helpers.invoke(helper.reached(), emittedAs(helper), args);
+        return helpers.invoke(helper.reached(), FixtureCallable.resolve(settled).method(), args);
     }
 
-    /** Where {@code helper}'s method went. A kernel's wrapper is emitted under a name of its own so
-     * that nothing else reaches it (#680); everything else is emitted under the name this module
-     * reaches it by. What the helper <em>is</em> stays {@link Applied#reached()}, which is what a
-     * report about it names. */
-    private static String emittedAs(Applied helper) {
-        return helper.def().body() instanceof Hir.FnBody.Intrinsic
-                ? HelperInliner.intrinsicWrapperName(helper.reached())
-                : helper.reached();
+    /**
+     * The one instance of {@code helper} that {@code c} applies, or the reason the call determines
+     * none.
+     *
+     * <p>The reason is the call's, not the declaration's. A helper being written with type variables
+     * is what lets a call have several instances; what a row is refused for is the variable its own
+     * arguments left open, which is the thing whoever wrote the row can do something about.
+     */
+    private FixtureApplication.SettledCall settled(Hir.Apply c, Applied helper) {
+        return switch (FixtureApplication.settle(helper.reached(), helper.def(),
+                FixtureArgumentTypes.of(c), symbols)) {
+            case FixtureApplication.Settled(FixtureApplication.SettledCall call) -> call;
+            case FixtureApplication.Miscalled(int written, int declared) ->
+                    throw new FixtureException("`" + c.written() + "` takes " + declared
+                            + " argument(s) but is called with " + written);
+            case FixtureApplication.Undeclared(String parameter) ->
+                    throw new FixtureException("`" + c.written() + "` parameter `" + parameter
+                            + "` has no type a fixture can be built against");
+            case FixtureApplication.Open(Type.Var variable) ->
+                    throw new FixtureException("`" + c.written() + "` leaves " + Type.show(variable)
+                            + " open: a fixture applies the one instance the arguments it wrote"
+                            + " settle, and nothing written here settles this one");
+        };
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {
