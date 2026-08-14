@@ -54,9 +54,9 @@ public final class DataChecker {
      * compile-time constant. The compiler runs each through the generated {@code $Ctfe.check}
      * (CTFE) so a violation becomes a compile error rather than a run-time abort (ADR-0032).
      */
-    public static List<ConstCheck> constNewtypeChecks(Hir.Module module, Symbols symbols) {
+    public static List<ConstCheck> constNewtypeChecks(List<Hir.FnDef> fns, Symbols symbols) {
         List<ConstCheck> out = new ArrayList<>();
-        for (Hir.FnDef fn : module.fns()) {
+        for (Hir.FnDef fn : fns) {
             collectConstChecks(fn.writtenBody(), symbols, out);
         }
         return out;

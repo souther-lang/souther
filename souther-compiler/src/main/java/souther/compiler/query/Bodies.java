@@ -477,7 +477,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(Lower.settle(prepared.value().tree(), scope.value(), reqSigs.value()));
+                return Answer.of(Lower.settle(prepared.value(), scope.value(), reqSigs.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

@@ -115,7 +115,7 @@ public final class Output {
                 return null;
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
-                    typePackages(prepared.value().tree()), signatures.value(), imported.value(),
+                    prepared.value().importedFrom(), signatures.value(), imported.value(),
                     injected.value(),
                     callees.value(), requirements.value(), checked.value(), dischargeClauses.value());
         }
@@ -156,15 +156,6 @@ public final class Output {
         }
 
         /** Maps each imported type name to its declaring module, for cross-package references. */
-        private static Map<String, String> typePackages(Hir.Module m) {
-            Map<String, String> packages = new LinkedHashMap<>();
-            for (Hir.Import imp : m.imports()) {
-                for (String imported : imp.names()) {
-                    packages.put(imported, imp.module());
-                }
-            }
-            return packages;
-        }
     }
 
     /**
@@ -495,7 +486,7 @@ public final class Output {
             }
             List<DataChecker.ConstCheck> checks;
             try {
-                checks = DataChecker.constNewtypeChecks(prepared.value().tree(), scope.value());
+                checks = DataChecker.constNewtypeChecks(prepared.value().fns(), scope.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -548,7 +539,7 @@ public final class Output {
                 return null;
             }
             List<Hir.InvariantClause> clauses = null;
-            for (Hir.Def def : declaring.value().tree().defs()) {
+            for (Hir.Def def : declaring.value().defs()) {
                 if (def instanceof Hir.Data d && d.name().equals(check.type().name())) {
                     clauses = TypeOps.effectiveInvariants(d, scope.value());
                 }

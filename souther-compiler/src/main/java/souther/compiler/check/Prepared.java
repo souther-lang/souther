@@ -71,6 +71,38 @@ public final class Prepared {
         return module.name();
     }
 
+    /** The tree, for the passes of this package that read what this state claims. */
+    Hir.Module module() {
+        return module;
+    }
+
+    /** The behaviors this module declares. */
+    public List<Hir.BehaviorDef> behaviors() {
+        return module.behaviors();
+    }
+
+    /** Its declarations, which this state says nothing about beyond what the one below it did. */
+    public List<Hir.Def> defs() {
+        return module.defs();
+    }
+
+    /** Its definitions, the taken-on ones not among them — those are what the artifact carries
+     * beside what the module wrote. */
+    public List<Hir.FnDef> fns() {
+        return module.fns();
+    }
+
+    /** Which module each imported name came from. */
+    public Map<String, String> importedFrom() {
+        Map<String, String> packages = new LinkedHashMap<>();
+        for (Hir.Import imp : module.imports()) {
+            for (String imported : imp.names()) {
+                packages.put(imported, imp.module());
+            }
+        }
+        return packages;
+    }
+
     /**
      * The tree.
      *
