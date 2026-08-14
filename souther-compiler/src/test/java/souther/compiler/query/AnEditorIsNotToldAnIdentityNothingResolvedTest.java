@@ -5,7 +5,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * A name nothing answered is a name the editor has no answer for.
  *
  * <p>What resolution worked out is what an editor is told, and a name that denotes nothing is not
- * something it worked out. Standing an identity in for the absence — a {@code TypeName} of a
+ * something it worked out. Standing an identity in for the absence — a {@code TypeSymbol} of a
  * declaration nobody wrote, a {@code ValueName} nothing binds — makes the reader's question come
  * back answered, so go-to-definition, find-references and rename each act on a declaration that is
  * not there. Absence is the answer, and a reader that has none falls back to what it can say
@@ -69,8 +69,8 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db().ask(key).value();
     }
 
-    private static TypeName typeAt(int line, int column) {
-        return (TypeName) under(TYPES, new Names.TypeAt(new SourcePos(line, column, ID)));
+    private static TypeSymbol typeAt(int line, int column) {
+        return (TypeSymbol) under(TYPES, new Names.TypeAt(new SourcePos(line, column, ID)));
     }
 
     private static ValueName valueAt(int line, int column) {
@@ -88,8 +88,8 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
     @Test
     void aClauseEntryIsAnsweredAndOneNamingNothingIsNot() {
         assertEquals(TypeSymbols.declared(new TypeKey("m", "A")),
-                (TypeName) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 16, ID))));
-        assertNull((TypeName) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 19, ID))),
+                (TypeSymbol) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 16, ID))));
+        assertNull((TypeSymbol) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 19, ID))),
                 "no declaration is named `Nowhere`, so the clause names none");
     }
 

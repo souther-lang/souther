@@ -29,7 +29,7 @@ class EveryPositionOfATypeIsRewrittenTest {
     /** What a rewrite put there. No sample holds it, so finding it means the position was written. */
     private static final Type REWRITTEN = Type.ref(TypeSymbols.declared(new TypeKey("m", "Rewritten")));
 
-    private static final TypeName A = TypeSymbols.declared(new TypeKey("m", "A"));
+    private static final TypeSymbol A = TypeSymbols.declared(new TypeKey("m", "A"));
     private static final BindingOwner CALL = new BindingOwner.OfValue("m", "f");
 
     private static List<Type> compounds() {

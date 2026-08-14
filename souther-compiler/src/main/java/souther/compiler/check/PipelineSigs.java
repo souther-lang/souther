@@ -7,7 +7,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -149,7 +149,7 @@ public final class PipelineSigs {
         List<Hir.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
         Type mainline = first.outputType();
-        Set<TypeName> retired = new LinkedHashSet<>();
+        Set<TypeSymbol> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
             Sig g = stageSig(stages.get(i), sigs, symbols, pipe.pos());
             // Every stage after the first takes exactly one input (spec §sequential-composition).
@@ -168,8 +168,8 @@ public final class PipelineSigs {
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
         // accepted.
         if (pipe.declaredOut() != null) {
-            Set<TypeName> inferred = TypeOps.leafCases(out, symbols);
-            Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut()), symbols);
+            Set<TypeSymbol> inferred = TypeOps.leafCases(out, symbols);
+            Set<TypeSymbol> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut()), symbols);
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
@@ -186,20 +186,20 @@ public final class PipelineSigs {
     }
 
     /** Formats a set of case names as {@code A | B} (sorted, for a stable diagnostic). */
-    static String caseList(Set<TypeName> cases) {
+    static String caseList(Set<TypeSymbol> cases) {
         java.util.TreeSet<String> names = new java.util.TreeSet<>();
-        for (TypeName c : cases) {
+        for (TypeSymbol c : cases) {
             names.add(c.name());
         }
         return String.join(" | ", names);
     }
 
     /** The pipeline's output: what the last stage yields, plus everything that left the main line. */
-    private static Type withRetired(Type mainline, Set<TypeName> retired) {
+    private static Type withRetired(Type mainline, Set<TypeSymbol> retired) {
         if (retired.isEmpty()) {
             return mainline;
         }
-        Set<TypeName> all = new LinkedHashSet<>(TypeOps.caseNamesOf(mainline));
+        Set<TypeSymbol> all = new LinkedHashSet<>(TypeOps.caseNamesOf(mainline));
         if (all.isEmpty()) {
             throw new IllegalStateException("cannot merge non-data stage output with retired cases");
         }
@@ -208,9 +208,9 @@ public final class PipelineSigs {
     }
 
     /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec §type-routing). */
-    public static List<TypeName> mainlineCases(Type mainline, Sig g, Symbols symbols) {
-        List<TypeName> accepted = new ArrayList<>();
-        for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
+    public static List<TypeSymbol> mainlineCases(Type mainline, Sig g, Symbols symbols) {
+        List<TypeSymbol> accepted = new ArrayList<>();
+        for (TypeSymbol caseName : TypeOps.leafCases(mainline, symbols)) {
             if (TypeOps.assignable(Type.ref(caseName), g.in(), symbols)) {
                 accepted.add(caseName);
             }
@@ -239,15 +239,15 @@ public final class PipelineSigs {
      * saying it once left a main line (§unmarked-sum), the plumbing is structural. Viewed on its own, `fg`
      * still has the merged sum `f`+`g` produce as its output.
      */
-    private static Type route(Type mainline, Sig g, Set<TypeName> retired, Symbols symbols,
+    private static Type route(Type mainline, Sig g, Set<TypeSymbol> retired, Symbols symbols,
                               SourcePos pos) {
         Type in = g.in();
         if (TypeOps.isDataLike(mainline)) {
-            Set<TypeName> consumed = new LinkedHashSet<>();
-            Set<TypeName> passed = new LinkedHashSet<>();
+            Set<TypeSymbol> consumed = new LinkedHashSet<>();
+            Set<TypeSymbol> passed = new LinkedHashSet<>();
             // route over the leaf cases: a named sum output splits into its members, so a stage that
             // accepts one of them consumes it while the rest retire (spec §sum-data, §type-routing)
-            for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
+            for (TypeSymbol caseName : TypeOps.leafCases(mainline, symbols)) {
                 if (TypeOps.assignable(Type.ref(caseName), in, symbols)) {
                     consumed.add(caseName);
                 } else {

@@ -1,6 +1,6 @@
 package souther.compiler.jvm;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -45,7 +45,7 @@ public final class SoutherJvmAbi {
     }
 
     /**
-     * The {@link TypeName} whose {@code Value} identity would have this binary name, or null where no
+     * The {@link TypeSymbol} whose {@code Value} identity would have this binary name, or null where no
      * type's would. It says nothing about whether such a type is declared, or about what was really
      * emitted under the name.
      *
@@ -61,7 +61,7 @@ public final class SoutherJvmAbi {
      * claiming a declaration it has no way to see — the same shape as an authority that hands out
      * half an answer, pointed the other way.
      */
-    public static TypeName valueTypeCandidate(String binaryName) {
+    public static TypeSymbol valueTypeCandidate(String binaryName) {
         int dot = binaryName.lastIndexOf('.');
         if (dot <= 0 || dot == binaryName.length() - 1) {
             return null;

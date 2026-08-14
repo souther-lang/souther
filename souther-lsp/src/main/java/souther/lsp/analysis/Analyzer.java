@@ -9,7 +9,7 @@ import souther.compiler.query.Shapes;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
@@ -310,7 +310,7 @@ public final class Analyzer {
     /** What the cursor is on, as the compiler answers it: the type a name at {@code pos} denotes,
      * or the declaration whose own name is there. Null when the compiler cannot say — a file it
      * could not read, or a name in the value namespace. */
-    private TypeName typeUnderCursor(Compilation compilation, String uri, Position pos) {
+    private TypeSymbol typeUnderCursor(Compilation compilation, String uri, Position pos) {
         return compilation.db().ask(new Names.TypeAt(cursor(uri, pos))).value();
     }
 
@@ -656,7 +656,7 @@ public final class Analyzer {
         }
         Compilation compilation = compileOf(graph);
         if (resolves(compilation, uri)) {
-            TypeName type = typeUnderCursor(compilation, uri, pos);
+            TypeSymbol type = typeUnderCursor(compilation, uri, pos);
             if (type != null) {
                 return declarationOf(compilation, type, graph);
             }
@@ -866,7 +866,7 @@ public final class Analyzer {
         // reference names, and matching the spelling here would edit this module's own `exposing`
         // instead — leaving both modules uncompilable.
         Compilation compilation = compileOf(graph);
-        TypeName type = typeUnderCursor(compilation, uri, pos);
+        TypeSymbol type = typeUnderCursor(compilation, uri, pos);
         if (type != null) {
             addExposingAndImportSites(compilation, type.name(), type.module(), graph, byUri);
             return byUri;
@@ -999,7 +999,7 @@ public final class Analyzer {
     }
 
     /** Where a type is declared, as the compiler answers it. */
-    private Optional<Location> declarationOf(Compilation compilation, TypeName target,
+    private Optional<Location> declarationOf(Compilation compilation, TypeSymbol target,
                                              ModuleGraph graph) {
         // Which module, which name and where it was written is the compiler's answer — the part a
         // spelling match gets wrong.
@@ -1015,7 +1015,7 @@ public final class Analyzer {
      */
     private List<Location> usesOf(Compilation compilation, String uri, Position pos,
                                   ModuleGraph graph, boolean includeDeclaration) {
-        TypeName target = typeUnderCursor(compilation, uri, pos);
+        TypeSymbol target = typeUnderCursor(compilation, uri, pos);
         if (target == null) {
             return null;
         }
@@ -1409,7 +1409,7 @@ public final class Analyzer {
         if (name == null || module == null) {
             return Optional.empty();
         }
-        Map<TypeName, List<ClauseDischarge>> byType =
+        Map<TypeSymbol, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
         List<ClauseDischarge> clauses = byType == null
                 ? null : byType.get(TypeSymbols.declared(new TypeKey(module, nameOf(name))));

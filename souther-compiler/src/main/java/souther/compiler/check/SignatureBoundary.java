@@ -9,7 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -109,7 +109,7 @@ final class SignatureBoundary {
     private static LeafScalar scalar(Type.Prim prim, Where where) {
         LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
-            throw foreignName(TypeName.primitive("Raw"), where);
+            throw foreignName(TypeSymbol.primitive("Raw"), where);
         }
         return scalar;
     }
@@ -117,7 +117,7 @@ final class SignatureBoundary {
     /** A name the boundary carries: one a model declared, which is what a derived codec is for. The
      *  language declares vocabulary of its own — what a division by zero answers with, what a
      *  rounding takes — and each of those says what one of the language's operations can answer. */
-    private static TypeName nominal(TypeName name, Where where, Symbols symbols) {
+    private static TypeSymbol nominal(TypeSymbol name, Where where, Symbols symbols) {
         if (!TypeOps.declaredByAModel(name, symbols)) {
             throw foreignName(name, where);
         }
@@ -125,9 +125,9 @@ final class SignatureBoundary {
     }
 
     /** The members of the union a behavior answers with, each a name in what crosses. */
-    private static List<TypeName> members(Type.Union union, Where where, Symbols symbols) {
-        List<TypeName> members = new ArrayList<>(union.members().size());
-        for (TypeName member : union.members()) {
+    private static List<TypeSymbol> members(Type.Union union, Where where, Symbols symbols) {
+        List<TypeSymbol> members = new ArrayList<>(union.members().size());
+        for (TypeSymbol member : union.members()) {
             members.add(nominal(member, where, symbols));
         }
         return members;
@@ -193,7 +193,7 @@ final class SignatureBoundary {
     /** What to write instead, said of the optional rather than of the position it was found in: the
      *  optional a collection carries is not the behavior's own answer, so advice naming the
      *  behavior's type would be advice about something else. */
-    private static CompileException foreignName(TypeName foreign, Where where) {
+    private static CompileException foreignName(TypeSymbol foreign, Where where) {
         return where.parameter()
                 ? where.hinted(new TypeMessage.AParameterTakesATypeTheLanguageDeclares(
                                 where.name(), foreign.name()),

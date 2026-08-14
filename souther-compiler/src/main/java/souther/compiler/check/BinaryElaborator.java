@@ -7,7 +7,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import java.util.List;
 import java.util.Set;
 
@@ -161,8 +161,8 @@ public final class BinaryElaborator {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2).say(new TypeMessage.AFunctionHasNoValueToCompare(Type.show(carrier))).build());
                 }
-                Set<TypeName> lCases = TypeOps.leafCases(lt, ctx.symbols());
-                Set<TypeName> rCases = TypeOps.leafCases(rt, ctx.symbols());
+                Set<TypeSymbol> lCases = TypeOps.leafCases(lt, ctx.symbols());
+                Set<TypeSymbol> rCases = TypeOps.leafCases(rt, ctx.symbols());
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
                 if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())

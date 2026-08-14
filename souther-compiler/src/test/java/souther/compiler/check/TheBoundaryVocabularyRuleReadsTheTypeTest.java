@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +29,7 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
 
     @Test
     void theReservedNameIsRefusedWhicheverWayItArrives() {
-        assertFalse(TypeOps.declaredByAModel(TypeName.primitive("Raw"), null));
+        assertFalse(TypeOps.declaredByAModel(TypeSymbol.primitive("Raw"), null));
     }
 
     @Test
@@ -39,7 +39,7 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
                 continue;
             }
             assertNotNull(LeafScalar.of(prim), prim.toString());
-            assertTrue(TypeOps.declaredByAModel(TypeName.primitive(Type.show(prim)), null),
+            assertTrue(TypeOps.declaredByAModel(TypeSymbol.primitive(Type.show(prim)), null),
                     prim.toString());
         }
     }

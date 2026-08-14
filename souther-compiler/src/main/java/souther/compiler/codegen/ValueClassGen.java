@@ -4,7 +4,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.MatchElaborator;
 
@@ -60,7 +60,7 @@ final class ValueClassGen {
     private ClassDesc cd(GeneratedClass generated) { return ctx.cd(generated); }
     private GeneratedClass.Value valueOf(Hir.Def def) { return new GeneratedClass.Value(def.declares()); }
     private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
-    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
+    private ClassDesc cd(TypeSymbol typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
     private Map<String, Type> fieldTypes(Hir.Data data) { return ctx.fieldTypes(data); }
     private int pub(String name) { return ctx.pub(name); }
@@ -190,7 +190,7 @@ final class ValueClassGen {
             caseCds.add(cd(caseName.denotes()));
         }
         boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
-        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
         out.put(valueOf(sum), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             // A sum may itself be a case of another sum (spec §sum-data), and then it carries that sum's
@@ -246,11 +246,11 @@ final class ValueClassGen {
      * the case records because one unit data may be a case of two sums, which place it differently;
      * a {@code Comparable} on the record would have to answer for both (issue #161).
      */
-    private void emitOrderMethods(ClassBuilder cb, ClassDesc cdX, List<TypeName> cases) {
+    private void emitOrderMethods(ClassBuilder cb, ClassDesc cdX, List<TypeSymbol> cases) {
         cb.withMethod(ORDER_METHOD, MTD_order, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
                 | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
             int i = 0;
-            for (TypeName c : cases) {
+            for (TypeSymbol c : cases) {
                 code.aload(0);
                 code.instanceOf(cd(c));
                 Label next = code.newLabel();
@@ -281,10 +281,10 @@ final class ValueClassGen {
     }
 
     /** Emits {@code static String __tag(Object)}: which case a value of this enumeration is. */
-    private void emitTagMethod(ClassBuilder cb, List<TypeName> cases) {
+    private void emitTagMethod(ClassBuilder cb, List<TypeSymbol> cases) {
         cb.withMethod(TAG_METHOD, MTD_tag, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
                 | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
-            for (TypeName c : cases) {
+            for (TypeSymbol c : cases) {
                 code.aload(0);
                 code.instanceOf(cd(c));
                 Label next = code.newLabel();
@@ -310,7 +310,7 @@ final class ValueClassGen {
      * <p>It has no codec. Belonging to a union does not change a member's external representation, so
      * a consumer that has switched to this case takes the value out and uses the member's own codec.
      */
-    byte[] generateBridgeCase(TypeName member, List<GeneratedClass.BehaviorResult> unions) {
+    byte[] generateBridgeCase(TypeSymbol member, List<GeneratedClass.BehaviorResult> unions) {
         ClassDesc cdB = ctx.bridgeCaseClass(member);
         Map<String, Type> held = Map.of("value", MatchElaborator.caseBindType(member));
         List<ClassDesc> ifaces = new ArrayList<>();

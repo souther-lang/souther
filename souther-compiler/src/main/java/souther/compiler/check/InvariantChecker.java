@@ -12,7 +12,7 @@ import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -124,7 +124,7 @@ public final class InvariantChecker {
      * declares is absent, and its clause is read off the declaration in the settled form — where the
      * operations have already become the folds they are, so it falls outside the fragment.
      */
-    public record Source(Hir.Expr body, Map<TypeName, List<Hir.InvariantClause>> invariants) {}
+    public record Source(Hir.Expr body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants) {}
 
     /** How many conditionals a construction opens before the rest is left to the run-time check.
      * Each one doubles the paths, and a value written over three of them is not what the bound is
@@ -147,7 +147,7 @@ public final class InvariantChecker {
     private final List<Diagnostic> warnings = new ArrayList<>();
 
     private InvariantChecker(Symbols symbols,
-                             Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants) {
+                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
         this.symbols = symbols;
         this.clauses = new Clauses(symbols, dischargeInvariants);
         this.terms = new Terms(symbols);
@@ -160,7 +160,7 @@ public final class InvariantChecker {
      * where the clause is written, which is the pre-expansion position; {@code clause} is that clause
      * in the representation the check reads.
      */
-    public static ClauseDischarge capabilityOf(Hir.Expr clause, SourcePos at, TypeName named,
+    public static ClauseDischarge capabilityOf(Hir.Expr clause, SourcePos at, TypeSymbol named,
                                                Hir.Data data, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         // Read over the declaration's own fields, each standing for itself: a construction hands one
@@ -270,25 +270,25 @@ public final class InvariantChecker {
      *                       being read
      * @param stopAt         which declarations are not read at all
      */
-    record Reach(java.util.function.Predicate<TypeName> withoutClauses,
-                 java.util.function.Predicate<TypeName> stopAt) {
+    record Reach(java.util.function.Predicate<TypeSymbol> withoutClauses,
+                 java.util.function.Predicate<TypeSymbol> stopAt) {
 
         /** Every rule, wherever it is written. */
         static final Reach EVERYTHING = new Reach(_ -> false, _ -> false);
 
         /** Every rule but the ones {@code these} names wrote. */
-        static Reach withoutClausesOf(java.util.function.Predicate<TypeName> these) {
+        static Reach withoutClausesOf(java.util.function.Predicate<TypeSymbol> these) {
             return new Reach(these, _ -> false);
         }
 
         /** Every rule that is not reached through one of {@code these}, they being supposed to hold
          * values whatever is written under them. */
-        static Reach stoppingAt(java.util.function.Predicate<TypeName> these) {
+        static Reach stoppingAt(java.util.function.Predicate<TypeSymbol> these) {
             return new Reach(_ -> false, these);
         }
     }
 
-    static Seeded seedFields(TypeName named, Hir.Data data, Symbols symbols) {
+    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols) {
         return seedFields(named, data, symbols, Map.of());
     }
 
@@ -299,7 +299,7 @@ public final class InvariantChecker {
      * field is one more assertion into it — so what comes back is the range each remaining field can
      * still take, which is where a row completing that assignment has to look.
      */
-    static Seeded seedFields(TypeName named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
                              Map<String, Count> settled) {
         return seedFields(named, data, symbols, settled, Reach.EVERYTHING);
     }
@@ -314,7 +314,7 @@ public final class InvariantChecker {
      * declaration was holding. Supposing a declaration has values is the other thing {@code reach}
      * says, and it is not that one — see {@link Reach}.
      */
-    static Seeded seedFields(TypeName named, Hir.Data data, Symbols symbols,
+    static Seeded seedFields(TypeSymbol named, Hir.Data data, Symbols symbols,
                              Map<String, Count> settled, Reach reach) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
@@ -471,11 +471,11 @@ public final class InvariantChecker {
      * @param measured whether the coordinate is a count taken of the position rather than its value
      * @param from     the declaration the clause is written on, which is what names the line
      */
-    record Direct(String path, boolean measured, TypeName from, InvariantBound bound) {}
+    record Direct(String path, boolean measured, TypeSymbol from, InvariantBound bound) {}
 
     /** One clause reaching a value, rebased onto the positions of that value, and the declaration it
      * is written on. */
-    private record Written(TypeName from, Core clause) {}
+    private record Written(TypeSymbol from, Core clause) {}
 
     /** A coordinate a clause reaching this value could be about. */
     private record Coordinate(String path, boolean measured, Carrier carrier) {}
@@ -492,7 +492,7 @@ public final class InvariantChecker {
      * @param narrowers the declarations whose clauses compare each coordinate to something without
      *                  placing an end on it, outermost first
      */
-    record Reading(List<Direct> directs, Map<String, List<TypeName>> narrowers) {}
+    record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, String> atoms, Map<String, String> keys,
@@ -512,7 +512,7 @@ public final class InvariantChecker {
         // its sizes are spaced.
         held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
-        Map<String, List<TypeName>> narrowers = new LinkedHashMap<>();
+        Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
         stated.forEach(each -> direct(each.clause(), each.from(), at, byName, out, narrowers));
         return new Reading(List.copyOf(out), Map.copyOf(narrowers));
     }
@@ -526,9 +526,9 @@ public final class InvariantChecker {
      * asked once — read apart, the second would be a walk that had to agree with this one about which
      * comparisons it had already accounted for.
      */
-    private void direct(Core clause, TypeName from, Denotations at,
+    private void direct(Core clause, TypeSymbol from, Denotations at,
                         Map<String, Coordinate> byName, List<Direct> out,
-                        Map<String, List<TypeName>> narrowers) {
+                        Map<String, List<TypeSymbol>> narrowers) {
         if (!(clause instanceof Core.Binary bin)) {
             return;
         }
@@ -579,13 +579,13 @@ public final class InvariantChecker {
      * along the differences, so a clause reading {@code a} is a way {@code a}'s edge can have been
      * moved even where the number came from somewhere further off.
      */
-    private void relating(Core clause, TypeName from, Denotations at,
+    private void relating(Core clause, TypeSymbol from, Denotations at,
                           Map<String, Coordinate> byName,
-                          Map<String, List<TypeName>> narrowers) {
+                          Map<String, List<TypeSymbol>> narrowers) {
         String named = nameOf(clause, at);
         Coordinate found = named == null ? null : byName.get(named);
         if (found != null) {
-            List<TypeName> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
+            List<TypeSymbol> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
             if (!had.contains(from)) {
                 had.add(from);
             }
@@ -631,12 +631,12 @@ public final class InvariantChecker {
      * empty, so a rule inside it is a rule about a value the construction need not make. A type
      * already met is not entered again, which is what stops a record that holds itself.
      */
-    static boolean everyRuleRead(TypeName named, Hir.Data data, Symbols symbols) {
+    static boolean everyRuleRead(TypeSymbol named, Hir.Data data, Symbols symbols) {
         return everyRuleRead(named, data, symbols, new HashSet<>());
     }
 
-    private static boolean everyRuleRead(TypeName named, Hir.Data data, Symbols symbols,
-                                         Set<TypeName> seen) {
+    private static boolean everyRuleRead(TypeSymbol named, Hir.Data data, Symbols symbols,
+                                         Set<TypeSymbol> seen) {
         if (!seen.add(named)) {
             return true;
         }
@@ -684,7 +684,7 @@ public final class InvariantChecker {
      * way the type refuses a value that the bounds do not express, and saying the bounds are the
      * whole story would offer a row nothing can build.
      */
-    private static boolean everyRuleBecameABound(TypeName named, Hir.Data data, Symbols symbols) {
+    private static boolean everyRuleBecameABound(TypeSymbol named, Hir.Data data, Symbols symbols) {
         Carrier carrier = Carrier.ofValue(Type.ref(named), symbols);
         Type base = TypeOps.fieldTypes(data, symbols).get("value");
         // Every name the value wears, read against what it is carried as. Asking only the outermost
@@ -722,7 +722,7 @@ public final class InvariantChecker {
      * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
      * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
-    static Findings analyze(Core body, Map<TypeName, List<Hir.InvariantClause>> invariants,
+    static Findings analyze(Core body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
                             Scope params, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, invariants);
         if (body == null) {
@@ -1044,7 +1044,7 @@ public final class InvariantChecker {
 
     /** The discharge verdict for a construction of {@code type} whose fields are being given
      * {@code given}. */
-    private Judgment verdictOf(TypeName named, Hir.Data type, Map<BindingId, Core> given, Known k,
+    private Judgment verdictOf(TypeSymbol named, Hir.Data type, Map<BindingId, Core> given, Known k,
                                Denotations at, boolean decidesFalse) {
         // What the construction hands over that no clause may be read against. A clause naming one of
         // them is left to the run-time check, and one that is decided outright is still decided: what
@@ -1671,8 +1671,8 @@ public final class InvariantChecker {
      *                 same descent again and rebase it a second way.
      */
     private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
-                         Set<TypeName> onPath,
-                         java.util.function.BiConsumer<TypeName, Core> onClause, Reach reach) {
+                         Set<TypeSymbol> onPath,
+                         java.util.function.BiConsumer<TypeSymbol, Core> onClause, Reach reach) {
         // Read before the path is entered, so that the one name and the other stay paired: a stop
         // taken after entering would leave the name on the path with nothing to take it off, and the
         // next field of the same type would be passed over as one already read. Supposed to hold

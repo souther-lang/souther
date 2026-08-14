@@ -12,7 +12,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayDeque;
@@ -862,7 +862,7 @@ public final class Generator {
      * <p>Depth first, so that a position is chosen against a projection that already has the ones
      * before it in it. The projection is the same one the whole search started from — what the
      * record's rules leave each of its fields — asked again with the assignment so far settled into
-     * it, which is what {@link FieldDomains#of(TypeName, Hir.Data, Symbols, Map)} is for.
+     * it, which is what {@link FieldDomains#of(TypeSymbol, Hir.Data, Symbols, Map)} is for.
      *
      * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
      * branch, and the search in front of it answers most rows without any of that; running this one

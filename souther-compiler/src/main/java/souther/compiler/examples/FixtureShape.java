@@ -6,7 +6,7 @@ import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,7 +54,7 @@ public sealed interface FixtureShape {
     }
 
     /** A type whose codec was derived, built by its own generated {@code decoder()}. */
-    record Nominal(TypeName name) implements FixtureShape {
+    record Nominal(TypeSymbol name) implements FixtureShape {
         @Override
         public Type type() {
             return Type.ref(name);
@@ -209,7 +209,7 @@ public sealed interface FixtureShape {
      * the reader's {@code Raw} arm never ran — it fell through to reflection and failed there
      * instead. It is refused as the reserved name it is.
      */
-    private static FixtureShape nominal(TypeName name, Symbols symbols) {
+    private static FixtureShape nominal(TypeSymbol name, Symbols symbols) {
         if (name.isPrimitive()) {
             return scalar(primitive(name));
         }
@@ -224,7 +224,7 @@ public sealed interface FixtureShape {
     /** The primitive a primitive-spelled name denotes, read through the inverse of the mint one is
      *  made by. {@code Raw} answers a primitive and is refused as the reserved name it is; a
      *  primitive-module name that denotes none — {@code Some}, {@code None} — answers nothing. */
-    private static Type.Prim primitive(TypeName name) {
+    private static Type.Prim primitive(TypeSymbol name) {
         Type.Prim prim = name.primitiveKind();
         if (prim == null) {
             throw new FixtureException("`" + name.name() + "` is not a type this example can read");

@@ -26,7 +26,7 @@ import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowClasses;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -1508,7 +1508,7 @@ public final class Adequacy {
             }
             MeasurementStatus status = signature.status();
             OutputCaseEvidence output = signature.output();
-            for (TypeName missing : output.unspecified()) {
+            for (TypeSymbol missing : output.unspecified()) {
                 out.add(new Finding(Kind.OUTPUT_CASE_UNSPECIFIED, behavior.name(), status,
                         behavior.pos(), List.of(missing.name(), behavior.name())));
             }
@@ -1516,7 +1516,7 @@ public final class Adequacy {
             // saying so of each says nothing. Left out here rather than at the printing, so that what
             // a report shows and what a build is told come from one list.
             if (!ExampleVerifier.isPending(module, behavior.name())) {
-                for (TypeName missing : output.unverified()) {
+                for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
                         out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,
                                 behavior.pos(), List.of(missing.name(), behavior.name())));
@@ -1524,7 +1524,7 @@ public final class Adequacy {
                 }
             }
             for (int i = 0; i < signature.inputs().size(); i++) {
-                for (TypeName missing : signature.inputs().get(i).unspecified()) {
+                for (TypeSymbol missing : signature.inputs().get(i).unspecified()) {
                     out.add(new Finding(Kind.INPUT_CASE_UNSPECIFIED, behavior.name(), status,
                             behavior.pos(), List.of(missing.name(), i + 1, behavior.name())));
                 }
@@ -1742,7 +1742,7 @@ public final class Adequacy {
      * numerator answering with the outermost of them, so every row would land outside the set it is
      * counted in: {@code 1} of {@code 2} covered, and both of the two still owed a row.
      */
-    private static Set<TypeName> inputCoverableCases(Type t, Symbols symbols) {
+    private static Set<TypeSymbol> inputCoverableCases(Type t, Symbols symbols) {
         return casesOfSum(TypeOps.base(t, symbols), symbols);
     }
 
@@ -1759,13 +1759,13 @@ public final class Adequacy {
      * <p>The arm check is wider than this on purpose: it uses the single name of a position that is
      * not a sum at all to catch a row that wrote the wrong one.
      */
-    private static Set<TypeName> outputCoverableCases(Type t, Symbols symbols) {
+    private static Set<TypeSymbol> outputCoverableCases(Type t, Symbols symbols) {
         return casesOfSum(t, symbols);
     }
 
     /** What a sum divides into, and nothing for a type that is not one. The one thing the two
      *  measures above share; what tells them apart is which type each hands it. */
-    private static Set<TypeName> casesOfSum(Type t, Symbols symbols) {
+    private static Set<TypeSymbol> casesOfSum(Type t, Symbols symbols) {
         return TypeOps.isSumType(t, symbols) ? TypeOps.leafCases(t, symbols) : Set.of();
     }
 
@@ -1781,22 +1781,22 @@ public final class Adequacy {
         List<RowOutcome> rows = seen.rows();
         // The cases the output type has, less the ones only an arm nothing reaches produces. A case
         // no reachable producer answers with is not a gap in the rows.
-        Set<TypeName> declaredOut = souther.compiler.partition.ProducedCases.of(
+        Set<TypeSymbol> declaredOut = souther.compiler.partition.ProducedCases.of(
                 body, plan, reachable.reachable(), outputCoverableCases(sig.outputType(), symbols));
-        Set<TypeName> specified = new LinkedHashSet<>();
-        Set<TypeName> observed = new LinkedHashSet<>();
-        Set<TypeName> verified = new LinkedHashSet<>();
+        Set<TypeSymbol> specified = new LinkedHashSet<>();
+        Set<TypeSymbol> observed = new LinkedHashSet<>();
+        Set<TypeSymbol> verified = new LinkedHashSet<>();
         int unreadableOut = 0;
 
         List<Type> ins = sig.inputTypes();
-        List<Set<TypeName>> declaredIn = new ArrayList<>(ins.size());
-        List<Set<TypeName>> inSpecified = new ArrayList<>(ins.size());
-        List<Set<TypeName>> inExecuted = new ArrayList<>(ins.size());
-        List<Set<TypeName>> inVerified = new ArrayList<>(ins.size());
-        List<Set<TypeName>> inExcluded = new ArrayList<>(ins.size());
+        List<Set<TypeSymbol>> declaredIn = new ArrayList<>(ins.size());
+        List<Set<TypeSymbol>> inSpecified = new ArrayList<>(ins.size());
+        List<Set<TypeSymbol>> inExecuted = new ArrayList<>(ins.size());
+        List<Set<TypeSymbol>> inVerified = new ArrayList<>(ins.size());
+        List<Set<TypeSymbol>> inExcluded = new ArrayList<>(ins.size());
         int[] unreadableIn = new int[ins.size()];
         for (int i = 0; i < ins.size(); i++) {
-            Set<TypeName> declared = inputCoverableCases(ins.get(i), symbols);
+            Set<TypeSymbol> declared = inputCoverableCases(ins.get(i), symbols);
             declaredIn.add(declared);
             inSpecified.add(new LinkedHashSet<>());
             inExecuted.add(new LinkedHashSet<>());
@@ -1804,7 +1804,7 @@ public final class Adequacy {
             // Matched within the position it was read at: a class is named the same way at every
             // position of the same type, and one behaviour's `Off` arm says nothing about another
             // input that is also a `Flag`.
-            List<TypeName> here = i < parameters.size()
+            List<TypeSymbol> here = i < parameters.size()
                     ? excluded.atParameter(parameters.get(i)) : List.of();
             inExcluded.add(here.stream().filter(declared::contains)
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
@@ -1827,7 +1827,7 @@ public final class Adequacy {
                 if (declaredIn.get(i).isEmpty()) {
                     continue;   // not a sum: nothing to cover at this position
                 }
-                TypeName written = i < row.inputCases().size() ? row.inputCases().get(i) : null;
+                TypeSymbol written = i < row.inputCases().size() ? row.inputCases().get(i) : null;
                 if (written == null) {
                     unreadableIn[i]++;
                     continue;

@@ -6,9 +6,9 @@ package souther.compiler.types;
  * <p>An identity is not something a reader assembles from two strings. It exists because something
  * put a declaration into the world this compilation reasons about, and this is the edge that says
  * so: {@link TypeKey} goes in — the structural address a class file carries and a query is asked
- * with — and a {@link TypeName} comes out, which is the identity the compiler reasons with.
+ * with — and a {@link TypeSymbol} comes out, which is the identity the compiler reasons with.
  *
- * <p>One direction, and it is here. {@link TypeName#key()} goes the other way and is public, because
+ * <p>One direction, and it is here. {@link TypeSymbol#key()} goes the other way and is public, because
  * a caller holding an identity was handed one already; what is closed is arriving at an identity
  * without having been. That is what made a spelling and an identity interchangeable, which is what
  * issues #464, #696 and #700 each were.
@@ -40,8 +40,8 @@ public final class TypeSymbols {
      * the module that wrote it together. A reader that pairs a name with the module it happens to
      * be compiling answers for a declaration here whatever the name came from.
      */
-    public static TypeName declared(TypeKey key) {
-        return new TypeName(key.module(), key.name());
+    public static TypeSymbol declared(TypeKey key) {
+        return new TypeSymbol(key.module(), key.name());
     }
 
     /**
@@ -52,8 +52,8 @@ public final class TypeSymbols {
      * source that declares {@code Int} — and a compilation that declares nothing at all still has
      * them.
      */
-    static TypeName ofLanguage(String module, String name) {
-        return new TypeName(module, name);
+    static TypeSymbol ofLanguage(String module, String name) {
+        return new TypeSymbol(module, name);
     }
 
     /**
@@ -64,7 +64,7 @@ public final class TypeSymbols {
      * declaration once the declaration world has said it has one — which is why this is separate
      * from {@link #declared}, and why nothing here is registered by asking.
      */
-    public static TypeName recovered(TypeKey key) {
-        return new TypeName(key.module(), key.name());
+    public static TypeSymbol recovered(TypeKey key) {
+        return new TypeSymbol(key.module(), key.name());
     }
 }

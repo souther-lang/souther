@@ -8,7 +8,7 @@ import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +45,7 @@ class EverySlotIsAChildTest {
     private static Hir.Binder binder(String name) {
         return BINDERS.binder(name, POS);
     }
-    private static final TypeName PERSON = TypeSymbols.declared(new TypeKey("demo", "Person"));
+    private static final TypeSymbol PERSON = TypeSymbols.declared(new TypeKey("demo", "Person"));
 
     private static Core.Read read(String name, int ordinal) {
         return new Core.Read(name, new BindingId(OWNER, ordinal), Type.INT, POS);

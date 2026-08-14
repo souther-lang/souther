@@ -15,7 +15,7 @@ import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -404,7 +404,7 @@ public final class Elaborator {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
             }
         }
-        List<TypeName> cases = TypeOps.sumCases(target, ctx.symbols());
+        List<TypeSymbol> cases = TypeOps.sumCases(target, ctx.symbols());
         if (cases != null) {
             // A field every case spreads is the sum's own: the sharing is nominal, and the generated
             // sealed interface declares the accessor its cases already carry (issue #160). Only a
@@ -420,7 +420,7 @@ public final class Elaborator {
             // until it is opened. Saying that is the difference between "this value has no such
             // field" and "read it in each case", which is what the author has to write.
             List<String> without = new ArrayList<>();
-            for (TypeName c : cases) {
+            for (TypeSymbol c : cases) {
                 if (!(ctx.symbols().declarations().declaration(c.key()) instanceof Hir.Data cd)
                         || !TypeOps.hasField(cd, fa.field(), ctx.symbols())) {
                     without.add(c.name());
@@ -577,7 +577,7 @@ public final class Elaborator {
      */
     private static void checkOpens(Hir.LetIn li, Type valueType, Symbols symbols) {
         String opened = li.opens().written();
-        TypeName layer = li.opens().denotes();
+        TypeSymbol layer = li.opens().denotes();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
             throw CompileException.of(Diagnostic
                             .at(li.pos())
@@ -1446,7 +1446,7 @@ public final class Elaborator {
      *
      * <p>Nothing is checked for the {@code else e} form: it already answers any failure.
      */
-    private static void checkArmsAnswerClauses(Hir.IfConstructed ic, TypeName typeName, Symbols symbols) {
+    private static void checkArmsAnswerClauses(Hir.IfConstructed ic, TypeSymbol typeName, Symbols symbols) {
         if (!ic.mapsClauses()) {
             return;
         }

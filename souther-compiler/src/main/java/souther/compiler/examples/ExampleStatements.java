@@ -17,7 +17,7 @@ import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -96,7 +96,7 @@ public final class ExampleStatements {
         return new FixtureReader(module, symbols, values, loader);
     }
 
-    private Set<TypeName> outCases(Type out) {
+    private Set<TypeSymbol> outCases(Type out) {
         return TypeOps.outputCases(out, symbols);
     }
 
@@ -441,7 +441,7 @@ public final class ExampleStatements {
         if (sig == null) {
             return;
         }
-        Set<TypeName> cases = outCases(sig.outputType());
+        Set<TypeSymbol> cases = outCases(sig.outputType());
         for (Hir.ExampleRow row : ex.rows()) {
             if (row.inputs().size() != sig.inputTypes().size()) {
                 continue;
@@ -905,7 +905,7 @@ public final class ExampleStatements {
     sealed interface Answered {
 
         /** The case, and nothing under it: a bare name denoting one. */
-        record CaseOnly(TypeName name) implements Answered {}
+        record CaseOnly(TypeSymbol name) implements Answered {}
 
         /** The whole value. */
         record Whole(FixtureReader.BuiltFixture fixture) implements Answered {}
@@ -921,7 +921,7 @@ public final class ExampleStatements {
      * which is where it stands in for nothing at all — that is reported where the fake is resolved.
      */
     private static Answered readStandIn(FixtureReader fixtures, Hir.Expr written,
-                                        BoundaryOutput outType, Set<TypeName> cases) {
+                                        BoundaryOutput outType, Set<TypeSymbol> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
             return new Answered.Unreadable();
         }
@@ -941,7 +941,7 @@ public final class ExampleStatements {
      * the form a fixture is written in and decoded again (issue #214).
      */
     private static Answered readExpected(FixtureReader fixtures, Hir.Expr written,
-                                         BoundaryOutput outType, Set<TypeName> cases) {
+                                         BoundaryOutput outType, Set<TypeSymbol> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
             return new Answered.Unreadable();
         }
@@ -958,8 +958,8 @@ public final class ExampleStatements {
     /** Whether {@code written} names a case the position cannot hold — <em>E1904</em> where the row
      * is evaluated, and nothing about the behavior it was written for. */
     private static boolean refusedCase(FixtureReader fixtures, Hir.Expr written,
-                                       Set<TypeName> cases) {
-        TypeName named = fixtures.constructedCase(written);
+                                       Set<TypeSymbol> cases) {
+        TypeSymbol named = fixtures.constructedCase(written);
         return named != null && !cases.isEmpty() && !cases.contains(named);
     }
 
@@ -982,13 +982,13 @@ public final class ExampleStatements {
         if (left instanceof Answered.Whole l && right instanceof Answered.Whole r) {
             return !souther.runtime.Values.equal(l.fixture().value(), r.fixture().value());
         }
-        TypeName one = caseOf(left);
-        TypeName other = caseOf(right);
+        TypeSymbol one = caseOf(left);
+        TypeSymbol other = caseOf(right);
         return one != null && other != null && !one.equals(other);
     }
 
     /** The case an assertion is about, or null where nothing says. */
-    private static TypeName caseOf(Answered a) {
+    private static TypeSymbol caseOf(Answered a) {
         return switch (a) {
             case Answered.CaseOnly c -> c.name();
             case Answered.Whole w -> w.fixture().caseName();

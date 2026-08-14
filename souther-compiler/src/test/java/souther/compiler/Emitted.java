@@ -6,7 +6,7 @@ import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 /**
  * What a test reaches for when it wants a class this compiler emitted.
@@ -39,7 +39,7 @@ public final class Emitted {
     }
 
     /** The class a declared type is emitted as, loaded. */
-    public static Class<?> value(ClassLoader loader, TypeName type) throws ClassNotFoundException {
+    public static Class<?> value(ClassLoader loader, TypeSymbol type) throws ClassNotFoundException {
         return GeneratedClasses.load(loader, new GeneratedClass.Value(type));
     }
 
@@ -55,7 +55,7 @@ public final class Emitted {
         return name(new GeneratedClass.BehaviorResult(module, name));
     }
 
-    public static String bridgeCase(String emittingModule, TypeName member) {
+    public static String bridgeCase(String emittingModule, TypeSymbol member) {
         return name(new GeneratedClass.BridgeCase(emittingModule, member));
     }
 

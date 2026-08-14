@@ -4,7 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.CoverageOrigin;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -424,7 +424,7 @@ public final class CoverageSites {
         }
 
         private static String label(Core.Case arm) {
-            List<String> names = arm.caseTypes().stream().map(TypeName::name).toList();
+            List<String> names = arm.caseTypes().stream().map(TypeSymbol::name).toList();
             return "case " + String.join(" | ", names);
         }
 

@@ -5,7 +5,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.types.ConstructionOrigin;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -98,7 +98,7 @@ public final class NewtypeDesugar {
                 // were resolved. Asking the type namespace again here would read a binding of the
                 // same spelling as the type it shadows, and rewrite an application of it into a
                 // construction — both of which compile, so the meaning would change in silence.
-                TypeName built = call.answered() != null
+                TypeSymbol built = call.answered() != null
                         && call.denotes() instanceof ValueName.OfType named ? named.type() : null;
                 if (built != null && symbols.declarations().declaration(built.key()) instanceof Hir.Data nt && nt.newtype()) {
                     if (args.size() != 1) {

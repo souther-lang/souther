@@ -25,7 +25,7 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -89,7 +89,7 @@ public final class Output {
                       Map<String, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
                       TypeChecker.Checked checked,
-                      Map<TypeName, List<Hir.InvariantClause>> dischargeClauses) {}
+                      Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses) {}
 
         static Inputs inputs(Db db, String name) {
             Answer<TypeChecker.Checked> checked = db.ask(new Bodies.Checked(name));
@@ -107,7 +107,7 @@ public final class Output {
                     db.ask(new Bodies.Requirements(name));
             // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
             // is written against the operations an author wrote — which the lowered module no longer has.
-            Answer<Map<TypeName, List<Hir.InvariantClause>>> dischargeClauses =
+            Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
                     || !signatures.present() || !injected.present() || !callees.present()

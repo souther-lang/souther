@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.HashMap;
@@ -39,7 +39,7 @@ public interface Registry<D> {
      * address is not an identity until something declares one there — so this is where the two are
      * told apart, and a reader that gets nothing back has nothing it could have gone on with.
      */
-    default TypeName identify(TypeKey address) {
+    default TypeSymbol identify(TypeKey address) {
         return declaration(address) != null ? TypeSymbols.declared(address) : null;
     }
 

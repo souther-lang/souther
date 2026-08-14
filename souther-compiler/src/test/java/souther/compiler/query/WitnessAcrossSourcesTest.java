@@ -3,7 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,8 +42,8 @@ class WitnessAcrossSourcesTest {
             }
             """;
 
-    private static List<String> names(Set<TypeName> cases) {
-        return cases.stream().map(TypeName::name).sorted().toList();
+    private static List<String> names(Set<TypeSymbol> cases) {
+        return cases.stream().map(TypeSymbol::name).sorted().toList();
     }
 
     @Test

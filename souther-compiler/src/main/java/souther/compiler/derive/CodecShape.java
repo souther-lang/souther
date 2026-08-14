@@ -11,7 +11,7 @@ import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 /**
  * What a field carries across the boundary, as the shape a codec is built out of.
@@ -41,7 +41,7 @@ sealed interface CodecShape {
     record Scalar(LeafScalar kind) implements Bare {}
 
     /** A named data, read and written by its own derived codec. */
-    record Named(TypeName name) implements Bare {}
+    record Named(TypeSymbol name) implements Bare {}
 
     /** A {@code List<T>}, written as an array. */
     record ListOf(CodecShape element) implements Bare {}

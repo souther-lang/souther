@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -95,7 +95,7 @@ public final class Symbols implements NameSense {
      */
     public Collection<Hir.Def> visible() {
         List<Hir.Def> defs = new ArrayList<>();
-        for (TypeName name : scope.visibleNames()) {
+        for (TypeSymbol name : scope.visibleNames()) {
             Hir.Def def = declarations.declaration(name.key());
             if (def != null) {
                 defs.add(def);

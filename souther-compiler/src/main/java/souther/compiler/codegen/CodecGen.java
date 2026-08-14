@@ -9,7 +9,7 @@ import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
@@ -83,7 +83,7 @@ final class CodecGen {
     private GeneratedClass.Value valueOf(Hir.Def def) { return new GeneratedClass.Value(def.declares()); }
     private GeneratedClass decoderOf(Hir.Def def, Src src) { return new GeneratedClass.Decoder(valueOf(def), src.kind()); }
     private ClassDesc cd(Hir.Def def) { return ctx.cd(def); }
-    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
+    private ClassDesc cd(TypeSymbol typeName) { return ctx.cd(typeName); }
     private Map<String, Type> fieldTypes(Hir.Data data) { return ctx.fieldTypes(data); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
     private void unbox(CodeBuilder code, Type type, int slot) { JvmTypes.unbox(code, type, slot, ctx); }
@@ -239,7 +239,7 @@ final class CodecGen {
         invokeCodec(code, typeName.denotes(), method, mtd);
     }
 
-    private void invokeCodec(CodeBuilder code, TypeName type, String method, MethodTypeDesc mtd) {
+    private void invokeCodec(CodeBuilder code, TypeSymbol type, String method, MethodTypeDesc mtd) {
         code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type.key()) instanceof Hir.SumData);
     }
 
@@ -254,7 +254,7 @@ final class CodecGen {
             // membership in this sum requires of it (spec §encoder-derivation).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 for (Hir.EncVariant v : enc.variants()) {
-                    TypeName caseName = v.caseType().denotes();
+                    TypeSymbol caseName = v.caseType().denotes();
                     code.aload(1);
                     code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
@@ -335,7 +335,7 @@ final class CodecGen {
      */
     byte[] generateEnumSumDecoder(Hir.SumData sum, Src src) {
         ClassDesc cdDec = cd(decoderOf(sum, src));
-        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -356,10 +356,10 @@ final class CodecGen {
 
     /** {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
      *  failure saying it denotes none of them. */
-    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<TypeName> cases) {
+    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<TypeSymbol> cases) {
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
-            for (TypeName c : cases) {
+            for (TypeSymbol c : cases) {
                 code.loadConstant(c.name());
                 code.aload(0);
                 code.invokevirtual(CD_String, "equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
@@ -533,7 +533,7 @@ final class CodecGen {
                 return false;   // an enumeration is a bare column, not a whole row (issue #161)
             }
             for (Hir.Name written : sum.cases()) {
-                TypeName caseName = written.denotes();
+                TypeSymbol caseName = written.denotes();
                 Hir.Def caseDef = symbols.declarations().declaration(caseName.key());
                 if (caseDef instanceof Hir.UnitData) continue;   // the discriminator alone, no column
                 if (!(caseDef instanceof Hir.Data d)) return false;   // a nested sum is not a row
@@ -1887,7 +1887,7 @@ final class CodecGen {
      * codec of its own — belonging to a union does not change a member's external representation,
      * only what wraps it here.
      */
-    byte[] generateResultUnionEncoder(GeneratedClass.BehaviorResult union, List<TypeName> members) {
+    byte[] generateResultUnionEncoder(GeneratedClass.BehaviorResult union, List<TypeSymbol> members) {
         ClassDesc cdEnc = cd(new GeneratedClass.Encoder(union));
         boolean enumeration = isEnumeration(members);
         return build(cdEnc, cb -> {
@@ -1896,7 +1896,7 @@ final class CodecGen {
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
-                for (TypeName member : members) {
+                for (TypeSymbol member : members) {
                     Label next = code.newLabel();
                     code.aload(1);
                     code.instanceOf(ctx.resultMemberClass(member));
@@ -1918,7 +1918,7 @@ final class CodecGen {
     }
 
     /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
-    private void emitMemberEncode(CodeBuilder code, TypeName member) {
+    private void emitMemberEncode(CodeBuilder code, TypeSymbol member) {
         emitTagged(code, TypeOps.caseShape(member, symbols), "type", member.name(), () -> {
             pushMemberEncoder(code, member);
             pushMemberValue(code, member);
@@ -1967,7 +1967,7 @@ final class CodecGen {
 
     /** Pushes the encoder a member writes itself with: its own derived one, or the Raoh leaf encoder
      * for a primitive, which declares none. */
-    private void pushMemberEncoder(CodeBuilder code, TypeName member) {
+    private void pushMemberEncoder(CodeBuilder code, TypeSymbol member) {
         if (member.isPrimitive()) {
             LeafScalar scalar = memberScalar(member);
             code.invokestatic(CD_ObjectEncoders, leafEncoderName(scalar), MTD_Rencode_leaf);
@@ -1981,7 +1981,7 @@ final class CodecGen {
 
     /** Pushes the Souther value the member holds: the union value itself for a member this module
      * declared, and what the bridge case wraps for any other. */
-    private void pushMemberValue(CodeBuilder code, TypeName member) {
+    private void pushMemberValue(CodeBuilder code, TypeSymbol member) {
         code.aload(1);
         if (ctx.isLocalMember(member)) {
             return;
@@ -1995,8 +1995,8 @@ final class CodecGen {
 
     /** Whether every member is a unit, so the union carries nothing but which member it is and
      * travels as that member's name — the form a named sum of units has (spec §encoder-derivation). */
-    private boolean isEnumeration(List<TypeName> members) {
-        for (TypeName member : members) {
+    private boolean isEnumeration(List<TypeSymbol> members) {
+        for (TypeSymbol member : members) {
             if (!(symbols.declarations().declaration(member.key()) instanceof Hir.UnitData)) {
                 return false;
             }
@@ -2006,18 +2006,18 @@ final class CodecGen {
 
     /** The static {@code encoder()} factory on the union's sealed interface. */
     void emitResultUnionEncoderFactory(ClassBuilder cb, GeneratedClass.BehaviorResult union,
-                                       List<TypeName> members) {
+                                       List<TypeSymbol> members) {
         emitCodecFactory(cb, "encoder", CD_REncoder, cd(new GeneratedClass.Encoder(union)),
                 encoderSig(cd(union), isEnumeration(members) ? CD_String : CD_Map));
     }
 
     /**
-     * The scalar a primitive member is. Recovered through {@link TypeName#primitiveKind()}, which is
+     * The scalar a primitive member is. Recovered through {@link TypeSymbol#primitiveKind()}, which is
      * the inverse of the mint a primitive case name comes from, rather than through a table of
      * spellings kept here — that table was a second place for the language's own spelling to be
      * written, and it answered a member outside it by raising.
      */
-    private static LeafScalar memberScalar(TypeName member) {
+    private static LeafScalar memberScalar(TypeSymbol member) {
         Type.Prim prim = member.primitiveKind();
         LeafScalar scalar = prim == null ? null : LeafScalar.of(prim);
         if (scalar == null) {

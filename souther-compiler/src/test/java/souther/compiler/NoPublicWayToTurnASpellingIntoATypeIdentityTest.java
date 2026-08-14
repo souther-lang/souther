@@ -10,7 +10,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -63,7 +63,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
             if (!Modifier.isPublic(m.getModifiers())) {
                 continue;
             }
-            boolean identity = m.getReturnType() == TypeName.class
+            boolean identity = m.getReturnType() == TypeSymbol.class
                     || Hir.Def.class.isAssignableFrom(m.getReturnType());
             boolean fromASpelling = List.of(m.getParameterTypes()).contains(String.class);
             if (identity && fromASpelling) {
@@ -80,7 +80,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     void nothingPublicOnADeclarationTakesAStringAndAnswersWithAnIdentity() {
         List<String> answering = new ArrayList<>();
         for (Method m : Hir.Def.class.getMethods()) {
-            if (m.getReturnType() == TypeName.class
+            if (m.getReturnType() == TypeSymbol.class
                     && List.of(m.getParameterTypes()).contains(String.class)) {
                 answering.add(m.getName());
             }
@@ -102,9 +102,9 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     @Test
     void aSpellingNamesAnIdentityOnlyForWhatTheLanguageDeclares() {
         Set<String> naming = new java.util.LinkedHashSet<>();
-        for (Method m : TypeName.class.getMethods()) {
+        for (Method m : TypeSymbol.class.getMethods()) {
             List<Class<?>> takes = List.of(m.getParameterTypes());
-            if (m.getReturnType() == TypeName.class && !takes.isEmpty()
+            if (m.getReturnType() == TypeSymbol.class && !takes.isEmpty()
                     && !takes.contains(TypeKey.class)) {
                 naming.add(m.getName());
             }
@@ -130,7 +130,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     void anAddressBecomesAnIdentityInOnePlace() {
         Set<String> exchanging = new java.util.LinkedHashSet<>();
         Set<String> asking = new java.util.LinkedHashSet<>();
-        for (Class<?> c : List.of(TypeName.class, souther.compiler.types.TypeSymbols.class,
+        for (Class<?> c : List.of(TypeSymbol.class, souther.compiler.types.TypeSymbols.class,
                 souther.compiler.check.Declarations.class, souther.compiler.check.TypeScope.class,
                 souther.compiler.check.Registry.class, Symbols.class, Hir.Def.class)) {
             for (Method m : c.getMethods()) {
@@ -138,7 +138,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                     continue;
                 }
                 String named = c.getSimpleName() + "." + m.getName();
-                (TypeName.class.equals(m.getReturnType()) ? exchanging : asking).add(named);
+                (TypeSymbol.class.equals(m.getReturnType()) ? exchanging : asking).add(named);
             }
             for (java.lang.reflect.Constructor<?> k : c.getConstructors()) {
                 if (List.of(k.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
@@ -195,8 +195,8 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
      */
     @Test
     void oneSpellingWrittenByTwoModulesIsTwoDeclarations() {
-        TypeName mine = declarationOf(APP_WITH_AMOUNT, "Amount").declares();
-        TypeName theirs = declarationOf(LIB, "Amount").declares();
+        TypeSymbol mine = declarationOf(APP_WITH_AMOUNT, "Amount").declares();
+        TypeSymbol theirs = declarationOf(LIB, "Amount").declares();
 
         assertEquals("Amount", mine.name());
         assertEquals("Amount", theirs.name());

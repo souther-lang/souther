@@ -17,7 +17,7 @@ import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.Denotation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
 
@@ -36,7 +36,7 @@ import java.util.Set;
  * {@code B.金額}, and whether the three mean one type is a question each consumer used to answer for
  * itself — which is why a capability reached the positions someone wired it to and no others
  * (issues #101, #113, #124, #132, #154). After it, every {@link Ast.Name} in the tree carries the
- * {@link TypeName} it denotes, and a check that wants to know whether two names are the same type
+ * {@link TypeSymbol} it denotes, and a check that wants to know whether two names are the same type
  * compares what they denote. There is no spelling left to compare.
  *
  * <p>A name that denotes nothing is reported here and is {@link Hir.Name.Unanswered} from there on
@@ -217,7 +217,7 @@ public final class Resolve {
      *                it there, and where they are
      * @param denotes what it names
      */
-    public record TypeUse(WrittenName written, TypeName denotes) {
+    public record TypeUse(WrittenName written, TypeSymbol denotes) {
 
         /** Where the name is written. */
         public SourcePos pos() {
@@ -286,7 +286,7 @@ public final class Resolve {
      * {@code reaches} is what those names turned out to denote, which is what says whether this
      * declaration stands on one that has no meaning.
      */
-    public record OfDeclaration(boolean answered, Set<TypeName> reaches) {}
+    public record OfDeclaration(boolean answered, Set<TypeSymbol> reaches) {}
 
     /** What a binding is called, and the occurrence of that name the author wrote. */
     public record BoundName(WrittenName written) {
@@ -333,12 +333,12 @@ public final class Resolve {
         // where that is decided again: reading them here would mean answering for a declaration
         // nothing else in the compilation has, which can only be done by making up an identity for
         // it.
-        for (Map.Entry<TypeName, Ast.Def> declared : symbols.declaredHere().entrySet()) {
+        for (Map.Entry<TypeSymbol, Ast.Def> declared : symbols.declaredHere().entrySet()) {
             int failedBefore = r.failed;
             int denotedBefore = r.denotations.size();
             Hir.Def resolved = r.def(declared.getKey(), declared.getValue());
             defs.add(resolved);
-            Set<TypeName> reaches = new LinkedHashSet<>();
+            Set<TypeSymbol> reaches = new LinkedHashSet<>();
             for (TypeUse d : r.denotations.subList(denotedBefore, r.denotations.size())) {
                 reaches.add(d.denotes());
             }
@@ -704,7 +704,7 @@ public final class Resolve {
 
     /** {@code def} resolved as {@code declared}, which is the identity the module's declarations
      * were indexed under and is handed in rather than worked out here. */
-    private Hir.Def def(TypeName declared, Ast.Def def) {
+    private Hir.Def def(TypeSymbol declared, Ast.Def def) {
         owner = new BindingOwner.OfData(declared);
         return switch (def) {
             case Ast.UnitData u -> new Hir.UnitData(u.written(), declared, u.pos());
@@ -738,7 +738,7 @@ public final class Resolve {
                 out.add(answered(unanswered(c)));
                 continue;
             }
-            TypeName denoted = answer.type();
+            TypeSymbol denoted = answer.type();
             // Recorded like any other written name. A case is a name this module wrote and this pass
             // answered, so leaving it out made it a use nothing could see — an editor asked about it
             // had no answer, and a reader asking which imports are written found the name missing.
@@ -760,7 +760,7 @@ public final class Resolve {
      * includes it reads these fields in <em>its</em> invariant, and the binding a field is stays the
      * declaring declaration's, so this is where an editor is answered from either way.
      */
-    private void declareFields(Ast.Data d, TypeName declared) {
+    private void declareFields(Ast.Data d, TypeSymbol declared) {
         Map<String, BindingId> bindings = TypeOps.fieldBindingsAsWritten(declared, d, symbols);
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
@@ -770,7 +770,7 @@ public final class Resolve {
         }
     }
 
-    private Bindings boundFields(Ast.Data d, TypeName declared) {
+    private Bindings boundFields(Ast.Data d, TypeSymbol declared) {
         Bindings bound = Bindings.NONE;
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again
@@ -1410,7 +1410,7 @@ public final class Resolve {
         return out;
     }
 
-    private static Hir.Name denoting(Ast.Name n, TypeName type) {
+    private static Hir.Name denoting(Ast.Name n, TypeSymbol type) {
         return new Hir.Name.Denoting(n.name(), type);
     }
 
@@ -1446,7 +1446,7 @@ public final class Resolve {
             case Denotation.Denotes d -> denoting(n, d.type());
             case Denotation.StandsForNothing ignored -> unanswered(n);
             case Denotation.NotInScope ignored -> {
-                TypeName option = TypeName.optionCase(n.written());
+                TypeSymbol option = TypeSymbol.optionCase(n.written());
                 yield option != null ? denoting(n, option) : nothingDenotes(n);
             }
         });

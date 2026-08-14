@@ -27,7 +27,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -380,7 +380,7 @@ public final class Names {
                     }
                     // asked one name at a time: what else that module declares is not what this
                     // import is about, and reading it would make this module depend on it
-                    TypeName brought = registry.identify(new TypeKey(imp.module(), imported));
+                    TypeSymbol brought = registry.identify(new TypeKey(imp.module(), imported));
                     if (brought == null) {
                         // a behavior import is resolved separately, and so is a value or a helper:
                         // none of them is a data Def, so none goes into the symbols map
@@ -597,7 +597,7 @@ public final class Names {
                     unbuilt.add(declared.getKey());
                     continue;
                 }
-                for (TypeName reached : declared.getValue().reaches()) {
+                for (TypeSymbol reached : declared.getValue().reaches()) {
                     if (reached.module().equals(name)) {
                         continue;
                     }
@@ -618,7 +618,7 @@ public final class Names {
                     if (unbuilt.contains(declared.getKey())) {
                         continue;
                     }
-                    for (TypeName reached : declared.getValue().reaches()) {
+                    for (TypeSymbol reached : declared.getValue().reaches()) {
                         if (reached.module().equals(name) && unbuilt.contains(reached.name())) {
                             unbuilt.add(declared.getKey());
                             more = true;
@@ -984,14 +984,14 @@ public final class Names {
      * <p>One question, so an editor's go-to-definition, find-references and rename all agree about
      * what the cursor is on. They used to each decide for themselves, by spelling.
      */
-    public record TypeAt(SourcePos at) implements Key<TypeName> {
+    public record TypeAt(SourcePos at) implements Key<TypeSymbol> {
         @Override
         public String sourceId() {
             return at == null ? null : at.sourceId();
         }
 
         @Override
-        public Answer<TypeName> compute(Db db) {
+        public Answer<TypeSymbol> compute(Db db) {
             String name = moduleAt(db, at);
             if (name == null) {
                 return Answer.absent();
@@ -1011,7 +1011,7 @@ public final class Names {
     }
 
     /** Every place a module names {@code denoted}, wherever it was declared. */
-    public record UsesOf(String name, TypeName denoted) implements Key<List<Resolve.TypeUse>> {
+    public record UsesOf(String name, TypeSymbol denoted) implements Key<List<Resolve.TypeUse>> {
         @Override
         public String module() {
             return name;
@@ -1260,7 +1260,7 @@ public final class Names {
     }
 
     /** The occurrence of a type's own name, in the declaration that declares it. */
-    public record DeclaredAt(TypeName denoted) implements Key<WrittenName> {
+    public record DeclaredAt(TypeSymbol denoted) implements Key<WrittenName> {
         @Override
         public String module() {
             return denoted.module();

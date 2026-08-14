@@ -8,7 +8,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;

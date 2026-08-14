@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -62,15 +62,15 @@ public final class HelperInvariants {
      * for it, which is where an imported clause falls outside the statically dischargeable fragment
      * (spec §invariant-discharge).
      */
-    public static Map<TypeName, List<Hir.InvariantClause>> invariantsForDischarge(
+    public static Map<TypeSymbol, List<Hir.InvariantClause>> invariantsForDischarge(
             Hir.Module m, Symbols symbols, Map<String, Hir.FnDef> published) {
         Hir.Module settled = settled(m, symbols);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
                 published, InliningPolicy.DISCHARGE);
-        Map<TypeName, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
+        Map<TypeSymbol, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
         for (Hir.Def def : settled.defs()) {
             if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
-                TypeName declared = d.declares();
+                TypeSymbol declared = d.declares();
                 out.put(declared, Hir.mapClauses(d.invariants(),
                         clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));
             }

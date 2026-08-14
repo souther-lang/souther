@@ -8,7 +8,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.MatchMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,14 +49,14 @@ public final class MatchElaborator {
      * says how to end the inner match.
      */
     static CompileException notCase(Hir.Name written, String what, Hir.Case c, Hir.Match m,
-                                            Set<TypeName> cases, Symbols symbols) {
+                                            Set<TypeSymbol> cases, Symbols symbols) {
         String caseName = written.written();
         String otherSum = null;
-        for (TypeName name : symbols.scope().visibleNames()) {
+        for (TypeSymbol name : symbols.scope().visibleNames()) {
             if (!(symbols.declarations().declaration(name.key()) instanceof Hir.SumData sum)) {
                 continue;
             }
-            List<TypeName> others = TypeOps.caseNames(sum);
+            List<TypeSymbol> others = TypeOps.caseNames(sum);
             if (others.contains(written.denotes()) && !cases.containsAll(others)) {
                 otherSum = sum.name();
                 break;
@@ -77,15 +77,15 @@ public final class MatchElaborator {
      * A single-case case binds that case's type; an or-pattern ({@code A | B}) binds {@code scrutinee}
      * (the sum type), since no one case type fits all its alternatives. Every case must be covered
      * exactly once (E1201; a second cover is an overlap error). */
-    static Core elaborateCasesMatch(Hir.Match m, Core scrutineeCore, Set<TypeName> cases,
+    static Core elaborateCasesMatch(Hir.Match m, Core scrutineeCore, Set<TypeSymbol> cases,
                                         String what, Type scrutinee,
                                         Scope env, CheckContext ctx, Type expected) {
-        Set<TypeName> covered = new HashSet<>();
+        Set<TypeSymbol> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Hir.Case c : m.cases()) {
             for (Hir.Name written : c.caseTypes()) {
-                TypeName caseName = names(written);
+                TypeSymbol caseName = names(written);
                 if (!cases.contains(caseName)) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
@@ -110,7 +110,7 @@ public final class MatchElaborator {
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
-        for (TypeName caseName : cases) {
+        for (TypeSymbol caseName : cases) {
             if (!covered.contains(caseName)) {
                 missing.add(caseName.name());
             }
@@ -129,7 +129,7 @@ public final class MatchElaborator {
      * {@code None}; both must be present (spec §match). */
     static Core elaborateOptionMatch(Hir.Match m, Core scrutineeCore, Type element,
                                           Scope env, CheckContext ctx, Type expected) {
-        Set<TypeName> covered = new HashSet<>();
+        Set<TypeSymbol> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Hir.Case c : m.cases()) {
@@ -138,17 +138,17 @@ public final class MatchElaborator {
             }
             Hir.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
-            TypeName armName = names(arm);
+            TypeSymbol armName = names(arm);
             Type bind;
-            if (TypeName.SOME.equals(armName)) {
+            if (TypeSymbol.SOME.equals(armName)) {
                 bind = element;
-            } else if (TypeName.NONE.equals(armName)) {
+            } else if (TypeSymbol.NONE.equals(armName)) {
                 bind = null;
             } else {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
             if (c.unwrapAsserts() != null) {
-                if (!TypeName.SOME.equals(armName)) {
+                if (!TypeSymbol.SOME.equals(armName)) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.TheCaseHasNoValueToOpen(caseType)).build());
                 }
                 checkOptionUnwrapAsserts(c, element, ctx.symbols());
@@ -163,7 +163,7 @@ public final class MatchElaborator {
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
-        for (TypeName caseName : List.of(TypeName.SOME, TypeName.NONE)) {
+        for (TypeSymbol caseName : List.of(TypeSymbol.SOME, TypeSymbol.NONE)) {
             if (!covered.contains(caseName)) {
                 missing.add(caseName.name());
             }
@@ -175,8 +175,8 @@ public final class MatchElaborator {
     }
 
     /** What each arm name denotes — what a {@code Core} arm dispatches on. */
-    static List<TypeName> denoted(List<Hir.Name> names) {
-        List<TypeName> out = new ArrayList<>();
+    static List<TypeSymbol> denoted(List<Hir.Name> names) {
+        List<TypeSymbol> out = new ArrayList<>();
         for (Hir.Name n : names) {
             out.add(names(n));
         }
@@ -192,7 +192,7 @@ public final class MatchElaborator {
      * cases — is that one mistake seen from another angle, which is what {@link Unanswerable} is
      * for.
      */
-    private static TypeName names(Hir.Name arm) {
+    private static TypeSymbol names(Hir.Name arm) {
         if (arm instanceof Hir.Name.Unanswered) {
             throw new Unanswerable(arm.pos());
         }
@@ -203,7 +203,7 @@ public final class MatchElaborator {
      * DivisionByZero}) binds that primitive; a data-named case binds its data type. Option's own
      * cases bind nothing readable here — an Option match binds the element, which
      * {@link #elaborateOptionMatch} knows and this does not. */
-    public static Type caseBindType(TypeName caseName) {
+    public static Type caseBindType(TypeSymbol caseName) {
         if (!caseName.isPrimitive()) {
             return Type.ref(caseName);
         }
@@ -253,7 +253,7 @@ public final class MatchElaborator {
                                   boolean firstOpensTheCase) {
         for (int i = 0; i < opened.size(); i++) {
             String name = opened.get(i).written();
-            TypeName layer = names(opened.get(i));
+            TypeSymbol layer = names(opened.get(i));
             Type inner = TypeOps.newtypeInner(layer, symbols);
             if (inner == null) {
                 Diagnostic.Builder d = Diagnostic.at(c.pos())

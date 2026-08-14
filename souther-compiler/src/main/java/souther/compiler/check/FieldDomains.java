@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import souther.compiler.numeric.Count;
 import java.util.ArrayList;
@@ -48,7 +48,7 @@ public final class FieldDomains {
     private final List<InvariantChecker.Direct> directs;
     /** Which declarations relate each coordinate to something else, and so could have moved where it
      * stops — see {@link #narrowedBy}. */
-    private final Map<String, List<TypeName>> narrowers;
+    private final Map<String, List<TypeSymbol>> narrowers;
     /** What each field has to hold, kept apart from what each field is. Same numbers, different
      * question — see {@link Held}. */
     private final Map<String, NumericDomain.Bounds> heldByField;
@@ -59,7 +59,7 @@ public final class FieldDomains {
     private final boolean seeded;
     private final NumericDomain numbers;
     /** What this was read from, so that it can be read again without one declaration's clauses. */
-    private final TypeName named;
+    private final TypeSymbol named;
     private final Hir.Data data;
     private final Symbols symbols;
     private final Map<String, Count> settled;
@@ -69,8 +69,8 @@ public final class FieldDomains {
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
                          List<InvariantChecker.Direct> directs,
-                         Map<String, List<TypeName>> narrowers, boolean infeasible,
-                         boolean seeded, NumericDomain numbers, TypeName named, Hir.Data data,
+                         Map<String, List<TypeSymbol>> narrowers, boolean infeasible,
+                         boolean seeded, NumericDomain numbers, TypeSymbol named, Hir.Data data,
                          Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
@@ -100,7 +100,7 @@ public final class FieldDomains {
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeName named, Hir.Data data, Symbols symbols) {
+    public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols) {
         return of(named, data, symbols, Map.of());
     }
 
@@ -112,7 +112,7 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeName named, Hir.Data data, Symbols symbols,
+    public static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
                                   Map<String, Count> settled) {
         return of(named, data, symbols, settled, InvariantChecker.Reach.EVERYTHING);
     }
@@ -126,13 +126,13 @@ public final class FieldDomains {
      * record holding it is otherwise told it holds nothing by the very rules the supposing was
      * about.
      */
-    static FieldDomains granting(TypeName named, Hir.Data data, Symbols symbols,
-                                 java.util.function.Predicate<TypeName> granted) {
+    static FieldDomains granting(TypeSymbol named, Hir.Data data, Symbols symbols,
+                                 java.util.function.Predicate<TypeSymbol> granted) {
         return of(named, data, symbols, Map.of(), InvariantChecker.Reach.stoppingAt(granted));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
-    private static FieldDomains of(TypeName named, Hir.Data data, Symbols symbols,
+    private static FieldDomains of(TypeSymbol named, Hir.Data data, Symbols symbols,
                                    Map<String, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
@@ -194,7 +194,7 @@ public final class FieldDomains {
      * @param from     the declaration the clause is written on, which is what names the line
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(String path, boolean measured, TypeName from, boolean lower, Endpoint end) {}
+    public record Placed(String path, boolean measured, TypeSymbol from, boolean lower, Endpoint end) {}
 
     /**
      * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
@@ -210,8 +210,8 @@ public final class FieldDomains {
      * differences and clauses can reach an end only together — and where it cannot, the set is what
      * is known and is handed over as it is.
      */
-    public List<TypeName> narrowedBy(String path, boolean lower) {
-        List<TypeName> candidates = narrowers.get(path);
+    public List<TypeSymbol> narrowedBy(String path, boolean lower) {
+        List<TypeSymbol> candidates = narrowers.get(path);
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -225,8 +225,8 @@ public final class FieldDomains {
         // where it stops: a second relation reaching a value the first has already passed changes
         // nothing, and naming it would make an edge's identity turn on a clause that moved it
         // nowhere.
-        List<TypeName> held = new ArrayList<>();
-        for (TypeName each : candidates) {
+        List<TypeSymbol> held = new ArrayList<>();
+        for (TypeSymbol each : candidates) {
             if (!ends(end, without(each::equals), path, lower)) {
                 held.add(each);
             }
@@ -240,8 +240,8 @@ public final class FieldDomains {
         // moves this end nowhere when it is the only one left moved it nowhere here, and it is out
         // whatever the rest of them are doing.
         Endpoint bare = endOf(without(candidates::contains), path, lower);
-        List<TypeName> saying = new ArrayList<>();
-        for (TypeName each : candidates) {
+        List<TypeSymbol> saying = new ArrayList<>();
+        for (TypeSymbol each : candidates) {
             if (!ends(bare, without(name -> candidates.contains(name) && !name.equals(each)),
                     path, lower)) {
                 saying.add(each);
@@ -253,8 +253,8 @@ public final class FieldDomains {
     /** In one order, whoever found them. Several of these are one answer and the answer is what a
      * line is told apart by, so an order read off the walk that collected them would make two
      * readings of one edge into two lines. */
-    private static List<TypeName> byName(List<TypeName> found) {
-        return found.stream().sorted(java.util.Comparator.comparing(TypeName::name)).toList();
+    private static List<TypeSymbol> byName(List<TypeSymbol> found) {
+        return found.stream().sorted(java.util.Comparator.comparing(TypeSymbol::name)).toList();
     }
 
     private Endpoint endOf(FieldDomains read, String path, boolean lower) {
@@ -268,7 +268,7 @@ public final class FieldDomains {
     }
 
     /** This value read again without the clauses of the declarations {@code skip} names. */
-    private FieldDomains without(java.util.function.Predicate<TypeName> skip) {
+    private FieldDomains without(java.util.function.Predicate<TypeSymbol> skip) {
         return of(named, data, symbols, settled, InvariantChecker.Reach.withoutClausesOf(skip));
     }
 
@@ -304,7 +304,7 @@ public final class FieldDomains {
      * bottom out, and a reader that guessed would refuse a type somebody can write.
      *
      */
-    public static boolean mayHoldNothingAt(TypeName named, Hir.Data data, String path,
+    public static boolean mayHoldNothingAt(TypeSymbol named, Hir.Data data, String path,
                                            Symbols symbols) {
         // A count is never below none, so leaving it no room above none is leaving it at none.
         return OccurrenceCounts.of(named, data, symbols).mayHoldAtMost(path, 0);

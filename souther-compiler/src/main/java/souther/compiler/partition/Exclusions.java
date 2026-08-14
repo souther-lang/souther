@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,9 +37,9 @@ public final class Exclusions {
     /** Nothing excluded: a behavior with no body, or one whose body says nothing this can read. */
     public static final Exclusions NONE = new Exclusions(Map.of());
 
-    private final Map<TermPath, Map<TypeName, List<String>>> byPath;
+    private final Map<TermPath, Map<TypeSymbol, List<String>>> byPath;
 
-    private Exclusions(Map<TermPath, Map<TypeName, List<String>>> byPath) {
+    private Exclusions(Map<TermPath, Map<TypeSymbol, List<String>>> byPath) {
         this.byPath = byPath;
     }
 
@@ -60,7 +60,7 @@ public final class Exclusions {
         if (path == null) {
             return NONE;
         }
-        Map<TypeName, List<String>> excluded = new LinkedHashMap<>();
+        Map<TypeSymbol, List<String>> excluded = new LinkedHashMap<>();
         for (Core.Case arm : match.cases()) {
             if (NormalReturn.of(arm.body())) {
                 continue;
@@ -78,13 +78,13 @@ public final class Exclusions {
     }
 
     /** The cases excluded at one input position, in the order the body rules them out. */
-    public List<TypeName> at(TermPath path) {
+    public List<TypeSymbol> at(TermPath path) {
         return List.copyOf(byPath.getOrDefault(path, Map.of()).keySet());
     }
 
     /** The cases excluded at a bare parameter, which is what the signature's own measure asks about:
      * it counts a position's cases and knows nothing of the fields inside one. */
-    public List<TypeName> atParameter(String name) {
+    public List<TypeSymbol> atParameter(String name) {
         return at(TermPath.of(name));
     }
 
@@ -95,7 +95,7 @@ public final class Exclusions {
      * {@code match} whose arms abort for different reasons has no single reason, and taking the one
      * written above the others would name it by where it happens to sit in the file.
      */
-    public List<String> reasonsFor(TermPath path, TypeName each) {
+    public List<String> reasonsFor(TermPath path, TypeSymbol each) {
         return byPath.getOrDefault(path, Map.of()).getOrDefault(each, List.of());
     }
 

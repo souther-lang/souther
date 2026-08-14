@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassFile;

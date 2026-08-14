@@ -2,7 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.MatchElaborator;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
@@ -37,13 +37,13 @@ final class ResultBoundary {
     private ResultBoundary() {}
 
     /** Returns the value on the stack as a member of {@code members}' union. */
-    static void inject(CodeBuilder code, CodegenContext ctx, List<TypeName> bridged, int slot) {
+    static void inject(CodeBuilder code, CodegenContext ctx, List<TypeSymbol> bridged, int slot) {
         if (bridged.isEmpty()) {
             code.areturn();
             return;
         }
         code.astore(slot);
-        for (TypeName member : bridged) {
+        for (TypeSymbol member : bridged) {
             Label next = code.newLabel();
             code.aload(slot);
             code.instanceOf(ctx.matchCaseClass(member));
@@ -64,14 +64,14 @@ final class ResultBoundary {
     }
 
     /** Reads the Souther value out of the union member on the stack, leaving it boxed. */
-    static void project(CodeBuilder code, CodegenContext ctx, String callee, List<TypeName> bridged,
+    static void project(CodeBuilder code, CodegenContext ctx, String callee, List<TypeSymbol> bridged,
                         int slot) {
         if (bridged.isEmpty()) {
             return;
         }
         code.astore(slot);
         Label done = code.newLabel();
-        for (TypeName member : bridged) {
+        for (TypeSymbol member : bridged) {
             Label next = code.newLabel();
             ClassDesc bridge = ctx.bridgeCaseClassOf(callee, member);
             code.aload(slot);

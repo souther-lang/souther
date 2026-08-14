@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -36,12 +36,12 @@ class CompileOutputUnionMemberTest {
                 """);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Class<?> union = loader.loadClass(Emitted.result("m", "half"));
-        assertEquals(List.of(loader.loadClass(Emitted.bridgeCase("m", TypeName.primitive("Int"))), loader.loadClass("m.NoAnswer")),
+        assertEquals(List.of(loader.loadClass(Emitted.bridgeCase("m", TypeSymbol.primitive("Int"))), loader.loadClass("m.NoAnswer")),
                 Arrays.asList(union.getPermittedSubclasses()),
                 "the primitive joins the union as a wrapper, the local case as itself");
 
         Object answered = Codecs.apply(loader.loadClass("m.Half").getMethod("of").invoke(null), 7L);
-        assertEquals(Emitted.bridgeCase("m", TypeName.primitive("Int")), answered.getClass().getName());
+        assertEquals(Emitted.bridgeCase("m", TypeSymbol.primitive("Int")), answered.getClass().getName());
         assertEquals(3L, answered.getClass().getMethod("value").invoke(answered));
     }
 

@@ -2,7 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.Prelude;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.core.Core;
 
 import java.lang.constant.ClassDesc;
@@ -203,8 +203,8 @@ final class Intrinsics {
             return CD_Option;
         }
         // So is a name of the runtime namespace ({@code RoundingMode}): it is the real package of
-        // the classes souther-runtime ships (see TypeName.RUNTIME), so a kernel taking one names it.
-        if (t instanceof Type.Ref r && TypeName.RUNTIME.equals(r.name().module())) {
+        // the classes souther-runtime ships (see TypeSymbol.RUNTIME), so a kernel taking one names it.
+        if (t instanceof Type.Ref r && TypeSymbol.RUNTIME.equals(r.name().module())) {
             return ClassDesc.of(r.name().qualified());
         }
         return CD_Object;   // Ref, Var, Tuple, Union, Nothing

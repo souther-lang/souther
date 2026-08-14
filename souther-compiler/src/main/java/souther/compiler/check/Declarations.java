@@ -110,7 +110,7 @@ public final class Declarations<D> {
     /** Every definition of one module, keyed by the name written there. The runtime namespace
      * answers with the prelude's runtime-backed data. */
     public Map<String, D> declaredIn(String moduleName) {
-        if (souther.compiler.types.TypeName.RUNTIME.equals(moduleName)) {
+        if (souther.compiler.types.TypeSymbol.RUNTIME.equals(moduleName)) {
             return language.declaredIn();
         }
         return registry.declaredIn(moduleName);

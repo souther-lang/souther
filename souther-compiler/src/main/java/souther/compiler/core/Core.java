@@ -4,7 +4,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Hir;
@@ -56,7 +56,7 @@ public sealed interface Core {
 
     /** A unit data written where a value goes: the type has one value, and naming it is that value
      * (spec §unit-data). Which unit is on the node, so nothing resolves a spelling again. */
-    record UnitValue(TypeName data, Type type, SourcePos pos) implements Core {}
+    record UnitValue(TypeSymbol data, Type type, SourcePos pos) implements Core {}
 
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
@@ -272,7 +272,7 @@ public sealed interface Core {
 
     /** {@code spreads} are the bindings the construction copies fields from — reads, not binders:
      * a spread names a value in force, it does not introduce one. */
-    record NewData(TypeName typeName, List<FieldInit> inits, List<Read> spreads, Type type,
+    record NewData(TypeSymbol typeName, List<FieldInit> inits, List<Read> spreads, Type type,
                    SourcePos pos) implements Core {
 
         /** How each spread source was written, in order. */
@@ -283,7 +283,7 @@ public sealed interface Core {
 
     /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
      * narrows to, or the element a {@code Some x} opens. */
-    record Case(List<TypeName> caseTypes, Hir.Binder binding, Core body, Type bindType,
+    record Case(List<TypeSymbol> caseTypes, Hir.Binder binding, Core body, Type bindType,
                 SourcePos pos) {
 
         /** How the binding was written, or null where the arm binds nothing. */

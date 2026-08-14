@@ -3,7 +3,7 @@ package souther.compiler.ast;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +37,7 @@ class ANameNothingDeclaresIsNotAResolvedNameTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    private static final TypeName DECLARED = TypeSymbols.declared(new TypeKey("demo", "Invoice"));
+    private static final TypeSymbol DECLARED = TypeSymbols.declared(new TypeKey("demo", "Invoice"));
 
     /** Before the pass runs, a name is what it is written as and nothing else. */
     @Test

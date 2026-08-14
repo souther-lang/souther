@@ -8,7 +8,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.coverage.Probe;
@@ -73,7 +73,7 @@ public final class ExampleVerifier {
      * Evaluates every example in {@code module}; returns one diagnostic per failing example row
      * (empty when all pass). Does not throw for a failed example — the caller aggregates. A fixture
      * of an imported type decodes against its declaring module's package, which its
-     * {@link TypeName} names (a cross-module example).
+     * {@link TypeSymbol} names (a cross-module example).
      *
      * <p>Classes this compile did not generate resolve under {@code parent} — where an example calls
      * into a module that was compiled by another project, that is the loader its classes come from.
@@ -233,7 +233,7 @@ public final class ExampleVerifier {
         if (sig == null) {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
         }
-        Set<TypeName> outCases = outCases(sig.outputType());
+        Set<TypeSymbol> outCases = outCases(sig.outputType());
         for (Hir.ExampleRow row : ex.rows()) {
             checkRow(target, sig, outCases, row, out, rows);
         }
@@ -363,12 +363,12 @@ public final class ExampleVerifier {
         private final FixtureReader fixtures;
         private final ExampleTarget target;
         private final Sig sig;
-        private final Set<TypeName> outCases;
+        private final Set<TypeSymbol> outCases;
         private final Hir.ExampleRow row;
         private final RowState state = new RowState();
 
         RowEvaluation(ExampleVerifier of, ExampleTarget target, Sig sig,
-                      Set<TypeName> outCases, Hir.ExampleRow row) {
+                      Set<TypeSymbol> outCases, Hir.ExampleRow row) {
             this.verifier = of;
             this.fixtures = of.newFixtureReader();
             this.target = target;
@@ -429,9 +429,9 @@ public final class ExampleVerifier {
         private volatile Stage stage = Stage.NONE;
         private Disposition disposition = Disposition.FAILED;
         private FailurePhase failurePhase = FailurePhase.NONE;
-        private TypeName expectedArm;
-        private TypeName resultArm;
-        private final List<TypeName> inputCases = new ArrayList<>();
+        private TypeSymbol expectedArm;
+        private TypeSymbol resultArm;
+        private final List<TypeSymbol> inputCases = new ArrayList<>();
         private final List<ObservedValue> inputs = new ArrayList<>();
         /** The arms this row went through, where the classes it ran were generated to say. Empty
          * otherwise, and empty for a row that did not finish — a set read from a row still running
@@ -467,7 +467,7 @@ public final class ExampleVerifier {
      * by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
      * {@link RowEvaluation} for why the row's own worker must not.
      */
-    private void checkRow(ExampleTarget target, Sig sig, Set<TypeName> outCases, Hir.ExampleRow row,
+    private void checkRow(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases, Hir.ExampleRow row,
                           List<Diagnostic> out, List<RowOutcome> rows) {
         RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
         switch (deadline.given(
@@ -615,7 +615,7 @@ public final class ExampleVerifier {
     }
 
     private void checkRowNow(FixtureReader fixtures, ExampleTarget target, Sig sig,
-                             Set<TypeName> outCases, Hir.ExampleRow row, List<Diagnostic> out,
+                             Set<TypeSymbol> outCases, Hir.ExampleRow row, List<Diagnostic> out,
                              RowState state) {
         List<BoundaryInput> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
@@ -646,12 +646,12 @@ public final class ExampleVerifier {
         // Only where that answers is there an arm to hold against the target's: a helper answers with a
         // case nothing here can read off the text, and reporting that as an arm the target cannot produce
         // refused a row whose expectation was right (issue #214).
-        TypeName named = fixtures.constructedCase(row.expected());
+        TypeSymbol named = fixtures.constructedCase(row.expected());
         state.expectedArm = named;
         if (named != null && !outCases.isEmpty() && !outCases.contains(named)) {
             String expectedArm = fixtures.expectedArm(row.expected());
             List<String> names = new ArrayList<>();
-            for (TypeName c : outCases) {
+            for (TypeSymbol c : outCases) {
                 names.add(c.name());
             }
             out.add(Diagnostic.at(row.pos())
@@ -708,7 +708,7 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
-            TypeName only = fixtures.caseOnly(row.expected());
+            TypeSymbol only = fixtures.caseOnly(row.expected());
             String stated = asserted != null ? fixtures.shown(asserted)
                     : only == null ? null : only.name();
             out.add(mismatch(fixtures, row, stated == null ? "the expected value" : stated,
@@ -725,7 +725,7 @@ public final class ExampleVerifier {
         // declares it, and what this module means by that class's spelling is a different question.
         state.resultArm = fixtures.typeOf(result);
         state.stage = Stage.COMPARED;
-        TypeName arm = fixtures.caseOnly(row.expected());
+        TypeSymbol arm = fixtures.caseOnly(row.expected());
         if (arm != null) {
             // A bare case name asserts the arm and nothing under it, so there is no value to compare.
             if (!arm.equals(state.resultArm)) {
@@ -758,7 +758,7 @@ public final class ExampleVerifier {
      * name divides into what its base divides into, so what a row there supplies is the case under
      * that name — the same projection, in the direction that reads rather than the one that derives.
      */
-    private TypeName caseWritten(FixtureReader fixtures, Hir.Expr fixture, Type position) {
+    private TypeSymbol caseWritten(FixtureReader fixtures, Hir.Expr fixture, Type position) {
         try {
             return fixtures.caseUnder(TypeView.of(position, symbols).wrappers().stream()
                     .map(TypeOps.Layer::named).toList(), fixture);
@@ -780,7 +780,7 @@ public final class ExampleVerifier {
         if (result == null || !(out instanceof Type.Union)) {
             return result;
         }
-        for (TypeName member : TypeOps.leafCases(out, symbols)) {
+        for (TypeSymbol member : TypeOps.leafCases(out, symbols)) {
             if (!member.isPrimitive() && member.module().equals(module.name())) {
                 continue;
             }
@@ -1053,7 +1053,7 @@ public final class ExampleVerifier {
         return b.build();
     }
 
-    private Set<TypeName> outCases(Type out) {
+    private Set<TypeSymbol> outCases(Type out) {
         return TypeOps.outputCases(out, symbols);
     }
 

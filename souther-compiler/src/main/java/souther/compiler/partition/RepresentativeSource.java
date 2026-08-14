@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
@@ -76,7 +76,7 @@ public sealed interface RepresentativeSource {
          * value under, outermost first — a fact about the position rather than about the
          * constructor.
          */
-        record Compose(TypeName through, List<TypeReachName.Written> worn) implements Evaluation {
+        record Compose(TypeSymbol through, List<TypeReachName.Written> worn) implements Evaluation {
 
             public Compose {
                 worn = List.copyOf(worn);
@@ -137,7 +137,7 @@ public sealed interface RepresentativeSource {
 
     /** A class whose values are composed through {@code through}, field by field, by the walk that
      *  composes every other record. */
-    record Composed(TypeName through) implements RepresentativeSource {
+    record Composed(TypeSymbol through) implements RepresentativeSource {
 
         @Override
         public Evaluation evaluate() {

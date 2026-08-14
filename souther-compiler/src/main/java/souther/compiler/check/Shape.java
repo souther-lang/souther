@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -67,25 +67,25 @@ public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Sh
     record Scalar(Type.Prim prim) implements PartitionInputShape {}
 
     /** A data with no contents: one value, which is which case it is. */
-    record Unit(TypeName name) implements PartitionInputShape {}
+    record Unit(TypeSymbol name) implements PartitionInputShape {}
 
     /** A data with fields, and what they are, in the order the declaration writes them.
      *
      *  <p>The order is part of the answer, not an accident of the map: what a report names first
      *  and which field a row is built for first are read off it. So the copy keeps it — an
      *  unordered one would leave every reader depending on a hash. */
-    record Product(TypeName name, Map<String, Type> fields) implements PartitionInputShape {
+    record Product(TypeSymbol name, Map<String, Type> fields) implements PartitionInputShape {
         public Product {
             fields = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(fields));
         }
     }
 
     /** A declared sum, {@code data S = A | B}. */
-    record Sum(TypeName name) implements PartitionInputShape {}
+    record Sum(TypeSymbol name) implements PartitionInputShape {}
 
     /** A union nobody named — what a branch widened to, or a behavior's written answer. Told apart
      *  from {@link Sum} because it has no declaration to be read off. */
-    record Cases(Set<TypeName> members) implements Shape {
+    record Cases(Set<TypeSymbol> members) implements Shape {
         public Cases {
             members = Set.copyOf(members);
         }
@@ -162,5 +162,5 @@ public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Sh
      * The interpretation was attempted and did not reach a terminal shape, which is a different
      * thing for a reader to report and a different thing for anyone to fix.
      */
-    record Unresolved(TypeName name) implements PartitionInputShape {}
+    record Unresolved(TypeSymbol name) implements PartitionInputShape {}
 }

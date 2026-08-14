@@ -9,7 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -45,7 +45,7 @@ import java.util.Set;
 final class Terms {
 
     private final Symbols symbols;
-    private final Map<TypeName, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
+    private final Map<TypeSymbol, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
     /** How the values of each atom this has named are spaced. Kept here because this is where an
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
      * anywhere else would be a second place that has to agree about which is which. */

@@ -11,7 +11,7 @@ import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 

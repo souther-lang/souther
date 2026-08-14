@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -98,7 +98,7 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
      * <p>A newtype arriving here is one the spine stopped on — its {@code value} was not declared,
      * so there is no base to read a shape from.
      */
-    private static Shape denoted(TypeName name, Symbols symbols) {
+    private static Shape denoted(TypeSymbol name, Symbols symbols) {
         return switch (symbols.declarations().declaration(name.key())) {
             case Hir.SumData _ -> new Shape.Sum(name);
             case Hir.UnitData _ -> new Shape.Unit(name);

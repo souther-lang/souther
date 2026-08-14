@@ -15,8 +15,8 @@ package souther.compiler.types;
  * by everyone; {@code Nothing} and {@code Unknown}, which is what they were called first, are two
  * words for the same thing and were read for each other within a day of being written.
  *
- * <p>The three used to be a {@link TypeName} that was null, a {@link TypeName} of a module no
- * source may name ({@code souther.unresolved}), and a {@link TypeName} — so a reader that took the
+ * <p>The three used to be a {@link TypeSymbol} that was null, a {@link TypeSymbol} of a module no
+ * source may name ({@code souther.unresolved}), and a {@link TypeSymbol} — so a reader that took the
  * answer for a declaration was reading a fabricated identity, and eight of them asked
  * {@code isUnresolved()} afterwards to find out. An answer that has to be asked what it is is an
  * answer a reader can forget to ask.
@@ -24,7 +24,7 @@ package souther.compiler.types;
 public sealed interface Denotation {
 
     /** The declaration the name denotes here. */
-    record Denotes(TypeName type) implements Denotation {
+    record Denotes(TypeSymbol type) implements Denotation {
 
         public Denotes {
             if (type == null) {
@@ -57,7 +57,7 @@ public sealed interface Denotation {
     /** The declaration this denotes, or null where it denotes none. For a reader that has one thing
      * to do with a declaration and nothing to do without one; a reader that tells the two absences
      * apart switches over this instead. */
-    default TypeName type() {
+    default TypeSymbol type() {
         return this instanceof Denotes d ? d.type() : null;
     }
 }

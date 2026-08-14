@@ -11,7 +11,7 @@ import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 
@@ -145,7 +145,7 @@ public interface Hir {
         /** A name a pass synthesized, already knowing what it denotes. It is written nowhere;
          * {@code pos} is what a complaint about it points at. The spelling is the declaration's own,
          * which is what a reference internal to a module reaches it by. */
-        static Name resolved(TypeName denotes, SourcePos pos) {
+        static Name resolved(TypeSymbol denotes, SourcePos pos) {
             return new Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
         }
 
@@ -178,7 +178,7 @@ public interface Hir {
          * on without one asks which of the two it is rather than taking the spelling. This is the
          * one place that says so.
          */
-        default TypeName denotes() {
+        default TypeSymbol denotes() {
             if (this instanceof Denoting denoting) {
                 return denoting.type();
             }
@@ -198,7 +198,7 @@ public interface Hir {
          * which is a different type — so "this has been resolved" and "this names something" are
          * not two readings of one value, which is what a stand-in identity made them.
          */
-        record Denoting(WrittenName name, TypeName type) implements Name {
+        record Denoting(WrittenName name, TypeSymbol type) implements Name {
 
             public Denoting {
                 if (type == null) {
@@ -653,7 +653,7 @@ public interface Hir {
          * declaration here whatever the name came from, which is what issues #464, #696 and #700
          * each were.
          */
-        TypeName declares();
+        TypeSymbol declares();
 
         /** What the declaration is called. */
         default String name() {
@@ -696,7 +696,7 @@ public interface Hir {
      * representation differs.
      */
     record Data(WrittenName written,
-                TypeName declares,
+                TypeSymbol declares,
                 boolean newtype,
                 List<Name> includes,
                 List<Field> fields,
@@ -731,7 +731,7 @@ public interface Hir {
 
     /** A sum data definition {@code data X = A | B | ...} with optional discriminate decoder/encoder. */
     record SumData(WrittenName written,
-                   TypeName declares,
+                   TypeSymbol declares,
                    List<Name> cases,
                    Optional<Discriminate> decoder,
                    Optional<SumEncoder> encoder,
@@ -743,7 +743,7 @@ public interface Hir {
     record EncVariant(Name caseType, String tag, SourcePos pos) implements Hir {}
 
     /** A unit data definition {@code data U} with no fields. */
-    record UnitData(WrittenName written, TypeName declares, SourcePos pos) implements Def {}
+    record UnitData(WrittenName written, TypeSymbol declares, SourcePos pos) implements Def {}
 
     /** {@code decoder from Object discriminate on "key" { "tag" -> Case.decoder ... }} */
     record Discriminate(String key, List<Variant> variants, SourcePos pos) implements Hir {}

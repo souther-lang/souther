@@ -18,7 +18,7 @@ import souther.compiler.report.GeneratedRows;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -64,7 +64,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
         return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
-    private TypeName named(String name) {
+    private TypeSymbol named(String name) {
         return TypeSymbols.declared(new TypeKey(symbols.module(), name));
     }
 

@@ -17,7 +17,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -429,14 +429,14 @@ public final class Shapes {
      * written where its type is declared; a reader in another module asks that module.
      */
     public record InvariantCapabilities(String name)
-            implements Key<Map<TypeName, List<ClauseDischarge>>> {
+            implements Key<Map<TypeSymbol, List<ClauseDischarge>>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeName, List<ClauseDischarge>>> compute(Db db) {
+        public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
             Answer<ResolvedModule> resolved = db.ask(new Expandable(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!resolved.present() || !scope.present()) {
@@ -449,7 +449,7 @@ public final class Shapes {
             // a rule this analysis cannot read, and a construction the bound rejects would compile.
             Hir.Module declaring = HelperNames.withQualifiedInvariants(resolved.value().module());
             try {
-                Map<TypeName, List<ClauseDischarge>> out = new LinkedHashMap<>();
+                Map<TypeSymbol, List<ClauseDischarge>> out = new LinkedHashMap<>();
                 for (Hir.Def def : declaring.defs()) {
                     if (!(def instanceof Hir.Data data) || data.invariants().isEmpty()) {
                         continue;
@@ -460,7 +460,7 @@ public final class Shapes {
                     HelperInliner inliner = HelperInliner.forHelpers(name,
                             HelperInliner.helpersOf(declaring), published, InliningPolicy.DISCHARGE);
                     List<ClauseDischarge> clauses = new ArrayList<>();
-                    TypeName named = data.declares();
+                    TypeSymbol named = data.declares();
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
@@ -510,14 +510,14 @@ public final class Shapes {
      * inside the fragment — the definition is substituted, as it is everywhere the invariant is read.
      */
     public record InvariantsForDischarge(String name)
-            implements Key<Map<TypeName, List<Hir.InvariantClause>>> {
+            implements Key<Map<TypeSymbol, List<Hir.InvariantClause>>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeName, List<Hir.InvariantClause>>> compute(Db db) {
+        public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
             Answer<ResolvedModule> resolved = db.ask(new Expandable(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!resolved.present() || !scope.present()) {

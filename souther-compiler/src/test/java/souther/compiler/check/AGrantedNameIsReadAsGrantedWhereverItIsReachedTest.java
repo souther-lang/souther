@@ -6,7 +6,7 @@ import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Set;

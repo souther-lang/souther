@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.HashMap;
@@ -80,8 +80,8 @@ public final class SyntaxSymbols implements NameSense {
      * the module declares. A source declaration the module does not have is not one of these, so
      * nothing here has an identity to be resolved under that nothing else would answer with.
      */
-    public Map<TypeName, Ast.Def> declaredHere() {
-        Map<TypeName, Ast.Def> declared = new LinkedHashMap<>();
+    public Map<TypeSymbol, Ast.Def> declaredHere() {
+        Map<TypeSymbol, Ast.Def> declared = new LinkedHashMap<>();
         for (Ast.Def def : registry.declaredIn(module()).values()) {
             if (!(scope.resolve(def.written()) instanceof Denotation.Denotes denotes)) {
                 // The scope is built from these same declarations, so a module that declares a name

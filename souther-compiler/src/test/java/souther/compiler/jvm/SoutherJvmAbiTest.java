@@ -3,7 +3,7 @@ package souther.compiler.jvm;
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class SoutherJvmAbiTest {
 
-    private static final TypeName ORDER = TypeSymbols.declared(new TypeKey("shop", "Order"));
+    private static final TypeSymbol ORDER = TypeSymbols.declared(new TypeKey("shop", "Order"));
 
     /** The specification, as a table: an identity and what it is called. */
     private static List<Object[]> abi() {
@@ -49,7 +49,7 @@ class SoutherJvmAbiTest {
         // A bridge case belongs to the module that emits it, not to the member's own module.
         rows.add(new Object[] {new GeneratedClass.BridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))),
                 "ship.ShortageCase"});
-        rows.add(new Object[] {new GeneratedClass.BridgeCase("m", TypeName.primitive("Int")),
+        rows.add(new Object[] {new GeneratedClass.BridgeCase("m", TypeSymbol.primitive("Int")),
                 "m.IntCase"});
 
         // A codec sits beside what it encodes, whatever that is — a declared type or a union the
@@ -123,8 +123,8 @@ class SoutherJvmAbiTest {
      */
     @Test
     void andAValueClassNameSaysWhichTypeItWouldBe() {
-        for (TypeName type : List.of(ORDER, TypeSymbols.declared(new TypeKey("在庫", "金額")),
-                TypeSymbols.declared(new TypeKey("a.b.c", "Deep")), TypeName.primitive("Int"))) {
+        for (TypeSymbol type : List.of(ORDER, TypeSymbols.declared(new TypeKey("在庫", "金額")),
+                TypeSymbols.declared(new TypeKey("a.b.c", "Deep")), TypeSymbol.primitive("Int"))) {
             assertEquals(type, SoutherJvmAbi.valueTypeCandidate(
                     SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
         }

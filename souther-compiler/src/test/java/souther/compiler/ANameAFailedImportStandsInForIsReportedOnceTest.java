@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * as many times as the model writes the name. So the name stays in scope denoting nothing, and a use
  * of it takes the error type.
  *
- * <p>Held here rather than on the mechanism. The scope used to hold a {@code TypeName} of a module
+ * <p>Held here rather than on the mechanism. The scope used to hold a {@code TypeSymbol} of a module
  * no source may name for this, which is why every reader below it had to ask whether the identity it
  * had was really one; the answer is a {@code Denotation} now. Either way what must be true is what a
  * build says, and nothing said it before this.

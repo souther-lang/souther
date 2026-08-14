@@ -16,7 +16,7 @@ import souther.compiler.partition.OriginRef;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 

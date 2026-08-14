@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -41,8 +41,8 @@ public final class ProducedCases {
      * @param declared what the output type's cases are, which is what this answers where nothing is
      *                 taken away
      */
-    public static Set<TypeName> of(Core body, CoverageSites.Plan plan, GuardReachability reachable,
-                                   Set<TypeName> declared) {
+    public static Set<TypeSymbol> of(Core body, CoverageSites.Plan plan, GuardReachability reachable,
+                                   Set<TypeSymbol> declared) {
         // Nothing proven is nothing to take away: what this returns is `declared` less the cases whose
         // every producer is behind a proven arm, and with no such arm there are none. Skipped rather
         // than walked to the same answer.
@@ -54,7 +54,7 @@ public final class ProducedCases {
         if (seen.anythingUnreadable) {
             return declared;   // something reachable answers with what this cannot name
         }
-        Set<TypeName> out = new LinkedHashSet<>(declared);
+        Set<TypeSymbol> out = new LinkedHashSet<>(declared);
         seen.behindAProvenArm.stream().filter(each -> !seen.reachable.contains(each)).toList()
                 .forEach(out::remove);
         // The order the cases were declared in, which is the order they are named in. `Set.copyOf`
@@ -67,10 +67,10 @@ public final class ProducedCases {
     private static final class Seen {
 
         /** Answered with somewhere no proof rules out. */
-        private final Set<TypeName> reachable = new LinkedHashSet<>();
+        private final Set<TypeSymbol> reachable = new LinkedHashSet<>();
         /** Answered with behind an arm nothing reaches, which is only worth acting on where the case
          * is answered with nowhere else. */
-        private final Set<TypeName> behindAProvenArm = new LinkedHashSet<>();
+        private final Set<TypeSymbol> behindAProvenArm = new LinkedHashSet<>();
         /** A producer that could answer with anything, at a place something reaches. */
         private boolean anythingUnreadable;
     }
@@ -83,7 +83,7 @@ public final class ProducedCases {
      * case owed because the body happened to build one on its way past.
      */
     private static void walk(Core e, List<Integer> under, CoverageSites.Plan plan,
-                             GuardReachability reachable, Set<TypeName> declared, Seen seen) {
+                             GuardReachability reachable, Set<TypeSymbol> declared, Seen seen) {
         if (seen.anythingUnreadable) {
             return;   // nothing further can be taken away
         }
@@ -119,8 +119,8 @@ public final class ProducedCases {
     }
 
     /** Where one producer puts the case it answers with. */
-    private static void produce(TypeName built, List<Integer> under, GuardReachability reachable,
-                                Set<TypeName> declared, Seen seen) {
+    private static void produce(TypeSymbol built, List<Integer> under, GuardReachability reachable,
+                                Set<TypeSymbol> declared, Seen seen) {
         boolean proven = under.stream().anyMatch(reachable::provenUnreachable);
         if (built == null || !declared.contains(built)) {
             // Not a case this can name. Reachable, it could be any of them and nothing is taken away;

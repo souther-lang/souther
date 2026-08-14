@@ -13,7 +13,7 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -206,7 +206,7 @@ public final class SpecChecker {
                 // against, and the other compositions still have theirs.
                 continue;
             }
-            Set<TypeName> inferred = TypeOps.leafCases(sig.outputType(), symbols);
+            Set<TypeSymbol> inferred = TypeOps.leafCases(sig.outputType(), symbols);
             Hir.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
@@ -214,7 +214,7 @@ public final class SpecChecker {
                                 .hint(new DeclarationMessage.WriteTheOutputSignature(pipe.name(), PipelineSigs.caseList(inferred)))
                                 .say(new DeclarationMessage.AnExposedCompositionDeclaresItsOutput(pipe.name())).build());
             }
-            Set<TypeName> declaredCases = TypeOps.leafCases(TypeOps.successType(declared), symbols);
+            Set<TypeSymbol> declaredCases = TypeOps.leafCases(TypeOps.successType(declared), symbols);
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
@@ -323,7 +323,7 @@ public final class SpecChecker {
             // Both sides name types, and a type has one identity however it is written — `up.Amount`
             // and an `Amount` an import brings in are the same one. Each side keeps its own spelling
             // in whatever it has to report.
-            Set<TypeName> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
+            Set<TypeSymbol> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
             // Every way this clause and this body disagree, and not the first of them. Both sides
             // are worked out once and whole before any of it is said, so stopping at one left the
             // author to fix that one, compile, and be told the next — a walk down the call graph,
@@ -339,7 +339,7 @@ public final class SpecChecker {
             // clause writes them — every one of them is at the declaration, so nothing reorders them
             // afterwards.
             List<Diagnostic> disagreements = new ArrayList<>();
-            for (Map.Entry<TypeName, String> built : constructed.originated().entrySet()) {
+            for (Map.Entry<TypeSymbol, String> built : constructed.originated().entrySet()) {
                 if (!declared.contains(built.getKey())) {
                     String c = built.getValue();
                     disagreements.add(Diagnostic.at(spec.pos())
@@ -414,7 +414,7 @@ public final class SpecChecker {
             if (sig == null) {
                 continue;
             }
-            TypeName[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
+            TypeSymbol[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
             if (clash == null) {
                 continue;
             }
@@ -435,7 +435,7 @@ public final class SpecChecker {
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            TypeName carrying = TypeOps.memberCarryingField(sig.outputType(), DISCRIMINATOR, symbols);
+            TypeSymbol carrying = TypeOps.memberCarryingField(sig.outputType(), DISCRIMINATOR, symbols);
             if (carrying == null) {
                 continue;
             }
@@ -459,7 +459,7 @@ public final class SpecChecker {
                                                  boolean exposeAll, Set<String> exposed) {
         for (Hir.Name name : spec.constructs()) {
             String c = name.written();
-            TypeName built = name.denotes();
+            TypeSymbol built = name.denotes();
             if (symbols.declarations().declaration(built.key()) instanceof Hir.UnitData) {
                 continue;   // a unit has a generated factory
             }
@@ -609,7 +609,7 @@ public final class SpecChecker {
         }
         // `mentions` stops at the first match, so the predicate keeps the name it stopped on: a
         // collection carries its element out with it too (`List<Id>` names `Id`).
-        TypeName[] hidden = new TypeName[1];
+        TypeSymbol[] hidden = new TypeSymbol[1];
         Type.mentions(written, t -> {
             if (t instanceof Type.Ref ref && !nameableOutside(ref.name(), symbols, exposeAll, exposed)) {
                 hidden[0] = ref.name();
@@ -625,7 +625,7 @@ public final class SpecChecker {
     }
 
     /** Whether a reader outside the declaring module can write {@code name}. */
-    private static boolean nameableOutside(TypeName name, Symbols symbols, boolean exposeAll,
+    private static boolean nameableOutside(TypeSymbol name, Symbols symbols, boolean exposeAll,
                                            Set<String> exposed) {
         return symbols.scope().isForeign(name)
                 ? symbols.scope().isExposed(name) : exposeAll || exposed.contains(name.name());

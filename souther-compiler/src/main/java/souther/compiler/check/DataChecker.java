@@ -14,7 +14,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -47,7 +47,7 @@ public final class DataChecker {
      * {@code type} says which module declared it — the check runs that module's generated class, not
      * one named after the module the construction is written in. {@code typeName} is what was
      * written, which is what the message quotes. */
-    public record ConstCheck(String typeName, TypeName type, Object value, SourcePos pos) {}
+    public record ConstCheck(String typeName, TypeSymbol type, Object value, SourcePos pos) {}
 
     /**
      * Every {@code 金額(constant)} in the module: a newtype construction whose argument folds to a
@@ -72,7 +72,7 @@ public final class DataChecker {
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
     }
 
-    public static boolean isInvariantBearing(TypeName typeName, Symbols symbols) {
+    public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
         return typeName != null && symbols.declarations().declaration(typeName.key()) instanceof Hir.Data d
                 && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
     }
@@ -105,14 +105,14 @@ public final class DataChecker {
      * came in with a published body — it may have no name for the type — and a behavior that declares
      * one anyway is not told it builds nothing.
      */
-    public record Constructs(Map<TypeName, String> originated, Map<TypeName, String> carried) {
+    public record Constructs(Map<TypeSymbol, String> originated, Map<TypeSymbol, String> carried) {
 
         public static Constructs empty() {
             return new Constructs(new LinkedHashMap<>(), new LinkedHashMap<>());
         }
 
         /** Whether {@code built} is built here at all, however it got here. */
-        public boolean builds(TypeName built) {
+        public boolean builds(TypeSymbol built) {
             return originated.containsKey(built) || carried.containsKey(built);
         }
 
@@ -123,7 +123,7 @@ public final class DataChecker {
         /** The same set with everything counted as carried — what a body reached through something
          * it was handed rather than wrote, and so answers for none of. */
         public Constructs allCarried() {
-            Map<TypeName, String> all = new LinkedHashMap<>(carried);
+            Map<TypeSymbol, String> all = new LinkedHashMap<>(carried);
             originated.forEach(all::putIfAbsent);
             return new Constructs(new LinkedHashMap<>(), all);
         }
@@ -132,10 +132,10 @@ public final class DataChecker {
          * whether that added anything. */
         public boolean absorb(Constructs other) {
             boolean added = false;
-            for (Map.Entry<TypeName, String> e : other.originated.entrySet()) {
+            for (Map.Entry<TypeSymbol, String> e : other.originated.entrySet()) {
                 added |= originated.putIfAbsent(e.getKey(), e.getValue()) == null;
             }
-            for (Map.Entry<TypeName, String> e : other.carried.entrySet()) {
+            for (Map.Entry<TypeSymbol, String> e : other.carried.entrySet()) {
                 added |= carried.putIfAbsent(e.getKey(), e.getValue()) == null;
             }
             return added;
@@ -149,7 +149,7 @@ public final class DataChecker {
      * construction only when nothing has bound it — a local of the same name wins (spec §unit-data).
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
-    static void collectConstructs(Hir.Expr e, Map<TypeName, String> out, Symbols symbols,
+    static void collectConstructs(Hir.Expr e, Map<TypeSymbol, String> out, Symbols symbols,
                                   Map<String, Constructs> recConstructs) {
         Constructs all = Constructs.empty();
         collectConstructs(e, all, symbols, recConstructs);
@@ -157,7 +157,7 @@ public final class DataChecker {
     }
 
     /** Whether {@code nd} arrived here already made, rather than being written here. */
-    private static boolean carried(Hir.NewData nd, TypeName built) {
+    private static boolean carried(Hir.NewData nd, TypeSymbol built) {
         return nd.origin().carried(built);
     }
 
@@ -187,7 +187,7 @@ public final class DataChecker {
                 // which it can. A value carries the construction its definition made, whatever module
                 // declares the type: the definition is where the value is made, and a body that names
                 // it compares against a limit rather than setting one.
-                Map<TypeName, String> side = carried(nd, nd.typeName().denotes())
+                Map<TypeSymbol, String> side = carried(nd, nd.typeName().denotes())
                         ? out.carried() : out.originated();
                 side.putIfAbsent(nd.typeName().denotes(), nd.typeName().name().quoted());
                 for (Hir.FieldInit init : nd.inits()) {
@@ -252,7 +252,7 @@ public final class DataChecker {
             case Hir.Var v when v.denotes() instanceof ValueName.OfType named
                     && symbols.declarations().declaredByCompilation(named.type().key())
                     && symbols.declarations().declaration(named.type().key()) instanceof Hir.UnitData -> {
-                Map<TypeName, String> side = named.origin().carried(named.type())
+                Map<TypeSymbol, String> side = named.origin().carried(named.type())
                         ? out.carried() : out.originated();
                 side.putIfAbsent(named.type(), v.written().quoted());
             }
@@ -289,7 +289,7 @@ public final class DataChecker {
      * `Amount` an import brings in and `up.Amount` are the duplicate a spelling comparison misses.
      */
     static void rejectDuplicateTypes(List<Hir.Name> names, String where, SourcePos pos) {
-        Set<TypeName> seen = new HashSet<>();
+        Set<TypeSymbol> seen = new HashSet<>();
         for (Hir.Name n : names) {
             // A name nothing declares denotes no type, so there is no type here for another to be
             // the same as. It was reported where it is written; calling it a duplicate as well
@@ -319,8 +319,8 @@ public final class DataChecker {
      * it has no leaf to dispatch a codec over and no case list a {@code match} could be exhaustive
      * against. Reported here rather than left to the walks, which would recurse until the stack ran
      * out — codec derivation runs before this check and stops at the repeat for the same reason. */
-    private static List<String> sumCycle(TypeName target, Symbols symbols,
-                                         LinkedHashSet<TypeName> path) {
+    private static List<String> sumCycle(TypeSymbol target, Symbols symbols,
+                                         LinkedHashSet<TypeSymbol> path) {
         if (!(symbols.declarations().declaration(
                 path.isEmpty() ? target.key() : last(path).key()) instanceof Hir.SumData s)) {
             return null;
@@ -328,7 +328,7 @@ public final class DataChecker {
         for (Hir.Name caseName : s.cases()) {
             if (target.equals(caseName.denotes())) {
                 List<String> out = new ArrayList<>();
-                for (TypeName seen : path) {
+                for (TypeSymbol seen : path) {
                     out.add(seen.name());
                 }
                 out.add(caseName.written());
@@ -345,9 +345,9 @@ public final class DataChecker {
         return null;
     }
 
-    private static TypeName last(LinkedHashSet<TypeName> path) {
-        TypeName out = null;
-        for (TypeName t : path) {
+    private static TypeSymbol last(LinkedHashSet<TypeSymbol> path) {
+        TypeSymbol out = null;
+        for (TypeSymbol t : path) {
             out = t;
         }
         return out;
@@ -375,7 +375,7 @@ public final class DataChecker {
         sum.decoder().ifPresent(disc -> {
             // a derived codec dispatches over the leaves, so a nested sum's cases count too (§sum-data,
             // §sum-discrimination)
-            Set<TypeName> dispatchable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
+            Set<TypeSymbol> dispatchable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
             for (Hir.Variant v : disc.variants()) {
                 Hir.Def caseDef = symbols.declarations().declaration(v.caseType().denotes().key());
                 if (!dispatchable.contains(v.caseType().denotes())) {
@@ -399,15 +399,15 @@ public final class DataChecker {
             // A case lays its fields flatly beside the discriminator the sum writes, so a case
             // declaring a field of that name and the tag want one key. Refused here rather than
             // written over where it is encoded, which would lose the value with nothing said.
-            TypeName carrying = TypeOps.memberCarryingField(
+            TypeSymbol carrying = TypeOps.memberCarryingField(
                     Type.ref(sum.declares()), enc.key(), symbols);
             if (carrying != null) {
                 throw CompileException.of(Diagnostic
                                 .at(sum.pos())
                                 .hint(new DataMessage.TheTagAndTheFieldWantOneKey(enc.key())).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), enc.key(), sum.name())).build());
             }
-            Set<TypeName> covered = new HashSet<>();
-            Set<TypeName> encodable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
+            Set<TypeSymbol> covered = new HashSet<>();
+            Set<TypeSymbol> encodable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
             for (Hir.EncVariant v : enc.variants()) {
                 if (!encodable.contains(v.caseType().denotes())) {
                     throw CompileException.of(Diagnostic.at(v.pos())
@@ -425,7 +425,7 @@ public final class DataChecker {
                 }
                 covered.add(v.caseType().denotes());
             }
-            for (TypeName caseName : encodable) {
+            for (TypeSymbol caseName : encodable) {
                 if (!covered.contains(caseName)) {
                     throw CompileException.of(Diagnostic.at(enc.pos())
                             .say(new CodecMessage.TheEncoderIsMissingACase(sum.name(), caseName.name()))
@@ -450,7 +450,7 @@ public final class DataChecker {
      */
     static List<CompileException> typesWithNoValue(Hir.Module module, Symbols symbols) {
         List<CompileException> found = new ArrayList<>();
-        for (List<TypeName> group : UninhabitableTypes.withNoValueOfTheirOwn(module, symbols,
+        for (List<TypeSymbol> group : UninhabitableTypes.withNoValueOfTheirOwn(module, symbols,
                 TypeCardinality.solve(module, symbols))) {
             // The group is one thing to say and is said at the first of them the module declares.
             // Which one that is settles where the report sits and not what it is about: the others
@@ -537,7 +537,7 @@ public final class DataChecker {
      * bound where it was written, so that is what the scope offers, and the clause carried in with the
      * declaration finds the very bindings it names.
      */
-    static Scope fieldScope(TypeName declared, Hir.Data data, Symbols symbols) {
+    static Scope fieldScope(TypeSymbol declared, Hir.Data data, Symbols symbols) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
         TypeOps.fieldBindings(declared, data, symbols).forEach((name, binding) ->

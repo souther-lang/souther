@@ -6,7 +6,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -37,20 +37,20 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
     /** The language's own data is there to be read. */
     @Test
     void aRuntimeBackedDeclarationIsAnswered() {
-        assertNotNull(declarations().declaration(TypeName.runtime("RoundingMode").key()));
-        assertTrue(declarations().contains(TypeName.runtime("RoundingMode").key()));
+        assertNotNull(declarations().declaration(TypeSymbol.runtime("RoundingMode").key()));
+        assertTrue(declarations().contains(TypeSymbol.runtime("RoundingMode").key()));
     }
 
     /** And is declared by no module here. */
     @Test
     void andIsNotDeclaredByThisCompilation() {
-        assertFalse(declarations().declaredByCompilation(TypeName.runtime("RoundingMode").key()));
+        assertFalse(declarations().declaredByCompilation(TypeSymbol.runtime("RoundingMode").key()));
     }
 
     /** While what the compilation writes answers yes to both. */
     @Test
     void aDeclarationOfThisCompilationAnswersBoth() {
-        TypeName note = TypeSymbols.declared(new TypeKey("app", "Note"));
+        TypeSymbol note = TypeSymbols.declared(new TypeKey("app", "Note"));
 
         assertNotNull(declarations().declaration(note.key()));
         assertTrue(declarations().declaredByCompilation(note.key()));
@@ -59,7 +59,7 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
     /** And a name neither of them declares is answered by neither. */
     @Test
     void aNameNothingDeclaresIsAnsweredByNeither() {
-        TypeName nothing = TypeSymbols.declared(new TypeKey("app", "Missing"));
+        TypeSymbol nothing = TypeSymbols.declared(new TypeKey("app", "Missing"));
 
         assertNull(declarations().declaration(nothing.key()));
         assertFalse(declarations().declaredByCompilation(nothing.key()));

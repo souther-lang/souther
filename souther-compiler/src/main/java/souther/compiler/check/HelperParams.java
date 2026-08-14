@@ -4,7 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -867,8 +867,8 @@ final class HelperParams {
             if (c.binding() == null || c.caseTypes().size() != 1) {
                 return env;
             }
-            TypeName arm = c.caseTypes().get(0).denotes();
-            Type bound = scrutinee instanceof Type.OptionOf opt && TypeName.SOME.equals(arm)
+            TypeSymbol arm = c.caseTypes().get(0).denotes();
+            Type bound = scrutinee instanceof Type.OptionOf opt && TypeSymbol.SOME.equals(arm)
                     ? opt.element() : MatchElaborator.caseBindType(arm);
             return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
         }

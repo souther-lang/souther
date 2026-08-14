@@ -19,7 +19,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
@@ -133,7 +133,7 @@ public final class Partitions {
                     domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
-                excluded.at(axis.path()).stream().map(TypeName::name).toList()));
+                excluded.at(axis.path()).stream().map(TypeSymbol::name).toList()));
         List<Axis> kept = new ArrayList<>();
         List<OmittedAxis> omitted = new ArrayList<>();
         int counted = 0;
@@ -655,7 +655,7 @@ public final class Partitions {
 
     /** The value a position is inside: what it is called, and what its rules leave each position of
      * it able to hold. */
-    record Placed(TypeName value, FieldDomains domains) {
+    record Placed(TypeSymbol value, FieldDomains domains) {
 
         /** What is left for the position at {@code path}, which is read from the value this is of. */
         NumericDomain.Bounds at(TermPath path) {
@@ -671,7 +671,7 @@ public final class Partitions {
         }
 
         /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
-        List<TypeName> narrowedBy(TermPath path, boolean lower) {
+        List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
             return path.fields().isEmpty() ? List.of()
                     : domains.narrowedBy(String.join(".", path.fields()), lower);
         }
@@ -680,7 +680,7 @@ public final class Partitions {
     /** The record a position holds, through the names it is written under: a value of
      *  {@code data SlotN = Slot} is a {@code Slot}, and the clauses relating its fields are
      *  {@code Slot}'s. */
-    private static TypeName recordIn(Type type, Symbols symbols) {
+    private static TypeSymbol recordIn(Type type, Symbols symbols) {
         return TypeView.of(type, symbols).shape() instanceof Shape.Product product
                 ? product.name() : null;
     }
@@ -709,7 +709,7 @@ public final class Partitions {
      * wrapper clause nothing could read left every edge under it looking certain.
      */
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
-        TypeName read = readAs(type, symbols);
+        TypeSymbol read = readAs(type, symbols);
         return read != null && symbols.declarations().declaration(read.key()) instanceof Hir.Data data
                 ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
     }
@@ -723,8 +723,8 @@ public final class Partitions {
      * an edge a wrapper narrowed was reported as narrowed by the record under it, which is a
      * declaration that may have no clause about the pair at all.
      */
-    private static TypeName readAs(Type type, Symbols symbols) {
-        TypeName written = nameOf(type);
+    private static TypeSymbol readAs(Type type, Symbols symbols) {
+        TypeSymbol written = nameOf(type);
         return written != null && symbols.declarations().declaration(written.key()) instanceof Hir.Data ? written
                 : heldIn(type, symbols);
     }
@@ -738,12 +738,12 @@ public final class Partitions {
      * refuses from being called writable. So the answer falls back to the name the signature wrote
      * rather than to nothing.
      */
-    private static TypeName heldIn(Type type, Symbols symbols) {
-        TypeName record = recordIn(type, symbols);
+    private static TypeSymbol heldIn(Type type, Symbols symbols) {
+        TypeSymbol record = recordIn(type, symbols);
         return record != null ? record : nameOf(type);
     }
 
-    private static TypeName nameOf(Type type) {
+    private static TypeSymbol nameOf(Type type) {
         return type instanceof Type.Ref ref ? ref.name() : null;
     }
 
@@ -779,7 +779,7 @@ public final class Partitions {
      */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
                                                    NumericDomain.Bounds within,
-                                                   java.util.Set<TypeName> expanding) {
+                                                   java.util.Set<TypeSymbol> expanding) {
         if (type == null) {
             return List.of();
         }
@@ -863,7 +863,7 @@ public final class Partitions {
      * stood at was reported as one no value can be written at (issue #651).
      */
     static List<FixtureTemplate> standingFor(RepresentativeSource source, Symbols symbols,
-                                             java.util.Set<TypeName> expanding) {
+                                             java.util.Set<TypeSymbol> expanding) {
         return switch (source.evaluate()) {
             case RepresentativeSource.Evaluation.Values values -> values.written();
             case RepresentativeSource.Evaluation.Compose compose ->
@@ -892,8 +892,8 @@ public final class Partitions {
      * one position at a time. Whether the values may be held together is the decoder's answer — the
      * same answer every other candidate this offers is put through.
      */
-    private static List<FixtureTemplate> composed(TypeName record, Symbols symbols,
-                                                  java.util.Set<TypeName> expanding) {
+    private static List<FixtureTemplate> composed(TypeSymbol record, Symbols symbols,
+                                                  java.util.Set<TypeSymbol> expanding) {
         if (expanding.contains(record) || !(symbols.declarations().declaration(record.key()) instanceof Hir.Data data)) {
             return List.of();
         }
@@ -901,7 +901,7 @@ public final class Partitions {
         if (fields.isEmpty()) {
             return List.of();   // a unit has no fields to compose, and is named rather than built
         }
-        java.util.Set<TypeName> inside = new LinkedHashSet<>(expanding);
+        java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
         Map<String, Count> settled = new LinkedHashMap<>();
         FieldDomains left = FieldDomains.of(record, data, symbols, settled);
@@ -1008,7 +1008,7 @@ public final class Partitions {
     static List<FixtureTemplate> representativesHolding(Type type, Symbols symbols,
                                                         NumericDomain.Bounds within,
                                                         FieldDomains.Held held,
-                                                        java.util.Set<TypeName> expanding) {
+                                                        java.util.Set<TypeSymbol> expanding) {
         List<FixtureTemplate> candidates = new ArrayList<>();
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
@@ -1112,19 +1112,19 @@ public final class Partitions {
      * one of them is how a value that holds everywhere came to be written in one place and not the
      * other.
      */
-    static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
+    static List<FixtureTemplate> insideTheNewtype(TypeSymbol newtype, Symbols symbols) {
         return insideTheNewtype(newtype, symbols, null, java.util.Set.of());
     }
 
-    static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols,
+    static List<FixtureTemplate> insideTheNewtype(TypeSymbol newtype, Symbols symbols,
                                                           NumericDomain.Bounds within,
-                                                          java.util.Set<TypeName> expanding) {
+                                                          java.util.Set<TypeSymbol> expanding) {
         // Already inside this one's own value, so the type is written in terms of itself and there is
         // nothing to hand back. Which is the answer and not a limit: no value of such a type exists.
         if (expanding.contains(newtype)) {
             return List.of();
         }
-        java.util.Set<TypeName> inside = new java.util.LinkedHashSet<>(expanding);
+        java.util.Set<TypeSymbol> inside = new java.util.LinkedHashSet<>(expanding);
         inside.add(newtype);
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();

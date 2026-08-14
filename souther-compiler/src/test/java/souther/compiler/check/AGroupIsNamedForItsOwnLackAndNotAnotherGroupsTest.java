@@ -3,7 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -34,7 +34,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                         compilation.symbols("demo"),
                         TypeCardinality.solve(compilation.module("demo"),
                                 compilation.symbols("demo")))
-                .stream().map(each -> each.stream().map(TypeName::name).toList()).toList();
+                .stream().map(each -> each.stream().map(TypeSymbol::name).toList()).toList();
     }
 
     @Test

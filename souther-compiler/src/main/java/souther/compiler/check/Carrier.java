@@ -10,7 +10,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -83,7 +83,7 @@ public sealed interface Carrier {
      * @param enumeration the sum whose declaration order this counts in
      * @param cases       its leaf cases, in that order
      */
-    record Ordinal(TypeName enumeration, List<TypeName> cases) implements Carrier {
+    record Ordinal(TypeSymbol enumeration, List<TypeSymbol> cases) implements Carrier {
 
         public Ordinal {
             cases = List.copyOf(cases);
@@ -91,14 +91,14 @@ public sealed interface Carrier {
 
         /** Where {@code name} comes in the declaration, or null where this enumeration has no such
          * case — which is a value of some other type and not a place on this order. */
-        public Place at(TypeName name) {
+        public Place at(TypeSymbol name) {
             int index = cases.indexOf(name);
             return index < 0 ? null : Count.of(index);
         }
 
         /** The case at a count. Only ever asked of a count this carrier holds, which is what
          * {@link Carrier#onTheGrid} is for. */
-        public TypeName caseAt(Place count) {
+        public TypeSymbol caseAt(Place count) {
             return cases.get(Count.number(count).at().intValueExact());
         }
     }
@@ -150,7 +150,7 @@ public sealed interface Carrier {
                 || !TypeOps.isUnitOnlySum(base, symbols)) {
             return null;
         }
-        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
         return cases.isEmpty() ? null : new Ordinal(ref.name(), cases);
     }
 

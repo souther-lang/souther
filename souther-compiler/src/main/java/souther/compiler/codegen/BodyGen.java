@@ -15,7 +15,7 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
@@ -55,11 +55,11 @@ final class BodyGen {
     private final String pkg;
     private final Symbols symbols;
 
-    private ClassDesc cd(TypeName typeName) {
+    private ClassDesc cd(TypeSymbol typeName) {
         return ctx.cd(typeName);
     }
 
-    private ClassDesc matchCaseClass(TypeName caseName) {
+    private ClassDesc matchCaseClass(TypeSymbol caseName) {
         return ctx.matchCaseClass(caseName);
     }
 
@@ -69,7 +69,7 @@ final class BodyGen {
 
     /** The fields a construction spread copies from a value of {@code src}: a data's own, or the part
      * every case of a sum spreads, which the sum's sealed interface declares as accessors. */
-    private Map<String, Type> spreadableFields(TypeName src) {
+    private Map<String, Type> spreadableFields(TypeSymbol src) {
         return symbols.declarations().declaration(src.key()) instanceof Hir.SumData sum
                 ? TypeOps.commonSpreadFields(sum, symbols)
                 : fieldTypes((Hir.Data) symbols.declarations().declaration(src.key()));
@@ -125,7 +125,7 @@ final class BodyGen {
         private Label tcoEntry;
         /** Members of this body's declared output union that reach it through a bridge case; empty
          * for every other body. @see #injectsInto */
-        private List<TypeName> injectMembers = List.of();
+        private List<TypeSymbol> injectMembers = List.of();
         /**
          * Whether the arms of this body are ones a coverage plan counted.
          *
@@ -238,7 +238,7 @@ final class BodyGen {
          * imported one, whose field is out of reach across the module = package boundary anyway
          * (spec §field-visibility, §jvm-product).
          */
-        private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
+        private void emitFieldRead(CodeBuilder code, TypeSymbol ownerName, String field, Type ft) {
             MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
             if (symbols.declarations().declaration(ownerName.key()) instanceof Hir.SumData) {
                 // a field every case spreads is declared on the sum's sealed interface (issue #160)
@@ -880,7 +880,7 @@ final class BodyGen {
          * jumps to {@code nextCase}. Shared by value-position {@link #match} and tail-position
          * {@link #emitTailMatch} so the two stay in step. */
         private void emitCaseGuard(Core.Case c, int sSlot, Type st, Type element, Label nextCase) {
-            List<TypeName> cases = c.caseTypes();
+            List<TypeSymbol> cases = c.caseTypes();
             if (element != null) {
                 // Option match: a single Some/None case (or-patterns are rejected by the checker)
                 boolean isSome = cases.get(0).name().equals("Some");
@@ -914,7 +914,7 @@ final class BodyGen {
                 // or-pattern: run the body if the value is any of the cases; the binding (if any)
                 // is the scrutinee's sum type, which every alternative already is
                 Label body = code.newLabel();
-                for (TypeName caseName : cases) {
+                for (TypeSymbol caseName : cases) {
                     code.aload(sSlot);
                     code.instanceOf(matchCaseClass(caseName));
                     code.ifne(body);
@@ -940,7 +940,7 @@ final class BodyGen {
             Hir.Data owner = (Hir.Data) symbols.declarations().declaration(nd.typeName().key());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
-            TypeName built = nd.typeName();
+            TypeSymbol built = nd.typeName();
             // A type of another module is built through its checked entry: `new` reaches a constructor
             // that is not public, and the checked entry is the declared path either way.
             if (DataChecker.isInvariantBearing(built, symbols) || symbols.scope().isForeign(built)) {
@@ -1108,7 +1108,7 @@ final class BodyGen {
          * invariant-bearing newtype goes through {@code __construct}/{@code orThrow} (aborts on
          * violation, which a behavior's guard is meant to have discharged); a plain newtype is stashed
          * and built with {@code new}/{@code <init>}. */
-        private Type wrapNewtypeValue(TypeName ntName, Type base) {
+        private Type wrapNewtypeValue(TypeSymbol ntName, Type base) {
             Hir.Data owner = (Hir.Data) symbols.declarations().declaration(ntName.key());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(ntName);
@@ -1132,7 +1132,7 @@ final class BodyGen {
 
         void spreadField(Core.Read spreadVar, String field) {
             Var v = locals.get(spreadVar.binding());
-            TypeName srcName = ((Type.Ref) v.type()).name();
+            TypeSymbol srcName = ((Type.Ref) v.type()).name();
             load(code, v.slot(), v.type());
             emitFieldRead(code, srcName, field, spreadableFields(srcName).get(field));
         }
@@ -1170,7 +1170,7 @@ final class BodyGen {
             // rather than reading a Comparable off the value (issue #161). Everything else about
             // these is what their declaration says, so only this prefix is written out here.
             if (ORDERED_BY_COMPARATOR.contains(call.name())) {
-                TypeName ordering = elementOrdering(call.args().get(0));
+                TypeSymbol ordering = elementOrdering(call.args().get(0));
                 if (ordering != null) {
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                     genExpr(call.args().get(0));
@@ -1184,7 +1184,7 @@ final class BodyGen {
             // is read off the key's result type.
             if ("List.sortBy".equals(call.name())
                     && call.args().get(0).type() instanceof Type.FnOf key
-                    && TypeOps.orderingEnumeration(key.result(), symbols) instanceof TypeName ordering) {
+                    && TypeOps.orderingEnumeration(key.result(), symbols) instanceof TypeSymbol ordering) {
                 code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                 emitFunctionValue(call.args().get(0),
                         List.of(((Type.ListOf) call.args().get(1).type()).element()));
@@ -1618,7 +1618,7 @@ final class BodyGen {
          * Souther value again and this behavior's own return puts it into its own bridge case.
          */
         private void project(String callee, Type calleeOut) {
-            List<TypeName> bridged = ctx.bridgedMembersOf(callee, calleeOut);
+            List<TypeSymbol> bridged = ctx.bridgedMembersOf(callee, calleeOut);
             ResultBoundary.project(code, ctx, callee, bridged, slot(Type.NOTHING));
         }
 
@@ -1723,7 +1723,7 @@ final class BodyGen {
                 default -> {
                     // An enumeration compares by where its case stands in the declaration, which the
                     // sum answers for both operands — `stage < Won` pairs a sum with one of its cases.
-                    TypeName enumOf = orderingOf(bin);
+                    TypeSymbol enumOf = orderingOf(bin);
                     if (enumOf != null) {
                         genExpr(bin.left());
                         code.invokestatic(cd(enumOf), ORDER_METHOD, MTD_order, true);
@@ -1785,7 +1785,7 @@ final class BodyGen {
 
         /** The enumeration a {@code <}/{@code <=}/{@code >}/{@code >=} orders its operands by, or
          * null when this is not that comparison. */
-        private TypeName orderingOf(Core.Binary bin) {
+        private TypeSymbol orderingOf(Core.Binary bin) {
             boolean ordering = switch (bin.op()) {
                 case LT, LE, GT, GE -> true;
                 default -> false;
@@ -1797,7 +1797,7 @@ final class BodyGen {
 
         /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
          * (an ordered primitive or a newtype over one, which carry their own {@code Comparable}). */
-        private TypeName elementOrdering(Core arg) {
+        private TypeSymbol elementOrdering(Core arg) {
             return arg.type() instanceof Type.ListOf lo
                     ? TypeOps.orderingEnumeration(lo.element(), symbols) : null;
         }

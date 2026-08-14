@@ -16,7 +16,7 @@ package souther.compiler.types;
  * {@link TypeSymbols} and nowhere else. {@link #key()} goes down to the address; nothing here comes
  * back up.
  */
-public final class TypeName implements Comparable<TypeName> {
+public final class TypeSymbol implements Comparable<TypeSymbol> {
 
     /** The module a primitive case name belongs to. {@code Int | DivisionByZero} unions a primitive
      * with a data case, so a primitive needs a name of this shape to sit in {@link Type.Union}; it
@@ -34,7 +34,7 @@ public final class TypeName implements Comparable<TypeName> {
      * address to the identity the compiler reasons with; a caller that could build one from two
      * strings is a caller that could arrive at an identity without having been handed one.
      */
-    TypeName(String module, String name) {
+    TypeSymbol(String module, String name) {
         this.key = new TypeKey(module, name);
     }
 
@@ -58,12 +58,12 @@ public final class TypeName implements Comparable<TypeName> {
     }
 
     /** A primitive case name ({@code Int}) as it appears in a union. */
-    public static TypeName primitive(String name) {
+    public static TypeSymbol primitive(String name) {
         return TypeSymbols.ofLanguage(PRIMITIVE, name);
     }
 
     /** The same, minted from the primitive itself, which is where the spelling comes from. */
-    public static TypeName primitive(Type.Prim prim) {
+    public static TypeSymbol primitive(Type.Prim prim) {
         return TypeSymbols.ofLanguage(PRIMITIVE, prim.shown());
     }
 
@@ -83,7 +83,7 @@ public final class TypeName implements Comparable<TypeName> {
     }
 
     /** A built-in error case ({@code DivisionByZero}). */
-    public static TypeName runtime(String name) {
+    public static TypeSymbol runtime(String name) {
         return TypeSymbols.ofLanguage(RUNTIME, name);
     }
 
@@ -91,13 +91,13 @@ public final class TypeName implements Comparable<TypeName> {
      * module. They are named for the same reason a primitive case is — a name a pattern writes has to
      * denote something — and they name no class: an Option match dispatches on the runtime Option
      * classes, never on the arm's own name. */
-    public static final TypeName SOME = primitive("Some");
+    public static final TypeSymbol SOME = primitive("Some");
 
     /** @see #SOME */
-    public static final TypeName NONE = primitive("None");
+    public static final TypeSymbol NONE = primitive("None");
 
     /** Option's case of that spelling, or {@code null} for any other. */
-    public static TypeName optionCase(String written) {
+    public static TypeSymbol optionCase(String written) {
         return switch (written) {
             case "Some" -> SOME;
             case "None" -> NONE;
@@ -115,13 +115,13 @@ public final class TypeName implements Comparable<TypeName> {
     }
 
     @Override
-    public int compareTo(TypeName other) {
+    public int compareTo(TypeSymbol other) {
         return key.compareTo(other.key);
     }
 
     @Override
     public boolean equals(Object o) {
-        return o instanceof TypeName other && key.equals(other.key);
+        return o instanceof TypeSymbol other && key.equals(other.key);
     }
 
     @Override

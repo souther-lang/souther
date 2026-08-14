@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.Collection;
@@ -66,9 +66,9 @@ public final class TypeScope {
     Denotation resolveCase(WrittenName written) {
         return switch (written.canonical()) {
             case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
-                    new Denotation.Denotes(TypeName.primitive(written.canonical()));
+                    new Denotation.Denotes(TypeSymbol.primitive(written.canonical()));
             case "DivisionByZero", "NotANumber", "NotADate", "NotATime" ->
-                    new Denotation.Denotes(TypeName.runtime(written.canonical()));
+                    new Denotation.Denotes(TypeSymbol.runtime(written.canonical()));
             default -> resolve(written);
         };
     }
@@ -95,7 +95,7 @@ public final class TypeScope {
             }
             // The prelude's runtime-backed data is nameable everywhere, on the lowest rung: a
             // module's own declaration or import of the same name is what the name means there.
-            TypeName runtime = Prelude.runtimeBackedType(written);
+            TypeSymbol runtime = Prelude.runtimeBackedType(written);
             return runtime != null ? new Denotation.Denotes(runtime) : Denotation.NOT_IN_SCOPE;
         }
         String target = moduleOfQualifier(written.substring(0, dot));
@@ -105,13 +105,13 @@ public final class TypeScope {
         String bare = written.substring(dot + 1);
         // Asked rather than assembled: an address is not an identity until something declares one
         // there, and what comes back is that identity or nothing.
-        TypeName denoted = registry.identify(new TypeKey(target, bare));
+        TypeSymbol denoted = registry.identify(new TypeKey(target, bare));
         return denoted != null && exposes(target, bare)
                 ? new Denotation.Denotes(denoted) : Denotation.NOT_IN_SCOPE;
     }
 
     /** Whether {@code name} is declared in another module (spec §modules). */
-    public boolean isForeign(TypeName name) {
+    public boolean isForeign(TypeSymbol name) {
         return !name.module().equals(module);
     }
 
@@ -154,12 +154,12 @@ public final class TypeScope {
      * {@link TypeReachName.Unnameable} rather than as the qualified spelling, which would resolve to
      * nothing wherever it was put.
      */
-    public TypeReachName reach(TypeName type) {
+    public TypeReachName reach(TypeSymbol type) {
         if (type.isPrimitive() || type.equals(scope.get(type.name()) instanceof Denotation.Denotes d
                 ? d.type() : null)) {
             return new TypeReachName.Bare(type);
         }
-        if (TypeName.RUNTIME.equals(type.module())) {
+        if (TypeSymbol.RUNTIME.equals(type.module())) {
             // Reached bare, and only while nothing else here is: the runtime namespace is not a
             // module a qualifier names, so a module declaring the spelling leaves it with no name.
             return scope.containsKey(type.name()) ? new TypeReachName.Unnameable(type)
@@ -235,8 +235,8 @@ public final class TypeScope {
 
     /** The names reachable here, canonical. A name in scope standing for nothing names no
      * declaration, so it is reachable and not among these. */
-    public Collection<TypeName> visibleNames() {
-        Set<TypeName> named = new LinkedHashSet<>();
+    public Collection<TypeSymbol> visibleNames() {
+        Set<TypeSymbol> named = new LinkedHashSet<>();
         for (Denotation denotation : scope.values()) {
             if (denotation instanceof Denotation.Denotes d) {
                 named.add(d.type());
@@ -246,7 +246,7 @@ public final class TypeScope {
     }
 
     /** Whether the module that declares {@code name} exposes it — its own names always count. */
-    public boolean isExposed(TypeName name) {
+    public boolean isExposed(TypeSymbol name) {
         return exposes(name.module(), name.name());
     }
 

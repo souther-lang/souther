@@ -17,7 +17,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.text.DisplayColumns;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
@@ -499,7 +499,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     out.append(String.format("      · %suses `%s`%n", noRow(f), f.args().get(0)));
                 }
             }
-            for (TypeName ruled : input.excluded()) {
+            for (TypeSymbol ruled : input.excluded()) {
                 out.append(String.format("      · `%s` is declared unreachable%n", ruled.name()));
             }
         }
@@ -1055,7 +1055,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     /** Case names, sorted: a report that changes order between runs cannot be compared between runs,
      * and the sets these come from keep the order the rows happened to arrive in. */
-    private static void names(ArrayNode into, java.util.Set<TypeName> cases) {
-        cases.stream().map(TypeName::name).sorted().forEach(into::add);
+    private static void names(ArrayNode into, java.util.Set<TypeSymbol> cases) {
+        cases.stream().map(TypeSymbol::name).sorted().forEach(into::add);
     }
 }

@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -34,13 +34,13 @@ public sealed interface BoundaryOutput {
      *  and nowhere else — see {@link BoundaryInput.Nominal}. */
     final class Nominal implements BoundaryOutput {
 
-        private final TypeName name;
+        private final TypeSymbol name;
 
-        Nominal(TypeName name) {
+        Nominal(TypeSymbol name) {
             this.name = name;
         }
 
-        public TypeName name() {
+        public TypeSymbol name() {
             return name;
         }
 
@@ -100,13 +100,13 @@ public sealed interface BoundaryOutput {
      */
     final class Cases implements BoundaryOutput {
 
-        private final List<TypeName> members;
+        private final List<TypeSymbol> members;
 
-        Cases(List<TypeName> members) {
+        Cases(List<TypeSymbol> members) {
             this.members = List.copyOf(members);
         }
 
-        public List<TypeName> members() {
+        public List<TypeSymbol> members() {
             return members;
         }
 

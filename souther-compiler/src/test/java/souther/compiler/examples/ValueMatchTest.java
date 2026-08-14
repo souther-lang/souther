@@ -7,7 +7,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -185,7 +185,7 @@ class ValueMatchTest {
     @Test
     void aValueUnderANameIsNotTheBaseItWraps() {
         // The whole of #653, at the level the comparison works at: one representation, two types.
-        TypeName amount = TypeSymbols.declared(new TypeKey("demo", "AmountN"));
+        TypeSymbol amount = TypeSymbols.declared(new TypeKey("demo", "AmountN"));
         ObservedValue wrapped = new ObservedValue.Constructed(amount,
                 java.util.Map.of("value", n(1)));
         ValueMatch.Mismatch m = differs(said(n(1)), wrapped, Type.ref(amount));

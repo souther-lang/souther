@@ -11,7 +11,7 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.LinkedHashMap;
@@ -63,7 +63,7 @@ class ADeclarationTheModuleDoesNotHaveGetsNoIdentityTest {
             data Some = { b: Amount }
             """;
 
-    private static final TypeName AMOUNT = TypeSymbols.declared(new TypeKey("m", "Amount"));
+    private static final TypeSymbol AMOUNT = TypeSymbols.declared(new TypeKey("m", "Amount"));
 
     private static Db db(String source) {
         Map<String, String> byId = new LinkedHashMap<>();

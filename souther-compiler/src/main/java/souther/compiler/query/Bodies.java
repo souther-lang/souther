@@ -26,7 +26,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -1101,7 +1101,7 @@ public final class Bodies {
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
-            Answer<Map<TypeName, List<Hir.InvariantClause>>> dischargeInvariants =
+            Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeInvariants =
                     db.ask(new Shapes.InvariantsForDischarge(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !inliner.present()

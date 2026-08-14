@@ -8,7 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -91,7 +91,7 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
                 | "no"  : (In { n = 0 }) -> up.No
             """;
 
-    private static List<TypeName> armsAnsweredIn(String module, String source) {
+    private static List<TypeSymbol> armsAnsweredIn(String module, String source) {
         Compilation compilation = Compilation.ofSources(List.of(LIB, source), ModulePath.EMPTY);
         compilation.answerEverything();
         String sourceId = compilation.exampleSourcesOf(module).get(0);

@@ -6,7 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.frontend.CstFrontend;
 
@@ -377,21 +377,21 @@ public final class Prelude {
                 throw new IllegalStateException("prelude resource " + resource + " declares `"
                         + name + "`, which is not registered as runtime-backed data");
             }
-            scope.put(name, new Denotation.Denotes(TypeName.runtime(name)));
+            scope.put(name, new Denotation.Denotes(TypeSymbol.runtime(name)));
         }
-        return SyntaxSymbols.of(TypeName.RUNTIME,
-                Registry.ofWritten(Map.of(TypeName.RUNTIME, m)), scope, Map.of());
+        return SyntaxSymbols.of(TypeSymbol.RUNTIME,
+                Registry.ofWritten(Map.of(TypeSymbol.RUNTIME, m)), scope, Map.of());
     }
 
     /** The runtime-backed declaration {@code name} denotes, or null when there is none. */
     public static Hir.Def runtimeBackedDef(TypeKey address) {
-        return TypeName.RUNTIME.equals(address.module()) ? RUNTIME_DEFS.get(address.name()) : null;
+        return TypeSymbol.RUNTIME.equals(address.module()) ? RUNTIME_DEFS.get(address.name()) : null;
     }
 
     /** The runtime-namespace name a bare {@code written} denotes, or null when it denotes none.
      *  The lowest rung of a module's scope: its own declarations and its imports come first. */
-    public static TypeName runtimeBackedType(String written) {
-        return RUNTIME_DEFS.containsKey(written) ? TypeName.runtime(written) : null;
+    public static TypeSymbol runtimeBackedType(String written) {
+        return RUNTIME_DEFS.containsKey(written) ? TypeSymbol.runtime(written) : null;
     }
 
     /** Every runtime-backed declaration, keyed by bare name — what the runtime namespace declares. */

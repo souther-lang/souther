@@ -14,7 +14,7 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -124,7 +124,7 @@ public final class Backend {
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked,
-                                               Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants) {
+                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
                 requirements, checked, dischargeInvariants, Instrumentation.NONE);
     }
@@ -150,7 +150,7 @@ public final class Backend {
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked,
-                                               Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
@@ -171,7 +171,7 @@ public final class Backend {
                                                   Map<String, ReqSig> calleeSigs,
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   TypeChecker.Checked checked,
-                                                  Map<TypeName, List<Hir.InvariantClause>> dischargeInvariants,
+                                                  Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
@@ -238,7 +238,7 @@ public final class Backend {
         // <behavior名>Result that its cases implement (spec §jvm-anonymous-union). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
-        Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResults =
+        Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResults =
                 b.behaviorResultInterfaces(module, sigs);
         b.rejectResultUnionCollisions(module, behaviorResults, localTypes, behaviorClassOwner);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
@@ -247,9 +247,9 @@ public final class Backend {
         // is the JDK's, and giving an imported class an interface from here would make a module's
         // bytecode depend on which modules import it — the mirror of what ADR-0024 refuses. Such a
         // member reaches the union through a bridge case this module emits instead (ADR-0057).
-        Map<TypeName, List<GeneratedClass.BehaviorResult>> bridgeCases = new LinkedHashMap<>();
+        Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases = new LinkedHashMap<>();
         behaviorResults.forEach((union, members) -> {
-            for (TypeName member : members) {
+            for (TypeSymbol member : members) {
                 if (b.ctx.isLocalMember(member)) {
                     caseToSums.computeIfAbsent(member.name(), k -> new ArrayList<>()).add(union);
                 } else {
@@ -309,15 +309,15 @@ public final class Backend {
                 // when the behavior declares it in `constructs` — that declaration is the authority
                 // to build it (spec §asymmetric-interop), and unlike a unit it cannot be told apart from a decoded
                 // pass-through output (会員) by shape alone.
-                List<TypeName> unitCases = new ArrayList<>();
+                List<TypeSymbol> unitCases = new ArrayList<>();
                 for (Hir.TypeTerm term : spec.ret().cases()) {
                     if (term instanceof Hir.TypeRef t && t.denotes() instanceof Type.Ref r
                             && b.symbols.declarations().declaration(r.name().key()) instanceof Hir.UnitData) {
                         unitCases.add(r.name());
                     }
                 }
-                List<TypeName> dataConstructs = new ArrayList<>();
-                Set<TypeName> seenConstruct = new HashSet<>();
+                List<TypeSymbol> dataConstructs = new ArrayList<>();
+                Set<TypeSymbol> seenConstruct = new HashSet<>();
                 if (spec.constructs() != null) {
                     for (Hir.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
@@ -682,7 +682,7 @@ public final class Backend {
      * rather than {@code Object}. If either side is a list/option/map (no single reference class), the
      * signature is omitted and the raw interface stands.
      */
-    private byte[] generateRequiredBase(String name, List<TypeName> unitCases, List<TypeName> dataConstructs,
+    private byte[] generateRequiredBase(String name, List<TypeSymbol> unitCases, List<TypeSymbol> dataConstructs,
                                         List<Type> paramTypes, Type retType) {
         ClassDesc cdR = cdBehavior(name);
         // Injected-vs-unary is orthogonal to composition: one input is the unary Behavior<In,Out> (so
@@ -705,17 +705,17 @@ public final class Backend {
                 code.invokespecial(CD_Object, "<init>", MTD_void);
                 code.return_();
             });
-            for (TypeName caseName : unitCases) {
+            for (TypeSymbol caseName : unitCases) {
                 emitUnitFactory(cb, caseName);
             }
-            for (TypeName construct : dataConstructs) {   // a field-bearing data or a newtype
+            for (TypeSymbol construct : dataConstructs) {   // a field-bearing data or a newtype
                 emitDataFactory(cb, construct);
             }
         });
     }
 
     /** A no-arg factory for a unit case: the type has exactly one value, so it hands that out. */
-    private void emitUnitFactory(ClassBuilder cb, TypeName typeName) {
+    private void emitUnitFactory(ClassBuilder cb, TypeSymbol typeName) {
         ClassDesc caseCd = ctx.cd(typeName);
         cb.withMethodBody(typeName.name(), MethodTypeDesc.of(caseCd),
                 ClassFile.ACC_PROTECTED | ClassFile.ACC_FINAL, code -> {
@@ -727,7 +727,7 @@ public final class Backend {
     /** A factory taking the data's fields (in declaration order) and building it through
      * {@code __construct}, so the invariant is checked and a violation aborts (spec §algebraic-types) — the same
      * path an in-domain construction takes, not a decode of an external representation. */
-    private void emitDataFactory(ClassBuilder cb, TypeName construct) {
+    private void emitDataFactory(ClassBuilder cb, TypeSymbol construct) {
         // The type as the `constructs` clause resolved it: an entry there may name a type another
         // module declares, and the class of one is that module's.
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(construct.key());
@@ -880,18 +880,18 @@ public final class Backend {
      * when they are members of two different unions of this module.
      */
     private void rejectBridgeCaseCollisions(Hir.Module module,
-                                            Map<TypeName, List<GeneratedClass.BehaviorResult>> bridgeCases,
+                                            Map<TypeSymbol, List<GeneratedClass.BehaviorResult>> bridgeCases,
                                             Map<JvmClassName, Hir.Def> localTypes,
                                             Map<JvmClassName, String> behaviorClassOwner) {
-        Map<JvmClassName, TypeName> byBridgeName = new LinkedHashMap<>();
-        for (Map.Entry<TypeName, List<GeneratedClass.BehaviorResult>> e : bridgeCases.entrySet()) {
-            TypeName member = e.getKey();
+        Map<JvmClassName, TypeSymbol> byBridgeName = new LinkedHashMap<>();
+        for (Map.Entry<TypeSymbol, List<GeneratedClass.BehaviorResult>> e : bridgeCases.entrySet()) {
+            TypeSymbol member = e.getKey();
             JvmClassName cls = SoutherJvmAbi.nameOf(new GeneratedClass.BridgeCase(module.name(), member));
             String bridge = cls.classDesc().displayName();
             Hir.BehaviorDef owner = behaviorNamed(module, e.getValue().get(0).behavior());
             SourcePos pos = owner.pos();
             String what = owner.name();
-            TypeName sameName = byBridgeName.put(cls, member);
+            TypeSymbol sameName = byBridgeName.put(cls, member);
             if (sameName != null) {
                 throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(sameName.qualified(), member.qualified(), bridge))
                                 .at(pos)
@@ -921,7 +921,7 @@ public final class Backend {
      * having already been rejected for capitalizing into one class.
      */
     private void rejectResultUnionCollisions(Hir.Module module,
-                                             Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResults,
+                                             Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResults,
                                              Map<JvmClassName, Hir.Def> localTypes,
                                              Map<JvmClassName, String> behaviorClassOwner) {
         for (GeneratedClass.BehaviorResult union : behaviorResults.keySet()) {
@@ -958,15 +958,15 @@ public final class Backend {
     /** The result union of each behavior that has one, keyed by the behavior — which is what a result
      *  union is identified by. Keying by what the union is called would mean reading the behavior back
      *  out of the spelling to find whose it is. */
-    private Map<GeneratedClass.BehaviorResult, List<TypeName>> behaviorResultInterfaces(Hir.Module module,
+    private Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> behaviorResultInterfaces(Hir.Module module,
                                                                  Map<String, Sig> sigs) {
-        Map<GeneratedClass.BehaviorResult, List<TypeName>> results = new LinkedHashMap<>();
+        Map<GeneratedClass.BehaviorResult, List<TypeSymbol>> results = new LinkedHashMap<>();
         for (Hir.BehaviorDef bd : module.behaviors()) {
             Sig sig = sigs.get(bd.name());
             if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            List<TypeName> members = new ArrayList<>(TypeOps.leafCases(sig.outputType(), symbols));
+            List<TypeSymbol> members = new ArrayList<>(TypeOps.leafCases(sig.outputType(), symbols));
             Collections.sort(members);
             results.put(new GeneratedClass.BehaviorResult(module.name(), bd.name()), members);
         }
@@ -980,10 +980,10 @@ public final class Backend {
      * and uses that case's own codec, and one that wants the answer as it crosses a boundary asks
      * the union, which writes the discriminator no member writes on itself.
      */
-    private byte[] generateBehaviorResult(GeneratedClass.BehaviorResult union, List<TypeName> members) {
+    private byte[] generateBehaviorResult(GeneratedClass.BehaviorResult union, List<TypeSymbol> members) {
         ClassDesc cdR = ctx.cd(union);
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (TypeName member : members) {
+        for (TypeSymbol member : members) {
             caseCds.add(ctx.resultMemberClass(member));
         }
         return build(cdR, cb -> {
@@ -1108,7 +1108,7 @@ public final class Backend {
     }
 
 
-    private ClassDesc caseClass(TypeName typeName) {
+    private ClassDesc caseClass(TypeSymbol typeName) {
         return ctx.caseClass(typeName);
     }
 
@@ -1235,9 +1235,9 @@ public final class Backend {
                         // than offering it to the stages after this one (spec §type-routing). Branching to
                         // the end is what makes a retired case unreachable without tagging it — the
                         // same case type may legitimately reappear on the main line downstream.
-                        List<TypeName> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
+                        List<TypeSymbol> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
                         Label doApply = code.newLabel();
-                        for (TypeName caseName : accepted) {
+                        for (TypeSymbol caseName : accepted) {
                             code.aload(1);
                             code.instanceOf(caseClass(caseName));
                             code.ifne(doApply);

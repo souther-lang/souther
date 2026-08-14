@@ -6,7 +6,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +35,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         String module = compilation.modules().get(0);
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         assertNotNull(symbols, "the model did not compile");
-        TypeName named = TypeSymbols.declared(new TypeKey(module, type));
+        TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
         assertNotNull(data, "no `" + type + "` in " + module);
         return FieldDomains.of(named, data, symbols);
@@ -299,7 +299,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         compilation.answerEverything();
         Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
         assertNotNull(symbols, "the model did not compile");
-        TypeName named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
+        TypeSymbol named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
 
         assertTrue(domains.allRulesRead(),
@@ -365,7 +365,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         Symbols symbols = compilation.db().ask(new Shapes.Scope("example.pair")).value();
-        TypeName named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
+        TypeSymbol named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
 
         assertBounds(domains.at("a"), 0, 9);
@@ -466,7 +466,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
         Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
-        TypeName named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
+        TypeSymbol named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
 
         assertBounds(domains.at("a"), 0, 9);

@@ -10,7 +10,7 @@ import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -30,7 +30,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
     private record Model(Symbols symbols, String module) {
 
         FieldDomains domainsOf(String type) {
-            TypeName named = TypeSymbols.declared(new TypeKey(module, type));
+            TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
             Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, data, symbols);

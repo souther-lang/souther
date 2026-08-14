@@ -7,7 +7,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
 
-    private static final TypeName STAGE = TypeSymbols.declared(new TypeKey("example.stage", "Stage"));
+    private static final TypeSymbol STAGE = TypeSymbols.declared(new TypeKey("example.stage", "Stage"));
 
     private static Carrier.Ordinal carrier() {
         return new Carrier.Ordinal(STAGE, List.of(
