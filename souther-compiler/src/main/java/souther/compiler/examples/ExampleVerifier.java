@@ -28,6 +28,9 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.observe.Applied;
+import souther.compiler.observe.Counting;
+import souther.compiler.observe.Run;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 
@@ -476,7 +479,20 @@ public final class ExampleVerifier {
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
         return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.identity(),
                 state.stage, state.disposition, state.failurePhase, state.expectedArm, state.resultArm,
-                state.inputCases, state.inputs, state.hits, state.stepsSpent);
+                state.inputCases, state.inputs,
+                ran(state.stage, new Counting.Read(state.stepsSpent, state.hits)));
+    }
+
+    /**
+     * What became of the row's evaluation: what applied the behavior, and what this compile counted.
+     *
+     * <p>One answer to the first, and it is this compile's own classes — nothing else applies a
+     * behavior here. The second is taken whatever the row reached, because the counting starts with
+     * the evaluation and a fixture applies the helpers it names before the behavior is reached.
+     */
+    private static Run ran(Stage reached, Counting counting) {
+        return new Run(reached.reached(Stage.INVOKED)
+                ? new Applied.GeneratedHere() : new Applied.Nothing(), counting);
     }
 
     /**
@@ -518,10 +534,12 @@ public final class ExampleVerifier {
                                         Long.toString(deadline.budgetMs()), helper))
                         .hint(new ExampleMessage.NotAnsweringIsNotNotTerminating()).build());
                 // No spend is read: the worker is still writing to its state, and a count taken
-                // while it runs would be some of what it spent rather than what it spent.
+                // while it runs would be some of what it spent rather than what it spent. That is
+                // what the row says — not zero, which is what a row that passed no counted point
+                // says.
                 rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
                         row.identity(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
-                        null, null, List.of(), List.of(), Set.of(), 0L));
+                        null, null, List.of(), List.of(), ran(reached, new Counting.Unread())));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The evaluated code stopped itself, having gone through more than it was allowed.

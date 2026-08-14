@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.observe.Disposition;
+import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -104,7 +106,7 @@ class TheStepBudgetHasRoomOverWhatModelsActuallySpendTest {
 
         assertTrue(rows.stream().allMatch(row -> row.disposition() == Disposition.HELD),
                 "the census model has to be one that holds: " + rows);
-        long heaviest = rows.stream().mapToLong(RowOutcome::stepsSpent).max().orElse(0L);
+        long heaviest = rows.stream().mapToLong(TheStepBudgetHasRoomOverWhatModelsActuallySpendTest::steps).max().orElse(0L);
         assertTrue(heaviest > 0, "a row that walks two thousand elements costs counted points");
         assertTrue(heaviest * SAFETY_FACTOR < EvaluationPolicy.DEFAULT_STEP_LIMIT,
                 "the heaviest row spent " + heaviest + " steps against a default of "
@@ -116,11 +118,19 @@ class TheStepBudgetHasRoomOverWhatModelsActuallySpendTest {
      *  over twice the elements costs about twice as much. */
     @Test
     void whatARowCostsFollowsWhatItWalks() {
-        long small = rowsOf(walking(500)).get(0).stepsSpent();
-        long large = rowsOf(walking(1_000)).get(0).stepsSpent();
+        long small = steps(rowsOf(walking(500)).get(0));
+        long large = steps(rowsOf(walking(1_000)).get(0));
 
         assertTrue(large > small, "walking twice as much costs more: " + small + " then " + large);
         assertTrue(large < small * 4,
                 "and not disproportionately more: " + small + " then " + large);
     }
+
+    /** What a row spent: the counted work of its whole evaluation, fixtures and application alike,
+     * from a row whose counting was read. */
+    private static long steps(RowOutcome row) {
+        return assertInstanceOf(Counting.Read.class, row.run().counting(),
+                "the row came back, so its counting was read").steps();
+    }
+
 }

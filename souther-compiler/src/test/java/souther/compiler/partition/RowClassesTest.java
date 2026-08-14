@@ -162,7 +162,7 @@ class RowClassesTest {
         RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.identity(), row.stage(),
                 row.disposition(), row.failurePhase(), row.expectedArm(), row.resultArm(),
                 row.inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), broken)), row.hits(), row.stepsSpent());
+                List.of(new ObservedValue.Constructed(request.type(), broken)), row.run());
 
         Map<AxisId, Classification> classes =
                 RowClasses.of(damaged, read.inputs(), read.axes());

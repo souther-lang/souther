@@ -9,6 +9,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
@@ -542,7 +543,7 @@ final class Coverages {
             if (on instanceof NumericTerm.Reading.Number here
                     && against instanceof NumericTerm.Reading.Number there
                     && here.value().sameAs(there.value())
-                    && row.hits().contains(origin.site())) {
+                    && litBy(row).contains(origin.site())) {
                 return Met.YES;
             }
         }
@@ -685,7 +686,7 @@ final class Coverages {
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
                     if (number.value().sameAs(boundary)
-                            && row.hits().contains(origin.site())) {
+                            && litBy(row).contains(origin.site())) {
                         return Met.YES;
                     }
                 }
@@ -733,4 +734,20 @@ final class Coverages {
     }
 
     private Coverages() {}
+
+    /**
+     * The sites a row is known to have gone through.
+     *
+     * <p>Read as a {@code switch} so that a counting this does not know about is a compile error
+     * here rather than a row silently counted as having lit nothing. A row whose counting was never
+     * read lights none that anything here can name, and that it was left undecided is said where the
+     * row is reported.
+     */
+    private static java.util.Set<Integer> litBy(RowOutcome row) {
+        return switch (row.run().counting()) {
+            case Counting.Read read -> read.hits();
+            case Counting.Unread _ -> java.util.Set.of();
+        };
+    }
+
 }

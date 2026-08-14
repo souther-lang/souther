@@ -4,6 +4,7 @@ import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.diag.CompileException;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
+import souther.compiler.observe.Counting;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -14,6 +15,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -129,7 +131,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     void aRowThatSpendsItsStepsSaysWhatItCost() {
         RowOutcome row = onlyRowOf(compiled(LOOPS, holdingTo(10_000L)), "example.loops");
 
-        assertEquals(10_000L, row.stepsSpent(),
+        assertEquals(10_000L, steps(row),
                 "it spent what it was allowed, and that is what it reports");
     }
 
@@ -186,4 +188,12 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
         }
         return running;
     }
+
+    /** What a row spent: the counted work of its whole evaluation, fixtures and application alike,
+     * from a row whose counting was read. */
+    private static long steps(RowOutcome row) {
+        return assertInstanceOf(Counting.Read.class, row.run().counting(),
+                "the row came back, so its counting was read").steps();
+    }
+
 }
