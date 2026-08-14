@@ -90,6 +90,30 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     }
 
     /**
+     * An identity is named from a spelling only for what the language declares, and every one of
+     * those is here by name.
+     *
+     * <p>{@code Int} and {@code DivisionByZero} are declared by no module, so nothing indexes them
+     * and there is nothing to look one up in — naming them is how they are reached, and the module
+     * they belong to is the language's own rather than anything a caller supplies. What must not
+     * join them is a spelling paired with a module of the compilation: an identity for a declaration
+     * that address may not name, arrived at without the declaration world having said it does.
+     */
+    @Test
+    void aSpellingNamesAnIdentityOnlyForWhatTheLanguageDeclares() {
+        Set<String> naming = new java.util.LinkedHashSet<>();
+        for (Method m : TypeName.class.getMethods()) {
+            List<Class<?>> takes = List.of(m.getParameterTypes());
+            if (m.getReturnType() == TypeName.class && !takes.isEmpty()
+                    && !takes.contains(TypeKey.class)) {
+                naming.add(m.getName());
+            }
+        }
+        assertEquals(Set.of("primitive", "runtime", "optionCase"), naming,
+                "a spelling and a module of the compilation do not make an identity between them");
+    }
+
+    /**
      * An address turns into an identity in one place, and every other reader that takes one gets
      * back an answer about the declaration world rather than an identity.
      *

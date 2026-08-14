@@ -302,14 +302,16 @@ public final class TypeOps {
         // A sum and its cases are declared together, so only that module can hold the sum this case
         // belongs to. A case may belong to more than one; pick by name so the choice is deterministic
         // across runs rather than dependent on the symbol map's iteration order.
-        String chosen = null;
+        Hir.SumData chosen = null;
         for (Hir.Def d : symbols.declarations().declaredIn(ref.name().module()).values()) {
             if (d instanceof Hir.SumData sum && caseNames(sum).contains(ref.name())
-                    && (chosen == null || sum.name().compareTo(chosen) < 0)) {
-                chosen = sum.name();
+                    && (chosen == null || sum.name().compareTo(chosen.name()) < 0)) {
+                chosen = sum;
             }
         }
-        return chosen == null ? null : Type.ref(ref.name().sibling(chosen));
+        // The identity is the one the declaration carries. Put together from this case's module and
+        // the sum's spelling instead, it would be an identity for whatever that address names.
+        return chosen == null ? null : Type.ref(chosen.declares());
     }
 
     public static boolean isSumType(Type t, Symbols symbols) {
@@ -1431,7 +1433,7 @@ public final class TypeOps {
         for (Hir.Def def : symbols.declarations().declaredIn(ref.name().module()).values()) {
             if (def instanceof Hir.SumData s && isUnitOnlySum(s, symbols)
                     && leafCases(s, symbols).contains(ref.name())) {
-                owners.add(ref.name().sibling(s.name()));
+                owners.add(s.declares());
             }
         }
         return owners;

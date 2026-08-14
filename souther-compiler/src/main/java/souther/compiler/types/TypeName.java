@@ -105,11 +105,6 @@ public final class TypeName implements Comparable<TypeName> {
         };
     }
 
-    /** Another name declared in the same module — a sum's case, given the sum. */
-    public TypeName sibling(String other) {
-        return new TypeName(module(), other);
-    }
-
     public boolean isPrimitive() {
         return module().equals(PRIMITIVE);
     }
