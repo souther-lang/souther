@@ -3,6 +3,8 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.Map;
 
@@ -101,6 +103,19 @@ public final class Declarations<D> {
     /** Whether anything declares {@code name} — this compilation or the language. */
     public boolean contains(TypeKey address) {
         return declaration(address) != null;
+    }
+
+    /**
+     * The identity of the declaration that address names, or null where nothing declares it.
+     *
+     * <p>{@link Registry#identify} over both sources, for a reader whose address came from outside
+     * the compiler — a binary name read off a live value is one. Asking rather than assembling: an
+     * address is not an identity until something declares one there, so a reader that gets nothing
+     * back has nothing it could have gone on with, and one that gets an identity has been told a
+     * declaration is behind it.
+     */
+    public TypeSymbol identify(TypeKey address) {
+        return contains(address) ? TypeSymbols.declared(address) : null;
     }
 
     /** Whether {@code name} is declared by a module of this compilation — as opposed to a

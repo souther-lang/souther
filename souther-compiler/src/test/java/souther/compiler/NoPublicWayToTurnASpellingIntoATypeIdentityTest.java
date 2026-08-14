@@ -7,14 +7,19 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
+import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -146,7 +151,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                 }
             }
         }
-        assertEquals(Set.of("TypeSymbols.declared", "TypeSymbols.recovered", "Registry.identify"),
+        assertEquals(Set.of("TypeSymbols.declared", "Registry.identify", "Declarations.identify"),
                 exchanging,
                 "an address becomes an identity where a declaration world says one is declared there");
         assertEquals(Set.of("Declarations.declaration", "Declarations.contains",
@@ -154,6 +159,63 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                         "Symbols.declares"),
                 asking,
                 "everything else that takes an address answers about the declaration world");
+    }
+
+    /**
+     * And the one exchange a caller may write is handed a declaration's own key, or an address the
+     * declaration world has just answered for.
+     *
+     * <p>{@link #anAddressBecomesAnIdentityInOnePlace} says how many doors there are; this says what
+     * goes through them. {@code TypeSymbols.declared} takes a {@link TypeKey}, and a key is two
+     * strings, so nothing in its signature stops a caller writing
+     * {@code TypeSymbols.declared(new TypeKey(module, spelling))} — which is the fabrication #464,
+     * #696 and #700 each were, under a new name. Java has no way to say "only from a declaration"
+     * across packages, so the argument is held to that here.
+     *
+     * <p>Read off the source rather than the bytecode, because what is being held is the expression
+     * the author wrote. Test sources are not read: a fixture naming a declaration it invented is
+     * what a fixture is for.
+     */
+    @Test
+    void andTheOneExchangeIsHandedADeclarationRatherThanASpelling() throws IOException {
+        Set<String> handed = new LinkedHashSet<>();
+        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            for (String argument : argumentsOf(Files.readString(source), "TypeSymbols.declared(")) {
+                handed.add(source.getFileName() + ": " + argument);
+            }
+        }
+        assertEquals(Set.of(
+                        // The declaration says which one it is: indexing what a module writes, and
+                        // writing a declaration's class into the metadata.
+                        "SyntaxSymbols.java: def.declaredKey()",
+                        "Names.java: own.declaredKey()",
+                        "ModuleMetadata.java: def.declaredKey()",
+                        // The address a declaration world has just been asked about and answered for.
+                        "Registry.java: address",
+                        "Declarations.java: address"),
+                handed,
+                "an identity is exchanged for a declaration, or for an address one was found at");
+    }
+
+    /** Everything written between the parentheses of each {@code call} in {@code source}. Counted
+     *  rather than matched, because an argument holds parentheses of its own. */
+    private static List<String> argumentsOf(String source, String call) {
+        List<String> found = new ArrayList<>();
+        for (int at = source.indexOf(call); at >= 0; at = source.indexOf(call, at + 1)) {
+            int from = at + call.length();
+            int depth = 1;
+            int i = from;
+            while (i < source.length() && depth > 0) {
+                depth += switch (source.charAt(i)) {
+                    case '(' -> 1;
+                    case ')' -> -1;
+                    default -> 0;
+                };
+                i++;
+            }
+            found.add(source.substring(from, i - 1).trim());
+        }
+        return found;
     }
 
     /** A declaration says which one it is without being told the module. */

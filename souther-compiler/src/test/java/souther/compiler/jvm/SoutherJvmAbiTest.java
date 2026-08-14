@@ -115,22 +115,23 @@ class SoutherJvmAbiTest {
      * The one naming rule that runs backwards, and the half of the question it answers.
      *
      * <p>A value class is its type, so the two directions are one rule and it is written once. What
-     * comes back is the type whose value class <em>would</em> be spelled that way — nothing more.
-     * Whether such a type is declared is a scope's answer, and so is what was really emitted under
-     * the name: {@code shop.FindOrder$Impl} is not a declaration any source could write, and
-     * {@code souther.Int} is a primitive, which reaches codegen as a boxed class and never as a value
-     * class of its own. Both read back here all the same, because reading back is all this does.
+     * comes back is the address whose value class <em>would</em> be spelled that way — nothing more,
+     * and an address rather than an identity for that reason. Whether such a type is declared is a
+     * declaration world's answer, and so is what was really emitted under the name:
+     * {@code shop.FindOrder$Impl} is not a declaration any source could write, and {@code souther.Int}
+     * is a primitive, which reaches codegen as a boxed class and never as a value class of its own.
+     * Both read back here all the same, because reading back is all this does.
      */
     @Test
     void andAValueClassNameSaysWhichTypeItWouldBe() {
         for (TypeSymbol type : List.of(ORDER, TypeSymbols.declared(new TypeKey("在庫", "金額")),
                 TypeSymbols.declared(new TypeKey("a.b.c", "Deep")), TypeSymbol.primitive("Int"))) {
-            assertEquals(type, SoutherJvmAbi.valueTypeCandidate(
+            assertEquals(type.key(), SoutherJvmAbi.valueTypeCandidate(
                     SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
         }
-        assertEquals(TypeSymbols.declared(new TypeKey("shop", "FindOrder$Impl")),
+        assertEquals(new TypeKey("shop", "FindOrder$Impl"),
                 SoutherJvmAbi.valueTypeCandidate("shop.FindOrder$Impl"),
-                "a candidate for the name, and no claim about what is under it");
+                "an address for the name, and no claim about what is under it");
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate("Loose"), "a name with no module names no type");
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate(".Foo"));
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate("demo."));

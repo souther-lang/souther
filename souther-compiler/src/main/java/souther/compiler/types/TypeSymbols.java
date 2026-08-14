@@ -13,7 +13,7 @@ package souther.compiler.types;
  * without having been. That is what made a spelling and an identity interchangeable, which is what
  * issues #464, #696 and #700 each were.
  *
- * <p>Three ways a declaration enters, and they are the whole of the list:
+ * <p>Two ways a declaration enters, and they are the whole of the list:
  *
  * <ul>
  *   <li>{@link #declared} — a module of this compilation wrote it. The implicit unit data a module
@@ -22,11 +22,13 @@ package souther.compiler.types;
  *       comes in this way as well, because its published text is parsed like any other source.</li>
  *   <li>{@link #ofLanguage} — the language declares it and no module does: a primitive standing in a
  *       union, {@code Option}'s two cases, the prelude's runtime-backed data.</li>
- *   <li>{@link #recovered} — a class the compiler is holding says which declaration it is. The one
- *       caller reads a binary name off a live value, and what it gets is a candidate: whether
- *       anything declares it is the declaration world's to answer, and this says nothing about
- *       it.</li>
  * </ul>
+ *
+ * <p>A name read back off a class the compiler is holding is not a third way. What a binary name
+ * gives is an address, and a linker holding one asks the declaration world whether anything is
+ * declared there — {@code Declarations.identify} and {@code Registry.identify} — rather than being
+ * handed an identity for having spelled one. An identity that would be a declaration if one existed
+ * is what {@code TypeName.UNRESOLVED} was, one level out.
  */
 public final class TypeSymbols {
 
@@ -56,15 +58,4 @@ public final class TypeSymbols {
         return new TypeSymbol(module, name);
     }
 
-    /**
-     * A candidate identity read off a name a class carries.
-     *
-     * <p>What comes back is an address the caller has yet to ask about. The linker reads one off a
-     * binary name to find out which declaration a live value is of, and the answer is only a
-     * declaration once the declaration world has said it has one — which is why this is separate
-     * from {@link #declared}, and why nothing here is registered by asking.
-     */
-    public static TypeSymbol recovered(TypeKey key) {
-        return new TypeSymbol(key.module(), key.name());
-    }
 }

@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
@@ -589,8 +590,8 @@ final class NeutralForm {
         if (live == null) {
             return null;
         }
-        TypeSymbol candidate = SoutherJvmAbi.valueTypeCandidate(live.getClass().getName());
-        return candidate != null && symbols.declarations().contains(candidate.key()) ? candidate : null;
+        TypeKey candidate = SoutherJvmAbi.valueTypeCandidate(live.getClass().getName());
+        return candidate == null ? null : symbols.declarations().identify(candidate);
     }
 
     /** What a report quotes a live value's class as. Its own name, and not the type's identity —
