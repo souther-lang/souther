@@ -44,6 +44,62 @@ public interface Hir {
     SourcePos pos();
 
     /**
+     * A node an author wrote, which therefore has a stretch of source as well as an anchor.
+     *
+     * <p>Here rather than on each kind of node that has one, because it is one rule: what a report
+     * about a node points at is either the characters it was written over or the point it is
+     * anchored at, and a second node kind working that out for itself would be a second answer to
+     * settle against this one.
+     *
+     * <p>What this does not answer is whether the region may be quoted. A node read back out of a
+     * published module was written somewhere the compile reading it has no source for, and its
+     * region says a line and a column of a text no reader holds. That is a question about the
+     * compile and not about the node, and it is asked of the region rather than here.
+     */
+    interface Written extends Hir {
+
+        /**
+         * The stretch of source this node was written over, or null where no one wrote it.
+         *
+         * <p>Not {@link #pos()}, and not derivable from it. A position is where a report about this
+         * node is anchored, and an anchor is chosen for the node it is about: a binary operation is
+         * anchored at its operator and a field read at its field, because that is where a complaint
+         * about either belongs. Neither is where the node begins, so a region built from an anchor
+         * and a width starts inside what the author wrote however the width is arrived at.
+         *
+         * <p>Read off the tree the parser built and carried from there. Working it out later means
+         * measuring the node — its name's length, its value's length, the token kinds it is made of
+         * — and a measurement is a claim about the value rather than about the file. The two agree
+         * until the source spells something the value does not keep: an escape, a decomposed
+         * spelling, a leading zero, a pair of parentheses.
+         *
+         * <p>Null rather than a zero-width region at the anchor. A node a lowering minted was
+         * written nowhere, and a report about it has nothing to underline — which is a different
+         * answer from underlining no characters at a place the author's cursor could be.
+         */
+        Region region();
+
+        /**
+         * Where a report about this node points: the characters it was written over, or the point
+         * it is anchored at where no one wrote it.
+         *
+         * <p>The choice between two answers already held, and not a third answer worked out from
+         * either. A node a lowering minted has somewhere a complaint about it belongs and nothing to
+         * underline, and that is what a point is — a place with no characters claimed at it, which
+         * the renderer draws as the one caret it draws for anything it cannot measure.
+         *
+         * <p>Null only where the node has neither, which is a report with nowhere to point.
+         */
+        default Region reportedAt() {
+            Region written = region();
+            if (written != null) {
+                return written;
+            }
+            return pos() == null ? null : Region.point(pos());
+        }
+    }
+
+    /**
      * A name a body binds: a parameter, a {@code let}, a lambda's parameter, a {@code match} arm's
      * binding. Every node below that introduces one holds this rather than a bare spelling, so what a
      * name under it means is the binding and not the text.
@@ -753,18 +809,30 @@ public interface Hir {
      * rule. An unnamed clause is enforced exactly as before it could be named: nothing can tell it
      * apart from the type's other unnamed clauses, so it aborts inside the domain and fails the decode
      * outside it without saying which rule it was.
+     *
+     * <p>{@code pos} and {@code region} are where the author wrote the clause, and they are the
+     * clause's own rather than its expression's. {@code expr} covers the condition and stops there:
+     * a clause written {@code invariant even = isEven(value)} has an expression over
+     * {@code isEven(value)}, and the name the author gave the clause — which is what a diagnostic
+     * about the clause says — is outside it. A report that named {@code even} and underlined the
+     * condition would leave the reader to work out that the two are the same clause.
+     *
+     * <p>{@link #with} carries both across a rewrite, so what a clause is addressed by does not
+     * change with the representation it is being read in.
      */
-    record InvariantClause(Optional<String> name, Expr expr, SourcePos pos) implements Hir {
+    record InvariantClause(Optional<String> name, Expr expr, SourcePos pos, Region region)
+            implements Written {
 
         /** A clause no name was written for. */
         public static InvariantClause unnamed(Expr expr) {
-            return new InvariantClause(Optional.empty(), expr, expr.pos());
+            return new InvariantClause(Optional.empty(), expr, expr.pos(), expr.region());
         }
 
         /** The same clause over a rewritten expression — what a stage that rewrites expressions
-         * produces, so a rewrite never drops the name the rest of the compiler classifies by. */
+         * produces, so a rewrite never drops the name the rest of the compiler classifies by, nor
+         * where the author wrote the clause it rewrote. */
         public InvariantClause with(Expr rewritten) {
-            return new InvariantClause(name, rewritten, pos);
+            return new InvariantClause(name, rewritten, pos, region);
         }
     }
 
@@ -1096,50 +1164,10 @@ public interface Hir {
 
     // --- expressions ---
 
-    sealed interface Expr extends Hir
+    sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Expansion, Block,
                     Tuple, TupleGet, Unreachable {
-
-        /**
-         * The stretch of source this expression was written over, or null where no one wrote it.
-         *
-         * <p>Not {@link #pos()}, and not derivable from it. A position is where a report about this
-         * node is anchored, and an anchor is chosen for the node it is about: a binary operation is
-         * anchored at its operator and a field read at its field, because that is where a complaint
-         * about either belongs. Neither is where the expression begins, so a region built from an
-         * anchor and a width starts inside what the author wrote however the width is arrived at.
-         *
-         * <p>Read off the tree the parser built and carried from there. Working it out later means
-         * measuring the node — its name's length, its value's length, the token kinds it is made of
-         * — and a measurement is a claim about the value rather than about the file. The two agree
-         * until the source spells something the value does not keep: an escape, a decomposed
-         * spelling, a leading zero, a pair of parentheses.
-         *
-         * <p>Null rather than a zero-width region at the anchor. A node a lowering minted was
-         * written nowhere, and a report about it has nothing to underline — which is a different
-         * answer from underlining no characters at a place the author's cursor could be.
-         */
-        Region region();
-
-        /**
-         * Where a report about this expression points: the characters it was written over, or the
-         * point it is anchored at where no one wrote it.
-         *
-         * <p>The choice between two answers already held, and not a third answer worked out from
-         * either. A node a lowering minted has somewhere a complaint about it belongs and nothing to
-         * underline, and that is what a point is — a place with no characters claimed at it, which
-         * the renderer draws as the one caret it draws for anything it cannot measure.
-         *
-         * <p>Null only where the node has neither, which is a report with nowhere to point.
-         */
-        default Region reportedAt() {
-            Region written = region();
-            if (written != null) {
-                return written;
-            }
-            return pos() == null ? null : Region.point(pos());
-        }
     }
 
     /**

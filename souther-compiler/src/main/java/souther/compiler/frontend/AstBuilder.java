@@ -383,7 +383,7 @@ public final class AstBuilder {
                 }
                 name = Optional.of(ident(label));
             }
-            out.add(new Ast.InvariantClause(name, expr, pos(clause)));
+            out.add(new Ast.InvariantClause(name, expr, pos(clause), region(clause)));
         }
         return out;
     }
