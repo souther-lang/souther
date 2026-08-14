@@ -6,7 +6,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -66,30 +65,11 @@ public final class InvariantSettled {
      */
     public static InvariantSettled settle(Expandable expandable, Symbols scope,
                                           Map<String, Hir.FnDef> published) {
-        Hir.Module declared = onlyWhatItDeclares(expandable.module());
-        Hir.Module derived = Deriver.derive(declared, scope);
+        Hir.Module derived = Deriver.derive(expandable.module(), scope);
         return new InvariantSettled(
                 HelperInvariants.withSettledInvariants(derived, scope, published));
     }
 
-    /**
-     * The module carrying only the declarations it may have. A name written twice keeps the first,
-     * reported where declarations are indexed; the second is not a declaration, so nothing below
-     * here should read it and find it disagreeing with the one that is.
-     *
-     * <p>Which those are is {@link TypeChecker#declared}'s to say, and it says it once — asking it
-     * again here rather than repeating the rule is what keeps the tree and the scope agreeing about
-     * what the module declares.
-     */
-    private static Hir.Module onlyWhatItDeclares(Hir.Module m) {
-        Collection<Hir.Def> kept = TypeChecker.declared(m).defs().values();
-        if (kept.size() == m.defs().size()) {
-            return m;
-        }
-        return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                List.copyOf(kept), m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
-                m.exampleFileTarget(), m.pos());
-    }
 
     /** What the module is called. */
     public String name() {
