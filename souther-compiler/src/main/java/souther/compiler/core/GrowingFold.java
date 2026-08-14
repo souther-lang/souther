@@ -82,7 +82,7 @@ public final class GrowingFold {
      *  a {@code filter} builds both, and the two builds are then joined into one. */
     public static Core rewrite(Core body) {
         Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s,
-                nd -> Core.mapChildren(nd, GrowingFold::rewrite, s -> s));
+                nd -> Core.mapChildren(nd, GrowingFold::rewrite));
         if (mapped instanceof Core.Call call) {
             Core built = built(call);
             if (built != null) {
@@ -332,7 +332,7 @@ public final class GrowingFold {
                     body.type(), c.pos());
         }
         return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s,
-                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused), s -> s));
+                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused)));
     }
 
     /** The step with its appends turned into adds, or null when the step does something else with the

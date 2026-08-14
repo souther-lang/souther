@@ -65,7 +65,7 @@ public final class Exclusions {
             if (NormalReturn.of(arm.body())) {
                 continue;
             }
-            List<String> why = UnreachableReasons.of(arm.body(), symbols);
+            List<String> why = UnreachableReasons.of(arm.body());
             // Cases written together on one arm are one run of code, and it answers nothing for every
             // one of them.
             arm.caseTypes().forEach(each -> excluded.put(each, why));

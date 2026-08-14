@@ -191,10 +191,12 @@ final class Terms {
      * {@code null}. */
     LinearForm affineOf(Core e, Denotations at, Known k) {
         return affine(e, at, n -> {
-            if (n instanceof Core.NewData nd && nd.spreads().isEmpty() && nd.inits().size() == 1
-                    && nd.inits().get(0).name().equals("value")
+            // A newtype built around a number is that number here. What makes it one is the
+            // declaration, which `affineScalarBase` asks; a construction of it has the one field the
+            // declaration gives it.
+            if (n instanceof Core.Construct nd
                     && affineScalarBase(Type.ref(nd.typeName())) != null) {
-                return affineOf(nd.inits().get(0).value(), at, k);
+                return affineOf(nd.values().get(0).value(), at, k);
             }
             Core written = writtenValue(n, at);
             if (written != null && written != n) {
@@ -514,18 +516,17 @@ final class Terms {
                 yield value == null || body == null ? null : shared("let(" + value + ", " + body + ")");
             }
             // A construction is a pure function of its fields, and a closure that builds one is what a
-            // mapping usually is. Fields are keyed in name order, so two sites writing them in
-            // different orders write one term.
-            case Core.NewData nd when nd.spreads().isEmpty() -> {
-                List<Core.FieldInit> inits = new ArrayList<>(nd.inits());
-                inits.sort(java.util.Comparator.comparing(Core.FieldInit::name));
+            // mapping usually is. The fields are held in declaration order, so two sites writing them
+            // in different orders — or one of them through a spread — write one term.
+            case Core.Construct nd -> {
                 StringBuilder sb = new StringBuilder(nd.typeName().toString()).append('{');
-                for (int i = 0; i < inits.size(); i++) {
-                    String v = termKey(inits.get(i).value(), at, bound, depth);
+                List<Core.FieldValue> values = nd.values();
+                for (int i = 0; i < values.size(); i++) {
+                    String v = termKey(values.get(i).value(), at, bound, depth);
                     if (v == null) {
                         yield null;
                     }
-                    sb.append(i == 0 ? "" : ", ").append(inits.get(i).name()).append('=').append(v);
+                    sb.append(i == 0 ? "" : ", ").append(values.get(i).field()).append('=').append(v);
                 }
                 yield shared(sb.append('}').toString());
             }
@@ -714,8 +715,8 @@ final class Terms {
             case Core.ListLit list -> list.elements().stream().allMatch(x -> isWritten(x, written));
             case Core.Tuple t -> t.elements().stream().allMatch(x -> isWritten(x, written));
             case Core.OptionSome s -> isWritten(s.value(), written);
-            case Core.NewData nd -> nd.spreads().isEmpty()
-                    && nd.inits().stream().allMatch(fi -> isWritten(fi.value(), written));
+            case Core.Construct nd ->
+                    nd.values().stream().allMatch(v -> isWritten(v.value(), written));
             case Core.LetIn li -> {
                 if (!isWritten(li.value(), written)) {
                     yield false;

@@ -88,8 +88,8 @@ public final class BinaryElaborator {
                 ArithmeticCheck answer = ArithmeticCheck.of(bin.op(), lt, rt,
                         isLiteralExpr(bin.left()), isLiteralExpr(bin.right()), ctx.symbols());
                 yield switch (answer) {
-                    case ArithmeticCheck.Allowed allowed ->
-                            new Core.Binary(bin.op(), left, right, bin.origin(), allowed.resultType(), bin.pos());
+                    case ArithmeticCheck.Allowed allowed -> arithmetic(bin, left, right,
+                            allowed.resultType(), ctx);
                     case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
                         // One type against another: the found-versus-expected block says it better
                         // than a sentence would, and requireType raises or absorbs it.
@@ -269,4 +269,36 @@ public final class BinaryElaborator {
         return (TypeOps.isSingleValueNewtype(lt, symbols) && !TypeOps.isSingleValueNewtype(rt, symbols) && isLiteralExpr(re))
                 || (TypeOps.isSingleValueNewtype(rt, symbols) && !TypeOps.isSingleValueNewtype(lt, symbols) && isLiteralExpr(le));
     }
+
+    /**
+     * The arithmetic, as the value it answers with. Where the operator answers a newtype, that value
+     * is built here: each operand is opened to the number it wraps, the operator works on those, and
+     * the result is constructed again (spec §newtype-arithmetic). Written as the construction it is,
+     * so the invariant is owed where every other invariant is owed, and no reader has to recognise an
+     * expression as a construction to find it.
+     */
+    private static Core arithmetic(Hir.Binary bin, Core left, Core right, Type result,
+                                   CheckContext ctx) {
+        Type base = TypeOps.directNumericNewtypeBase(result, ctx.symbols());
+        if (base == null) {
+            return new Core.Binary(bin.op(), left, right, bin.origin(), result, bin.pos());
+        }
+        Core computed = new Core.Binary(bin.op(), opened(left, ctx), opened(right, ctx), bin.origin(),
+                base, bin.pos());
+        return new Core.Construct(((Type.Ref) result).name(),
+                List.of(new Core.FieldValue(WRAPPED, computed, bin.pos())), result, bin.pos());
+    }
+
+    /** The number an operand carries: a newtype is opened to what it wraps, and anything else is
+     * already the number. Arithmetic admits one layer of newtype ({@link
+     * TypeOps#directNumericNewtypeBase}), so one read reaches it. */
+    private static Core opened(Core operand, CheckContext ctx) {
+        Type base = TypeOps.directNumericNewtypeBase(operand.type(), ctx.symbols());
+        return base == null ? operand
+                : new Core.FieldAccess(operand, WRAPPED, base, operand.pos());
+    }
+
+    /** What a newtype calls the value it wraps (spec §newtype) — the name {@link TypeOps#wrapped}
+     * reads it by, said here so both reach the same field. */
+    private static final String WRAPPED = "value";
 }

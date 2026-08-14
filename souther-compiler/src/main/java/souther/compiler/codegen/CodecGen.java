@@ -30,6 +30,7 @@ import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -1532,14 +1533,19 @@ final class CodecGen {
         // The decoder is still AST-level; elaborate its field inits so the shared emitFieldValues
         // consumes one representation, with the type the checker decides for each (ADR-0021, #81).
         // The field's declared type is pushed in, as the checker does when it checks a construction.
-        List<Core.FieldInit> inits = new ArrayList<>();
+        // a decoder's construction gives every field a value of its own, and they are put in
+        // declaration order here as a construction in a body already holds them
+        Map<String, Hir.FieldInit> written = new HashMap<>();
         for (Hir.FieldInit init : construct.inits()) {
-            inits.add(new Core.FieldInit(init.name(),
-                    gen.elaborate(init.value(), fields.get(init.name())), init.pos()));
+            written.put(init.name(), init);
         }
-        // a decoder's construction gives every field a value of its own; nothing builds one with a
-        // spread, so there is no binding to copy from here
-        gen.emitFieldValues(fields, inits, List.of());
+        List<Core.FieldValue> values = new ArrayList<>();
+        for (String field : fields.keySet()) {
+            Hir.FieldInit init = written.get(field);
+            values.add(new Core.FieldValue(field,
+                    gen.elaborate(init.value(), fields.get(field)), init.pos()));
+        }
+        gen.emitFieldValues(fields, values);
         code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));
         // Souther construction Result -> Raoh boundary Result. An invariant failure becomes a
         // Raoh failure (spec §violation-destination, §decoder-role); success wraps the constructed value.

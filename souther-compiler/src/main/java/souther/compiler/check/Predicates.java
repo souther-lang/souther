@@ -623,13 +623,13 @@ final class Predicates {
         if (read.isEmpty()) {
             traced = reads.chain(made);   // the closure hands the element straight back
         } else {
-            if (!(made instanceof Core.NewData nd) || !nd.spreads().isEmpty()) {
+            if (!(made instanceof Core.Construct nd)) {
                 return null;
             }
             List<String> copied = null;
-            for (Core.FieldInit fi : nd.inits()) {
-                if (fi.name().equals(read.get(0))) {
-                    copied = reads.chain(fi.value());
+            for (Core.FieldValue given : nd.values()) {
+                if (given.field().equals(read.get(0))) {
+                    copied = reads.chain(given.value());
                 }
             }
             if (copied == null) {

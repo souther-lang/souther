@@ -257,10 +257,10 @@ public final class Elaborator {
                     }
                     spreads.add(new Core.Read(s.bare(), local.id(), env.typeOf(local.id()), s.pos()));
                 }
-                List<Core.FieldInit> inits = DataChecker.checkConstruction(built.written(), nd.inits(),
-                        spreads, nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
-                yield new Core.NewData(built.denotes(), inits, spreads,
-                        Type.ref(built.denotes()), nd.pos());
+                List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
+                        nd.inits(), spreads, nd.pos(),
+                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
+                yield new Core.Construct(built.denotes(), values, Type.ref(built.denotes()), nd.pos());
             }
             case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Hir.If iff -> {
@@ -291,7 +291,7 @@ public final class Elaborator {
             }
             case Hir.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
-                if (!(built instanceof Core.NewData construct)) {
+                if (!(built instanceof Core.Construct construct)) {
                     throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
                             .say(new AttemptMessage.ThisIsNotAConstruction())
                             .hint(new AttemptMessage.WriteTheConstructionWhoseInvariantDecides())

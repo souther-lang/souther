@@ -111,7 +111,7 @@ public final class ProducedCases {
                 }
             }
             case Core.UnitValue u -> produce(u.data(), under, reachable, declared, seen);
-            case Core.NewData nd -> produce(nd.typeName(), under, reachable, declared, seen);
+            case Core.Construct nd -> produce(nd.typeName(), under, reachable, declared, seen);
             // Everything else answers something this cannot name: a call, a name read from a binding,
             // a function value. The top of the lattice, which keeps every case owed.
             case null, default -> produce(null, under, reachable, declared, seen);

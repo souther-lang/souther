@@ -809,8 +809,11 @@ public final class InvariantChecker {
                             predicates.assumeCond(value.cond(), within, there, false), there, depth));
             return;
         }
-        checkIfConstruction(e, k, at, false);
         switch (e) {
+            case Core.Construct made -> {
+                judge(made, k, at, false);
+                Core.forEachChild(made, child -> walk(child, k, at, depth));
+            }
             case Core.If iff -> {
                 walk(iff.cond(), k, at, depth);
                 walk(iff.then(), predicates.assumeCond(iff.cond(), k, at, true), at, depth);
@@ -821,7 +824,7 @@ public final class InvariantChecker {
                 // branch — so it is checked for a decided violation and never warned about as a
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
-                checkIfConstruction(ic.construct(), k, at, true);
+                judge(ic.construct(), k, at, true);
                 Core.forEachChild(ic.construct(), child -> walk(child, k, at, depth));
                 // Reaching `then` is the construction having held, so the binding carries the type's
                 // invariant exactly as an input of that type does — which is a location, and not the
@@ -925,25 +928,16 @@ public final class InvariantChecker {
         return out;
     }
 
-    // --- construction detection & discharge check ----------------------------------------------
+    // --- the discharge check -------------------------------------------------------------------
 
-    private void checkIfConstruction(Core e, Known k, Denotations at, boolean attempted) {
-        if (e instanceof Core.NewData nd && nd.spreads().isEmpty()) {
-            if (symbols.declarations().declaration(nd.typeName().key()) instanceof Hir.Data type) {
-                report(nd, type, nd.pos(), attempted, verdictOf(nd, type, k, at));
-            }
-            return;
-        }
-        // Closed arithmetic over a newtype builds one where it stands: the operands are unwrapped,
-        // the operator applied, and the result constructed again, so the invariant is owed here.
-        if (Terms.asOperator(e) instanceof Core.Binary bin && Terms.isArith(bin.op())
-                && bin.type() instanceof Type.Ref r
-                && symbols.declarations().declaration(r.name().key()) instanceof Hir.Data type && type.newtype()) {
-            BindingId value = clauses.bindingsOf(r.name(), type).get("value");
-            if (value != null && terms.affineOf(bin, at, k) != null) {
-                report(bin, type, bin.pos(), attempted,
-                        verdictOf(r.name(), type, Map.of(value, bin), k, at, true));
-            }
+    /**
+     * What this check says about one construction. Every value a body makes is one of these, so
+     * there is nothing to recognise here: a construction was settled where the tree was built, and
+     * what it builds and what each of its fields is given came with it.
+     */
+    private void judge(Core.Construct made, Known k, Denotations at, boolean attempted) {
+        if (symbols.declarations().declaration(made.typeName().key()) instanceof Hir.Data type) {
+            report(made, type, made.pos(), attempted, verdictOf(made, type, k, at));
         }
     }
 
@@ -952,18 +946,18 @@ public final class InvariantChecker {
      * reaches here: the walk opens it before anything is checked, so what a field is given is a
      * value and not a choice of two.
      */
-    private Judgment verdictOf(Core.NewData nd, Hir.Data type, Known k, Denotations at) {
+    private Judgment verdictOf(Core.Construct nd, Hir.Data type, Known k, Denotations at) {
         Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName(), type);
         Map<BindingId, Core> given = new HashMap<>();
-        for (Core.FieldInit fi : nd.inits()) {
-            BindingId field = fields.get(fi.name());
+        for (Core.FieldValue fv : nd.values()) {
+            BindingId field = fields.get(fv.field());
             if (field == null) {
                 continue;
             }
             // A name given a value written out hands over that value: the clause folds over what
             // was written, wherever the writing was done.
-            Core written = Terms.writtenValue(fi.value(), at);
-            given.put(field, written != null ? written : fi.value());
+            Core written = Terms.writtenValue(fv.value(), at);
+            given.put(field, written != null ? written : fv.value());
         }
         return verdictOf(nd.typeName(), type, given, k, at, !constantlyBuilt(type, nd));
     }
@@ -1173,8 +1167,8 @@ public final class InvariantChecker {
     /** Whether the constant check reads this construction: a newtype's, over a value written where
      * it is built. That check names the clause that failed, so it is left to say it — and it reads
      * the construction as written, so a name given the value is not one it sees. */
-    private static boolean constantlyBuilt(Hir.Data type, Core.NewData nd) {
-        return type.newtype() && nd.inits().size() == 1 && Terms.isWritten(nd.inits().get(0).value());
+    private static boolean constantlyBuilt(Hir.Data type, Core.Construct nd) {
+        return type.newtype() && Terms.isWritten(nd.values().get(0).value());
     }
 
     /** Says what {@code verdict} found. A definite violation is an error and an unproven one a

@@ -45,7 +45,7 @@ public final class NormalReturn {
             case Core.TupleGet tg -> of(tg.tuple());
             case Core.Tuple t -> all(t.elements());
             case Core.ListLit lit -> all(lit.elements());
-            case Core.NewData nd -> nd.inits().stream().allMatch(init -> of(init.value()));
+            case Core.Construct nd -> nd.values().stream().allMatch(given -> of(given.value()));
             // The callee's own body is not read; its arguments are evaluated before it is reached.
             case Core.Call c -> all(c.args());
             case Core.Apply a -> all(a.args());
@@ -63,7 +63,7 @@ public final class NormalReturn {
             case Core.Match m -> of(m.scrutinee())
                     && m.cases().stream().anyMatch(arm -> of(arm.body()));
             case Core.IfConstructed ic ->
-                    ic.construct().inits().stream().allMatch(init -> of(init.value()))
+                    ic.construct().values().stream().allMatch(given -> of(given.value()))
                             && (of(ic.then()) || ic.els().stream().anyMatch(arm -> of(arm.body())));
         };
     }
