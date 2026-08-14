@@ -11,6 +11,11 @@ package souther.compiler.check;
  * written without recursion was a warning, because that one was expanded and this one was a call
  * nothing here had a case for (#722).
  *
+ * <p>A third silence is beside these and not among them. Whether an analysis ran to the end is a
+ * fact about the analysis and not about any value in it ({@link InvariantChecker.Status}), so it is
+ * held where analyses are and not here: an answer about a value and an answer about a walk are not
+ * two values of one question, and folding them together is how one of them stops being asked.
+ *
  * <p>So the two are apart. {@link Opaque} is this check's own semantics: what an injected behavior
  * answered is a different value each time it is asked, and a function value a body applies may be
  * one. {@link Unsupported} is not a state a compile should reach — the classification is a
