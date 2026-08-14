@@ -136,7 +136,8 @@ final class Clauses {
         for (TypeOps.Declared inv : declared(named, data)) {
             Core one = statedAt(inv.clause().expr(), named, data, given);
             if (one != null) {
-                stated.add(new Stated(inv.clause().name().orElse(null), inv.declaredOn(), one));
+                stated.add(new Stated(inv.clause().name().map(ClauseName::new), inv.declaredOn(),
+                        one));
             }
         }
         return stated;
@@ -149,8 +150,14 @@ final class Clauses {
      * <p>A check that judges the clauses one at a time has something to say about the one it could
      * not settle, and what it says it by is the name — which the clauses were flattened out of
      * before reaching here, leaving every unproven clause reported as "the invariant".
+     *
+     * <p>The name stays optional the whole way, as {@link Hir.InvariantClause} writes it. A clause
+     * with no name was always a clause — one is here for each of them, and a clause that is not
+     * stated is one this list does not hold — so what the absence of a name is the absence of is the
+     * name. Written as an {@code Optional} so that it says that where it is read: a null String says
+     * only that something is missing, and leaves each reader to decide what.
      */
-    record Stated(String name, TypeSymbol declaredOn, Core expr) {}
+    record Stated(Optional<ClauseName> name, TypeSymbol declaredOn, Core expr) {}
 
     /** Every clause of {@code named}, each with the declaration that wrote it. */
     List<TypeOps.Declared> declared(TypeSymbol named, Hir.Data data) {

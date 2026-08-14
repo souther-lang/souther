@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The intraprocedural invariant-discharge check (spec §invariant-discharge). It walks a behavior's
@@ -102,8 +103,20 @@ public final class InvariantChecker {
      */
     static List<GaveUp> GAVE_UP;
 
-    /** One construction and how this check came out on it. */
-    record Said(String type, SourcePos pos, Verdict verdict) {}
+    /**
+     * One construction and what this check found on it: the verdict on the invariant, and the names
+     * it could have written out on either side of it.
+     *
+     * <p>The whole judgment and not the verdict alone, so that a test can hold the two apart. What a
+     * clause with no name costs is a name and not a judgment, and read from a rendered warning that
+     * difference is only visible where the wording changes.
+     */
+    record Said(String type, SourcePos pos, Judgment judgment) {
+
+        Verdict verdict() {
+            return judgment.verdict();
+        }
+    }
 
     /**
      * Where a test in this package reads the verdicts a check reached, and null everywhere else.
@@ -1041,12 +1054,12 @@ public final class InvariantChecker {
         // cannot be guarded is not the same as what cannot be computed.
         Set<Core> unnamed = unnamed(given.values(), k, at);
         List<Owing> owed = new ArrayList<>();
-        // Which clauses came out settled and which did not, in the order they were declared. What is
-        // reported of a construction that may abort is the clause the guards did not establish, and
-        // the invariant is the conjunction of its clauses — so every one of them is read before the
-        // answer is decided, and each is remembered by the name its author gave it.
-        SequencedSet<String> unsettled = new LinkedHashSet<>();
-        SequencedSet<String> settled = new LinkedHashSet<>();
+        // The names of the clauses that came out settled and unsettled, in the order they were
+        // declared. Names, and not the clauses: a clause written without one is judged like any other
+        // and appears in neither set. What the invariant came out as is `verdict` and is decided
+        // below from the clauses themselves.
+        SequencedSet<ClauseName> namedUnsettled = new LinkedHashSet<>();
+        SequencedSet<ClauseName> namedSettled = new LinkedHashSet<>();
         boolean refutedAlone = false;
         // Whether any clause is unsettled, which is not the same as whether any named one is: a
         // clause MAY be written without a name, and one that was is still a clause the guards did
@@ -1069,7 +1082,7 @@ public final class InvariantChecker {
         }
         if (owed.isEmpty()) {
             return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED,
-                    unsettled, settled);
+                    namedUnsettled, namedSettled);
         }
         NumericDomain<Term> dom = k.numbers();
         // The same clauses read against the same site, under what would be known here had no
@@ -1091,59 +1104,64 @@ public final class InvariantChecker {
         for (Owing owing : owed) {
             Predicates.Clause c = owing.clause();
             if (c.dischargedBy(dom, k.facts())) {
-                if (owing.said() != null) {
-                    settled.add(owing.said());
-                }
+                owing.said().ifPresent(namedSettled::add);
                 continue;
             }
             if (!c.refutedBy(dom, k.facts())) {
                 unknown = true;
-                if (owing.said() != null) {
-                    unsettled.add(owing.said());
-                }
+                owing.said().ifPresent(namedUnsettled::add);
                 continue;
             }
             if (c.refutedBy(alone, k.unguarded().facts())) {
                 refutedAlone = true;
             }
             alongside = true;
-            if (owing.said() != null) {
-                unsettled.add(owing.said());
-            }
+            owing.said().ifPresent(namedUnsettled::add);
         }
         if (refutedAlone) {
-            return new Judgment(Verdict.REFUTED_ALONE, unsettled, settled);
+            return new Judgment(Verdict.REFUTED_ALONE, namedUnsettled, namedSettled);
         }
         if (alongside) {
-            return new Judgment(Verdict.REFUTED_NOT_ALONE, unsettled, settled);
+            return new Judgment(Verdict.REFUTED_NOT_ALONE, namedUnsettled, namedSettled);
         }
         if (unknown) {
-            return new Judgment(Verdict.UNKNOWN, unsettled, settled);
+            return new Judgment(Verdict.UNKNOWN, namedUnsettled, namedSettled);
         }
         // Every clause that could be read is discharged. One that could not be read still stands, so
         // this is not the whole invariant proven.
-        return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, unsettled,
-                settled);
+        return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, namedUnsettled,
+                namedSettled);
     }
 
     /** One obligation and the clause it was owed by. */
     private record Owing(Clauses.Stated from, Predicates.Clause clause) {
 
-        /** The name the author gave this clause, or null where they gave it none. A clause MAY be
-         * named, and one that is not is one a reader cannot be sent to by name. */
-        String said() {
+        /** The name the author gave this clause, where they gave it one. A clause MAY be named, and
+         * one that is not is a clause a reader cannot be sent to by name — which is a fact about the
+         * diagnostic and not about the clause, so nothing here reads an absent name as an absent
+         * clause. */
+        Optional<ClauseName> said() {
             return from.name();
         }
     }
 
     /**
-     * What the check found, and of which clauses.
+     * What the check found: the verdict on the invariant, and the names of the clauses on each side
+     * of it.
      *
      * <p>The verdict alone is what used to come back, and it is the conjunction's answer: a reader
      * told that a construction may violate "its invariant" is told nothing they can act on where the
      * type declares five clauses and four of them are settled.
+     *
+     * <p>{@code namedUnsettled} and {@code namedSettled} are the projection a diagnostic can write
+     * out, and are named for it. They hold the clauses an author gave a name to and no others, so
+     * neither of them empty says anything about whether there were clauses: {@code verdict} answers
+     * that, and is the only thing that does. Two of them, because being able to name what was not
+     * established and being able to name what was are separate questions with separate answers —
+     * asking one of them for both is what ended a warning with an empty list.
      */
-    record Judgment(Verdict verdict, SequencedSet<String> unsettled, SequencedSet<String> settled) {
+    record Judgment(Verdict verdict, SequencedSet<ClauseName> namedUnsettled,
+                    SequencedSet<ClauseName> namedSettled) {
 
         /**
          * What two readings of one construction found, together.
@@ -1152,12 +1170,65 @@ public final class InvariantChecker {
          * is not established where the other did not — and settled only where both settled it.
          */
         static Judgment of(Judgment a, Judgment b) {
-            SequencedSet<String> unsettled = new LinkedHashSet<>(a.unsettled());
-            unsettled.addAll(b.unsettled());
-            SequencedSet<String> settled = new LinkedHashSet<>(a.settled());
-            settled.retainAll(b.settled());
+            SequencedSet<ClauseName> unsettled = new LinkedHashSet<>(a.namedUnsettled());
+            unsettled.addAll(b.namedUnsettled());
+            SequencedSet<ClauseName> settled = new LinkedHashSet<>(a.namedSettled());
+            settled.retainAll(b.namedSettled());
             return new Judgment(Verdict.of(a.verdict(), b.verdict()), unsettled, settled);
         }
+
+        /** Whether a diagnostic can name a clause the guards did not establish. Not whether there
+         * was one: a clause written without a name is not in here. */
+        boolean canNameUnsettled() {
+            return !namedUnsettled.isEmpty();
+        }
+
+        /** Whether a diagnostic can name a clause the guards did establish. Not whether there was
+         * one, for the same reason. */
+        boolean canNameSettled() {
+            return !namedSettled.isEmpty();
+        }
+    }
+
+    /**
+     * What a possible violation of {@code type}'s invariant is said as, which is two questions and
+     * not one: whether a clause the guards did not establish can be named, and whether one they did
+     * can be. Neither answers the other, and neither answers whether there was such a clause — a
+     * clause written without a name is judged like any other and is in no set here.
+     *
+     * <p>Asked one at a time and of the sets, before anything is written out. One joined string
+     * answering both is what ended this warning with `Established here: .`, and it could as easily
+     * have dropped an established clause a reader could have been told about: the two mistakes are
+     * the same mistake, and they are the two spellings this did not have.
+     */
+    private static Diagnostic.Builder mayViolate(Hir.Data type, Judgment judgment) {
+        if (judgment.canNameUnsettled()) {
+            if (judgment.canNameSettled()) {
+                return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablishButDoEstablish(
+                        type.name(), names(judgment.namedUnsettled()),
+                        names(judgment.namedSettled())));
+            }
+            return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablish(
+                    type.name(), names(judgment.namedUnsettled())));
+        }
+        if (judgment.canNameSettled()) {
+            return Diagnostic.say(
+                    new InvariantMessage.TheGuardsDoNotEstablishTheInvariantButDoEstablish(
+                            type.name(), names(judgment.namedSettled())));
+        }
+        return Diagnostic.say(new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(type.name()));
+    }
+
+    /**
+     * The clause names as a diagnostic writes them out.
+     *
+     * <p>Reached only from a branch that has already chosen what to say. What decides which of the
+     * spellings a diagnostic is written in is the set, and never this text: an empty string is what
+     * a set with no names in it renders as, and reading it back as an answer puts "no clause was
+     * named" and "there is no clause" into one value.
+     */
+    private static String names(SequencedSet<ClauseName> clauses) {
+        return clauses.stream().map(ClauseName::value).collect(Collectors.joining(", "));
     }
 
     /** Whether the constant check reads this construction: a newtype's, over a value written where
@@ -1176,7 +1247,7 @@ public final class InvariantChecker {
         Verdict verdict = judgment.verdict();
         List<Said> watching = WATCHING;
         if (watching != null && capturing == null) {
-            watching.add(new Said(type.name(), pos, verdict));
+            watching.add(new Said(type.name(), pos, judgment));
         }
         if (capturing != null) {
             capturing.found().put(new Occurrence(asWritten(at)),
@@ -1188,13 +1259,8 @@ public final class InvariantChecker {
             case REFUTED_NOT_ALONE -> reportViolation(type, pos, judgment, true);
             case UNKNOWN -> {
                 if (!attempted) {
-                    String named = String.join(", ", judgment.unsettled());
-                    warnings.add(Diagnostic.at(pos)
-                            .say(named.isEmpty()
-                                    ? new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(
-                                            type.name())
-                                    : new InvariantMessage.TheGuardsDoNotEstablish(type.name(),
-                                            named, String.join(", ", judgment.settled())))
+                    warnings.add(mayViolate(type, judgment)
+                            .at(pos)
                             .hint(new InvariantMessage.ReifyTheRelationOntoAnInput(type.name()))
                             .build());
                 }
@@ -1540,20 +1606,32 @@ public final class InvariantChecker {
      * a guard. */
     private void reportViolation(Hir.Data type, SourcePos pos, Judgment judgment,
                                  boolean onAPath) {
-        String named = String.join(", ", judgment.unsettled());
-        errors.add(CompileException.of(Diagnostic.at(pos)
-                .say(onAPath
-                        ? named.isEmpty()
-                                ? new InvariantMessage.TheValueIsRejectedOnAReachablePathUnnamed(
-                                        type.name())
-                                : new InvariantMessage.TheValueIsRejectedOnAReachablePath(
-                                        type.name(), named)
-                        : named.isEmpty()
-                                ? new InvariantMessage.TheValueIsOneTheInvariantRejectsUnnamed(
-                                        type.name())
-                                : new InvariantMessage.TheValueIsOneTheInvariantRejects(
-                                        type.name(), named))
-                .build()));
+        errors.add(CompileException.of(rejects(type, judgment, onAPath).at(pos).build()));
+    }
+
+    /**
+     * What a refuted invariant is said as. One question here and not two, because what this error
+     * reports is the clause the value fails and nothing else.
+     *
+     * <p>A refuted invariant may well have clauses the guards established, and {@code judgment}
+     * holds their names when it does — E2010 does not report them, which is a decision about what
+     * this diagnostic is for and not an observation that there were none. Anything that starts
+     * reporting them here asks {@link Judgment#canNameSettled()}, as the warning does, rather than
+     * reading the answer off the set it is already writing out.
+     */
+    private static Diagnostic.Builder rejects(Hir.Data type, Judgment judgment, boolean onAPath) {
+        if (onAPath) {
+            return judgment.canNameUnsettled()
+                    ? Diagnostic.say(new InvariantMessage.TheValueIsRejectedOnAReachablePath(
+                            type.name(), names(judgment.namedUnsettled())))
+                    : Diagnostic.say(new InvariantMessage.TheValueIsRejectedOnAReachablePathUnnamed(
+                            type.name()));
+        }
+        return judgment.canNameUnsettled()
+                ? Diagnostic.say(new InvariantMessage.TheValueIsOneTheInvariantRejects(
+                        type.name(), names(judgment.namedUnsettled())))
+                : Diagnostic.say(new InvariantMessage.TheValueIsOneTheInvariantRejectsUnnamed(
+                        type.name()));
     }
 
     // --- introducing a binding -----------------------------------------------------------------
