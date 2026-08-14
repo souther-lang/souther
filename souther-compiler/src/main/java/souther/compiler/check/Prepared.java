@@ -81,6 +81,11 @@ public final class Prepared {
         return module.behaviors();
     }
 
+    /** The names its source offers to whatever reads it, which no stage rewrites. */
+    public List<String> exposing() {
+        return module.exposing();
+    }
+
     /** Its declarations, which this state says nothing about beyond what the one below it did. */
     public List<Hir.Def> defs() {
         return module.defs();
@@ -178,10 +183,10 @@ public final class Prepared {
     /**
      * The tree.
      *
-     * <p>What every reader below this takes, and the seam the rest of this migration closes. The
-     * checks, the adequacy report, the backend and the editor each read a part of this module — the
-     * behaviors, the declarations, the definitions — and each of those is a projection this state
-     * has yet to name. Until it does, the claim is what the query answered with and is dropped here.
+     * <p>For a reader asking about the payload rather than about the claim — what shape the module
+     * has at this stage, which is a question about the tree and not about what was prepared. What
+     * the checks, the adequacy report and the runner read is the parts above, each of which is a
+     * projection this state names; a reader wanting one of those asks for it rather than for this.
      */
     public Hir.Module tree() {
         return module;

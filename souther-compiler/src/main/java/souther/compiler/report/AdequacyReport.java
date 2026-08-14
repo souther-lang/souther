@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
+import souther.compiler.check.Prepared;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.observe.MeasurementStatus;
@@ -109,7 +110,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<ModuleReport> modules = new ArrayList<>();
         MeasurementStatus overall = MeasurementStatus.COMPLETE;
         for (String name : compilation.modules()) {
-            Hir.Module module = compilation.module(name);
+            Prepared module = compilation.module(name);
             if (module == null) {
                 continue;   // a module that did not get far enough to have behaviors
             }
@@ -147,7 +148,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
     }
 
-    private static ModuleReport moduleReport(Compilation compilation, String name, Hir.Module module) {
+    private static ModuleReport moduleReport(Compilation compilation, String name, Prepared module) {
         Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
         // The same rows every measure beside them reads. Two evaluations of

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -74,7 +75,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

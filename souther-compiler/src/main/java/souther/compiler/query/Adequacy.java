@@ -1487,7 +1487,7 @@ public final class Adequacy {
             Map<String, List<Finding>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 List<Finding> found = new ArrayList<>();
-                signatureFindings(behavior, prepared.value().tree(),
+                signatureFindings(behavior, prepared.value(),
                         signatures == null ? null : signatures.get(behavior.name()), found);
                 partitionFindings(behavior,
                         partitions == null ? null : partitions.get(behavior.name()), found);
@@ -1503,7 +1503,8 @@ public final class Adequacy {
         /** What the rows say about the cases of the signature. Carried at the measurement's own status:
          *  a case nothing here claims is, where some row could not be read, a case nothing *seen*
          *  claims. */
-        private static void signatureFindings(Hir.BehaviorDef behavior, Hir.Module module,
+        private static void signatureFindings(Hir.BehaviorDef behavior,
+                                              souther.compiler.check.Prepared module,
                                               SignatureEvidence signature, List<Finding> out) {
             if (signature == null || !signature.status().counted()) {
                 return;

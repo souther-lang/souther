@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
-import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.query.Compilation;
 
@@ -30,7 +30,7 @@ final class Crossing {
     /** The behavior's answer as JSON, for a sole input that reads. */
     static String of(String source, String module, String behavior, String json) throws Exception {
         Compilation compilation = Compiler.compiled(source, module, new ArrayList<>());
-        Hir.Module written = compilation.module(compilation.modules().get(0));
+        Prepared written = compilation.module(compilation.modules().get(0));
         Sig sig = compilation.signatures(written.name()).get(behavior);
 
         ClassLoader loader = compilation.loader();
@@ -46,7 +46,7 @@ final class Crossing {
     static JsonBoundary.Read reading(String source, String module, String behavior, String json)
             throws Exception {
         Compilation compilation = Compiler.compiled(source, module, new ArrayList<>());
-        Hir.Module written = compilation.module(compilation.modules().get(0));
+        Prepared written = compilation.module(compilation.modules().get(0));
         Sig sig = compilation.signatures(written.name()).get(behavior);
         return JsonBoundary.read(compilation.loader(), sig.ins().get(0), JSON.readTree(json));
     }

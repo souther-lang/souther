@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
@@ -65,7 +66,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Compilation compilation = Compilation.ofSource(TRIP, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
@@ -56,7 +57,7 @@ class AGuardsArmsAreNotItsThresholdTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);

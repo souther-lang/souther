@@ -6,6 +6,7 @@ import souther.compiler.generated.JsonBoundary;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -207,7 +208,7 @@ public final class Runner {
         Compilation compilation = Compiler.compiled(source, moduleName, warningsOut, path);
         // The module this file declares, and not one it reached: what the path holds is read for its
         // declarations and is no part of what this compilation declares.
-        Hir.Module module = compilation.module(compilation.modules().get(0));
+        Prepared module = compilation.module(compilation.modules().get(0));
         Map<String, Sig> sigs = compilation.signatures(module.name());
 
         Hir.BehaviorDef spec = resolveBehavior(module, behaviorName);
@@ -242,7 +243,7 @@ public final class Runner {
      * which the JVM allows only for a class the module published. A module with no {@code exposing}
      * list keeps nothing to itself, so a header-less file publishes everything in it.
      */
-    private static boolean exposes(Hir.Module module, String name) {
+    private static boolean exposes(Prepared module, String name) {
         return module.exposing().isEmpty() || module.exposing().contains(name);
     }
 
@@ -255,13 +256,13 @@ public final class Runner {
      * module and arrives the way any other reader does. A behavior can answer the first and not the
      * second, and one the module keeps to itself is exactly that.
      */
-    private static Hir.BehaviorDef resolveBehavior(Hir.Module module, String requestedSpelling) {
+    private static Hir.BehaviorDef resolveBehavior(Prepared module, String requestedSpelling) {
         // What `--behavior` was given is a name arriving from outside, and it is looked up
         // against names the source settled.
         String requested = Reserved.name(requestedSpelling);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Hir.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
         Map<String, Hir.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!exposes(module, b.name())) {
@@ -307,7 +308,7 @@ public final class Runner {
      * behavior. A stage with no implementation (injected from Java) or one that needs its own injected
      * dependencies would make that constructor take those behaviors, which {@code run} cannot supply.
      */
-    private static Blocker pipelineBlocker(Hir.Module module, Hir.PipeBehavior pipe,
+    private static Blocker pipelineBlocker(Prepared module, Hir.PipeBehavior pipe,
             java.util.Set<String> implemented, Map<String, List<Hir.Var>> pipeStages) {
         Map<String, Hir.SpecBehavior> specs = new java.util.HashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
@@ -344,11 +345,11 @@ public final class Runner {
      * what a reader standing outside it is owed, and following one of them would only bring the
      * author back to the same refusal.
      */
-    private static RunException whyNotRunnable(Hir.Module module, String name, java.util.Set<String> drivable) {
+    private static RunException whyNotRunnable(Prepared module, String name, java.util.Set<String> drivable) {
         String available = drivable.isEmpty() ? "none" : String.join(", ", drivable);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Hir.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;
