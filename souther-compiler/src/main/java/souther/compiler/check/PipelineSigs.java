@@ -170,8 +170,15 @@ public final class PipelineSigs {
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
         // accepted.
         if (pipe.declaredOut() != null) {
+            // What was written is read first, and whether it can be compared with what is produced
+            // is asked of the reading. A member no arm can name is a mistake in the declaration
+            // itself, and it is the author's whether or not something beside it went unresolved.
+            Type declaredOut = TypeOps.successType(pipe.declaredOut());
+            if (TypeOps.restsOnAnUnresolvedName(pipe.declaredOut())) {
+                throw new Unanswerable(pipe.declaredOut().pos());
+            }
             Set<TypeSymbol> inferred = TypeOps.leafCases(out, symbols);
-            Set<TypeSymbol> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut()), symbols);
+            Set<TypeSymbol> declared = TypeOps.leafCases(declaredOut, symbols);
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 

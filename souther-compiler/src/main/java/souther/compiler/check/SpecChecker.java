@@ -214,7 +214,14 @@ public final class SpecChecker {
                                 .hint(new DeclarationMessage.WriteTheOutputSignature(pipe.name(), PipelineSigs.caseList(inferred)))
                                 .say(new DeclarationMessage.AnExposedCompositionDeclaresItsOutput(pipe.name())).build());
             }
-            Set<TypeSymbol> declaredCases = TypeOps.leafCases(TypeOps.successType(declared), symbols);
+            // What was written is read first, and whether it can be compared with what is produced
+            // is asked of the reading. A member no arm can name is a mistake in the declaration
+            // itself, and it is the author's whether or not something beside it went unresolved.
+            Type declaredOut = TypeOps.successType(declared);
+            if (TypeOps.restsOnAnUnresolvedName(declared)) {
+                throw new Unanswerable(declared.pos());
+            }
+            Set<TypeSymbol> declaredCases = TypeOps.leafCases(declaredOut, symbols);
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
