@@ -15,6 +15,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -224,6 +225,84 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(0, applications(clauseOf(List.of(Derived.Def.derive(amount, scope).read()),
                         "Amount")),
                 "and none is left as one afterwards");
+    }
+
+    /**
+     * And an assembly is handed the answers for its own parts, which it checks rather than reads off
+     * the key they arrived under.
+     *
+     * <p>The map is keyed by bare name, and a bare name is a name in some module: two modules writing
+     * `Amount` write two declarations, and an answer for one of them put under `"Amount"` would
+     * otherwise be built into the other. What comes out would say `module a` and hold `b.Amount`,
+     * which is the proposition — every declaration this module writes has an answer — made of a
+     * declaration this module does not write.
+     *
+     * <p>The query graph asks {@code Shapes.Derived} and {@code Shapes.DerivedDeclarations} with the
+     * same module name, so nothing here goes wrong today. That is the reason to hold it: a claim that
+     * stands because its callers are careful is a claim nobody is keeping.
+     */
+    @Test
+    void anAssemblyRefusesAnAnswerForAnotherModulesDeclaration() {
+        Symbols scopeA = TypeChecker.symbols(resolvedA());
+        InvariantSettled a = InvariantSettled.settle(
+                Expandable.check(resolvedA(), Map.of()), scopeA, Map.of());
+        Symbols scopeB = TypeChecker.symbols(resolvedB());
+        InvariantSettled b = InvariantSettled.settle(
+                Expandable.check(resolvedB(), Map.of()), scopeB, Map.of());
+
+        Derived.Def ofA = Derived.Def.derive(defNamed(a, "Amount"), scopeA);
+        Derived.Def ofB = Derived.Def.derive(defNamed(b, "Amount"), scopeB);
+        assertEquals("Amount", ofB.name(), "the same bare name, so the map key does not tell them apart");
+        assertNotEquals(ofA.declaredKey(), ofB.declaredKey());
+
+        assertEquals("a", Derived.Module.assemble(a, Map.of("Amount", ofA)).name());
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> Derived.Module.assemble(a, Map.of("Amount", ofB)));
+        assertTrue(refused.getMessage().contains("Amount"), refused.getMessage());
+    }
+
+    /** The same of the definitions, which a module carries several modules' of under names of one
+     *  shape — so the key tells them apart even less there. */
+    @Test
+    void anAssemblyRefusesAnAnswerForAnotherModulesDefinition() {
+        Symbols scopeA = TypeChecker.symbols(resolvedA());
+        Derived.Module a = Derived.Module.assemble(
+                InvariantSettled.settle(Expandable.check(resolvedA(), Map.of()), scopeA, Map.of()),
+                Map.of("Amount", Derived.Def.derive(defNamed(InvariantSettled.settle(
+                        Expandable.check(resolvedA(), Map.of()), scopeA, Map.of()), "Amount"), scopeA)));
+        Hir.FnDef ofA = a.fns().get(0);
+        Hir.FnDef ofB = new Hir.FnDef(ofA.written(), "b", ofA.params(), ofA.declaredReturn(),
+                ofA.body(), ofA.modifiers(), ofA.pos());
+
+        assertEquals(ofA.name(), ofB.name(), "the same bare name, so the map key does not tell them apart");
+        assertEquals("a", Desugared.Module.assemble(a,
+                Map.of(ofA.name(), Desugared.Fn.desugar(ofA, scopeA))).name());
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> Desugared.Module.assemble(a,
+                        Map.of(ofA.name(), Desugared.Fn.desugar(ofB, scopeA))));
+        assertTrue(refused.getMessage().contains(ofA.name()), refused.getMessage());
+    }
+
+    private static Hir.Module resolvedA() {
+        return resolved("""
+                module a exposing ( Amount )
+
+                data Amount = Int
+
+                let ok (n: Int) : Bool = n > 0
+                """);
+    }
+
+    private static Hir.Module resolvedB() {
+        return resolved("""
+                module b exposing ( Amount )
+
+                data Amount = Int
+                """);
+    }
+
+    private static InvariantSettled.Def defNamed(InvariantSettled settled, String name) {
+        return settled.defs().stream().filter(d -> d.name().equals(name)).findFirst().orElseThrow();
     }
 
     private static int applications(Hir.Expr e) {

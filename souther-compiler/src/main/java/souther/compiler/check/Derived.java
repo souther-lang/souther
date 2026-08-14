@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +61,11 @@ public final class Derived {
             return def.name();
         }
 
+        /** Which declaration it is — the module that wrote it and the name it was written under. */
+        public TypeKey declaredKey() {
+            return def.declaredKey();
+        }
+
         /**
          * The node.
          *
@@ -106,6 +112,14 @@ public final class Derived {
          * <p>The completeness is the point, so it is asked here rather than remembered: a caller
          * holding one of these is holding a module where every declaration came out, and there is
          * no way to hold one otherwise.
+         *
+         * <p>Which declaration each answer is for is checked and not taken from the key it arrived
+         * under. {@code derived} is keyed by bare name, and a bare name is a name in some module —
+         * so an answer for another module's declaration of the same name would otherwise be built
+         * into this module, and the claim would be made of a declaration this module does not write.
+         *
+         * @throws IllegalArgumentException where an answer is for a declaration other than the one
+         *     it stands in for
          */
         public static Module assemble(InvariantSettled settled, Map<String, Def> derived) {
             List<Hir.Def> defs = new ArrayList<>();
@@ -113,6 +127,10 @@ public final class Derived {
                 Def came = derived.get(def.name());
                 if (came == null) {
                     return null;
+                }
+                if (!came.declaredKey().equals(def.declaredKey())) {
+                    throw new IllegalArgumentException("the declaration derived under `" + def.name()
+                            + "` is " + came.declaredKey() + ", not " + def.declaredKey());
                 }
                 defs.add(came.def);
             }

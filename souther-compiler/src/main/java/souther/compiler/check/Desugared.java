@@ -86,6 +86,14 @@ public final class Desugared {
          *
          * <p>What it declares is what {@link Derived.Module} answered for, so both conjunctions are
          * in this one value: every declaration came out, and every definition did.
+         *
+         * <p>Which definition each answer is for is checked and not taken from the key it arrived
+         * under, for the reason {@link Derived.Module#assemble} states of declarations: a module
+         * carries definitions of several modules under names of one shape, and which module wrote
+         * each is on the definition.
+         *
+         * @throws IllegalArgumentException where an answer is for a definition other than the one it
+         *     stands in for
          */
         public static Module assemble(Derived.Module derived, Map<String, Fn> desugared) {
             List<Hir.FnDef> fns = new ArrayList<>();
@@ -93,6 +101,12 @@ public final class Desugared {
                 Fn came = desugared.get(fn.name());
                 if (came == null) {
                     return null;
+                }
+                if (!came.fn.name().equals(fn.name())
+                        || !java.util.Objects.equals(came.fn.declaredIn(), fn.declaredIn())) {
+                    throw new IllegalArgumentException("the definition desugared under `" + fn.name()
+                            + "` is `" + came.fn.name() + "` of " + came.fn.declaredIn()
+                            + ", not `" + fn.name() + "` of " + fn.declaredIn());
                 }
                 fns.add(came.fn);
             }
