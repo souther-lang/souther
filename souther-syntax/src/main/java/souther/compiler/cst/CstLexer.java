@@ -66,6 +66,39 @@ public final class CstLexer {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    /**
+     * The characters a string literal denotes: its quotes dropped and its escapes read.
+     *
+     * <p>Here rather than where a value is built, because which backslash pairs mean something is
+     * what {@link #escapes} says and a second reading of them would be a second answer to it. Both
+     * questions asked of a literal are asked of the text it denotes rather than of the text it is
+     * written as — what a value holds, and whether a name written on an example row names anything.
+     *
+     * <p>A backslash before anything else is read as that character. The scan refuses such a literal
+     * where it meets it, so this is what a literal already reported on denotes rather than a second
+     * opinion about it.
+     */
+    public static String textOf(String raw) {
+        int from = raw.startsWith("\"") ? 1 : 0;
+        int to = raw.length() >= 2 && raw.endsWith("\"") ? raw.length() - 1 : raw.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = from; i < to; i++) {
+            char c = raw.charAt(i);
+            if (c == '\\' && i + 1 < to) {
+                char e = raw.charAt(++i);
+                sb.append(switch (e) {
+                    case 'n' -> '\n';
+                    case 't' -> '\t';
+                    case 'r' -> '\r';
+                    default -> e;
+                });
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
     /** The lexer's result: the token stream (trivia and a trailing {@code EOF} included) and any
      * lexical errors, positioned by offset. */
     public record Result(List<GreenToken> tokens, List<CstError<?>> errors) {}

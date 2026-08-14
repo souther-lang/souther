@@ -330,7 +330,7 @@ class CompileExampleGenerateTest {
         assertEquals(2, rows.size(), "the row that was there, and the one generated");
         for (souther.compiler.observe.RowOutcome row : rows) {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
-                    row.description() + " -> " + row.failurePhase());
+                    row.identity().shown() + " -> " + row.failurePhase());
         }
     }
 
@@ -686,7 +686,7 @@ class CompileExampleGenerateTest {
         assertEquals(4, rows.size(), "the row that was there, and the three generated");
         for (souther.compiler.observe.RowOutcome row : rows) {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
-                    row.description() + " -> " + row.failurePhase());
+                    row.identity().shown() + " -> " + row.failurePhase());
         }
         assertEquals("", GeneratedRows.of("example.trip", generated(source), false,
                         SourceNameResolver.identity()),

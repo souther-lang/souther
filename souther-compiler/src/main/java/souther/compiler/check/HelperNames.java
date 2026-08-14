@@ -70,7 +70,7 @@ public final class HelperNames {
                 for (Hir.With w : row.withs()) {
                     withs.add(new Hir.With(w.dep(), qualifyForeign(w.value(), m.name()), w.pos()));
                 }
-                rows.add(new Hir.ExampleRow(row.description(), inputs, withs,
+                rows.add(new Hir.ExampleRow(row.identity(), inputs, withs,
                         qualifyForeign(row.expected(), m.name()), row.pos()));
             }
             examples.add(new Hir.Example(ex.target(), rows, ex.pos()));

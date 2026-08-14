@@ -614,7 +614,7 @@ class CompilePartialAdequacyTest {
                     | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
                     | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
                 """, DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowDescribed("over it")), Adequacy.Asked.reportOnly())
+                        DoesNotComeBack.everythingAboutTheRowNamed("over it")), Adequacy.Asked.reportOnly())
                 .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
 
         BoundaryAssessment line = partition.boundaries().stream()
@@ -658,7 +658,7 @@ class CompilePartialAdequacyTest {
                     | "comes back" : (Draft { n = 2 }) -> Ok { n = 2 }
                 """,
                 DoesNotComeBack.overrunningOn(
-                        DoesNotComeBack.everythingAboutTheRowDescribed("does not come back")));
+                        DoesNotComeBack.everythingAboutTheRowNamed("does not come back")));
 
         List<String> codes = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {

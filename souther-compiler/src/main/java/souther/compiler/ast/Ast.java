@@ -1,6 +1,7 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.Region;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -204,11 +205,11 @@ public interface Ast {
     record Example(String target, List<ExampleRow> rows, SourcePos pos) implements Ast {}
 
     /**
-     * One example row: an optional business description, the input argument expressions, and the
-     * expected result. A bare {@link Var} expected asserts only the result arm (the case); a
-     * {@link NewData}, a {@link Call} (a newtype constructor), or a literal asserts the whole value.
+     * One example row: what it names itself, the input argument expressions, and the expected result.
+     * A bare {@link Var} expected asserts only the result arm (the case); a {@link NewData}, a
+     * {@link Call} (a newtype constructor), or a literal asserts the whole value.
      */
-    record ExampleRow(String description, List<Expr> inputs, List<With> withs, Expr expected,
+    record ExampleRow(RowIdentity identity, List<Expr> inputs, List<With> withs, Expr expected,
                       SourcePos pos) implements Ast {}
 
     /**

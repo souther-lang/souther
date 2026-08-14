@@ -159,7 +159,7 @@ class RowClassesTest {
                 assertInstanceOf(ObservedValue.Constructed.class, row.inputs().get(0));
         Map<String, ObservedValue> broken = new java.util.LinkedHashMap<>(request.fields());
         broken.put("cost", new ObservedValue.Truncated());
-        RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.description(), row.stage(),
+        RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.identity(), row.stage(),
                 row.disposition(), row.failurePhase(), row.expectedArm(), row.resultArm(),
                 row.inputCases(),
                 List.of(new ObservedValue.Constructed(request.type(), broken)), row.hits(), row.stepsSpent());

@@ -456,7 +456,7 @@ public final class ExampleStatements {
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
             }, new Deadline.Work.Fixtures(ex.target(), origin, row.pos(),
-                    row.description()));
+                    row.identity()));
             // A reading that did not finish is not said here, whichever reason ended it. The same row
             // is evaluated where the example is checked, which builds these fixtures and then runs the
             // behavior on top of them, so a fixture that overruns this overruns that too and is E1910

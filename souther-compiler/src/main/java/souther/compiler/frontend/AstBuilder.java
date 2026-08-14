@@ -6,10 +6,12 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.LineIndex;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -60,6 +62,17 @@ public final class AstBuilder {
      * number is taken once, where the construct is recognised.
      */
     private int constructCounter = 0;
+    /**
+     * How many rows this source has been read to write for each behavior, which is what numbers the
+     * next one ({@link RowIdentity.Unnamed}).
+     *
+     * <p>Per behavior and not per {@code example} block: a behavior may be exampled by more than one
+     * block in one file, and a reader shown "the second row of {@code submit}" is being told which of
+     * that behavior's rows it is. Per source, because one builder reads one file — a behavior
+     * exampled here and in an attached file has a first row in each, and which file a row is in is
+     * what tells those apart.
+     */
+    private final Map<String, Integer> rowsOfTarget = new HashMap<>();
 
     private AstBuilder(String source, String sourceId) {
         this.lines = new LineIndex(source, sourceId);
@@ -200,15 +213,18 @@ public final class AstBuilder {
         SourcePos pos = idents.size() >= 2 ? posOf(idents.get(1)) : pos(n);
         List<Ast.ExampleRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
-            rows.add(exampleRow(row));
+            rows.add(exampleRow(row, target));
         }
         return new Ast.Example(target, rows, pos);
     }
 
-    /** {@code [ "desc" : ] ( inputs ) -> expected}. The description is a leading string token; the
-     * inputs are the {@code ARG_LIST}'s expressions; the expected is the remaining expression. */
-    private Ast.ExampleRow exampleRow(SyntaxNode n) {
-        String description = n.token(SyntaxKind.STRING_LIT).map(t -> stringValue(t.text())).orElse(null);
+    /** {@code [ "name" : ] ( inputs ) -> expected}. The name is a leading string token; the inputs are
+     * the {@code ARG_LIST}'s expressions; the expected is the remaining expression. A name that names
+     * nothing is not one, and is refused where it is written (E2304), so a row written with one is
+     * read here as the row without a name it turned out to be. */
+    private Ast.ExampleRow exampleRow(SyntaxNode n, String target) {
+        String written = n.token(SyntaxKind.STRING_LIT).map(t -> stringValue(t.text())).orElse(null);
+        RowIdentity identity = RowIdentity.of(written, rowsOfTarget.merge(target, 1, Integer::sum));
         List<Ast.Expr> inputs = new ArrayList<>();
         n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
             for (SyntaxNode a : exprChildren(list)) {
@@ -224,7 +240,7 @@ public final class AstBuilder {
         // the expected is the row's own expr child (ARG_LIST holds the inputs; WITH_CLAUSE the fakes)
         List<SyntaxNode> expectedNodes = exprChildren(n);
         Ast.Expr expected = expectedNodes.isEmpty() ? null : expr(expectedNodes.get(0));
-        return new Ast.ExampleRow(description, inputs, withs, expected, pos(n));
+        return new Ast.ExampleRow(identity, inputs, withs, expected, pos(n));
     }
 
     /** {@code fake <target> | rows}. The contextual {@code fake} lexes as an identifier, so the
@@ -1742,36 +1758,7 @@ public final class AstBuilder {
      * full-width one, which is a different claim about the text than "these are the same characters".
      */
     private static String stringValue(String raw) {
-        return java.text.Normalizer.normalize(unescaped(raw), java.text.Normalizer.Form.NFC);
-    }
-
-    /** The literal's characters, with the quotes dropped and the escapes read. */
-    private static String unescaped(String raw) {
-        int from = raw.startsWith("\"") ? 1 : 0;
-        int to = raw.length() >= 2 && raw.endsWith("\"") ? raw.length() - 1 : raw.length();
-        StringBuilder sb = new StringBuilder();
-        for (int i = from; i < to; i++) {
-            char c = raw.charAt(i);
-            if (c == '\\' && i + 1 < to) {
-                char e = raw.charAt(++i);
-                sb.append(switch (e) {
-                    case 'n' -> '\n';
-                    case 't' -> '\t';
-                    case 'r' -> '\r';
-                    case '"' -> '"';
-                    case '\\' -> '\\';
-                    // The lexer refuses a backslash written before anything else, and a source
-                    // that did not read never reaches here (CstFrontend raises on the first
-                    // error). Reading it as the character alone would take a character the author
-                    // wrote out of the value and say nothing about it.
-                    default -> throw new IllegalStateException(
-                            "an escape the lexer refuses reached the builder: \\" + e);
-                });
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
+        return java.text.Normalizer.normalize(CstLexer.textOf(raw), java.text.Normalizer.Form.NFC);
     }
 
     private <M extends Message & Reported> CompileException error(SourcePos pos, M said) {

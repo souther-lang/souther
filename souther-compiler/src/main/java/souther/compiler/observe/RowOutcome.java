@@ -44,7 +44,10 @@ import java.util.Set;
  *
  * @param at             where the row is written
  * @param target         the behavior the row is about
- * @param description    the row's business-case name, or null
+ * @param identity       what the row names itself. A {@link RowIdentity.Named} is unique among the
+ *                       rows this module writes for {@link #target}, so something outside the file
+ *                       can say which row it means; a {@link RowIdentity.Unnamed} can be shown and
+ *                       not addressed
  * @param stage          how far it got
  * @param disposition    how it ended
  * @param failurePhase   where it stopped, when it did
@@ -64,7 +67,7 @@ import java.util.Set;
  */
 public record RowOutcome(SourceRef at,
                          String target,
-                         String description,
+                         RowIdentity identity,
                          Stage stage,
                          Disposition disposition,
                          FailurePhase failurePhase,
