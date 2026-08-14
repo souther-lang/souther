@@ -3,7 +3,6 @@ package souther.compiler.query;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
-import souther.compiler.check.Resolved;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperGraph;
@@ -564,12 +563,12 @@ public final class Bodies {
             if (Names.cyclic(db, name)) {
                 return Answer.absent();
             }
-            Answer<Resolved> resolved = db.ask(new Names.Resolved(name));
+            Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-            for (Hir.Import imp : resolved.value().module().imports()) {
+            for (Hir.Import imp : resolved.value().imports()) {
                 Answer<Hir.Module> from = db.ask(new Settled(imp.module()));
                 // Closed against the table that module's own bodies are expanded against, which is
                 // everything it can name and not only what it declares: a published body may call a

@@ -10,20 +10,36 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * An expandable module whose declarations have the invariants of every type they spread settled into
- * them, with the codecs those declarations need derived along the way.
+ * An expandable module whose invariants say what they say — every clause is the rule it states,
+ * rather than a call to a helper that states it or a name that means something elsewhere.
  *
- * <p>The name is the part a reader cannot see for itself. A derived codec is in the tree — a
- * decoder node is there or it is not — and an invariant that arrived by spread is not: it reads like
- * one the declaration wrote, and what this says is that nothing is left to follow back to the type
- * it was spread from. A pass that read a declaration before this would read the same shape meaning
- * something weaker.
+ * <p>What is settled, exactly:
+ *
+ * <ul>
+ *   <li>a clause naming a helper carries that helper's body, so a reader has the rule and not a
+ *       call it would have to expand to find out;</li>
+ *   <li>a name in a clause that denotes another module's definition is written qualified, which is
+ *       the spelling every table that reads a clause is keyed by;</li>
+ *   <li>a helper's parameter types are settled, since a clause is read through them;</li>
+ *   <li>the codecs the declarations need are derived, which the settling reads through.</li>
+ * </ul>
+ *
+ * <p>What is <em>not</em> settled is what a declaration takes in by a spread. A clause of the type
+ * spread from is still that type's, and which clauses apply to a declaration is composed on demand
+ * by {@link TypeOps#declaredInvariants} walking {@code includes()}. A reader that took this state to
+ * mean the spreads had been flattened into each declaration would find a declaration's own clauses
+ * where it expected every clause that governs it.
+ *
+ * <p>The name is the part a reader cannot see for itself. A derived codec is in the tree — a decoder
+ * node is there or it is not — and a clause that has been expanded is not: it reads like one the
+ * author wrote that way, and what this says is that nothing in it is left to expand. A pass that
+ * read a declaration before this would read the same shape meaning something weaker.
  *
  * <p>{@link #settle} owns the rewrites rather than taking their result. Handed a finished tree
  * instead, this would be somewhere to make the claim about anything — which is what a wrapper with a
  * {@code with} operation is, and what the claim being carried by nothing looked like the first time.
- * The two go together in one step because the settling reads the spread source through the symbols
- * the derive produced.
+ * The derive and the settling go together in one step because a clause is expanded through the
+ * symbols the derive produced.
  *
  * <p>What it hands out is what its consumers ask of it: the declarations, the definitions, and the
  * tree with each declaration replaced by what that declaration came to. Not the tree itself — a
@@ -39,7 +55,7 @@ public final class InvariantSettled {
     }
 
     /**
-     * {@code expandable} with its codecs derived and its spread invariants settled.
+     * {@code expandable} with its codecs derived and its clauses expanded.
      *
      * <p>{@code published} is what the modules this one imports offer it: an invariant names what is
      * in scope where it is written, and an imported definition is in scope there as it is in a body.
@@ -79,7 +95,7 @@ public final class InvariantSettled {
         return module.name();
     }
 
-    /** Its declarations, each with its invariants settled. */
+    /** Its declarations, each with the clauses it wrote expanded. */
     public List<Hir.Def> defs() {
         return module.defs();
     }

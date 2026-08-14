@@ -39,14 +39,19 @@ public final class Expandable {
     }
 
     /**
-     * {@code resolved} where its values are well founded.
+     * {@code module} where its values are well founded.
+     *
+     * <p>Of the tree it is handed and not of where that tree came from. What it answers is about
+     * this module, so a rewritten one is checked again rather than inheriting the answer given about
+     * the tree it was rewritten from — which is the mistake a state that meant "resolution produced
+     * this" would invite.
      *
      * @throws CompileException where a value of the module is defined in terms of itself, which is
      *     the refusal itself and not a report about the answer being absent
      */
-    public static Expandable check(Resolved resolved, Map<String, Hir.FnDef> imported) {
-        ValueCycles.rejectIn(resolved.module(), imported);
-        return new Expandable(resolved.module());
+    public static Expandable check(Hir.Module module, Map<String, Hir.FnDef> imported) {
+        ValueCycles.rejectIn(module, imported);
+        return new Expandable(module);
     }
 
     /** What the module is called. */

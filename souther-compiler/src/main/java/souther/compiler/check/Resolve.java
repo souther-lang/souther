@@ -274,7 +274,7 @@ public final class Resolve {
      * every unknown name at once instead of one per compile, and an editor can still say what the
      * names around it mean.
      */
-    public record Resolution(Resolved module, ResolutionIndex index,
+    public record Resolution(Hir.Module module, ResolutionIndex index,
                              List<CompileException> unresolved,
                              Map<String, OfDeclaration> declarations) {}
 
@@ -312,7 +312,7 @@ public final class Resolve {
             // the compiler, not something an author can be told about and carry on past.
             throw resolved.unresolved().get(0);
         }
-        return resolved.module().module();
+        return resolved.module();
     }
 
     /** As {@link #module(Ast.Module, SyntaxSymbols)}, keeping what each name was answered with. */
@@ -395,9 +395,9 @@ public final class Resolve {
                     "`" + m.name() + "` reached resolution having already taken helpers on");
         }
         return new Resolution(
-                new Resolved(new Hir.Module(m.name(), m.exposing(), exposedOutputs,
+                new Hir.Module(m.name(), m.exposing(), exposedOutputs,
                         r.imports(m), defs, behaviors, fns, List.of(), examples, fakes,
-                        m.exampleFileTarget(), m.pos())),
+                        m.exampleFileTarget(), m.pos()),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
                         Map.copyOf(r.binders)),
                 List.copyOf(r.unresolved), Map.copyOf(declarations));

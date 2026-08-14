@@ -3,7 +3,6 @@ package souther.compiler.query;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
-import souther.compiler.check.Resolved;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperInvariants;
 import souther.compiler.check.HelperNames;
@@ -28,7 +27,7 @@ import java.util.Map;
 
 /**
  * What each declaration becomes before anything is checked against it: its codecs derived, the
- * invariants of the types it spreads settled into it, and its newtype constructors turned into
+ * clauses it wrote expanded to the rules they state, and its newtype constructors turned into
  * constructions.
  *
  * <p>These used to be three passes over a whole module in a fixed order, and getting that order
@@ -40,17 +39,18 @@ public final class Shapes {
     private Shapes() {}
 
     /**
-     * A module with its codecs derived and the invariants of every type it spreads settled into the
-     * spreading declaration — the form each declaration is read from, before what one of them wrote
-     * is normalized.
+     * A module with its codecs derived and every invariant clause saying the rule it states — the
+     * form each declaration is read from, before what one of them wrote is normalized.
      *
      * <p>Not what a later stage reads. This is how {@link DerivedDeclarations} works its answers
      * out, and a mistake reached here is a mistake in the module rather than in any one
      * declaration: the derive and the settling read every declaration to answer about each.
      *
-     * <p>The two go together because settling reads the spread source through the same symbols the
-     * derive produced: an invariant that arrives by spread is part of the declaration from here on,
-     * and a later pass that read the declaration before settling would read a type without it.
+     * <p>The two go together because the settling reads a clause through the symbols the derive
+     * produced. Which clauses govern a declaration is a separate question and is not answered here:
+     * a clause of a type this one spreads stays that type's, and
+     * {@link souther.compiler.check.TypeOps#declaredInvariants} composes them where one is asked
+     * for.
      *
      * <p>Settling substitutes what the modules this one imports publish to it, as lowering a body
      * does. The dependency runs the other way from the rest of this file — a shape reaching into
@@ -124,7 +124,7 @@ public final class Shapes {
 
         @Override
         public Answer<souther.compiler.check.Expandable> compute(Db db) {
-            Answer<Resolved> resolved = db.ask(new Names.Resolved(name));
+            Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
                 return Answer.absent();
             }
@@ -139,7 +139,7 @@ public final class Shapes {
     }
 
     /**
-     * One declaration with its codecs derived and its spreads settled — what every later stage
+     * One declaration with its codecs derived and its clauses expanded — what every later stage
      * resolves a type to.
      *
      * <p>Its own question, so its failure is the named declaration's and not the ones beside it: a

@@ -288,8 +288,8 @@ public final class Names {
 
         @Override
         public Answer<Map<String, Hir.Def>> compute(Db db) {
-            Answer<souther.compiler.check.Resolved> m = db.ask(new Resolved(name));
-            return m.present() ? Answer.of(defsOf(m.value().module())) : Answer.absent();
+            Answer<Hir.Module> m = db.ask(new Resolved(name));
+            return m.present() ? Answer.of(defsOf(m.value())) : Answer.absent();
         }
     }
 
@@ -545,7 +545,7 @@ public final class Names {
                     || unbuilt.value().contains(named.name())) {
                 return Answer.absent();
             }
-            for (Hir.Def def : resolution.value().module().module().defs()) {
+            for (Hir.Def def : resolution.value().module().defs()) {
                 if (def.name().equals(named.name())) {
                     return Answer.of(def);
                 }
@@ -709,11 +709,11 @@ public final class Names {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            souther.compiler.check.Resolved m = db.ask(new Resolved(name)).value();
+            Hir.Module m = db.ask(new Resolved(name)).value();
             if (m == null) {
                 return Answer.of(Boolean.FALSE);   // there is no module here to have a hole in
             }
-            for (Hir.BehaviorDef b : m.module().behaviors()) {
+            for (Hir.BehaviorDef b : m.behaviors()) {
                 List<Hir.Var> named = switch (b) {
                     case Hir.PipeBehavior pipe -> pipe.stages();
                     case Hir.SpecBehavior spec -> spec.dependsOn();
@@ -910,14 +910,14 @@ public final class Names {
     }
 
     /** The resolved module — {@link Resolution} without the record of how it got there. */
-    public record Resolved(String name) implements Key<souther.compiler.check.Resolved> {
+    public record Resolved(String name) implements Key<Hir.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<souther.compiler.check.Resolved> compute(Db db) {
+        public Answer<Hir.Module> compute(Db db) {
             Answer<Resolve.Resolution> resolution = db.ask(new Resolution(name));
             return resolution.present() ? Answer.of(resolution.value().module()) : Answer.absent();
         }

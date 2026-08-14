@@ -53,7 +53,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         if (!answered.unresolved().isEmpty()) {
             throw answered.unresolved().get(0);
         }
-        return answered.module().module();
+        return answered.module();
     }
 
     /** A module declaring one recursive helper that descends on nothing. */

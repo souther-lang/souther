@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.Resolved;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.ValueCycles;
 import souther.compiler.diag.CompileException;
@@ -92,14 +91,14 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         Map<String, Key<Hir.Module>> stages = new LinkedHashMap<>();
         // Resolution answers with the tree and the claim that it has been read, which the stages
         // below it hand on as an ordinary module.
-        Answer<Resolved> resolved = db.ask(new Names.Resolved(name));
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
         assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
         stages.put("derived", new Shapes.Derived(name));
         stages.put("desugared", new Shapes.Desugared(name));
         stages.put("prepared", new Shapes.Prepared(name));
         stages.put("settled", new Bodies.Settled(name));
         Map<String, Hir.Module> out = new LinkedHashMap<>();
-        out.put("resolved", resolved.value().module());
+        out.put("resolved", resolved.value());
         stages.forEach((stage, key) -> {
             Answer<Hir.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());
@@ -158,10 +157,10 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                     constructs Out
                 let go (i) = Out { n = i.n + step }
                 """), Set.of(), ModulePath.EMPTY).db();
-        Answer<Resolved> resolved = db.ask(new Names.Resolved("m.a"));
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved("m.a"));
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 
         assertThrows(CompileException.class,
-                () -> ValueCycles.rejectIn(resolved.value().module(), Map.of()));
+                () -> ValueCycles.rejectIn(resolved.value(), Map.of()));
     }
 }

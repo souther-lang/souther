@@ -6,7 +6,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.LinkedHashSet;
@@ -22,23 +21,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A module in one of these states got there by having the thing the state says happen to it.
  *
- * <p>{@link Resolved}, {@link Expandable} and {@link InvariantSettled} are three claims about one
- * module, and they used to be one type: whichever question you asked, what came back said only that
- * resolution had been over the tree. A reader that wanted an expandable module and one that wanted a
- * settled one were handed the same value, and what told them apart was which query they happened to
- * ask.
+ * <p>{@link Expandable} and {@link InvariantSettled} are two claims about a module, and they used to
+ * be one type with the tree: whichever question you asked, what came back said only that resolution
+ * had been over it. A reader that wanted an expandable module and one that wanted a settled one were
+ * handed the same value, and what told them apart was which query they happened to ask.
  *
- * <p>So the propositions here are about the ways in. Each state is reached from the one below it by
- * a step that performs what the state claims — the cycle check, the settling — and there is no other
- * way to reach it. What that forbids is the shape this replaces: a carrier with an operation that
- * takes a payload and hands the claim back, which is a way to assert anything about anything.
+ * <p>So the propositions here are about the ways in. Each state is reached by a step that performs
+ * what the state claims — the cycle check, the settling — and there is no other way to reach it.
+ * What that forbids is the shape this replaces: a carrier with an operation that takes a payload and
+ * hands the claim back, which is a way to assert anything about anything.
+ *
+ * <p>That a tree is what the first of them is handed is not a hole. {@code check} answers about the
+ * tree it is given, so a rewritten module is checked again rather than inheriting an answer given
+ * about the tree it was rewritten from. A state saying "resolution produced this" would be a
+ * record of where a value came from, and {@link Hir} already says the one thing such a state could
+ * claim: no occurrence of it is one nothing has read.
  */
 class AStateIsReachedOnlyThroughWhatEstablishesItTest {
 
-    private static final List<Class<?>> STATES =
-            List.of(Resolved.class, Expandable.class, InvariantSettled.class);
+    private static final List<Class<?>> STATES = List.of(Expandable.class, InvariantSettled.class);
 
-    private static Resolved resolved(String source) {
+    private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
         return Resolve.resolving(parsed, SyntaxSymbols.of(parsed)).module();
     }
@@ -61,14 +64,17 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     }
 
     /**
-     * The ways in, named. One that appears later is a way of reaching a state that someone was
-     * given, and it fails here until it is either narrowed or written down as these are.
+     * The ways in, named. Each one performs what the state it answers with claims — the cycle check,
+     * the settling — and that is the requirement rather than which value it is handed: a tree is a
+     * fine thing to be handed by an operation that goes on to check it, and a state that took only
+     * the state below would be recording where a value came from instead.
+     *
+     * <p>One that appears later is a way of reaching a state that someone was given, and it fails
+     * here until it is either narrowed or written down as these are.
      */
     @Test
-    void everyWayIntoAStateComesFromTheStateBelowIt() {
-        assertEquals(Set.of(), waysInto(Resolved.class),
-                "resolution mints it, and there is nothing public to mint it with");
-        assertEquals(Set.of("check(Resolved, Map)"), waysInto(Expandable.class));
+    void everyWayIntoAStateIsTheOperationThatEstablishesIt() {
+        assertEquals(Set.of("check(Module, Map)"), waysInto(Expandable.class));
         assertEquals(Set.of("settle(Expandable, Symbols, Map)"), waysInto(InvariantSettled.class));
     }
 
@@ -85,28 +91,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     }
 
     /**
-     * No state takes a tree. Handed one, every way in would be somewhere to make its claim about
-     * anything — which is what {@code ResolvedModule.with} was, and why the claim it carried was
-     * carried by nobody.
+     * None of them answers with its own state. That is what {@code ResolvedModule.with} was — a
+     * method on the claim that takes a payload and hands the claim back — and it is the one shape
+     * that lets a state be asserted of a tree nothing established it of.
      */
-    @Test
-    void noStateTakesATree() {
-        for (Class<?> state : STATES) {
-            for (Method m : state.getMethods()) {
-                assertFalse(List.of(m.getParameterTypes()).contains(Hir.Module.class),
-                        state.getSimpleName() + "." + signature(m) + " takes a tree");
-            }
-            for (Constructor<?> k : state.getDeclaredConstructors()) {
-                assertTrue(Modifier.isPrivate(k.getModifiers())
-                                || !List.of(k.getParameterTypes()).contains(Hir.Module.class)
-                                || state == Resolved.class,
-                        state.getSimpleName() + " is built from a tree by something outside it");
-            }
-        }
-    }
-
-    /** And none of them answers with its own state, which is the same operation written as a method
-     * on the value it would re-assert about. */
     @Test
     void noStateAnswersWithItself() {
         for (Class<?> state : STATES) {
@@ -120,15 +108,15 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     /** The way to an expandable module is the cycle check, so a module with a value defined in terms
      * of itself has no way through — and one without it does. */
     @Test
-    void thewayToAnExpandableModuleIsTheCycleCheck() {
-        Resolved wellFounded = resolved("""
+    void theWayToAnExpandableModuleIsTheCycleCheck() {
+        Hir.Module wellFounded = resolved("""
                 module m exposing ( n )
 
                 let n = 1
                 """);
         assertEquals("m", Expandable.check(wellFounded, Map.of()).name());
 
-        Resolved reachesItself = resolved("""
+        Hir.Module reachesItself = resolved("""
                 module m exposing ( a )
 
                 let a = b
@@ -147,7 +135,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      */
     @Test
     void theWayToASettledModuleIsTheSettling() {
-        Resolved resolved = resolved("""
+        Hir.Module resolved = resolved("""
                 module m exposing ( Amount )
 
                 data Amount = Int

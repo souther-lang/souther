@@ -79,7 +79,7 @@ class ADeclarationTheModuleDoesNotHaveGetsNoIdentityTest {
      * way out and the proposition would hold whatever this pass did.
      */
     private static List<Hir.Def> resolvedDefs(String source) {
-        return db(source).ask(new Names.Resolved("m")).value().module().defs();
+        return db(source).ask(new Names.Resolved("m")).value().defs();
     }
 
     private static List<String> namesOf(List<Hir.Def> defs) {
