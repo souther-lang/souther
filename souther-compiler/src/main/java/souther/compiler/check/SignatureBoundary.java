@@ -116,19 +116,22 @@ final class SignatureBoundary {
 
     /** A name the boundary carries: one a model declared, which is what a derived codec is for. The
      *  language declares vocabulary of its own — what a division by zero answers with, what a
-     *  rounding takes — and each of those says what one of the language's operations can answer. */
-    private static TypeSymbol nominal(TypeSymbol name, Where where, Symbols symbols) {
-        if (!TypeOps.declaredByAModel(name, symbols)) {
+     *  rounding takes — and each of those says what one of the language's operations can answer.
+     *  The rule is {@link CrossingNominal}'s, shared with every other position that crosses; how a
+     *  refusal is worded is this position's. */
+    private static CrossingNominal nominal(TypeSymbol name, Where where, Symbols symbols) {
+        CrossingNominal admitted = CrossingNominal.admitted(name, symbols);
+        if (admitted == null) {
             throw foreignName(name, where);
         }
-        return name;
+        return admitted;
     }
 
     /** The members of the union a behavior answers with, each a name in what crosses. */
     private static List<TypeSymbol> members(Type.Union union, Where where, Symbols symbols) {
         List<TypeSymbol> members = new ArrayList<>(union.members().size());
         for (TypeSymbol member : union.members()) {
-            members.add(nominal(member, where, symbols));
+            members.add(nominal(member, where, symbols).name());
         }
         return members;
     }
@@ -141,16 +144,16 @@ final class SignatureBoundary {
      * <p>A key that classifies is still the boundary's, so a name the language declares is refused
      * here as it is anywhere else in the shape.
      */
-    private static BoundaryMapKey mapKey(Type key, Where where, Symbols symbols) {
+    private static CrossingMapKey mapKey(Type key, Where where, Symbols symbols) {
         MapKeyRepresentation representation = TypeOps.classifyConcreteMapKey(key, symbols);
         if (representation == null) {
             throw notAKey(key, where);
         }
-        switch (representation) {
-            case MapKeyRepresentation.NamedKey n -> nominal(n.name(), where, symbols);
-            case MapKeyRepresentation.Lexical _ -> { }
-        }
-        return new BoundaryMapKey(representation);
+        return switch (representation) {
+            case MapKeyRepresentation.NamedKey n ->
+                    CrossingMapKey.named(nominal(n.name(), where, symbols));
+            case MapKeyRepresentation.Lexical l -> CrossingMapKey.lexical(l);
+        };
     }
 
     private static CompileException union(Type.Union u, Where where) {

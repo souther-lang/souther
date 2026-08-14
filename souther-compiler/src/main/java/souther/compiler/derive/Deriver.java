@@ -153,7 +153,7 @@ public final class Deriver {
             case CodecShape.Named n -> new Hir.DataDecRef(Hir.Name.resolved(n.name(), pos), pos);
             case CodecShape.ListOf l -> new Hir.ListDecRef(decRef(l.element(), pos), pos);
             case CodecShape.SetOf st -> new Hir.SetDecRef(decRef(st.element(), pos), pos);
-            case CodecShape.MapOf m -> new Hir.MapDecRef(decRef(m.value(), pos), m.key(), pos);
+            case CodecShape.MapOf m -> new Hir.MapDecRef(decRef(m.value(), pos), m.key().representation(), pos);
         };
     }
 
@@ -209,7 +209,7 @@ public final class Deriver {
             case CodecShape.Named n -> new Hir.EncodeRaw(Hir.Name.resolved(n.name(), pos), access, pos);
             case CodecShape.ListOf l -> new Hir.ListEnc(access, encElem(l.element(), pos), pos);
             case CodecShape.SetOf st -> new Hir.SetEnc(access, encElem(st.element(), pos), pos);
-            case CodecShape.MapOf m -> new Hir.MapEnc(access, encElem(m.value(), pos), m.key(), pos);
+            case CodecShape.MapOf m -> new Hir.MapEnc(access, encElem(m.value(), pos), m.key().representation(), pos);
             case CodecShape.OptionOf o -> {
                 Hir.Binder elem = binders.binder("$opt", pos);
                 yield new Hir.OptionRaw(access,
@@ -237,7 +237,7 @@ public final class Deriver {
             case CodecShape.Named n -> new Hir.DataEnc(Hir.Name.resolved(n.name(), pos), pos);
             case CodecShape.ListOf l -> new Hir.ListElemEnc(encElem(l.element(), pos), pos);
             case CodecShape.SetOf st -> new Hir.SetElemEnc(encElem(st.element(), pos), pos);
-            case CodecShape.MapOf m -> new Hir.MapElemEnc(encElem(m.value(), pos), m.key(), pos);
+            case CodecShape.MapOf m -> new Hir.MapElemEnc(encElem(m.value(), pos), m.key().representation(), pos);
         };
     }
 

@@ -5,15 +5,22 @@ import souther.compiler.diag.CompileException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The language declares vocabulary of its own — what a division by zero answers with, what a rounding
- * takes, the reserved `Raw` — and each says what one of its operations can answer or take. A behavior
- * publishes what a model declared, so none of those may stand in its boundary. Before this they were
- * written freely: a parameter compiled and failed at run with a reflection exception, and an output
- * union raised inside codegen.
+ * takes, the reserved `Raw` — and each says what one of its operations can answer or take. A named
+ * type that crosses is one a model declares (spec {@code [#a-boundary-carries-the-models-own-vocabulary]}),
+ * so none of those may stand where an external representation crosses. Before this they were written
+ * freely: a parameter compiled and failed at run with a reflection exception, and an output union
+ * raised inside codegen.
+ *
+ * <p>A behavior's boundary is not the only place something crosses. A data field crosses too, at any
+ * depth, and so does the base a newtype is written from (spec {@code [#collections]}); those were
+ * asked by nobody, or answered by whether a decoder node happened to be on the declaration, which is
+ * a fact about the compiler rather than about the model.
  */
 class ABoundaryCarriesTheModelsOwnVocabularyTest {
 
@@ -22,7 +29,16 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
     }
 
     private static void refuses(String signature, String body, String named) {
-        CompileException e = err("module demo\n\n" + signature + "\n" + body + "\n");
+        refusesModel("module demo\n\n" + signature + "\n" + body + "\n", named);
+    }
+
+    /** The same rule, where what crosses is written as a declaration rather than as a signature. */
+    private static void refusesDeclaring(String declaration, String named) {
+        refusesModel("module demo\n\n" + declaration + "\n", named);
+    }
+
+    private static void refusesModel(String model, String named) {
+        CompileException e = err(model);
         assertTrue(e.getMessage().contains("E1325"), e.getMessage());
         assertTrue(e.getMessage().contains("`" + named + "`"), "names the type: " + e.getMessage());
         assertTrue(e.getMessage().contains("Declare this as a type of the model"),
@@ -125,5 +141,62 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
                 behavior write : (n: Note) -> Note
                 let write (n) = n
                 """));
+    }
+
+    @Test
+    void aFieldTakesATypeTheLanguageDeclares() {
+        refusesDeclaring("data X = { e: DivisionByZero }", "DivisionByZero");
+    }
+
+    @Test
+    void aFieldCarryingOneInACollectionIsAskedAtItsDepth() {
+        // spec [#collections] says a data field crosses at any depth, so every nominal position of
+        // the walk is asked and not only the one the field type names.
+        refusesDeclaring("data X = { ms: List<RoundingMode> }", "RoundingMode");
+    }
+
+    @Test
+    void aFieldsMapValueIsAskedAtItsDepthToo() {
+        // The other recursion arm. A key position has a rule of its own, so a fix that only reached
+        // one would leave the quantifier — the field itself, or anywhere below it — unfixed and this
+        // test is what tells the two apart.
+        refusesDeclaring("data X = { m: Map<String, RoundingMode> }", "RoundingMode");
+    }
+
+    @Test
+    void aFieldsMapKeyIsAskedToo() {
+        // `RoundingMode` classifies as a key — it is an enumeration — so having a representation is
+        // not what admits it. It is refused for whose vocabulary it is, as it is in a signature.
+        refusesDeclaring("data X = { m: Map<RoundingMode, Int> }", "RoundingMode");
+    }
+
+    @Test
+    void theBaseANewtypeIsWrittenFromIsAskedToo() {
+        // a newtype delegates the whole input to its base's decoder, so the base is what crosses
+        refusesDeclaring("data Wrapped = RoundingMode", "RoundingMode");
+    }
+
+    @Test
+    void theReservedTypeIsAskedInAFieldToo() {
+        refusesDeclaring("data X = { r: Raw }", "Raw");
+    }
+
+    @Test
+    void aModelsOwnUnitDataStandsInAField() throws Exception {
+        // The other side of the same rule: a unit data is the model's own vocabulary, so it crosses.
+        // Held by taking one across rather than by compiling: what admitting it is worth is that the
+        // value goes out and comes back, through the codec a unit's class is generated with. That no
+        // decoder node sits on the declaration is a fact about the compiler's representation, which
+        // is what the refusal used to read.
+        assertEquals("{\"u\":{}}", Crossing.of("""
+                module demo
+
+                data Undivided
+
+                data X = { u: Undivided }
+
+                behavior echo : (x: X) -> X
+                let echo (x) = x
+                """, "demo", "echo", "{\"u\":{}}"));
     }
 }

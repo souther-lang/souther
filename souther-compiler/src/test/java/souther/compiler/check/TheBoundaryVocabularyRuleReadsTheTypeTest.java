@@ -6,10 +6,8 @@ import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The rule is asked of the type, not of the name a source spelling happened to resolve to. Written
@@ -29,7 +27,7 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
 
     @Test
     void theReservedNameIsRefusedWhicheverWayItArrives() {
-        assertFalse(TypeOps.declaredByAModel(TypeSymbol.primitive("Raw"), null));
+        assertNull(CrossingNominal.admitted(TypeSymbol.primitive("Raw"), null));
     }
 
     @Test
@@ -39,7 +37,7 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
                 continue;
             }
             assertNotNull(LeafScalar.of(prim), prim.toString());
-            assertTrue(TypeOps.declaredByAModel(TypeSymbol.primitive(Type.show(prim)), null),
+            assertNotNull(CrossingNominal.admitted(TypeSymbol.primitive(Type.show(prim)), null),
                     prim.toString());
         }
     }
