@@ -5648,17 +5648,28 @@ value, or guard the path so the violating case cannot reach here.
 
 Neither names what decided it: the check knows the values alone did not, and not which of the things known there did.
 
+The secondary regions identify only the invariant clauses shown to reject the value. A clause the check could settle neither way is a clause the guards did not establish, which is what <<e2011>> reports; it is not presented here as one the value fails.
+
 [#e2011]
 === A construction is not shown to satisfy its invariant
 
 [,text]
 ----
+model.sou:7:5
+7|     invariant charged <= limit
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+The guards do not establish this clause.
+
 Constructing `Amount` here may violate its invariant: the guards do not establish it. Guard
 it with `guard`, or reify the relation into `Amount`'s (or an input's) invariant so it is
 assumed here.
 Hint: If a relation between inputs guarantees this, declare it as an `invariant` on the
 input data so it is checked once at its boundary and assumed here.
 ----
+
+The secondary regions identify the invariant clauses the guards did not establish, at the declarations that write them. Every one of them, in the order they are declared, and however many there are.
+
+What a clause is called and where it is written are separate things a report may carry, and neither is the other's fallback. The message names the clauses it can name, which is the ones an author wrote a name on (<<invariant-declaration>>); the regions point at the ones this compile has the source of, which is every clause but those of a module read off the module path, whose declarations arrive as text reassembled from what the module carries. A clause with a name and no source to quote is named and not pointed at; a clause with a source and no name is pointed at and said to be "its invariant". The same holds of <<e2010>>.
 
 A warning, and the one diagnostic in this chapter that says nothing about whether the model is wrong. E2010 is the check having proved the invariant false; this is the check having proved nothing either way, so what was always going to happen still happens — the invariant is tested when the value is built, and a violation aborts there (<<violation-destination>>). A model whose guards do establish the invariant by an argument the check cannot follow is told this too, and is not thereby wrong.
 
