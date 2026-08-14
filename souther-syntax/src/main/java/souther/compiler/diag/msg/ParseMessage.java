@@ -117,6 +117,16 @@ public sealed interface ParseMessage extends Message {
     @Code(DiagnosticCode.E2304)
     record AFakeNeedsAtLeastOneRow() implements ParseMessage, Reported {}
 
+    /**
+     * A row was written with a name that names nothing.
+     *
+     * <p>Read here rather than where the row is checked, because it is a question about the literal:
+     * a row that wrote no name is a row without one, and a row that wrote an empty one meant to say
+     * which row it is and did not. The two are different mistakes and only one of them is a mistake.
+     */
+    @Code(DiagnosticCode.E2304)
+    record ARowNameSaysNothing() implements ParseMessage, Reported {}
+
     @Code(DiagnosticCode.E2306)
     record ATypeVariableNeedsANameAfterTheApostrophe() implements ParseMessage, Reported {}
 

@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.examples.Deadline;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.examples.ExampleStatements;
 import java.time.Duration;
@@ -166,17 +167,18 @@ final class DoesNotComeBack {
     }
 
     /**
-     * The one row written with {@code description}, and the statements it is read from.
+     * The one row named {@code name}, and the statements it is read from.
      *
      * <p>For a model with more than one row of a behavior, where only one of them is the one that
-     * does not come back. The description is written on the row, so it moves with it — a position
-     * would have to be counted out of a text block and re-counted whenever the model above it
-     * changed.
+     * does not come back. The name is written on the row, so it moves with it — a position would have
+     * to be counted out of a text block and re-counted whenever the model above it changed — and one
+     * behavior's rows do not share a name, so it picks out one row.
      */
-    static Predicate<Deadline.Work> everythingAboutTheRowDescribed(String description) {
+    static Predicate<Deadline.Work> everythingAboutTheRowNamed(String name) {
+        RowIdentity named = new RowIdentity.Named(name);
         return w -> switch (w) {
-            case Deadline.Work.Row row -> description.equals(row.description());
-            case Deadline.Work.Fixtures f -> description.equals(f.description());
+            case Deadline.Work.Row row -> named.equals(row.identity());
+            case Deadline.Work.Fixtures f -> named.equals(f.identity());
             default -> false;
         };
     }

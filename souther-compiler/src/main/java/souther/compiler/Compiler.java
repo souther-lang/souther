@@ -12,6 +12,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.query.Front;
 import souther.compiler.query.Report;
 import souther.compiler.query.Output;
 
@@ -239,6 +240,12 @@ public final class Compiler {
             }
             List<Diagnostic> failures = new ArrayList<>();
             for (String id : compilation.exampleSourcesOf(module)) {
+                // What the rows name themselves, before what they state: a name says which row is
+                // meant, and two rows sharing one leave every later report about either of them
+                // saying it of both.
+                for (Report failure : Report.errorsIn(db.ask(new Front.RowNames(id)).reports())) {
+                    failures.add(failure.diagnostic());
+                }
                 // Only the errors: this key also carries what a clean run wants to say about how well
                 // the rows cover the model, and a warning is not a reason to fail the build.
                 for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {

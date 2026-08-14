@@ -27,6 +27,7 @@ import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 
@@ -473,7 +474,7 @@ public final class ExampleVerifier {
 
     /** What the row turned out to be, from the state its worker left. */
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
-        return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.description(),
+        return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.identity(),
                 state.stage, state.disposition, state.failurePhase, state.expectedArm, state.resultArm,
                 state.inputCases, state.inputs, state.hits, state.stepsSpent);
     }
@@ -488,7 +489,7 @@ public final class ExampleVerifier {
                           List<Diagnostic> out, List<RowOutcome> rows) {
         RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
         switch (deadline.given(
-                new Deadline.Work.Row(target.name(), sourceId, row.pos(), row.description()),
+                new Deadline.Work.Row(target.name(), sourceId, row.pos(), row.identity()),
                 evaluation)) {
             case Deadline.Outcome.Finished(List<Diagnostic> found) -> {
                 out.addAll(found);
@@ -519,7 +520,7 @@ public final class ExampleVerifier {
                 // No spend is read: the worker is still writing to its state, and a count taken
                 // while it runs would be some of what it spent rather than what it spent.
                 rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
-                        row.description(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
+                        row.identity(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
                         null, null, List.of(), List.of(), Set.of(), 0L));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
@@ -1065,8 +1066,10 @@ public final class ExampleVerifier {
                     fixtures.typeShown(differs.asserted()),
                     fixtures.typeShown(differs.observed(), differs.position())));
         }
-        if (row.description() != null) {
-            b.hint(new ExampleMessage.WhatTheRowSaid(row.description()));
+        // The row's own words, where it has any. An unnamed row's ordinal is not words about the
+        // row, and the position the report is already anchored at says which row it is.
+        if (row.identity() instanceof RowIdentity.Named named) {
+            b.hint(new ExampleMessage.WhatTheRowSaid(named.name()));
         }
         return b.build();
     }

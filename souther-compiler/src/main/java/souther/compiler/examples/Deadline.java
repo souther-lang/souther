@@ -1,6 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.RowIdentity;
 
 import java.util.concurrent.Callable;
 
@@ -22,11 +23,11 @@ public interface Deadline {
     /**
      * One piece of work, said as what it is rather than as a sentence about it.
      *
-     * <p>A deadline a test writes decides by reading this, so it is an identity and not a label:
-     * a description that read well would still have to be unique, and would break every test that
-     * matched on it the day the wording improved. What makes it unique is where the writing is —
-     * two rows of one behavior differ in nothing else, and a behavior can be exampled by more than
-     * one {@code example} block and by more than one file.
+     * <p>A deadline a test writes decides by reading this, so what it carries has to say which piece
+     * of work it is. Where the writing is says that for any of them, and a row written with a name
+     * says it as well: a name is unique among the rows one behavior has, over the module's own source
+     * and every file attached to it, so a test may match on either. Editing a name is renaming the
+     * row, and a deadline matched on the old one no longer meets it — which is what a rename is.
      */
     sealed interface Work {
 
@@ -40,12 +41,12 @@ public interface Deadline {
         SourcePos pos();
 
         /** A row of an {@code example}, evaluated: its fixtures built, the behavior applied, the
-         * result compared. {@code description} is what the row was written with, or null. */
-        record Row(String target, String sourceId, SourcePos pos, String description)
+         * result compared. {@code identity} is what the row names itself. */
+        record Row(String target, String sourceId, SourcePos pos, RowIdentity identity)
                 implements Work {}
 
         /** The statements a row is read from, with no behavior applied. */
-        record Fixtures(String target, String sourceId, SourcePos pos, String description)
+        record Fixtures(String target, String sourceId, SourcePos pos, RowIdentity identity)
                 implements Work {}
 
         /** A {@code fake} table, built. */

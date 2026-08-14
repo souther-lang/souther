@@ -223,13 +223,16 @@ class APairIsChosenOnePositionAtATimeTest {
         }
         String rows = out.toString(StandardCharsets.UTF_8);
 
-        assertTrue(rows.contains("band.low = 0"),
+        // Read off the values a row is written with rather than off what it is called: a row is named
+        // for the one obligation it was composed for, and an edge met by a row composed for a cell is
+        // met by it all the same.
+        assertTrue(rows.contains("low = Ratio(0m)"),
                 () -> "the bottom of `low` is a row it can write:\n" + rows);
-        assertTrue(rows.contains("band.high = 1"),
+        assertTrue(rows.contains("high = Ratio(1m)"),
                 () -> "and so is the top of `high`:\n" + rows);
-        assertFalse(rows.contains("band.high = 0"),
+        assertFalse(rows.contains("high = Ratio(0m)"),
                 () -> "a high of zero is refused by the record, so nothing is owed there:\n" + rows);
-        assertFalse(rows.contains("band.low = 1"),
+        assertFalse(rows.contains("low = Ratio(1m)"),
                 () -> "nor at a low of one:\n" + rows);
     }
 }

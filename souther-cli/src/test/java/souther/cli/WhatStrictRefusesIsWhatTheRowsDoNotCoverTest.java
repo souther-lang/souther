@@ -138,7 +138,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         assertTrue(before.out().contains("no row is at baseRate/score = 0"), before.out());
         assertTrue(before.out().contains("1 row waiting for a `let`."), before.out());
         // The row the block proposes, which is what the pasted model below answers.
-        assertTrue(before.out().contains("| \"score = 0\" : (RiskScore(0)) -> <?>"), before.out());
+        assertTrue(before.out().contains("| (RiskScore(0)) -> <?>"), before.out());
 
         Run after = examples(ONLY_WAITING, "--strict");
 

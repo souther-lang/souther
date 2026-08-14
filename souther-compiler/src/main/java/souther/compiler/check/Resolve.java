@@ -368,7 +368,7 @@ public final class Resolve {
                 for (Ast.With w : row.withs()) {
                     withs.add(new Hir.With(w.dep(), r.expr(w.value()), w.pos()));
                 }
-                rows.add(new Hir.ExampleRow(row.description(), r.exprs(row.inputs()), withs,
+                rows.add(new Hir.ExampleRow(row.identity(), r.exprs(row.inputs()), withs,
                         r.expr(row.expected()), row.pos()));
             }
             examples.add(new Hir.Example(e.target(), rows, e.pos()));

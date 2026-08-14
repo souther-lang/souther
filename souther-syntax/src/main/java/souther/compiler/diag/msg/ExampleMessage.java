@@ -56,6 +56,15 @@ public sealed interface ExampleMessage extends Message {
     /** What the row said and what came back. */
     record WhatTheRowSaid(String said) implements ExampleMessage, Supporting {}
 
+    /**
+     * A name is on more than one row of one behavior, so it says which row nowhere.
+     *
+     * <p>Said at every row that carries it, in the source that row is written in. Which of them is
+     * the one that should have been named otherwise is not a question the language answers.
+     */
+    @Code(DiagnosticCode.E1925)
+    record TheNameIsOnMoreThanOneRow(String name, String target) implements ExampleMessage, Reported {}
+
     /** The row reached a point the model says cannot arise. */
     @Code(DiagnosticCode.E1911)
     record TheRowReachedAnUnreachablePoint(String reason) implements ExampleMessage, Reported {}

@@ -6,6 +6,7 @@ import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Compilation;
@@ -82,7 +83,7 @@ class ExampleOutcomeTest {
         assertEquals(Disposition.HELD, row.disposition());
         assertEquals(FailurePhase.NONE, row.failurePhase());
         assertEquals("submit", row.target());
-        assertEquals("within the ceiling", row.description());
+        assertEquals(new RowIdentity.Named("within the ceiling"), row.identity());
         assertEquals("Submitted", row.expectedArm().name());
         assertEquals("Submitted", row.resultArm().name());
         assertEquals(List.of("Draft"), row.inputCases().stream().map(t -> t.name()).toList());
@@ -155,7 +156,8 @@ class ExampleOutcomeTest {
                 assertInstanceOf(ObservedValue.Constructed.class, draft.field("cost"));
         assertEquals("Amount", amount.type().name());
         assertEquals(new ObservedValue.Integer(50L), amount.field("value"));
-        assertNull(row.description(), "a row need not be named");
+        assertEquals(new RowIdentity.Unnamed(1), row.identity(),
+                "a row need not be named, and an unnamed one is shown by which of its behavior's it is");
     }
 
     /** A position is a line and a column; once rows are gathered under a module it no longer says

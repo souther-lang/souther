@@ -2682,7 +2682,18 @@ What a row is held to, and what holding a build to it requires:
 * [[example-evaluation-stays-within-stack]]and it MUST reach that counted depth limit before the JVM stack runs out, the two being set so the counted one is met first;
 * [[example-evaluation-answers]]the work around the counted evaluation — loading a class, decoding a value, comparing two of them — MUST answer within the wait the policy allows. Unlike the two above, this says nothing about the model.
 
-An `+example+` names a target behavior, then lists one or more `+|+`-led rows. A row is an optional description string (a business-case name, followed by `+:+`), an input argument tuple, `+->+`, and an expected result. `+example+`, `+examples+`, and `+for+` are contextual keywords, not reserved words, so they do not collide with an identifier or the `+example.*+` namespace.
+An `+example+` names a target behavior, then lists one or more `+|+`-led rows. A row is an optional name (a string, followed by `+:+`), an input argument tuple, `+->+`, and an expected result. `+example+`, `+examples+`, and `+for+` are contextual keywords, not reserved words, so they do not collide with an identifier or the `+example.*+` namespace.
+
+[#example-row-name]
+=== A row's name
+
+The string a row is written with is its name, and a name is what says which row is meant from somewhere the row is not written: a report line two runs are compared on, a test that prepares what one row needs.
+
+[[a-row-name-is-unique-within-its-behavior]]A name written on a row MUST be carried by no other row of that behavior, over the module's own source and every `+examples for+` file attached to it (<<example-placement>>). Every row carrying a name more than one row carries is reported, each in the file it is written in (<<e1925>>). Which of them is the one to write differently is not decided here: two rows of one behavior are what they are whichever order a compile was handed its files in.
+
+A string with nothing in it is not a name, and a row written with one is refused where it is written (<<e2304>>). A row written without a name is held to none of this. It can be shown — as which of its behavior's rows in that file it is — and it cannot be named from outside, which is the whole of what writing no name means.
+
+Editing a name renames the row. What was written elsewhere against the old name no longer says anything about this row, the same way a renamed behavior no longer answers to its old name.
 
 [#example-expected]
 === The expected result
@@ -5541,6 +5552,21 @@ recursion so it loops instead of adding frames.
 ----
 
 Emitted when the JVM stack runs out before the counted recursion-depth limit is reached. Not <<e1910>> either: how many frames a stack holds depends on how large they are, which is decided by the helper and by whether the JVM has compiled it — so this says nothing about whether the recursion terminates. The depth limit and the stack an evaluation is given are set so the counted limit is reached first; this says they are set wrong for this model.
+
+[#e1925]
+=== A name is on more than one row of one behavior
+
+[,text]
+----
+`over the ceiling` names more than one row of `submit`, so nothing outside this file can
+say which row it means.
+----
+
+Emitted at every row of one behavior carrying a name another of its rows carries, in the file that row is written in (<<a-row-name-is-unique-within-its-behavior>>). Read over the module's own source and the `+examples for+` files attached to it together, since a behavior's rows may be written across them (<<example-placement>>).
+
+Both rows are reported and neither is named as the duplicate. Which source a row is in comes from the order a compile was handed its files, which a build and a command line decide differently; a rule naming one of the two would say different things about one model depending on how it was compiled.
+
+Rows written with no name are not compared with each other: a row without a name is not addressable from outside, so there is nothing for two of them to disagree about (<<example-row-name>>).
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims
