@@ -219,12 +219,13 @@ public final class TypeOps {
         if (members.size() == 1) {
             return members.get(0);
         }
-        // Every member is read before anything is said, because the two ways a member can fail to
-        // be one are different mistakes and the author owns only one of them. A member that cannot
-        // be written in an arm is theirs, and is reported wherever it stands. A member whose name
-        // denotes nothing was reported where that name was written, and what this reading finds
-        // there is that same mistake: the output has no case set at all, so it takes the type that
-        // absorbs and this says nothing further.
+        // The two ways a member can fail to be one are different mistakes, and the author owns only
+        // one of them. A member that cannot be written in an arm is theirs and is reported where it
+        // stands, as the first such member always was. A member whose name denotes nothing was
+        // reported where that name was written, and what this reading finds there is that same
+        // mistake: the output has no case set at all, so it takes the type that absorbs and this
+        // says nothing further. Finding one does not end the reading, because a member the author
+        // does own may be written after it.
         Set<TypeSymbol> names = new LinkedHashSet<>();
         boolean unknown = false;
         for (Type m : members) {

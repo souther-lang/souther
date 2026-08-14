@@ -48,13 +48,27 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
             data Amount = Int
             """;
 
-    /** How the one mistake is spelled, beside the spelling that names something — which is what
-     * says whether the position reads the form at all. */
-    private record Spelling(String name, String denotesNothing, String denotesSomething) {}
+    /**
+     * How the one mistake is spelled, beside the spelling that names something — which is what says
+     * whether the position reads the form at all — and what the position is to answer.
+     *
+     * <p>The third carries a second mistake the author owns: a member no arm can name. It is theirs
+     * to fix whatever went unresolved beside it, so it is still said, and withholding it would cost
+     * them a build to learn it. What is withheld is only what is read off the type the unresolved
+     * name left behind.
+     */
+    private record Spelling(String name, String denotesNothing, String denotesSomething,
+                            List<String> answered) {}
 
     private static final List<Spelling> SPELLINGS = List.of(
-            new Spelling("on its own", "up.Nope", "up.Amount"),
-            new Spelling("as a union member", "A | up.Nope", "A | up.Amount"));
+            new Spelling("on its own", "up.Nope", "up.Amount", List.of("E1506")),
+            new Spelling("as a union member", "A | up.Nope", "A | up.Amount", List.of("E1506")),
+            new Spelling("as a union member beside one no arm can name",
+                    "List<Int> | up.Nope", "List<Int> | up.Amount", List.of("E1506", "E1613")),
+            // The same two members the other way round. What the reading finds first is not what it
+            // reports, so a reading rewritten to stop at the unresolved member is caught here.
+            new Spelling("as a union member before one no arm can name",
+                    "up.Nope | List<Int>", "up.Amount | List<Int>", List.of("E1506", "E1613")));
 
     /** Something to write where a position needs a value beside the type. It is not of the type
      * written above it, and does not have to be: what a position says about a value it was given is
@@ -70,9 +84,17 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
      */
     private static final List<String> NOT_WRITABLE = List.of(
             "data field as a union member",
+            "data field as a union member beside one no arm can name",
+            "data field as a union member before one no arm can name",
             "newtype base as a union member",
+            "newtype base as a union member beside one no arm can name",
+            "newtype base as a union member before one no arm can name",
             "type argument as a union member",
-            "tuple member as a union member");
+            "type argument as a union member beside one no arm can name",
+            "type argument as a union member before one no arm can name",
+            "tuple member as a union member",
+            "tuple member as a union member beside one no arm can name",
+            "tuple member as a union member before one no arm can name");
 
     private static List<Diagnostic> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
@@ -99,6 +121,7 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
     void theNameIsReportedAndNothingIsReadOffTheTypeItLeftBehind() {
         List<String> notWritable = new ArrayList<>();
         List<String> answered = new ArrayList<>();
+        List<String> naming = new ArrayList<>();
         for (TypePositions.Position position : TypePositions.ALL) {
             for (Spelling spelling : SPELLINGS) {
                 String cell = position.name() + " " + spelling.name();
@@ -106,10 +129,12 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
                     notWritable.add(cell);
                     continue;
                 }
-                List<Diagnostic> found =
-                        diagnose(position.of(spelling.denotesNothing(), VALUE));
-                if (found.size() != 1 || !"E1506".equals(found.get(0).code())) {
+                List<Diagnostic> found = diagnose(position.of(spelling.denotesNothing(), VALUE));
+                if (!spelling.answered().equals(found.stream().map(Diagnostic::code).sorted().toList())) {
                     answered.add(cell + ": " + shown(found));
+                }
+                if (found.stream().anyMatch(d -> d.values().containsValue("?"))) {
+                    naming.add(cell + ": " + shown(found));
                 }
             }
         }
@@ -117,37 +142,9 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
         assertEquals(NOT_WRITABLE, notWritable,
                 "which positions cannot be written a union; read the change rather than re-fitting");
         assertEquals(List.of(), answered,
-                "the name that denotes nothing, and nothing read off the type it left behind");
-    }
-
-    /**
-     * A member no arm can name is still reported when a member beside it denotes nothing.
-     *
-     * <p>The two are different mistakes and the author owns both: the list is a member they wrote
-     * and can rewrite, and withholding it because something else in the same union went unresolved
-     * would cost them a build to learn it. What is withheld is only what is read off the type the
-     * unresolved name left behind.
-     */
-    @Test
-    void aMemberNoArmCanNameIsSaidBesideAMemberThatDenotesNothing() {
-        List<Diagnostic> found = diagnose("""
-                module demo
-
-                data A = { a: Int }
-
-                behavior go : (i: A) -> List<Int> | up.Nope
-                    constructs A
-
-                let go (i) = A { a = 1 }
-                """);
-
-        assertEquals(List.of("E1506", "E1613"),
-                found.stream().map(Diagnostic::code).sorted().toList(),
-                "the name nothing declares, and the member no arm can name: " + shown(found));
-        assertEquals(List.of(), found.stream()
-                        .filter(d -> d.values().containsValue("?")).map(Diagnostic::code).toList(),
-                "the member named is the one written, not the type the other member left behind: "
-                        + shown(found));
+                "the name that denotes nothing, what is wrong beside it, and nothing else");
+        assertEquals(List.of(), naming,
+                "the type a name that denotes nothing leaves behind is named in nothing");
     }
 
     /**
