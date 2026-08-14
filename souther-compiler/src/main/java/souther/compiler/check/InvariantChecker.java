@@ -66,7 +66,7 @@ import java.util.Set;
  * <p>The walk mirrors {@link TotalityChecker}: a {@code switch} over {@link Core} threading an
  * immutable environment. It is fail-open for what it cannot analyze — an expression or a shape it
  * has no rule for is swallowed, so a limit of this analysis can never reject a valid program. It is
- * not fail-open for this analysis disagreeing with itself: {@link Terms.OneKeyTwoKinds} says one
+ * not fail-open for this analysis disagreeing with itself: {@link Terms.OneTermTwoKinds} says one
  * name was given two values, and swallowing it produces a behavior with no findings, which is what a
  * behavior whose invariants all discharge produces. That one is rethrown ({@link #gaveUp}).
  */
@@ -246,12 +246,12 @@ public final class InvariantChecker {
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
      */
-    record Seeded(NumericDomain numbers, Map<String, String> atoms, Map<String, String> held,
+    record Seeded(NumericDomain<Term> numbers, Map<String, Term> atoms, Map<String, Term> held,
                   Reading reading, boolean everyClauseRead) {}
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
-     * declaration throws. {@link Terms.OneKeyTwoKinds} is not about the declaration and is not
+     * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
      * caught ({@link #gaveUp}). */
     /**
      * How far a seeding reads at each name it meets.
@@ -355,10 +355,10 @@ public final class InvariantChecker {
             return new Seeded(NumericDomain.top(), Map.of(), Map.of(),
                     new Reading(List.of(), Map.of()), false);
         }
-        Map<String, String> atoms = new LinkedHashMap<>();
+        Map<String, Term> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
-        Map<String, String> held = new LinkedHashMap<>();
-        Map<String, String> keys = new LinkedHashMap<>();
+        Map<String, Term> held = new LinkedHashMap<>();
+        Map<String, Term> keys = new LinkedHashMap<>();
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
             if (type != null) {
@@ -373,9 +373,9 @@ public final class InvariantChecker {
         // Which of the clauses place an edge, asked once the positions have names to be recognised
         // by.
         Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt);
-        NumericDomain numbers = k.numbers();
+        NumericDomain<Term> numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
-            String atom = atoms.get(each.getKey());
+            Term atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());
             if (atom == null || type == null) {
                 continue;
@@ -405,16 +405,16 @@ public final class InvariantChecker {
      * ask for what they left.
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
-                      int depth, Map<String, String> atoms, Map<String, Type> typeAt,
-                      Map<String, String> held, Map<String, String> keys) {
-        String atom = terms.atomOf(value, at);
+                      int depth, Map<String, Term> atoms, Map<String, Type> typeAt,
+                      Map<String, Term> held, Map<String, Term> keys) {
+        Term atom = terms.atomOf(value, at);
         if (atom != null) {
             atoms.put(path, atom);
         }
         // What the position is called, which every position has and only some are numbers. An
         // enumeration is ordered and carries no atom, so a clause bounding one is recognised by this
         // and by nothing above it.
-        String key = terms.bodyKey(value, at);
+        Term key = terms.bodyKey(value, at);
         if (key != null) {
             keys.put(path, key);
         }
@@ -424,7 +424,7 @@ public final class InvariantChecker {
         // And what a rule counting this position spoke about, which is not what the position is. A
         // list is no number and has no atom above; the count of it has one, and a reader asking how
         // much the position holds is asking about that one.
-        String counted = terms.takenAtomOf(value, type, at);
+        Term counted = terms.takenAtomOf(value, type, at);
         if (counted != null) {
             held.put(path, counted);
         }
@@ -495,14 +495,14 @@ public final class InvariantChecker {
     record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
-                                   Map<String, String> atoms, Map<String, String> keys,
-                                   Map<String, String> held, Map<String, Type> typeAt) {
-        Map<String, Coordinate> byName = new LinkedHashMap<>();
+                                   Map<String, Term> atoms, Map<String, Term> keys,
+                                   Map<String, Term> held, Map<String, Type> typeAt) {
+        Map<Term, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
             if (carrier != null) {
                 byName.put(key, new Coordinate(path, false, carrier));
-                String atom = atoms.get(path);
+                Term atom = atoms.get(path);
                 if (atom != null) {
                     byName.put(atom, new Coordinate(path, false, carrier));
                 }
@@ -527,7 +527,7 @@ public final class InvariantChecker {
      * comparisons it had already accounted for.
      */
     private void direct(Core clause, TypeSymbol from, Denotations at,
-                        Map<String, Coordinate> byName, List<Direct> out,
+                        Map<Term, Coordinate> byName, List<Direct> out,
                         Map<String, List<TypeSymbol>> narrowers) {
         if (!(clause instanceof Core.Binary bin)) {
             return;
@@ -580,9 +580,9 @@ public final class InvariantChecker {
      * moved even where the number came from somewhere further off.
      */
     private void relating(Core clause, TypeSymbol from, Denotations at,
-                          Map<String, Coordinate> byName,
+                          Map<Term, Coordinate> byName,
                           Map<String, List<TypeSymbol>> narrowers) {
-        String named = nameOf(clause, at);
+        Term named = nameOf(clause, at);
         Coordinate found = named == null ? null : byName.get(named);
         if (found != null) {
             List<TypeSymbol> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
@@ -604,8 +604,8 @@ public final class InvariantChecker {
      * <p>Then what the position is called, for the positions that are ordered and are not numbers. An
      * enumeration has no atom and a clause can still say where its values stop.
      */
-    private String nameOf(Core e, Denotations at) {
-        String atom = terms.atomOf(e, at);
+    private Term nameOf(Core e, Denotations at) {
+        Term atom = terms.atomOf(e, at);
         return atom != null ? atom : terms.bodyKey(e, at);
     }
 
@@ -718,7 +718,7 @@ public final class InvariantChecker {
 
     /**
      * Analyzes one behavior body against the bindings its inputs are. Nothing the body is throws:
-     * a walk that cannot get through one comes back {@code ABANDONED}. {@link Terms.OneKeyTwoKinds}
+     * a walk that cannot get through one comes back {@code ABANDONED}. {@link Terms.OneTermTwoKinds}
      * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
      * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
@@ -749,12 +749,12 @@ public final class InvariantChecker {
      * <p>Every place this check swallows a failure comes through here, so what must not be swallowed
      * is refused in one place. A shape the walk has no rule for is what fail-open is for: the
      * run-time check stands for the clause, and reporting the walk's limit as the author's problem is
-     * what the policy avoids. {@link Terms.OneKeyTwoKinds} is not that. It says this check called two
+     * what the policy avoids. {@link Terms.OneTermTwoKinds} is not that. It says this check called two
      * values one value, and what it would produce if caught is a behavior with no findings — which
      * is exactly what a behavior whose invariants all discharge produces.
      */
     static void gaveUp(String where, RuntimeException why) {
-        if (why instanceof Terms.OneKeyTwoKinds) {
+        if (why instanceof Terms.OneTermTwoKinds) {
             throw why;
         }
         List<GaveUp> watching = GAVE_UP;
@@ -1075,14 +1075,14 @@ public final class InvariantChecker {
             return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED,
                     unsettled, settled);
         }
-        NumericDomain dom = k.numbers();
+        NumericDomain<Term> dom = k.numbers();
         // The same clauses read against the same site, under what would be known here had no
         // condition on the path settled anything. What each clause states of the sizes it names holds
         // either way, so both readings take it.
-        NumericDomain alone = k.unguarded().numbers();
+        NumericDomain<Term> alone = k.unguarded().numbers();
         for (Owing owing : owed) {
             for (Predicates.Constraint known : owing.clause().known()) {
-                Map<String, Granularity> kinds = terms.kindsOf(known.form());
+                Map<Term, Granularity> kinds = terms.kindsOf(known.form());
                 dom = dom.assume(known.form(), known.rel(), kinds);
                 alone = alone.assume(known.form(), known.rel(), kinds);
             }
@@ -1500,14 +1500,14 @@ public final class InvariantChecker {
     private Set<Core> sameConditional(Core e, Core.If value, Denotations at) {
         Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
         alike.add(value);
-        String key = terms.bodyKey(value, at);
+        Term key = terms.bodyKey(value, at);
         if (key != null) {
             collectAlike(e, key, at, alike);
         }
         return alike;
     }
 
-    private void collectAlike(Core e, String key, Denotations at, Set<Core> alike) {
+    private void collectAlike(Core e, Term key, Denotations at, Set<Core> alike) {
         if (e instanceof Core.Block) {
             return;
         }

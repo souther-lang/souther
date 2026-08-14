@@ -19,14 +19,15 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a canonical key costs when the term it names reads a named value twice.
+ * What a term costs when it reads a named value twice.
  *
  * <p>What terms are made of is a graph and not a tree. A name read twice is one value read twice, and
- * `+let (a, b) = t+` reads `+t+` twice by itself, so a chain of those is a graph whose nodes grow by
- * one per link and whose paths double. A key holding each of its parts in full holds one copy per
- * path — twenty-four links asked for more characters than an array can hold.
+ * {@code let (a, b) = t} reads {@code t} twice by itself, so a chain of those is a graph whose nodes
+ * grow by one per link and whose paths double. A term holding each of its parts in full holds one
+ * copy per path — twenty-four links once asked for more characters than an array can hold, when a
+ * term was the string it was written out as.
  *
- * <p>Held on the size of the key rather than on the time a compile takes. Time is what the growth
+ * <p>Held on the size of the term rather than on the time a compile takes. Time is what the growth
  * showed up as last: the chain measured flat right up to the link that asked for two gigabytes at
  * once, because the walk is one lookup per name and only what it wrote doubled. What was wrong is the
  * size of the representation, so that is what is measured, and it is measured where it is built.
@@ -41,44 +42,53 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
     private static final BindingOwner OWNER = new BindingOwner.OfValue("m", "f");
 
     /** {@code v0 = 1 + 1}, then {@code v(i) = v(i-1) + v(i-1)}: each link names one value and reads
-     *  it twice. Answers the key of the last link. */
-    private static String chainKey(Terms terms, int links) {
+     *  it twice. Answers the term of the last link. */
+    private static Term chainTerm(Terms terms, int links) {
+        return chain(terms, links).get(links);
+    }
+
+    /** The term of each link, the first one first. */
+    private static List<Term> chain(Terms terms, int links) {
+        List<Term> along = new java.util.ArrayList<>();
         Denotations at = Denotations.none();
         Core value = new Core.Binary(Hir.BinOp.ADD, new Core.Int(1, Type.INT, NOWHERE),
                 new Core.Int(1, Type.INT, NOWHERE), CoverageOrigin.unwritten(), Type.INT, NOWHERE);
-        String key = terms.bodyKey(value, at);
+        Term term = terms.bodyKey(value, at);
+        along.add(term);
         for (int i = 0; i < links; i++) {
             BindingId id = new BindingId(OWNER, i);
-            at = at.binding(id, value, new Denotes.Term(key, true));
+            at = at.binding(id, value, new Denotes.Computed(term, true));
             Core read = new Core.Read("v" + i, id, Type.INT, NOWHERE);
             value = new Core.Binary(Hir.BinOp.ADD, read, read, CoverageOrigin.unwritten(),
                     Type.INT, NOWHERE);
-            key = terms.bodyKey(value, at);
+            term = terms.bodyKey(value, at);
+            along.add(term);
         }
-        return key;
+        return along;
     }
 
-    private static int keyLength(int links) {
-        String key = chainKey(new Terms(Symbols.none()), links);
-        return key == null ? -1 : key.length();
+    private static int held(int links) {
+        Term term = chainTerm(new Terms(Symbols.none()), links);
+        return term == null ? -1 : term.distinct();
     }
 
     /**
-     * A link adds a name to read, and a name is what a link adds.
+     * A link adds a term, and a term is what a link adds.
      *
-     * <p>Asked at four lengths as one map, because what is held is that the number does not follow the
-     * chain — one length is met by any growth at all, and it was met by one that doubled.
+     * <p>Asked at four lengths as one map, because what is held is that the size does not follow the
+     * paths through the chain — one length is met by any growth at all, and it was met by one that
+     * doubled.
      */
     @Test
     void aLinkCostsTheSameWhateverIsUnderIt() {
-        // Asked shortest first and held as it goes, so that a key which follows the chain is caught
+        // Asked shortest first and held as it goes, so that a term which follows the paths is caught
         // at the length where it is still a number and not at the one where it is an allocation.
         Map<Integer, Integer> measured = new LinkedHashMap<>();
         for (int links : List.of(4, 8, 16, 32)) {
-            int length = keyLength(links);
-            measured.put(links, length);
-            assertTrue(length > 0 && length <= 16,
-                    "a key names one shape and is read as a name: " + measured);
+            int size = held(links);
+            measured.put(links, size);
+            assertTrue(size > 0 && size <= 2 * links + 4,
+                    "a link holds the term under it rather than a copy of it: " + measured);
         }
     }
 
@@ -86,28 +96,65 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
      * The chain a compile met, at a length the growth never allowed.
      *
      * <p>Twenty-four links is where it stopped, having asked for two gigabytes. A thousand is past
-     * every length that was reachable, and the key is still a name.
+     * every length that was reachable, and the term is still one term per link.
      */
     @Test
-    void aChainLongerThanTheOldLimitIsStillOneName() {
-        assertTrue(keyLength(1000) <= 16, "the key at a thousand links: " + keyLength(1000));
+    void aChainLongerThanTheOldLimitIsStillOneTermPerLink() {
+        assertTrue(held(1000) <= 2004, "the term at a thousand links holds: " + held(1000));
     }
 
     /**
-     * Naming a shape does not merge two shapes that differ.
+     * Sharing a term does not merge two terms that differ.
      *
-     * <p>Which is the property the keys are for: two terms are one key exactly when they compute one
+     * <p>Which is the property terms are for: two writings are one term exactly when they compute one
      * value, and that is what makes naming an expression not change what is known of it. A chain of
      * four and a chain of five read alike at every link but the last.
      */
     @Test
-    void twoShapesThatDifferAreTwoNames() {
+    void twoShapesThatDifferAreTwoTerms() {
         Terms terms = new Terms(Symbols.none());
-        String four = chainKey(terms, 4);
-        String five = chainKey(terms, 5);
-        String fourAgain = chainKey(terms, 4);
+        Term four = chainTerm(terms, 4);
+        Term five = chainTerm(terms, 5);
+        Term fourAgain = chainTerm(terms, 4);
 
-        assertEquals(four, fourAgain, "one shape is one name");
+        assertEquals(four, fourAgain, "one shape is one term");
         assertNotEquals(four, five, "and two shapes are two");
+    }
+
+    /**
+     * A link's term is told apart from every other link's by its hash alone.
+     *
+     * <p>Which is what a term being held in a map asks of it. A term reading one part twice folds
+     * that part in twice, so a chain of them multiplies the hash it carries up by a fixed amount at
+     * every link; where that amount is a power of two, the bits of a level's own hash are gone a few
+     * links later and every link from there hashes alike. Nothing about the terms says so — they are
+     * distinct, they compare distinct, and the map holding them turns into a list, so a chain of a
+     * thousand links takes what a chain of a hundred took cubed.
+     */
+    @Test
+    void eachLinkHashesApartFromTheOthers() {
+        List<Term> along = chain(new Terms(Symbols.none()), 64);
+        java.util.Set<Term> terms = new java.util.HashSet<>(along);
+        java.util.Set<Integer> hashes = new java.util.HashSet<>();
+        along.forEach(term -> hashes.add(term.hashCode()));
+
+        assertEquals(65, terms.size(), "sixty-five links are sixty-five terms");
+        assertEquals(terms.size(), hashes.size(), "and each is hashed apart from the rest");
+    }
+
+    /**
+     * A term built by one reading equals its twin built by another.
+     *
+     * <p>Sharing is what makes the comparison cheap and is not what makes two terms equal. Two
+     * readings of one program — one compile against another, a test comparing what two spellings
+     * name — hold terms from different interners, and they are the same terms.
+     */
+    @Test
+    void aTermBuiltByAnotherReadingIsTheSameTerm() {
+        Term here = chainTerm(new Terms(Symbols.none()), 6);
+        Term there = chainTerm(new Terms(Symbols.none()), 6);
+
+        assertEquals(here, there, "two readings name one value alike");
+        assertEquals(here.hashCode(), there.hashCode(), "and hash it alike");
     }
 }

@@ -54,7 +54,7 @@ final class Predicates {
         Set<Shape> crossed = EnumSet.noneOf(Shape.class);
         Core source = container;
         while (true) {
-            String key = terms.bodyKey(source, at);
+            Term key = terms.bodyKey(source, at);
             if (key != null) {
                 for (Quantified q : k.quantified()) {
                     if (key.equals(q.container()) && q.through().containsAll(crossed)) {
@@ -119,7 +119,7 @@ final class Predicates {
         // The container is the carrying rule's, which is the one argument this predicate is about.
         // What the operation hands its closure answers the same question about the same argument, and
         // is asked here only for the closure.
-        String container = terms.bodyKey(carried.container(), at);
+        Term container = terms.bodyKey(carried.container(), at);
         if (container == null) {
             return;
         }
@@ -136,7 +136,7 @@ final class Predicates {
         return found[0];
     }
 
-    record Constraint(LinearForm form, Rel rel) {}
+    record Constraint(LinearForm<Term> form, Rel rel) {}
 
     /**
      * A predicate stated of a term. {@code keys} is the term as written first, then each container it
@@ -145,10 +145,10 @@ final class Predicates {
      * about a list built from it. {@code positive} is false for a clause written under a negation,
      * and such a clause carries nowhere, since the implication runs the other way.
      */
-    record Fact(List<String> keys, boolean positive) {
+    record Fact(List<Term> keys, boolean positive) {
 
         boolean entailedBy(PredicateFacts facts) {
-            for (String key : keys) {
+            for (Term key : keys) {
                 if (facts.entails(key, positive)) {
                     return true;
                 }
@@ -173,12 +173,12 @@ final class Predicates {
      */
     record Clause(Constraint numeric, Fact fact, List<Constraint> known) {
 
-        boolean dischargedBy(NumericDomain d, PredicateFacts facts) {
+        boolean dischargedBy(NumericDomain<Term> d, PredicateFacts facts) {
             return numeric != null && d.entails(numeric.form(), numeric.rel())
                     || fact != null && fact.entailedBy(facts);
         }
 
-        boolean refutedBy(NumericDomain d, PredicateFacts facts) {
+        boolean refutedBy(NumericDomain<Term> d, PredicateFacts facts) {
             return numeric != null && d.refutes(numeric.form(), numeric.rel())
                     || fact != null && fact.refutedBy(facts);
         }
@@ -276,8 +276,8 @@ final class Predicates {
         Constraint numeric = null;
         if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
             Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
-            LinearForm la = eff == null ? null : terms.affineOf(b.left(), at, k);
-            LinearForm ra = eff == null ? null : terms.affineOf(b.right(), at, k);
+            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at, k);
+            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at, k);
             if (la != null && ra != null) {
                 numeric = new Constraint(la.minus(ra), eff);
             }
@@ -286,7 +286,7 @@ final class Predicates {
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
-        List<String> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed)
+        List<Term> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed)
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
@@ -306,7 +306,7 @@ final class Predicates {
         return folded instanceof Boolean b ? b : null;
     }
 
-    static List<String> firstOnly(List<String> keys) {
+    static List<Term> firstOnly(List<Term> keys) {
         return keys.isEmpty() ? keys : List.of(keys.get(0));
     }
 
@@ -343,15 +343,15 @@ final class Predicates {
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
             Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            LinearForm la = eff == null ? null : terms.affineOf(b.left(), at, out);
-            LinearForm ra = eff == null ? null : terms.affineOf(b.right(), at, out);
+            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at, out);
+            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at, out);
             if (la != null && ra != null) {
                 LinearForm compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
-            Set<String> named = new HashSet<>(spokenOf(b.left(), at, la));
+            Set<Term> named = new HashSet<>(spokenOf(b.left(), at, la));
             named.addAll(spokenOf(b.right(), at, ra));
             out = out.speaking(named);
         }
@@ -361,15 +361,15 @@ final class Predicates {
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
-        String key = terms.bodyKey(polar.expr(), at);
+        Term key = terms.bodyKey(polar.expr(), at);
         return key == null ? out : out.taking(key, polar.positive(), Known.Held.ON_THE_PATH);
     }
 
     /** The terms one side of a compared pair names: the expression itself, and each atom of the form it
      * reduced to — {@code leftover + 1} says something about {@code leftover}. */
-    Collection<String> spokenOf(Core side, Denotations at, LinearForm form) {
-        Set<String> named = new HashSet<>(form == null ? Set.of() : form.coefs().keySet());
-        String written = terms.bodyKey(side, at);
+    Collection<Term> spokenOf(Core side, Denotations at, LinearForm<Term> form) {
+        Set<Term> named = new HashSet<>(form == null ? Set.of() : form.coefs().keySet());
+        Term written = terms.bodyKey(side, at);
         if (written != null) {
             named.add(written);
         }
@@ -469,7 +469,7 @@ final class Predicates {
         }
         Core container = DischargeRules.sizeArgOf(call);
         if (container != null) {
-            String atom = terms.sizeAtomOf(call, arg -> terms.bodyKey(arg, at));
+            Term atom = terms.sizeAtomOf(call, arg -> terms.bodyKey(arg, at));
             if (atom != null) {
                 out.add(new Constraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
                 bounds(call.operation(), DischargeRules.sizeSource(container), at, out);
@@ -506,8 +506,8 @@ final class Predicates {
      * nothing can be said of, and stops the walk. */
     private void stated(ValueName sizeCall, Core container, Core source, Rel rel, Denotations at,
                         List<Constraint> out) {
-        String here = terms.bodyKey(container, at);
-        String there = terms.bodyKey(source, at);
+        Term here = terms.bodyKey(container, at);
+        Term there = terms.bodyKey(source, at);
         if (here == null || there == null) {
             return;
         }
@@ -531,12 +531,12 @@ final class Predicates {
     /** The keys a guard could have settled to establish this clause: the predicate as written, and
      * the same predicate of each container the written one was built from by a construction that
      * carries it. Stating {@code List.all(p, xs)} is stating it of every sublist of {@code xs}. */
-    List<String> factKeys(Core inv, Denotations at) {
-        String written = terms.bodyKey(inv, at);
+    List<Term> factKeys(Core inv, Denotations at) {
+        Term written = terms.bodyKey(inv, at);
         if (written == null) {
             return List.of();
         }
-        List<String> keys = new ArrayList<>();
+        List<Term> keys = new ArrayList<>();
         keys.add(written);
         if (!(inv instanceof Core.PreservedCall call)) {
             return keys;
@@ -559,7 +559,7 @@ final class Predicates {
                 break;
             }
             Core source = built.container();
-            String key = terms.bodyKey(carried.over(next, source), at);
+            Term key = terms.bodyKey(carried.over(next, source), at);
             if (key == null) {
                 break;
             }

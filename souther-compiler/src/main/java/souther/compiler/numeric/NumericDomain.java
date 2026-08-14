@@ -26,65 +26,65 @@ import java.util.Set;
  * immutable — each operation returns a fresh domain, threaded functionally like
  * {@code TotalityChecker}'s scope map.
  */
-public final class NumericDomain {
+public final class NumericDomain<A> {
 
     /** A comparison of a {@link LinearForm} against zero. */
     public enum Rel { GE, GT, LE, LT, EQ, NE }
 
     /** An affine form {@code const + Σ coef·atom} over the domain's atoms. */
-    public record LinearForm(BigDecimal constant, Map<String, BigDecimal> coefs) {
-        public static LinearForm constant(BigDecimal c) {
-            return new LinearForm(c, Map.of());
+    public record LinearForm<A>(BigDecimal constant, Map<A, BigDecimal> coefs) {
+        public static <A> LinearForm<A> constant(BigDecimal c) {
+            return new LinearForm<>(c, Map.of());
         }
 
-        public static LinearForm atom(String a) {
-            return new LinearForm(BigDecimal.ZERO, Map.of(a, BigDecimal.ONE));
+        public static <A> LinearForm<A> atom(A a) {
+            return new LinearForm<>(BigDecimal.ZERO, Map.of(a, BigDecimal.ONE));
         }
 
-        public LinearForm plus(LinearForm o) {
-            Map<String, BigDecimal> m = new HashMap<>(coefs);
+        public LinearForm<A> plus(LinearForm<A> o) {
+            Map<A, BigDecimal> m = new HashMap<>(coefs);
             o.coefs.forEach((k, v) -> m.merge(k, v, BigDecimal::add));
             m.values().removeIf(v -> v.signum() == 0);
-            return new LinearForm(constant.add(o.constant), m);
+            return new LinearForm<>(constant.add(o.constant), m);
         }
 
-        public LinearForm negate() {
-            Map<String, BigDecimal> m = new HashMap<>();
+        public LinearForm<A> negate() {
+            Map<A, BigDecimal> m = new HashMap<>();
             coefs.forEach((k, v) -> m.put(k, v.negate()));
-            return new LinearForm(constant.negate(), m);
+            return new LinearForm<>(constant.negate(), m);
         }
 
-        public LinearForm minus(LinearForm o) {
+        public LinearForm<A> minus(LinearForm<A> o) {
             return plus(o.negate());
         }
 
         /** This form scaled by a constant {@code k} (a scalar multiply). */
-        public LinearForm times(BigDecimal k) {
+        public LinearForm<A> times(BigDecimal k) {
             if (k.signum() == 0) {
                 return constant(BigDecimal.ZERO);
             }
-            Map<String, BigDecimal> m = new HashMap<>();
+            Map<A, BigDecimal> m = new HashMap<>();
             coefs.forEach((key, v) -> m.put(key, v.multiply(k)));
-            return new LinearForm(constant.multiply(k), m);
+            return new LinearForm<>(constant.multiply(k), m);
         }
     }
 
     /** A form asserted {@code f <= 0} (or {@code f < 0}) and kept as written, because its shape is
      * neither an interval nor a difference. */
-    private record Asserted(LinearForm f, boolean strict) {}
+    private record Asserted<A>(LinearForm<A> f, boolean strict) {}
 
     private final boolean bottom;                              // an infeasible path (guards contradict)
-    private final Map<String, Endpoint> lo;                    // atom -> lower bound (absent = -inf)
-    private final Map<String, Endpoint> hi;                    // atom -> upper bound (absent = +inf)
-    private final Map<String, Map<String, Endpoint>> diff;     // diff[a][b] = tightest known (a - b)
-    private final List<Asserted> kept;                         // forms outside both shapes, as written
-    private final Map<String, Granularity> kinds;              // atom -> how its values are spaced
-    private final Map<String, Set<Loss>> losses;               // atom -> what was not recorded of it
-    private Map<String, Map<String, Endpoint>> closed;         // diff closed transitively, on first ask
+    private final Map<A, Endpoint> lo;                    // atom -> lower bound (absent = -inf)
+    private final Map<A, Endpoint> hi;                    // atom -> upper bound (absent = +inf)
+    private final Map<A, Map<A, Endpoint>> diff;     // diff[a][b] = tightest known (a - b)
+    private final List<Asserted<A>> kept;                         // forms outside both shapes, as written
+    private final Map<A, Granularity> kinds;              // atom -> how its values are spaced
+    private final Map<A, Set<Loss>> losses;               // atom -> what was not recorded of it
+    private Map<A, Map<A, Endpoint>> closed;         // diff closed transitively, on first ask
 
-    private NumericDomain(boolean bottom, Map<String, Endpoint> lo, Map<String, Endpoint> hi,
-                          Map<String, Map<String, Endpoint>> diff, List<Asserted> kept,
-                          Map<String, Granularity> kinds, Map<String, Set<Loss>> losses) {
+    private NumericDomain(boolean bottom, Map<A, Endpoint> lo, Map<A, Endpoint> hi,
+                          Map<A, Map<A, Endpoint>> diff, List<Asserted<A>> kept,
+                          Map<A, Granularity> kinds, Map<A, Set<Loss>> losses) {
         this.bottom = bottom;
         this.lo = lo;
         this.hi = hi;
@@ -94,8 +94,8 @@ public final class NumericDomain {
         this.losses = losses;
     }
 
-    public static NumericDomain top() {
-        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of());
+    public static <A> NumericDomain<A> top() {
+        return new NumericDomain<>(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of());
     }
 
     /**
@@ -132,7 +132,7 @@ public final class NumericDomain {
      *                  wrongly sharpened on or silently left blunt, and neither shows up as a
      *                  failure anywhere near where the guess was made.
      */
-    public NumericDomain assume(LinearForm f, Rel rel, Map<String, Granularity> atomKinds) {
+    public NumericDomain<A> assume(LinearForm<A> f, Rel rel, Map<A, Granularity> atomKinds) {
         NumericDomain d = knowing(f.coefs().keySet(), atomKinds);
         if (d.bottom) {
             return d;
@@ -171,9 +171,9 @@ public final class NumericDomain {
      * spacings under one key means the naming and the typing disagree, and the answer to that is to
      * stop rather than to pick the safer of the two.
      */
-    private NumericDomain knowing(Set<String> atoms, Map<String, Granularity> atomKinds) {
-        Map<String, Granularity> next = null;
-        for (String atom : atoms) {
+    private NumericDomain<A> knowing(Set<A> atoms, Map<A, Granularity> atomKinds) {
+        Map<A, Granularity> next = null;
+        for (A atom : atoms) {
             Granularity given = atomKinds.get(atom);
             if (given == null) {
                 throw new IllegalStateException("no granularity given for atom `" + atom + "`");
@@ -192,7 +192,7 @@ public final class NumericDomain {
             next.put(atom, given);
         }
         return next == null ? this
-                : new NumericDomain(bottom, lo, hi, diff, kept, Map.copyOf(next), losses);
+                : new NumericDomain<>(bottom, lo, hi, diff, kept, Map.copyOf(next), losses);
     }
 
     /**
@@ -205,7 +205,7 @@ public final class NumericDomain {
      * is no step, and the end stays where the constraint put it and says that the value is not its
      * own. A form of neither shape keeps its strictness as written.
      */
-    private NumericDomain addLe(LinearForm g, boolean strict) {
+    private NumericDomain<A> addLe(LinearForm<A> g, boolean strict) {
         if (bottom) {
             // Nothing holds here, so nothing asserted of it holds either. Read again rather than
             // built on: a bottom domain keeps no bounds, and the sisters below derive feasibility
@@ -214,14 +214,14 @@ public final class NumericDomain {
             // where a contradicted one came back satisfiable.
             return this;
         }
-        Map<String, BigDecimal> c = g.coefs();
+        Map<A, BigDecimal> c = g.coefs();
         if (c.isEmpty()) {
             boolean ok = strict ? g.constant().signum() < 0 : g.constant().signum() <= 0;
             return ok ? this : bottom();
         }
         if (c.size() == 1) {
-            Map.Entry<String, BigDecimal> e = c.entrySet().iterator().next();
-            String a = e.getKey();
+            Map.Entry<A, BigDecimal> e = c.entrySet().iterator().next();
+            A a = e.getKey();
             BigDecimal k = e.getValue();
             // k·a + const <= 0  =>  a <= -const/k (k>0, an upper bound)  or  a >= -const/k (k<0, a
             // lower bound). Round an inexact quotient conservatively — toward +inf for an upper bound,
@@ -236,23 +236,23 @@ public final class NumericDomain {
                     : new Endpoint(Count.of(bound), !strict);
             return upper ? withHi(a, end) : withLo(a, end);
         }
-        String[] ab = unitDiffAtoms(c);
+        List<A> ab = unitDiffAtoms(c);
         if (ab != null) {
             // a - b <= -const. A difference of two whole numbers is a whole number, and only then:
             // one dense atom on either side leaves the difference with no smallest step, so the
             // bound stays where the constant put it and says the value is outside it.
             BigDecimal bound = g.constant().negate();
-            Endpoint end = kinds.get(ab[0]) == Granularity.DISCRETE
-                    && kinds.get(ab[1]) == Granularity.DISCRETE
+            Endpoint end = kinds.get(ab.get(0)) == Granularity.DISCRETE
+                    && kinds.get(ab.get(1)) == Granularity.DISCRETE
                     ? Endpoint.inclusive(whole(bound, true, strict))
                     : new Endpoint(Count.of(bound), !strict);
-            return withDiff(ab[0], ab[1], end);
+            return withDiff(ab.get(0), ab.get(1), end);
         }
         // Neither shape holds it — a sum of two lengths, say. Keeping the form as written is what lets
         // a guard restating an invariant discharge it, which is the promise the flagging rests on.
-        List<Asserted> next = new ArrayList<>(kept);
+        List<Asserted<A>> next = new ArrayList<>(kept);
         next.add(new Asserted(g, strict));
-        return new NumericDomain(false, lo, hi, diff, List.copyOf(next), kinds,
+        return new NumericDomain<>(false, lo, hi, diff, List.copyOf(next), kinds,
                 with(Loss.KEPT_UNPROJECTABLE, c.keySet()));
     }
 
@@ -280,13 +280,13 @@ public final class NumericDomain {
 
     /** The two atoms of a unit difference {@code {a:+1, b:-1}} as {@code {a, b}}, or {@code null} if
      * {@code c} is not a two-atom form with coefficients +1 and -1. */
-    private static String[] unitDiffAtoms(Map<String, BigDecimal> c) {
+    private static <A> List<A> unitDiffAtoms(Map<A, BigDecimal> c) {
         if (c.size() != 2) {
             return null;
         }
-        String a = null;
-        String b = null;
-        for (Map.Entry<String, BigDecimal> e : c.entrySet()) {
+        A a = null;
+        A b = null;
+        for (Map.Entry<A, BigDecimal> e : c.entrySet()) {
             if (e.getValue().compareTo(BigDecimal.ONE) == 0) {
                 a = e.getKey();
             } else if (e.getValue().compareTo(BigDecimal.ONE.negate()) == 0) {
@@ -295,7 +295,7 @@ public final class NumericDomain {
                 return null;
             }
         }
-        return a != null && b != null ? new String[] {a, b} : null;
+        return a != null && b != null ? List.of(a, b) : null;
     }
 
     /** True for {@code GT}/{@code LT} (a strict comparison). */
@@ -311,7 +311,7 @@ public final class NumericDomain {
     // --- entails / refutes ---------------------------------------------------------------------
 
     /** Whether the domain proves {@code f rel 0} (the construction's invariant is discharged). */
-    public boolean entails(LinearForm f, Rel rel) {
+    public boolean entails(LinearForm<A> f, Rel rel) {
         if (bottom) {
             return true;   // an infeasible path discharges anything
         }
@@ -327,7 +327,7 @@ public final class NumericDomain {
     /** Whether the domain proves {@code ¬(f rel 0)} — the invariant is <em>definitely</em> violated
      * on this path (a compile error, the path-sensitive generalization of the constant check). The
      * negation flips both bits of the comparison: {@code ¬(f >= 0)} is {@code f < 0}, etc. */
-    public boolean refutes(LinearForm f, Rel rel) {
+    public boolean refutes(LinearForm<A> f, Rel rel) {
         if (bottom || rel == Rel.EQ) {
             return false;   // an unreachable path violates nothing; equality is never refuted here
         }
@@ -352,7 +352,7 @@ public final class NumericDomain {
      * relations over each other is arbitrary linear reasoning and a different fragment to state; this
      * one is what the domain already decides in, reached through one relation it does not.
      */
-    private boolean proveLe(LinearForm g, boolean strict) {
+    private boolean proveLe(LinearForm<A> g, boolean strict) {
         if (proveBaseLe(g, strict)) {
             return true;
         }
@@ -369,7 +369,7 @@ public final class NumericDomain {
     /** The same over what this derives in: an interval bound on the whole form, or a bound on a
      * difference of two atoms read through the closure. The kept relations are not read here — this
      * is what a residual is proven against, and reading them would let one stand on another. */
-    private boolean proveBaseLe(LinearForm g, boolean strict) {
+    private boolean proveBaseLe(LinearForm<A> g, boolean strict) {
         Endpoint hiG = upperBound(g);
         if (hiG != null) {
             int s = at(hiG).signum();
@@ -379,9 +379,9 @@ public final class NumericDomain {
                 return true;
             }
         }
-        String[] ab = unitDiffAtoms(g.coefs());
+        List<A> ab = unitDiffAtoms(g.coefs());
         if (ab != null) {
-            Endpoint diffBound = closedDiff(ab[0], ab[1]);     // proven upper bound on (a - b)
+            Endpoint diffBound = closedDiff(ab.get(0), ab.get(1));     // proven upper bound on (a - b)
             if (diffBound != null) {
                 Count bound = Count.of(g.constant().negate());   // want a - b <= -const
                 int s = at(diffBound).compareTo(bound);
@@ -400,10 +400,10 @@ public final class NumericDomain {
      * reach its edge is one the sum cannot reach either, so a single exclusive contribution makes the
      * total exclusive.
      */
-    private Endpoint upperBound(LinearForm f) {
+    private Endpoint upperBound(LinearForm<A> f) {
         Count acc = Count.of(f.constant());
         boolean inclusive = true;
-        for (Map.Entry<String, BigDecimal> e : f.coefs().entrySet()) {
+        for (Map.Entry<A, BigDecimal> e : f.coefs().entrySet()) {
             BigDecimal k = e.getValue();
             Endpoint b = k.signum() > 0 ? bestHi(e.getKey()) : bestLo(e.getKey());
             if (b == null) {
@@ -419,9 +419,9 @@ public final class NumericDomain {
      * {@code a - b <= d} and {@code b <= c} give {@code a <= c + d}, which is what relates the size of
      * a filtered list to a bound on the list it came from. A value at the end reached that way needs
      * every end on the way to be reachable, so the derived end is its own only where both are. */
-    private Endpoint bestHi(String a) {
+    private Endpoint bestHi(A a) {
         Endpoint best = hi.get(a);
-        for (Map.Entry<String, Endpoint> b : hi.entrySet()) {
+        for (Map.Entry<A, Endpoint> b : hi.entrySet()) {
             if (b.getKey().equals(a)) {
                 continue;
             }
@@ -437,9 +437,9 @@ public final class NumericDomain {
 
     /** The tightest lower bound on an atom, the same way: {@code b - a <= d} and {@code b >= c} give
      * {@code a >= c - d}. */
-    private Endpoint bestLo(String a) {
+    private Endpoint bestLo(A a) {
         Endpoint best = lo.get(a);
-        for (Map.Entry<String, Endpoint> b : lo.entrySet()) {
+        for (Map.Entry<A, Endpoint> b : lo.entrySet()) {
             if (b.getKey().equals(a)) {
                 continue;
             }
@@ -462,7 +462,7 @@ public final class NumericDomain {
      * {@code b <= 1440} bounds {@code a} at 1440 though nothing was ever asserted about {@code a}
      * alone. That is the whole point of asking here rather than reading what was put in.
      */
-    public Bounds boundsOf(String atom) {
+    public Bounds boundsOf(A atom) {
         return bottom ? new Bounds(null, null) : new Bounds(bestLo(atom), bestHi(atom));
     }
 
@@ -474,7 +474,7 @@ public final class NumericDomain {
      * denser. Read off what was recorded rather than off the ends, because ends that happen to be
      * whole are what a dense value between two of them has as well.
      */
-    public Granularity spacingOf(String atom) {
+    public Granularity spacingOf(A atom) {
         return kinds.get(atom);
     }
 
@@ -526,24 +526,24 @@ public final class NumericDomain {
      * name says nothing about how many minutes a day has.
      */
     /** What was asserted about one atom and not recorded. */
-    public Set<Loss> lossesAt(String atom) {
+    public Set<Loss> lossesAt(A atom) {
         return losses.getOrDefault(atom, Set.of());
     }
 
     /** Every atom something was lost about. */
-    public Set<String> lossyAtoms() {
+    public Set<A> lossyAtoms() {
         return losses.keySet();
     }
 
-    private NumericDomain losing(Loss loss, Set<String> atoms) {
-        Map<String, Set<Loss>> next = with(loss, atoms);
+    private NumericDomain<A> losing(Loss loss, Set<A> atoms) {
+        Map<A, Set<Loss>> next = with(loss, atoms);
         return next == losses ? this
-                : new NumericDomain(bottom, lo, hi, diff, kept, kinds, next);
+                : new NumericDomain<>(bottom, lo, hi, diff, kept, kinds, next);
     }
 
-    private Map<String, Set<Loss>> with(Loss loss, Set<String> atoms) {
-        Map<String, Set<Loss>> next = null;
-        for (String atom : atoms) {
+    private Map<A, Set<Loss>> with(Loss loss, Set<A> atoms) {
+        Map<A, Set<Loss>> next = null;
+        for (A atom : atoms) {
             if (losses.getOrDefault(atom, Set.of()).contains(loss)) {
                 continue;
             }
@@ -560,29 +560,29 @@ public final class NumericDomain {
 
     // --- immutable updates ---------------------------------------------------------------------
 
-    private NumericDomain bottom() {
-        return new NumericDomain(true, Map.of(), Map.of(), Map.of(), List.of(), kinds, losses);
+    private NumericDomain<A> bottom() {
+        return new NumericDomain<>(true, Map.of(), Map.of(), Map.of(), List.of(), kinds, losses);
     }
 
-    private NumericDomain withHi(String a, Endpoint bound) {
-        Map<String, Endpoint> nhi = new HashMap<>(hi);
+    private NumericDomain<A> withHi(A a, Endpoint bound) {
+        Map<A, Endpoint> nhi = new HashMap<>(hi);
         nhi.merge(a, bound, Endpoint::upper);
-        NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept, kinds, losses);
+        NumericDomain d = new NumericDomain<>(false, lo, nhi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
-    private NumericDomain withLo(String a, Endpoint bound) {
-        Map<String, Endpoint> nlo = new HashMap<>(lo);
+    private NumericDomain<A> withLo(A a, Endpoint bound) {
+        Map<A, Endpoint> nlo = new HashMap<>(lo);
         nlo.merge(a, bound, Endpoint::lower);
-        NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept, kinds, losses);
+        NumericDomain d = new NumericDomain<>(false, nlo, hi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
-    private NumericDomain withDiff(String a, String b, Endpoint bound) {
-        Map<String, Map<String, Endpoint>> nd = new HashMap<>();
+    private NumericDomain<A> withDiff(A a, A b, Endpoint bound) {
+        Map<A, Map<A, Endpoint>> nd = new HashMap<>();
         diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
         nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, Endpoint::upper);
-        NumericDomain d = new NumericDomain(false, lo, hi, nd, kept, kinds, losses);
+        NumericDomain d = new NumericDomain<>(false, lo, hi, nd, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
@@ -598,7 +598,7 @@ public final class NumericDomain {
      * about {@code a} — so both are asked here rather than at the atom the assertion happened to name.
      */
     private boolean feasible() {
-        for (Map.Entry<String, Map<String, Endpoint>> row : closed().entrySet()) {
+        for (Map.Entry<A, Map<A, Endpoint>> row : closed().entrySet()) {
             Endpoint cycle = row.getValue().get(row.getKey());
             // `a - a` is zero, so a cycle bounding it below zero is a contradiction — and so is one
             // bounding it at zero without admitting it.
@@ -607,7 +607,7 @@ public final class NumericDomain {
                 return false;
             }
         }
-        for (String a : lo.keySet()) {
+        for (A a : lo.keySet()) {
             if (!Endpoint.someValueLiesBetween(bestLo(a), bestHi(a))) {
                 return false;
             }
@@ -616,36 +616,36 @@ public final class NumericDomain {
     }
 
     /** The tightest proven upper bound on {@code a - b}, or {@code null} if none is known. */
-    private Endpoint closedDiff(String a, String b) {
+    private Endpoint closedDiff(A a, A b) {
         if (a.equals(b)) {
             return Endpoint.inclusive(Count.ZERO);
         }
-        Map<String, Endpoint> row = closed().get(a);
+        Map<A, Endpoint> row = closed().get(a);
         return row == null ? null : row.get(b);
     }
 
     /** The difference facts closed transitively — {@code a - b <= c} with {@code b - d <= e} gives
      * {@code a - d <= c + e} — computed once for the domain and read by every query it answers, since
      * a bound on one atom is derived through the differences to every other. */
-    private Map<String, Map<String, Endpoint>> closed() {
+    private Map<A, Map<A, Endpoint>> closed() {
         if (closed == null) {
             closed = close(diff);
         }
         return closed;
     }
 
-    private static Map<String, Map<String, Endpoint>> close(Map<String, Map<String, Endpoint>> diff) {
-        Set<String> atoms = new HashSet<>(diff.keySet());
+    private static <A> Map<A, Map<A, Endpoint>> close(Map<A, Map<A, Endpoint>> diff) {
+        Set<A> atoms = new HashSet<>(diff.keySet());
         diff.values().forEach(r -> atoms.addAll(r.keySet()));
-        Map<String, Map<String, Endpoint>> d = new HashMap<>();
+        Map<A, Map<A, Endpoint>> d = new HashMap<>();
         diff.forEach((a, row) -> d.put(a, new HashMap<>(row)));
-        for (String through : atoms) {
-            Map<String, Endpoint> from = d.get(through);
+        for (A through : atoms) {
+            Map<A, Endpoint> from = d.get(through);
             if (from == null) {
                 continue;
             }
-            List<Map.Entry<String, Endpoint>> hops = List.copyOf(from.entrySet());
-            for (String a : atoms) {
+            List<Map.Entry<A, Endpoint>> hops = List.copyOf(from.entrySet());
+            for (A a : atoms) {
                 if (a.equals(through)) {
                     continue;   // a hop from an atom to itself only repeats a cycle already recorded
                 }
@@ -653,7 +653,7 @@ public final class NumericDomain {
                 if (toThrough == null) {
                     continue;
                 }
-                for (Map.Entry<String, Endpoint> hop : hops) {
+                for (Map.Entry<A, Endpoint> hop : hops) {
                     // A path reaches its end only where every hop on it does.
                     Endpoint candidate = new Endpoint(
                             at(toThrough).plus(at(hop.getValue())),
@@ -668,8 +668,8 @@ public final class NumericDomain {
         return d;
     }
 
-    private static Endpoint edge(Map<String, Map<String, Endpoint>> d, String a, String b) {
-        Map<String, Endpoint> row = d.get(a);
+    private static <A> Endpoint edge(Map<A, Map<A, Endpoint>> d, A a, A b) {
+        Map<A, Endpoint> row = d.get(a);
         return row == null ? null : row.get(b);
     }
 }

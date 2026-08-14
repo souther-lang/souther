@@ -25,19 +25,19 @@ import java.util.Set;
  * reading refutes took something more than the values to settle. Which something is not recorded, so
  * it is not claimed either.
  */
-record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quantified,
-                     Set<String> spoken, Unguarded unguarded) {
+record Known(NumericDomain<Term> numbers, PredicateFacts facts, List<Quantified> quantified,
+                     Set<Term> spoken, Unguarded unguarded) {
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
      * clauses are read at all, and both readings are asked about the same clauses. */
-    record Unguarded(NumericDomain numbers, PredicateFacts facts) {
+    record Unguarded(NumericDomain<Term> numbers, PredicateFacts facts) {
 
-        Unguarded taking(LinearForm f, Rel rel, Map<String, Granularity> kinds) {
+        Unguarded taking(LinearForm<Term> f, Rel rel, Map<Term, Granularity> kinds) {
             return new Unguarded(numbers.assume(f, rel, kinds), facts);
         }
 
-        Unguarded taking(String key, boolean positive) {
+        Unguarded taking(Term key, boolean positive) {
             return new Unguarded(numbers, facts.assume(key, positive));
         }
     }
@@ -52,14 +52,14 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
-    Known taking(LinearForm f, Rel rel, Held held, Map<String, Granularity> kinds) {
+    Known taking(LinearForm<Term> f, Rel rel, Held held, Map<Term, Granularity> kinds) {
         return new Known(numbers.assume(f, rel, kinds), facts, quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
-    Known taking(String key, boolean positive, Held held) {
+    Known taking(Term key, boolean positive, Held held) {
         return new Known(numbers, facts.assume(key, positive), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded);
     }
@@ -70,17 +70,17 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
      * spoke about is known exactly then, and reading it back out of a domain would mean matching
      * key text, which is how a term that merely reads like another gets mistaken for it.
      */
-    Known speaking(Collection<String> terms) {
+    Known speaking(Collection<Term> terms) {
         if (terms.isEmpty()) {
             return this;
         }
-        Set<String> all = new HashSet<>(spoken);
+        Set<Term> all = new HashSet<>(spoken);
         all.addAll(terms);
         return new Known(numbers, facts, quantified, all, unguarded);
     }
 
     /** Whether an assumption on this path named {@code term}. */
-    boolean speaksOf(String term) {
+    boolean speaksOf(Term term) {
         return spoken.contains(term);
     }
 

@@ -71,7 +71,7 @@ public final class OccurrenceValues {
         if (seeded == null) {
             return Cardinality.UNKNOWN;
         }
-        String atom = seeded.atoms().get(path);
+        Term atom = seeded.atoms().get(path);
         if (atom == null) {
             return Cardinality.UNKNOWN;
         }
