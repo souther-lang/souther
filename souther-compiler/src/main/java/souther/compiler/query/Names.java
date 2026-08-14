@@ -1000,8 +1000,9 @@ public final class Names {
             if (defs.present()) {
                 for (Ast.Def def : defs.value().values()) {
                     if (spans(def.written(), at)) {
-                        return Answer.of(
-                                TypeSymbols.declared(def.declaredKey()));
+                        // Asked of the declaration world this came out of, rather than made from the
+                        // address it answers to.
+                        return Answer.of(writtenRegistry(db).identify(def.declaredKey()));
                     }
                 }
             }

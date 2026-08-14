@@ -7,8 +7,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.ClauseDischarge;
-import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
@@ -1409,10 +1407,15 @@ public final class Analyzer {
         if (name == null || module == null) {
             return Optional.empty();
         }
+        // Asked of the compiler, which is what resolved the declaration this clause is written in.
+        // Put together here from the module and the spelling instead, it would be an identity for
+        // whatever that address names — including nothing.
+        TypeSymbol declared = typeUnderCursor(compilation, uri,
+                new Position(lines.lspLine(name.start()), lines.lspColumn(name.start())));
         Map<TypeSymbol, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
-        List<ClauseDischarge> clauses = byType == null
-                ? null : byType.get(TypeSymbols.declared(new TypeKey(module, nameOf(name))));
+        List<ClauseDischarge> clauses = byType == null || declared == null
+                ? null : byType.get(declared);
         if (clauses == null || clauses.isEmpty()) {
             return Optional.empty();
         }
