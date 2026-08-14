@@ -17,6 +17,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -279,14 +280,17 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         for (Class<?> above : STATES) {
             for (Class<?> below : rungsBelow(above)) {
                 for (String part : parts()) {
-                    if (answeredBy(above, part).isEmpty()) {
+                    Set<Class<?>> here = answeredBy(above, part);
+                    if (here.isEmpty()) {
                         continue;
                     }
-                    if (answersWithAState(below, part) && !answersWithAState(above, part)) {
+                    for (Class<?> said : answeredBy(below, part)) {
+                        if (!STATES.contains(said) || keeps(here, said)) {
+                            continue;
+                        }
                         lost.add(named(above) + "." + part + "() answers "
                                 + answered(above, part) + ", where "
-                                + named(below) + "." + part + "() answers "
-                                + answered(below, part));
+                                + named(below) + "." + part + "() answers " + named(said));
                     }
                 }
             }
@@ -294,6 +298,16 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(List.of(), lost,
                 "a rung below said something about that part, and this one hands over a value that "
                         + "no longer carries it");
+    }
+
+    /** Whether one of the answers here says everything {@code said} said. */
+    private static boolean keeps(Set<Class<?>> here, Class<?> said) {
+        for (Class<?> answered : here) {
+            if (STATES.contains(answered) && saysAtLeastWhat(answered, said)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** What a module is made of, which is what there is to say something about. */
@@ -333,6 +347,56 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
             }
         }
         return false;
+    }
+
+    /**
+     * Which state says at least as much as which, read off the operations that establish them.
+     *
+     * <p>A way into one that is handed another is what orders the two: {@code Derived.Def} is
+     * reached by deriving an {@code InvariantSettled.Def}, so it says what that one says and the
+     * thing derivation established. Asking only whether a route answers <em>a</em> state would let
+     * the parts go back down the ladder — every rung answering the settled declaration keeps
+     * something at each step and loses what deriving it established, and nothing would say so.
+     *
+     * <p>The order is the same material {@link #waysInto} reads, so there is no second description
+     * of the ladder here to fall out of step with the first.
+     */
+    private static final Map<Class<?>, Set<Class<?>>> SAYS_AT_LEAST = strengths();
+
+    private static Map<Class<?>, Set<Class<?>>> strengths() {
+        Map<Class<?>, Set<Class<?>>> under = new LinkedHashMap<>();
+        for (Class<?> state : STATES) {
+            under.put(state, new LinkedHashSet<>());
+        }
+        for (Class<?> declaring : STATES) {
+            for (Method m : declaring.getDeclaredMethods()) {
+                if (!Modifier.isStatic(m.getModifiers()) || !STATES.contains(m.getReturnType())) {
+                    continue;
+                }
+                for (Class<?> takes : m.getParameterTypes()) {
+                    if (STATES.contains(takes)) {
+                        under.get(m.getReturnType()).add(takes);
+                    }
+                }
+            }
+        }
+        for (boolean grew = true; grew; ) {
+            grew = false;
+            for (Class<?> state : STATES) {
+                Set<Class<?>> reached = new LinkedHashSet<>();
+                for (Class<?> under1 : under.get(state)) {
+                    reached.addAll(under.get(under1));
+                }
+                grew |= under.get(state).addAll(reached);
+            }
+        }
+        return Map.copyOf(under);
+    }
+
+    /** Whether {@code above} says everything {@code below} says — the same state, or one reached by
+     *  an operation that was handed it. */
+    private static boolean saysAtLeastWhat(Class<?> above, Class<?> below) {
+        return above == below || SAYS_AT_LEAST.getOrDefault(above, Set.of()).contains(below);
     }
 
     private static String answered(Class<?> state, String part) {
@@ -529,14 +593,15 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
      *
      * <p>Held from the source and not from the API, because the accessor is not what is banned. The
      * failure is a production reader choosing the payload, and the moment to decide against it is
-     * the change that adds one.
+     * the change that adds one. Written as a call or handed on as a reference — {@code prepared::tree}
+     * puts the same value in the same hands and spells neither parenthesis.
      */
     @Test
     void noReaderInTheCompilerTakesAStatesPayloadInsteadOfItsParts() throws IOException {
         List<String> reading = new ArrayList<>();
         for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
             String text = Files.readString(source);
-            if (text.contains(".tree()")) {
+            if (text.contains(".tree()") || text.contains("::tree")) {
                 reading.add(String.valueOf(source.getFileName()));
             }
         }
@@ -576,26 +641,64 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
             if (!source.toString().contains("/souther/compiler/check/")) {
                 continue;   // Java has the accessor down to this package already
             }
-            Class<?> in = classOf(source);
-            if (in == null || STATES.contains(in)) {
-                continue;   // a state projecting for its own use is what the routes are about
-            }
-            for (Method m : in.getDeclaredMethods()) {
-                for (Class<?> takes : m.getParameterTypes()) {
-                    if (saysSomethingAboutAPart(takes)) {
-                        handling.add(in.getSimpleName() + "." + signature(m));
+            Deque<Class<?>> pending = new ArrayDeque<>();
+            pending.add(classOf(source));
+            while (!pending.isEmpty()) {
+                Class<?> in = pending.poll();
+                if (in == null || STATES.contains(in)) {
+                    continue;   // a state projecting for its own use is what the routes are about
+                }
+                // A class written inside another one is a class of this package too, and holding a
+                // state in a field of it reaches the projection exactly as the outer one would.
+                pending.addAll(List.of(in.getDeclaredClasses()));
+                for (java.lang.reflect.Executable e : taking(in)) {
+                    // The generic parameters and not the erasures: a `List<Prepared>` is handed
+                    // every state in it, and `List` is what the erasure says it was handed.
+                    if (holdsAStateThatSpeaks(e.getGenericParameterTypes())) {
+                        handling.add(named(in) + "." + signature(e));
                     }
                 }
-            }
-            for (Field f : in.getDeclaredFields()) {
-                if (saysSomethingAboutAPart(f.getType())) {
-                    handling.add(in.getSimpleName() + "." + f.getName());
+                for (Field f : in.getDeclaredFields()) {
+                    if (holdsAStateThatSpeaks(f.getGenericType())) {
+                        handling.add(named(in) + "." + f.getName());
+                    }
                 }
             }
         }
         assertEquals(List.of("Lower.settle(Prepared, Symbols, Map)"), handling,
                 "a class here that is handed a state can reach its projection, and taking a part "
                         + "off that is the claim thrown away with nothing saying so");
+    }
+
+    /** Everything of {@code in} that can be handed a value. */
+    private static List<java.lang.reflect.Executable> taking(Class<?> in) {
+        List<java.lang.reflect.Executable> all = new ArrayList<>(List.of(in.getDeclaredMethods()));
+        all.addAll(List.of(in.getDeclaredConstructors()));
+        return all;
+    }
+
+    private static String signature(java.lang.reflect.Executable e) {
+        StringBuilder sb = new StringBuilder(
+                e instanceof java.lang.reflect.Constructor<?> ? "<init>" : e.getName()).append('(');
+        for (int i = 0; i < e.getParameterTypes().length; i++) {
+            sb.append(i == 0 ? "" : ", ").append(e.getParameterTypes()[i].getSimpleName());
+        }
+        return sb.append(')').toString();
+    }
+
+    /** Whether any of these types holds a state that says something about a part — wherever in the
+     *  type it is written, since a state inside a collection is one the holder was handed. */
+    private static boolean holdsAStateThatSpeaks(java.lang.reflect.Type... types) {
+        Deque<Class<?>> found = new ArrayDeque<>();
+        for (java.lang.reflect.Type t : types) {
+            mentioned(t, found);
+        }
+        for (Class<?> one : found) {
+            if (saysSomethingAboutAPart(one)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether the state answers any part of the module with a state — whether, that is, its
