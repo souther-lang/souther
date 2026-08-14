@@ -1,8 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
-import souther.compiler.check.ResolvedModule;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperGraph;
@@ -25,7 +25,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -165,12 +165,11 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Ast.Module m = db.ask(new Front.Available(name)).value();
-            if (m == null) {
+            if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : m.imports()) {
+            for (Ast.Import imp : Names.importsOf(db, name)) {
                 Set<String> deps = db.ask(new Dependencies(imp.module())).value();
                 if (deps == null) {
                     continue;
@@ -194,12 +193,11 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Ast.Module m = db.ask(new Front.Available(name)).value();
-            if (m == null) {
+            if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : m.imports()) {
+            for (Ast.Import imp : Names.importsOf(db, name)) {
                 Set<String> callable = db.ask(new Callable(imp.module())).value();
                 if (callable == null) {
                     continue;
@@ -223,15 +221,16 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, Sig>> compute(Db db) {
-            Answer<Ast.Module> desugared = db.ask(new Shapes.Desugared(name));
+            Answer<souther.compiler.check.Desugared.Module> desugared =
+                    db.ask(new Shapes.Desugared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
             if (!desugared.present() || !scope.present() || !imported.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(PipelineSigs.signatures(desugared.value(), scope.value(),
-                        imported.value()));
+                return Answer.of(PipelineSigs.signatures(desugared.value().behaviors(),
+                        scope.value(), imported.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -257,13 +256,12 @@ public final class Bodies {
             if (Names.cyclic(db, name)) {
                 return Answer.absent();
             }
-            Ast.Module m = db.ask(new Front.Available(name)).value();
-            if (m == null) {
+            if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.absent();
             }
             Map<String, Sig> result = new LinkedHashMap<>();
             Map<String, String> fromModule = new LinkedHashMap<>();   // bare name → its module
-            for (Ast.Import imp : m.imports()) {
+            for (Ast.Import imp : Names.importsOf(db, name)) {
                 Ast.Module src = db.ask(new Front.Available(imp.module())).value();
                 if (src == null) {
                     continue;   // the unknown module is reported where the scope is worked out
@@ -310,12 +308,11 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Ast.Module m = db.ask(new Front.Available(name)).value();
-            if (m == null) {
+            if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : m.imports()) {
+            for (Ast.Import imp : Names.importsOf(db, name)) {
                 Set<String> injected = db.ask(new Injected(imp.module())).value();
                 if (injected == null) {
                     continue;
@@ -384,7 +381,7 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, ReqSig>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Dependencies(name));
@@ -394,7 +391,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.dependencies(prepared.value(), scope.value(),
+                return Answer.of(InjectionSigs.dependencies(prepared.value().behaviors(), scope.value(),
                         own.value(), imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
@@ -418,7 +415,7 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, ReqSig>> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Callable(name));
@@ -428,7 +425,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.callable(prepared.value(), scope.value(), own.value(),
+                return Answer.of(InjectionSigs.callable(prepared.value().behaviors(), scope.value(), own.value(),
                         imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
@@ -465,15 +462,15 @@ public final class Bodies {
 
     /** A module with every helper parameter the author left unwritten carrying the type its body
      * gives it — the surface tree the check reads its declarations from. */
-    public record Settled(String name) implements Key<Ast.Module> {
+    public record Settled(String name) implements Key<Hir.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+        public Answer<Hir.Module> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             if (!prepared.present() || !scope.present() || !reqSigs.present()) {
@@ -506,23 +503,23 @@ public final class Bodies {
      * was edited to, so a body that reads this is left alone. An inliner cannot do that job — nothing
      * says when two of them are the same, so every reader of one would run again whatever changed.
      */
-    public record ModuleDefinitions(String name) implements Key<Map<String, Ast.FnDef>> {
+    public record ModuleDefinitions(String name) implements Key<Map<String, Hir.FnDef>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Ast.FnDef>> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(name));
+        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
             if (!settled.present()) {
                 return Answer.absent();
             }
-            Answer<Map<String, Ast.FnDef>> imported = db.ask(new ImportedDefinitions(name));
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
             if (!imported.present()) {
                 return Answer.absent();
             }
-            Map<String, Ast.FnDef> helpers = new LinkedHashMap<>(imported.value());
+            Map<String, Hir.FnDef> helpers = new LinkedHashMap<>(imported.value());
             // What this module has, both components of it: a body may name a helper it took on to
             // emit exactly as it names one it declared, and a row may apply either.
             helpers.putAll(HelperInliner.helpersOf(settled.value()));
@@ -553,27 +550,27 @@ public final class Bodies {
      * reading it there is what leaves every later stage free to read this — {@link Shapes.Derived}
      * among them, which settles the invariants and would ask through itself for any answer below it.
      */
-    public record ImportedDefinitions(String name) implements Key<Map<String, Ast.FnDef>> {
+    public record ImportedDefinitions(String name) implements Key<Map<String, Hir.FnDef>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Ast.FnDef>> compute(Db db) {
+        public Answer<Map<String, Hir.FnDef>> compute(Db db) {
             // A module in a cycle takes a published body from a module that takes one from it. This is
             // where that would be asked, so this is where it stops; the cycle itself is reported by
             // Names.InCycle.
             if (Names.cyclic(db, name)) {
                 return Answer.absent();
             }
-            Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+            Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
                 return Answer.absent();
             }
-            Map<String, Ast.FnDef> out = new LinkedHashMap<>();
-            for (Ast.Import imp : resolved.value().module().imports()) {
-                Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
+            Map<String, Hir.FnDef> out = new LinkedHashMap<>();
+            for (Hir.Import imp : resolved.value().imports()) {
+                Answer<Hir.Module> from = db.ask(new Settled(imp.module()));
                 // Closed against the table that module's own bodies are expanded against, which is
                 // everything it can name and not only what it declares: a published body may call a
                 // helper that module imported in turn, and a chain of three is where a table of its
@@ -615,15 +612,15 @@ public final class Bodies {
      * reader follows from the same shape: a definition with no parameters is substituted where it is
      * named, one with parameters is expanded where it is called.
      */
-    public static Map<String, Ast.FnDef> publishedDefinitions(Ast.Module from, List<String> wanted,
+    public static Map<String, Hir.FnDef> publishedDefinitions(Hir.Module from, List<String> wanted,
                                                               Expanding.Of against) {
-        Map<String, Ast.FnDef> out = new LinkedHashMap<>();
+        Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         HelperInliner inliner = null;
-        for (Ast.FnDef fn : publishable(from, wanted)) {
+        for (Hir.FnDef fn : publishable(from, wanted)) {
             if (inliner == null) {
                 inliner = HelperInliner.over(against.table(), against.graph());
             }
-            Ast.FnDef closed = inliner.closeAcross(fn, from.name());
+            Hir.FnDef closed = inliner.closeAcross(fn, from.name());
             out.put(closed.name(), closed);
         }
         return out;
@@ -639,9 +636,9 @@ public final class Bodies {
      * it reaches in turn. A mutually-recursive group therefore arrives whole: each member is reached
      * from the others, so following the calls collects all of them.
      */
-    public static Map<String, Ast.FnDef> publishedClosure(Ast.Module from, List<String> wanted,
+    public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from, List<String> wanted,
                                                           Expanding.Of against) {
-        Map<String, Ast.FnDef> out = publishedDefinitions(from, wanted, against);
+        Map<String, Hir.FnDef> out = publishedDefinitions(from, wanted, against);
         if (out.isEmpty()) {
             return out;
         }
@@ -660,7 +657,7 @@ public final class Bodies {
                 boolean ownHelper = reached.module().equals(from.name());
                 // Asked of what the name reaches there, which is the one relation this module has any
                 // business asking of another module's table.
-                Ast.FnDef def =
+                Hir.FnDef def =
                         against.table().reached(ownHelper ? reached.name() : qualified);
                 if (def == null) {
                     continue;   // a prelude helper, which every module emits for itself
@@ -675,9 +672,9 @@ public final class Bodies {
     /** The bare names {@code from} publishes among {@code wanted} — what a reader writes for them.
      * Asked on its own where only the names are wanted, so resolving a module's names does not close
      * every body the modules around it publish. */
-    public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
+    public static Set<String> publishedNames(Hir.Module from, List<String> wanted) {
         Set<String> out = new java.util.LinkedHashSet<>();
-        for (Ast.FnDef fn : publishable(from, wanted)) {
+        for (Hir.FnDef fn : publishable(from, wanted)) {
             out.add(fn.name());
         }
         return out;
@@ -686,13 +683,43 @@ public final class Bodies {
     /** The definitions {@code from} offers among {@code wanted}: its values and helpers that it
      * exposes. A behavior's own {@code let} is not among them whatever its shape — it is an
      * implementation, and what a reader reaches is the behavior, which it calls (ADR-0005). */
-    private static List<Ast.FnDef> publishable(Ast.Module from, List<String> wanted) {
+    private static List<Hir.FnDef> publishable(Hir.Module from, List<String> wanted) {
         Set<String> exposed = new java.util.HashSet<>(from.exposing());
-        List<Ast.FnDef> out = new java.util.ArrayList<>();
-        for (Ast.FnDef fn : HelperInliner.helpersOf(from).values()) {
-            if (fn.body() instanceof Ast.FnBody.Written && exposed.contains(fn.name())
-                    && wanted.contains(fn.name())) {
+        List<Hir.FnDef> out = new java.util.ArrayList<>();
+        for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
+            if (publishes(exposed, fn.name(), fn.body() instanceof Hir.FnBody.Written, wanted)) {
                 out.add(fn);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether a module hands a definition of this name to a reader that asked for it.
+     *
+     * <p>Written over the name and what kind of body it has, because a module's own definitions are
+     * read at both representations: {@code Resolve} asks what an import brings into the value
+     * namespace, of a module it has not resolved, and everything after it asks the same question of
+     * one it has. The rule is the same one, so it is here rather than restated over each tree.
+     */
+    static boolean publishes(Set<String> exposing, String fn, boolean hasWrittenBody,
+                             List<String> wanted) {
+        return hasWrittenBody && exposing.contains(fn) && wanted.contains(fn);
+    }
+
+    /** The names {@code from} publishes among {@code wanted}, of a module as it was written. */
+    public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
+        Set<String> exposed = new java.util.HashSet<>(from.exposing());
+        Set<String> behaviorNames = new java.util.HashSet<>();
+        for (Ast.BehaviorDef b : from.behaviors()) {
+            behaviorNames.add(b.name());
+        }
+        Set<String> out = new java.util.LinkedHashSet<>();
+        for (Ast.FnDef fn : from.fns()) {
+            if (HelperInliner.isHelperName(behaviorNames, fn.name())
+                    && publishes(exposed, fn.name(), fn.body() instanceof Ast.FnBody.Written,
+                            wanted)) {
+                out.add(fn.name());
             }
         }
         return out;
@@ -743,8 +770,8 @@ public final class Bodies {
 
         @Override
         public Answer<Of> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(name));
-            Answer<Map<String, Ast.FnDef>> imported = db.ask(new ImportedDefinitions(name));
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
             if (!settled.present() || !imported.present()) {
                 return Answer.absent();
             }
@@ -780,8 +807,8 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(name));
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new ModuleDefinitions(name));
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
+            Answer<Map<String, Hir.FnDef>> helpers = db.ask(new ModuleDefinitions(name));
             if (!settled.present() || !helpers.present()) {
                 return Answer.absent();
             }
@@ -798,19 +825,19 @@ public final class Bodies {
      * travels, not what the work was. Settling per definition, if it is ever worth it, goes behind
      * this without any reader noticing.
      */
-    public record SettledFn(String module, String fn) implements Key<Ast.FnDef> {
+    public record SettledFn(String module, String fn) implements Key<Hir.FnDef> {
 
         @Override
-        public Answer<Ast.FnDef> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(module));
+        public Answer<Hir.FnDef> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(module));
             if (!settled.present()) {
                 return Answer.absent();
             }
             // Either component: a body is asked for by name, and a helper the module took on to emit
             // has one to expand exactly as one it declared does.
-            for (List<Ast.FnDef> component : List.of(
+            for (List<Hir.FnDef> component : List.of(
                     settled.value().fns(), settled.value().takenOn())) {
-                for (Ast.FnDef candidate : component) {
+                for (Hir.FnDef candidate : component) {
                     if (candidate.name().equals(fn)) {
                         return Answer.of(candidate);
                     }
@@ -826,11 +853,11 @@ public final class Bodies {
      * <p>What it reads is the fn itself and the helpers around it, so editing another body in the same
      * module does not expand this one again.
      */
-    public record LoweredBody(String module, String fn) implements Key<Ast.FnDef> {
+    public record LoweredBody(String module, String fn) implements Key<Hir.FnDef> {
 
         @Override
-        public Answer<Ast.FnDef> compute(Db db) {
-            Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
+        public Answer<Hir.FnDef> compute(Db db) {
+            Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
             Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
             Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
@@ -857,11 +884,11 @@ public final class Bodies {
      * about what {@code List.map} does to a length has nothing to match. This is the same body at the
      * level the rules are written at.
      */
-    public record BodyForInvariantDischarge(String module, String fn) implements Key<Ast.FnDef> {
+    public record BodyForInvariantDischarge(String module, String fn) implements Key<Hir.FnDef> {
 
         @Override
-        public Answer<Ast.FnDef> compute(Db db) {
-            Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
+        public Answer<Hir.FnDef> compute(Db db) {
+            Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.DISCHARGE);
             Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
             Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
@@ -895,7 +922,7 @@ public final class Bodies {
 
         @Override
         public Answer<Lower.Lowered> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(name));
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(name));
             Answer<Set<String>> examples = db.ask(new ExampleHelpers(name));
             if (!settled.present() || !recursive.present() || !examples.present()) {
@@ -907,14 +934,14 @@ public final class Bodies {
             // not do is carry the same body twice. Shared across both components because a module
             // that took on a helper it also declares would otherwise emit two of it.
             Set<String> taken = new LinkedHashSet<>();
-            List<List<Ast.FnDef>> lowered = new ArrayList<>();
+            List<List<Hir.FnDef>> lowered = new ArrayList<>();
             // Both, and each stays where it was: what becomes a method is one question and what this
             // module declared is another, and the backend reads the first while every rule about the
             // declaring module reads the second.
-            for (List<Ast.FnDef> component : List.of(
+            for (List<Hir.FnDef> component : List.of(
                     settled.value().fns(), settled.value().takenOn())) {
-                List<Ast.FnDef> fns = new ArrayList<>();
-                for (Ast.FnDef fn : component) {
+                List<Hir.FnDef> fns = new ArrayList<>();
+                for (Hir.FnDef fn : component) {
                     // A non-recursive helper is fully inlined at its call sites and never emitted —
                     // it has no body of its own down here, so nothing asks for one. Unless an example
                     // row applies it (ADR-0077): a row runs a helper rather than expanding it, so
@@ -926,7 +953,7 @@ public final class Bodies {
                     if (!taken.add(fn.name())) {
                         continue;
                     }
-                    Answer<Ast.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
+                    Answer<Hir.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
                     if (!body.present()) {
                         // Why is the body's to say, and it said it. A module with a body that does
                         // not expand has none to emit.
@@ -983,9 +1010,9 @@ public final class Bodies {
             if (!inliner.present() || !sigs.present() || !scope.present()) {
                 return Answer.absent();
             }
-            Map<String, Ast.Expr> bodies = new LinkedHashMap<>();
+            Map<String, Hir.Expr> bodies = new LinkedHashMap<>();
             for (String helper : sigs.value().keySet()) {
-                Answer<Ast.FnDef> body = db.ask(new LoweredBody(name, helper));
+                Answer<Hir.FnDef> body = db.ask(new LoweredBody(name, helper));
                 if (!body.present()) {
                     return Answer.absent();
                 }
@@ -1010,7 +1037,7 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(name));
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
             return settled.present()
                     ? Answer.of(Names.behaviorNames(settled.value())) : Answer.absent();
         }
@@ -1019,12 +1046,12 @@ public final class Bodies {
     /** What {@code fn}'s behavior declares in {@code depends on}, or nothing where {@code fn}
      * implements no behavior — a helper has no such parameters (spec §depends-on). */
     private static Set<String> dependencyParams(Db db, String module, String fn) {
-        Answer<Ast.SpecBehavior> spec = db.ask(new Spec(module, fn));
+        Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, fn));
         if (!spec.present()) {
             return Set.of();
         }
         Set<String> names = new HashSet<>();
-        for (Ast.Var req : spec.value().dependsOn()) {
+        for (Hir.Var req : spec.value().dependsOn()) {
             // Reported where it is written; it names no parameter for a body to be held to.
             if (!req.unresolved()) {
                 names.add(req.bare());
@@ -1035,16 +1062,16 @@ public final class Bodies {
 
     /** One behavior's declaration, so what a body is checked against is the behavior it implements
      * and not the module it sits in. */
-    public record Spec(String module, String behavior) implements Key<Ast.SpecBehavior> {
+    public record Spec(String module, String behavior) implements Key<Hir.SpecBehavior> {
 
         @Override
-        public Answer<Ast.SpecBehavior> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(module));
+        public Answer<Hir.SpecBehavior> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(module));
             if (!settled.present()) {
                 return Answer.absent();
             }
-            for (Ast.BehaviorDef b : settled.value().behaviors()) {
-                if (b instanceof Ast.SpecBehavior spec && spec.name().equals(behavior)) {
+            for (Hir.BehaviorDef b : settled.value().behaviors()) {
+                if (b instanceof Hir.SpecBehavior spec && spec.name().equals(behavior)) {
                     return Answer.of(spec);
                 }
             }
@@ -1063,9 +1090,9 @@ public final class Bodies {
 
         @Override
         public Answer<Core> compute(Db db) {
-            Answer<Ast.SpecBehavior> spec = db.ask(new Spec(module, behavior));
-            Answer<Ast.FnDef> fn = db.ask(new SettledFn(module, behavior));
-            Answer<Ast.FnDef> body = db.ask(new LoweredBody(module, behavior));
+            Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
+            Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
+            Answer<Hir.FnDef> body = db.ask(new LoweredBody(module, behavior));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
             Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(module));
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
@@ -1073,8 +1100,8 @@ public final class Bodies {
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
-            Answer<Ast.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
-            Answer<Map<TypeName, List<Ast.InvariantClause>>> dischargeInvariants =
+            Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
+            Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeInvariants =
                     db.ask(new Shapes.InvariantsForDischarge(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !inliner.present()
@@ -1149,7 +1176,7 @@ public final class Bodies {
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
             Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
-            Answer<Map<String, Ast.FnDef>> published = db.ask(new ImportedDefinitions(name));
+            Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
             if (!lowering.present() || !scope.present()
                     || !injected.present() || !reqSigs.present() || !sigs.present()
                     || !calleeSigs.present() || !published.present()) {
@@ -1161,9 +1188,8 @@ public final class Bodies {
                 // none is not here and nothing here asks why: a reader of a declaration knows there
                 // is one or there is not, and the reasons belong to the pass that settles them.
                 Set<String> settled = new LinkedHashSet<>();
-                for (Ast.Def def : lowering.value().settled().defs()) {
-                    if (db.ask(new Names.Definition(
-                            new TypeName(name, def.name()))).present()) {
+                for (Hir.Def def : lowering.value().settled().defs()) {
+                    if (db.ask(new Names.Definition(def.declaredKey())).present()) {
                         settled.add(def.name());
                     }
                 }
@@ -1195,15 +1221,54 @@ public final class Bodies {
      * found. What is left here is the decision they and the module's own check come to together:
      * whether there is a module to emit.
      */
-    public record Checked(String name) implements Key<TypeChecker.Checked> {
+    /**
+     * What a successful check produced for the backend (issue #81): the Core of every body it typed,
+     * carrying the type decided for each node. The backend emits from these rather than translating
+     * the AST and inferring the same types a second time.
+     *
+     * <p>Held here, where the check that produces one is asked. What makes a module's bodies these
+     * is a conjunction {@link Checked} evaluates — every name came out, every body was typed, the
+     * module is sound, and no type nobody could name is left in it — so this is minted there and
+     * nowhere else. Somewhere a caller could build one is somewhere the conjunction is not what makes
+     * it true.
+     *
+     * <p>Whether the check established that is the answer being there. {@code Answer} says it
+     * already: absent is a check that did not, present is one that did, and this is what the one
+     * that did produced. A reader wanting only the fact asks whether the answer is present.
+     *
+     * <p>What the check found is not in here. A warning belongs to the question that raised it, which
+     * is one body, and a caller that wants them reads them from there.
+     */
+    public static final class Elaborated {
+
+        private final Map<String, Core> behaviorBodies;
+        private final Map<String, Core> emittedHelpers;
+
+        private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers) {
+            this.behaviorBodies = behaviorBodies;
+            this.emittedHelpers = emittedHelpers;
+        }
+
+        /** The Core of each behavior body, by the behavior's name. */
+        public Map<String, Core> behaviorBodies() {
+            return behaviorBodies;
+        }
+
+        /** The Core of each helper the module emits as a method of its own. */
+        public Map<String, Core> emittedHelpers() {
+            return emittedHelpers;
+        }
+    }
+
+    public record Checked(String name) implements Key<Elaborated> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<TypeChecker.Checked> compute(Db db) {
-            Answer<Ast.Module> settled = db.ask(new Settled(name));
+        public Answer<Elaborated> compute(Db db) {
+            Answer<Hir.Module> settled = db.ask(new Settled(name));
             // Asked before any body, so a module told about its own mistakes is told about them
             // first: an author reads the file from the top, and the check of a body it declares
             // cannot come before the declaration it rests on.
@@ -1217,7 +1282,7 @@ public final class Bodies {
             // one declaration silencing every other definition in the file.
             boolean named = Boolean.TRUE.equals(db.ask(new Names.Sound(name)).value());
             Set<String> implemented = new LinkedHashSet<>();
-            for (Ast.FnDef fn : settled.value().fns()) {
+            for (Hir.FnDef fn : settled.value().fns()) {
                 implemented.add(fn.name());
             }
             Map<String, Core> bodies = new LinkedHashMap<>();
@@ -1227,10 +1292,10 @@ public final class Bodies {
             if (!module.value().stopped()) {
                 // In the order they are declared, so what the backend emits does not move with what
                 // the check happened to ask for first.
-                for (Ast.BehaviorDef b : settled.value().behaviors()) {
+                for (Hir.BehaviorDef b : settled.value().behaviors()) {
                     // An injection target has no body here — something else supplies it (spec §injected-behavior)
                     // — so there is nothing to check and nothing missing when there is none.
-                    if (!(b instanceof Ast.SpecBehavior spec) || !implemented.contains(spec.name())) {
+                    if (!(b instanceof Hir.SpecBehavior spec) || !implemented.contains(spec.name())) {
                         continue;
                     }
                     Answer<Core> core = db.ask(new CheckedBehavior(name, spec.name()));
@@ -1253,7 +1318,7 @@ public final class Bodies {
                     && module.value().sound()
                     && !TypeOps.holdsAnErroneousType(settled.value());
             return sound
-                    ? Answer.of(new TypeChecker.Checked(bodies, module.value().emittedHelpers()))
+                    ? Answer.of(new Elaborated(bodies, module.value().emittedHelpers()))
                     : Answer.absent();
         }
     }

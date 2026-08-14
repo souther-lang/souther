@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.Compiler;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -104,21 +106,21 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
 
             String module = compilation.modules().get(0);
             Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
-            Map<TypeName, List<Ast.InvariantClause>> declared =
+            Map<TypeSymbol, List<Hir.InvariantClause>> declared =
                     compilation.db().ask(new Shapes.InvariantsForDischarge(module)).value();
-            Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+            Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             assertNotNull(symbols);
             assertNotNull(declared);
             assertNotNull(prepared);
 
             Clauses clauses = new Clauses(symbols, declared);
             int read = 0;
-            for (Ast.Def def : prepared.defs()) {
-                if (!(def instanceof Ast.Data data)) {
+            for (Hir.Def def : prepared.defs()) {
+                if (!(def instanceof Hir.Data data)) {
                     continue;
                 }
-                TypeName named = new TypeName(module, data.name());
-                for (Ast.InvariantClause clause : clauses.of(named, data)) {
+                TypeSymbol named = TypeSymbols.declared(new TypeKey(module, data.name()));
+                for (Hir.InvariantClause clause : clauses.of(named, data)) {
                     assertNotNull(clauses.typed(clause.expr(), named, data),
                             "`" + data.name() + "` declares a clause this check could not type:\n"
                                     + source);

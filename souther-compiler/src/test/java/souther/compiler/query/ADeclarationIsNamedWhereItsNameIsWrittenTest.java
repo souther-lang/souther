@@ -3,7 +3,9 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -35,7 +37,7 @@ class ADeclarationIsNamedWhereItsNameIsWrittenTest {
             let f (d) = d
             """;
 
-    private static TypeName under(int line, int column) {
+    private static TypeSymbol under(int line, int column) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, SOURCE);
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db()
@@ -44,12 +46,12 @@ class ADeclarationIsNamedWhereItsNameIsWrittenTest {
 
     @Test
     void aCursorOnTheNameIsOnTheDeclaration() {
-        assertEquals(new TypeName("m", "D"), under(3, 6));
+        assertEquals(TypeSymbols.declared(new TypeKey("m", "D")), under(3, 6));
     }
 
     @Test
     void aCursorJustPastTheNameIsStillOnIt() {
-        assertEquals(new TypeName("m", "D"), under(3, 7));
+        assertEquals(TypeSymbols.declared(new TypeKey("m", "D")), under(3, 7));
     }
 
     @Test
@@ -59,6 +61,6 @@ class ADeclarationIsNamedWhereItsNameIsWrittenTest {
 
     @Test
     void aCursorOnAUseIsStillOnWhatTheUseDenotes() {
-        assertEquals(new TypeName("m", "D"), under(4, 18));
+        assertEquals(TypeSymbols.declared(new TypeKey("m", "D")), under(4, 18));
     }
 }

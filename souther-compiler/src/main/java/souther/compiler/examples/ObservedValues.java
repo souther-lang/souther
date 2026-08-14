@@ -1,10 +1,10 @@
 package souther.compiler.examples;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -116,11 +116,11 @@ final class ObservedValues {
                     ? new ObservedValue.Unknown("an optional's value could not be read")
                     : walk(inner, depth);
         }
-        TypeName type = neutral.typeOf(live);
+        TypeSymbol type = neutral.typeOf(live);
         if (type == null) {
             return new ObservedValue.Unknown("`" + name + "` is not a type this module can name");
         }
-        if (!(symbols.get(type) instanceof Ast.Data data)) {
+        if (!(symbols.declarations().declaration(type.key()) instanceof Hir.Data data)) {
             return new ObservedValue.Unit(type);   // a case that carries nothing
         }
         Map<String, ObservedValue> fields = ObservedValue.fields();

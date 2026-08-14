@@ -2,9 +2,9 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Symbols;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -40,7 +40,7 @@ final class CodegenContext {
     final Set<String> exposed;
     /** The module's recursive helpers, lowered to static methods on {@code $Fns} (spec §fn-declaration), keyed
      * by helper name. A call to one is an {@code invokestatic}, not an inlined body. */
-    final Map<String, Ast.FnDef> emittedHelpers;
+    final Map<String, Hir.FnDef> emittedHelpers;
 
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
      * module output once every behavior is generated. */
@@ -67,13 +67,13 @@ final class CodegenContext {
      * constraint mapping a derived decoder does is written against those operations, so it reads this
      * rather than the settled form the rest of the backend emits from.
      */
-    private Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants = Map.of();
+    private Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants = Map.of();
 
-    void setDischargeInvariants(Map<TypeName, List<Ast.InvariantClause>> clauses) {
+    void setDischargeInvariants(Map<TypeSymbol, List<Hir.InvariantClause>> clauses) {
         this.dischargeInvariants = clauses;
     }
 
-    Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants() {
+    Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants() {
         return dischargeInvariants;
     }
 
@@ -288,7 +288,7 @@ final class CodegenContext {
 
     CodegenContext(String pkg, Symbols symbols, Map<String, List<GeneratedClass>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Ast.FnDef> emittedHelpers) {
+                   Map<String, Hir.FnDef> emittedHelpers) {
         this.pkg = pkg;
         this.symbols = symbols;
         this.caseToSums = caseToSums;
@@ -315,14 +315,14 @@ final class CodegenContext {
     }
 
     /** The class of a type, from the module that declares it — nothing to look up, since a
-     * {@link TypeName} already says where it lives. */
-    ClassDesc cd(TypeName name) {
+     * {@link TypeSymbol} already says where it lives. */
+    ClassDesc cd(TypeSymbol name) {
         return cd(new GeneratedClass.Value(name));
     }
 
     /** The class of a declaration of the module being generated. */
-    ClassDesc cd(Ast.Def def) {
-        return cd(symbols.own(def));
+    ClassDesc cd(Hir.Def def) {
+        return cd(def.declares());
     }
 
     ClassDesc cdBehavior(String name) {
@@ -355,20 +355,20 @@ final class CodegenContext {
      * carries every result union of this module the member belongs to, which is the rule a local case
      * class already follows (spec §jvm-anonymous-union).
      */
-    ClassDesc bridgeCaseClass(TypeName member) {
+    ClassDesc bridgeCaseClass(TypeSymbol member) {
         return cd(new GeneratedClass.BridgeCase(pkg, member));
     }
 
     /** The class a union member occupies in the union: itself when this module declared it, its
      * bridge case otherwise. What {@code permits} lists, and what a value of the union is at the
      * {@code apply} boundary. */
-    ClassDesc resultMemberClass(TypeName member) {
+    ClassDesc resultMemberClass(TypeSymbol member) {
         return isLocalMember(member) ? cd(member) : bridgeCaseClass(member);
     }
 
     /** Whether {@code member} is a type this module declares, and so carries its result unions
      * itself. A primitive never is; nor is a type another module emitted. */
-    boolean isLocalMember(TypeName member) {
+    boolean isLocalMember(TypeSymbol member) {
         return !member.isPrimitive() && member.module().equals(pkg);
     }
 
@@ -376,22 +376,22 @@ final class CodegenContext {
      * union lists them. Empty when {@code out} is not a union, or when every member of it is a type
      * this module declared — then the union's JVM form and its Souther form are the same values and
      * neither boundary converts anything. */
-    List<TypeName> bridgedMembers(Type out) {
+    List<TypeSymbol> bridgedMembers(Type out) {
         return bridgedMembersIn(pkg, out);
     }
 
     /** The bridged members of a behavior's output, decided in the module that declares that behavior:
      * a member is local to the union's own module, which for a call is the callee's, not this one's. */
-    List<TypeName> bridgedMembersOf(String behavior, Type out) {
+    List<TypeSymbol> bridgedMembersOf(String behavior, Type out) {
         return bridgedMembersIn(moduleOf(behavior), out);
     }
 
-    private List<TypeName> bridgedMembersIn(String module, Type out) {
+    private List<TypeSymbol> bridgedMembersIn(String module, Type out) {
         if (!(out instanceof Type.Union)) {
             return List.of();
         }
-        List<TypeName> bridged = new ArrayList<>();
-        for (TypeName member : TypeOps.leafCases(out, symbols)) {
+        List<TypeSymbol> bridged = new ArrayList<>();
+        for (TypeSymbol member : TypeOps.leafCases(out, symbols)) {
             if (member.isPrimitive() || !member.module().equals(module)) {
                 bridged.add(member);
             }
@@ -400,7 +400,7 @@ final class CodegenContext {
     }
 
     /** The bridge case of {@code member} in the module that declares {@code behavior}. */
-    ClassDesc bridgeCaseClassOf(String behavior, TypeName member) {
+    ClassDesc bridgeCaseClassOf(String behavior, TypeSymbol member) {
         return cd(new GeneratedClass.BridgeCase(moduleOf(behavior), member));
     }
 
@@ -418,16 +418,16 @@ final class CodegenContext {
     }
 
     /** The JVM class of an output case. The built-in {@code DivisionByZero}/{@code NotANumber} need
-     * no special case: their {@link TypeName} names {@code souther.runtime}, which is where they are. An
+     * no special case: their {@link TypeSymbol} names {@code souther.runtime}, which is where they are. An
      * invariant violation is no longer a case — it aborts (spec §algebraic-types, §violation-destination) —
      * so there is no 制約違反 case here. */
-    ClassDesc caseClass(TypeName typeName) {
+    ClassDesc caseClass(TypeSymbol typeName) {
         return cd(typeName);
     }
 
     /** The class a match case is tested against: a boxed/reference class for a primitive case,
      * otherwise the case's data class, which its resolved name already names. */
-    ClassDesc matchCaseClass(TypeName caseName) {
+    ClassDesc matchCaseClass(TypeSymbol caseName) {
         if (!caseName.isPrimitive()) {
             return caseClass(caseName);
         }
@@ -468,12 +468,12 @@ final class CodegenContext {
         return JvmTypes.boxedPrim(t);
     }
 
-    Map<String, Type> fieldTypes(Ast.Data data) {
+    Map<String, Type> fieldTypes(Hir.Data data) {
         return TypeOps.fieldTypes(data, symbols);
     }
 
-    Type successType(Ast.RetType ret) {
-        return TypeOps.successType(ret, symbols);
+    Type successType(Hir.RetType ret) {
+        return TypeOps.successType(ret);
     }
 
     /** Whether {@code name} is an imported type or behavior (declared in another module, spec §modules). */

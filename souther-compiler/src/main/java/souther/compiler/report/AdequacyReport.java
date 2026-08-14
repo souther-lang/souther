@@ -1,10 +1,11 @@
 package souther.compiler.report;
 
 import souther.compiler.examples.ExampleVerifier;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
+import souther.compiler.check.Prepared;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.observe.MeasurementStatus;
@@ -17,7 +18,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.text.DisplayColumns;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
@@ -109,7 +110,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<ModuleReport> modules = new ArrayList<>();
         MeasurementStatus overall = MeasurementStatus.COMPLETE;
         for (String name : compilation.modules()) {
-            Ast.Module module = compilation.module(name);
+            Prepared module = compilation.module(name);
             if (module == null) {
                 continue;   // a module that did not get far enough to have behaviors
             }
@@ -147,7 +148,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
     }
 
-    private static ModuleReport moduleReport(Compilation compilation, String name, Ast.Module module) {
+    private static ModuleReport moduleReport(Compilation compilation, String name, Prepared module) {
         Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
         // The same rows every measure beside them reads. Two evaluations of
@@ -199,7 +200,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         Map<String, List<Adequacy.Finding>> findings =
                 compilation.db().ask(new Adequacy.Findings(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
-        for (Ast.BehaviorDef behavior : module.behaviors()) {
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
             List<RowOutcome> rows = byTarget.getOrDefault(behavior.name(), List.of());
             int pending = (int) rows.stream()
                     .filter(r -> r.disposition() == souther.compiler.observe.Disposition.PENDING)
@@ -218,7 +219,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             Adequacy.BranchEvidence branch =
                     branches == null ? null : branches.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
-                    ExampleVerifier.isPending(module, behavior.name()), rows.size(), pending,
+                    ExampleVerifier.isPending(module.behaviors(), module.fns(), behavior.name()),
+                    rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
                     signature, partition, branch,
                     findings == null ? List.of()
@@ -499,7 +501,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     out.append(String.format("      · %suses `%s`%n", noRow(f), f.args().get(0)));
                 }
             }
-            for (TypeName ruled : input.excluded()) {
+            for (TypeSymbol ruled : input.excluded()) {
                 out.append(String.format("      · `%s` is declared unreachable%n", ruled.name()));
             }
         }
@@ -1055,7 +1057,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     /** Case names, sorted: a report that changes order between runs cannot be compared between runs,
      * and the sets these come from keep the order the rows happened to arrive in. */
-    private static void names(ArrayNode into, java.util.Set<TypeName> cases) {
-        cases.stream().map(TypeName::name).sorted().forEach(into::add);
+    private static void names(ArrayNode into, java.util.Set<TypeSymbol> cases) {
+        cases.stream().map(TypeSymbol::name).sorted().forEach(into::add);
     }
 }

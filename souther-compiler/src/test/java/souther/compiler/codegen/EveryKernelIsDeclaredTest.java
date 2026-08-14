@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Prelude;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 
 import org.junit.jupiter.api.Test;
 
@@ -51,7 +51,7 @@ class EveryKernelIsDeclaredTest {
     private static Set<String> declaredKeys() {
         Set<String> declared = new LinkedHashSet<>();
         for (Prelude.PreludeEntry entry : Prelude.entries().values()) {
-            if (entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
+            if (entry.declaration().body() instanceof Hir.FnBody.Intrinsic kernel) {
                 declared.add(kernel.key());
             }
         }

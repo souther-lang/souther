@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
 import souther.compiler.frontend.CstFrontend;
@@ -85,9 +86,9 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
     @Test
     void theExpansionOfThatModuleFinishes() {
         Ast.Module parsed = CstFrontend.parse(CYCLE);
-        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, Symbols.of(parsed)));
+        HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, SyntaxSymbols.of(parsed)));
 
-        Ast.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
+        Hir.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
                 inliner.held().get("depth").writtenBody(), inliner.bodyOf("depth")));
 
         assertTrue(expanded != null, "a body the expansion finished with");

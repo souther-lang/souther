@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -64,8 +66,8 @@ class ValueRenderingTest {
         Map<String, ObservedValue> fields = new LinkedHashMap<>();
         fields.put("total", n(1));
         assertEquals("Receipt { total = 1 }",
-                show(new ObservedValue.Constructed(new TypeName("demo", "Receipt"), fields)));
-        assertEquals("Ok", show(new ObservedValue.Unit(new TypeName("demo", "Ok"))));
+                show(new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("demo", "Receipt")), fields)));
+        assertEquals("Ok", show(new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("demo", "Ok")))));
     }
 
     @Test
@@ -84,7 +86,7 @@ class ValueRenderingTest {
         assertEquals("DateTime", type(new ObservedValue.Temporal("2026-07-25T09:00")));
         assertEquals("Instant", type(new ObservedValue.Temporal("2026-07-25T09:00:00Z")));
         assertEquals("Time", type(new ObservedValue.Temporal("09:00")));
-        assertEquals("AmountN", type(new ObservedValue.Constructed(new TypeName("demo", "AmountN"),
+        assertEquals("AmountN", type(new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("demo", "AmountN")),
                 Map.of("value", n(1)))));
         assertEquals("None", type(new ObservedValue.Absent()));
     }

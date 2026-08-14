@@ -3,7 +3,9 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,7 +50,7 @@ class ADeclarationThatDoesNotComeOutDoesNotTakeItsSiblingsTest {
     }
 
     private static boolean derived(Compilation c, String declared) {
-        return c.db().ask(new Shapes.DerivedDef(new TypeName("m.a", declared))).present();
+        return c.db().ask(new Shapes.DerivedDef(new TypeKey("m.a", declared))).present();
     }
 
     @Test

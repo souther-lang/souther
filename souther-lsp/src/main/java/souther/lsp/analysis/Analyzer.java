@@ -7,10 +7,11 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.ClauseDischarge;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstLexer;
@@ -307,7 +308,7 @@ public final class Analyzer {
     /** What the cursor is on, as the compiler answers it: the type a name at {@code pos} denotes,
      * or the declaration whose own name is there. Null when the compiler cannot say — a file it
      * could not read, or a name in the value namespace. */
-    private TypeName typeUnderCursor(Compilation compilation, String uri, Position pos) {
+    private TypeSymbol typeUnderCursor(Compilation compilation, String uri, Position pos) {
         return compilation.db().ask(new Names.TypeAt(cursor(uri, pos))).value();
     }
 
@@ -387,14 +388,15 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        souther.compiler.check.Prepared written =
+                compilation.db().ask(new Shapes.Prepared(module)).value();
         if (written == null) {
             return List.of();
         }
         Adequacy.Of adequacy = compilation.adequacy(module);
         LineIndex lines = new LineIndex(graph.text(uri));
         List<CodeLens> out = new ArrayList<>();
-        for (Ast.BehaviorDef behavior : written.behaviors()) {
+        for (Hir.BehaviorDef behavior : written.behaviors()) {
             // A module's declarations need not all be in this document, and a line number from
             // another file read against this one's index points somewhere arbitrary.
             if (!uri.equals(documentOf(behavior.pos(), null, graph))) {
@@ -568,12 +570,13 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        souther.compiler.check.Prepared written =
+                compilation.db().ask(new Shapes.Prepared(module)).value();
         if (written == null) {
             return List.of();
         }
         LineIndex lines = new LineIndex(text);
-        for (Ast.BehaviorDef behavior : written.behaviors()) {
+        for (Hir.BehaviorDef behavior : written.behaviors()) {
             // The cursor is in this document, so a declaration written in another one is not what
             // it is on, however the lines happen to line up.
             if (!uri.equals(documentOf(behavior.pos(), null, graph))
@@ -653,7 +656,7 @@ public final class Analyzer {
         }
         Compilation compilation = compileOf(graph);
         if (resolves(compilation, uri)) {
-            TypeName type = typeUnderCursor(compilation, uri, pos);
+            TypeSymbol type = typeUnderCursor(compilation, uri, pos);
             if (type != null) {
                 return declarationOf(compilation, type, graph);
             }
@@ -863,7 +866,7 @@ public final class Analyzer {
         // reference names, and matching the spelling here would edit this module's own `exposing`
         // instead — leaving both modules uncompilable.
         Compilation compilation = compileOf(graph);
-        TypeName type = typeUnderCursor(compilation, uri, pos);
+        TypeSymbol type = typeUnderCursor(compilation, uri, pos);
         if (type != null) {
             addExposingAndImportSites(compilation, type.name(), type.module(), graph, byUri);
             return byUri;
@@ -996,7 +999,7 @@ public final class Analyzer {
     }
 
     /** Where a type is declared, as the compiler answers it. */
-    private Optional<Location> declarationOf(Compilation compilation, TypeName target,
+    private Optional<Location> declarationOf(Compilation compilation, TypeSymbol target,
                                              ModuleGraph graph) {
         // Which module, which name and where it was written is the compiler's answer — the part a
         // spelling match gets wrong.
@@ -1012,7 +1015,7 @@ public final class Analyzer {
      */
     private List<Location> usesOf(Compilation compilation, String uri, Position pos,
                                   ModuleGraph graph, boolean includeDeclaration) {
-        TypeName target = typeUnderCursor(compilation, uri, pos);
+        TypeSymbol target = typeUnderCursor(compilation, uri, pos);
         if (target == null) {
             return null;
         }
@@ -1022,7 +1025,7 @@ public final class Analyzer {
         }
         for (String module : compilation.modules()) {
             String moduleUri = compilation.sourceIdOf(module);
-            for (Resolve.Denotation use
+            for (Resolve.TypeUse use
                     : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
                 if (at != null) {
@@ -1406,10 +1409,15 @@ public final class Analyzer {
         if (name == null || module == null) {
             return Optional.empty();
         }
-        Map<TypeName, List<ClauseDischarge>> byType =
+        // Asked of the compiler, which is what resolved the declaration this clause is written in.
+        // Put together here from the module and the spelling instead, it would be an identity for
+        // whatever that address names — including nothing.
+        TypeSymbol declared = typeUnderCursor(compilation, uri,
+                new Position(lines.lspLine(name.start()), lines.lspColumn(name.start())));
+        Map<TypeSymbol, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
-        List<ClauseDischarge> clauses = byType == null
-                ? null : byType.get(new TypeName(module, nameOf(name)));
+        List<ClauseDischarge> clauses = byType == null || declared == null
+                ? null : byType.get(declared);
         if (clauses == null || clauses.isEmpty()) {
             return Optional.empty();
         }

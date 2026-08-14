@@ -4,7 +4,9 @@ import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TwoClassesUnderOneNameAreNotOneClassTest {
 
     private static final GeneratedClass.Value QUOTE_DATA =
-            new GeneratedClass.Value(new TypeName("demo", "Quote"));
+            new GeneratedClass.Value(TypeSymbols.declared(new TypeKey("demo", "Quote")));
     private static final GeneratedClass.BehaviorInterface QUOTE_BEHAVIOR =
             new GeneratedClass.BehaviorInterface("demo", "quote");
 
@@ -58,9 +60,9 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     @Test
     void twoMembersBridgedUnderOneNameAreOneClass() {
         Emissions out = new Emissions();
-        out.put(new GeneratedClass.BridgeCase("demo", new TypeName("a", "Foo")), new byte[] {1});
+        out.put(new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("a", "Foo"))), new byte[] {1});
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> out.put(new GeneratedClass.BridgeCase("demo", new TypeName("b", "Foo")),
+                () -> out.put(new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("b", "Foo"))),
                         new byte[] {2}));
         assertTrue(refused.getMessage().contains("a.Foo") && refused.getMessage().contains("b.Foo"),
                 "the refusal names both members: " + refused.getMessage());

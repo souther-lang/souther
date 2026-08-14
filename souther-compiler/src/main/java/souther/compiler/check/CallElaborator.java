@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -51,7 +51,7 @@ public final class CallElaborator {
      * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
      * fine: it sorts to itself and its max is {@code None}.
      */
-    private static void requiresOrdering(String key, Ast.Apply call, Type result, CheckContext ctx) {
+    private static void requiresOrdering(String key, Hir.Apply call, Type result, CheckContext ctx) {
         OrderedElement where = ORDERED_ELEMENT.get(key);
         if (where == null) {
             return;
@@ -78,7 +78,7 @@ public final class CallElaborator {
      * what the list holds, so it reads the binding the key's declared result took rather than the
      * call's result.
      */
-    private static void requiresOrderedKey(String key, Ast.Apply call, Type.FnOf declaredKey,
+    private static void requiresOrderedKey(String key, Hir.Apply call, Type.FnOf declaredKey,
                                            Map<String, Type> bindings, CheckContext ctx) {
         if (!key.equals("list.sortBy")) {
             return;
@@ -104,7 +104,7 @@ public final class CallElaborator {
      * <p>The Core is the one the application spelling produced, so nothing downstream of here tells
      * the two apart — which is what keeps a growing fold's seed the seed it was.
      */
-    static Core libraryValue(Ast.Var v, CheckContext ctx, Type expected) {
+    static Core libraryValue(Hir.Var v, CheckContext ctx, Type expected) {
         if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
             return null;
         }
@@ -119,9 +119,9 @@ public final class CallElaborator {
                 TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
-    static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
+    static Core elaborateCall(Hir.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
-        if (call.function() instanceof Ast.Var.Unanswered) {
+        if (call.function() instanceof Hir.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
             throw new Unanswerable(call.pos());
         }
@@ -155,7 +155,7 @@ public final class CallElaborator {
      * business with a call left standing meets it as itself rather than as an ordinary call it might
      * try to emit.
      */
-    private static Core preservedCall(Ast.Apply call, CompleteSignature kept, Scope env,
+    private static Core preservedCall(Hir.Apply call, CompleteSignature kept, Scope env,
                                       CheckContext ctx, Type expected) {
         List<Type> params = kept.params();
         CallArgs ca = new CallArgs(call.args(), env, ctx);
@@ -212,7 +212,7 @@ public final class CallElaborator {
      * because a difference here is not a failure but a variable settled to the wrong type, which is
      * reported somewhere else as something else.
      */
-    static Map<String, Type> settledByValues(Ast.Apply call, List<Type> params, Type result,
+    static Map<String, Type> settledByValues(Hir.Apply call, List<Type> params, Type result,
                                              Type expected,
                                              java.util.function.IntFunction<Type> argType,
                                              CheckContext ctx) {
@@ -253,12 +253,12 @@ public final class CallElaborator {
      * rather than by a separate walk that would have to reconstruct that context.
      */
     static final class CallArgs {
-        private final List<Ast.Expr> args;
+        private final List<Hir.Expr> args;
         private final Core[] cores;
         private final Scope env;
         private final CheckContext ctx;
 
-        CallArgs(List<Ast.Expr> args, Scope env, CheckContext ctx) {
+        CallArgs(List<Hir.Expr> args, Scope env, CheckContext ctx) {
             this.args = args;
             this.cores = new Core[args.size()];
             this.env = env;
@@ -349,7 +349,7 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Ast.Apply call) {
+    static RuntimeException noCallee(Hir.Apply call) {
         return switch (call.denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
@@ -378,7 +378,7 @@ public final class CallElaborator {
         };
     }
 
-    private static IllegalStateException unelaborated(String what, Ast.Apply call) {
+    private static IllegalStateException unelaborated(String what, Hir.Apply call) {
         return new IllegalStateException("`" + call.written() + "` denotes " + what
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
@@ -432,9 +432,9 @@ public final class CallElaborator {
      * <p>Arity is the caller's to check first, in its own words; this throws where the two
      * disagree rather than walking off the shorter list.
      */
-    private static Applied applySignature(Ast.Apply call, Type.FnOf signature, CallArgs ca,
+    private static Applied applySignature(Hir.Apply call, Type.FnOf signature, CallArgs ca,
                                           Type expected, Scope env, CheckContext ctx) {
-        List<Ast.Expr> args = call.args();
+        List<Hir.Expr> args = call.args();
         if (args.size() != signature.params().size()) {
             throw new IllegalStateException("`" + call.written() + "` reached signature application"
                     + " with " + args.size() + " argument(s) against " + signature.params().size());
@@ -466,7 +466,7 @@ public final class CallElaborator {
 
     /** Each value argument held to the parameter it was given to, at its own position — the
      * refusal {@link #settledByValues} leaves to whoever has the argument in hand. */
-    private static void requireValueArgs(Ast.Apply call, List<Type> params, CallArgs ca,
+    private static void requireValueArgs(Hir.Apply call, List<Type> params, CallArgs ca,
                                          Map<String, Type> bind) {
         for (int i = 0; i < params.size(); i++) {
             Type param = params.get(i);
@@ -477,9 +477,9 @@ public final class CallElaborator {
         }
     }
 
-    static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
-        List<Ast.Expr> args = call.args();
-        if (call.function() instanceof Ast.Var.Unanswered) {
+    static Type typeOfCall(CallArgs ca, Hir.Apply call, Scope env, CheckContext ctx, Type expected) {
+        List<Hir.Expr> args = call.args();
+        if (call.function() instanceof Hir.Var.Unanswered) {
             // reported where the name was written; this definition has no meaning to work out
             throw new Unanswerable(call.pos());
         }
@@ -501,7 +501,7 @@ public final class CallElaborator {
         // and yield its result type; the backend emits the primitive for its key. A Souther-bodied
         // library call — a recursive helper such as `List.foldFrom` — is not one of these and takes
         // the paths below, as any helper does.
-        if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
+        if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic kernel) {
             Prelude.Signature intrinsic = entry.signature();
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(Diagnostic
@@ -597,7 +597,7 @@ public final class CallElaborator {
      * form written directly. Empty when the argument is a runtime value or the data is not a
      * single-{@code value} wrapper (e.g. a product).
      */
-    static Optional<Object> newtypeConstantArg(Ast.NewData nd) {
+    static Optional<Object> newtypeConstantArg(Hir.NewData nd) {
         if (nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
             return ConstEval.eval(nd.inits().get(0).value());
@@ -611,7 +611,7 @@ public final class CallElaborator {
      * literal is one such expression and so is a {@code ++} of literals and of a module's values,
      * which is what lets several formats share a part (issue #208). What is validated is the string
      * the whole expression composes to, not the pieces it was written in. */
-    static void validateRegexPattern(Ast.Expr e) {
+    static void validateRegexPattern(Hir.Expr e) {
         String pattern = ConstEval.evalString(e).orElse(null);
         if (pattern == null) {
             throw CompileException.of(Diagnostic
@@ -654,7 +654,7 @@ public final class CallElaborator {
      * that a sum does not go here — asking for an annotation would send the reader after something
      * the position already carries.
      */
-    private static Type numericFold(Ast.Apply call, Type element, Type expected) {
+    private static Type numericFold(Hir.Apply call, Type element, Type expected) {
         if (element == Type.INT || element == Type.DECIMAL) {
             return element;
         }
@@ -700,9 +700,9 @@ public final class CallElaborator {
      * temporal at all). This form spells one out; a temporal computed from values comes from the
      * boundary, from the arithmetic, or from {@code Date.fromParts} / {@code Time.fromParts}, which
      * answer a case where the parts name no such moment. */
-    static Type temporalLiteral(Ast.Apply call) {
+    static Type temporalLiteral(Hir.Apply call) {
         Type.Prim kind = Type.Prim.named(call.reaches());
-        if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
+        if (!(call.args().get(0) instanceof Hir.StringLit lit)) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
@@ -787,7 +787,7 @@ public final class CallElaborator {
         return parsed;
     }
 
-    static void arity(Ast.Apply call, int n) {
+    static void arity(Hir.Apply call, int n) {
         if (call.args().size() != n) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt())

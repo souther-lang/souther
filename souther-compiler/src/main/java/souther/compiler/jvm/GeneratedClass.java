@@ -1,6 +1,6 @@
 package souther.compiler.jvm;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 /**
  * A JVM class this compiler invents, said in Souther's terms: which declaration it stands for and
@@ -31,7 +31,7 @@ public sealed interface GeneratedClass {
     sealed interface Encodable extends GeneratedClass {}
 
     /** The class a declared data, sum or unit type is emitted as. */
-    record Value(TypeName type) implements Encodable {
+    record Value(TypeSymbol type) implements Encodable {
         public Value {
             if (type == null) {
                 throw new IllegalArgumentException("a value class stands for a declared type");
@@ -71,7 +71,7 @@ public sealed interface GeneratedClass {
      * modules is two classes. Reading the module off the reader instead is right exactly when the
      * reader happens to be the emitter.
      */
-    record BridgeCase(String emittingModule, TypeName member) implements GeneratedClass {
+    record BridgeCase(String emittingModule, TypeSymbol member) implements GeneratedClass {
         public BridgeCase {
             if (emittingModule == null || emittingModule.isEmpty() || member == null) {
                 throw new IllegalArgumentException("a bridge case is a member and the module emitting it: "

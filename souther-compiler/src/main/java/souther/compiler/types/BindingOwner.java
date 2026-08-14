@@ -5,7 +5,7 @@ package souther.compiler.types;
  * pass placed inside one.
  *
  * <p>An owner is named by what already identifies a definition across the whole compiler: the
- * declaring module and the name declared there, which is what {@link TypeName} is for a type. None of
+ * declaring module and the name declared there, which is what {@link TypeSymbol} is for a type. None of
  * them is a bare spelling, so neither is a {@link BindingId}: two modules that both declare
  * {@code f} own different bindings, and saying so needs no comparison of text.
  *
@@ -31,7 +31,7 @@ public sealed interface BindingOwner {
      *
      * <p>Which of the two it is says nothing about identity, because a module cannot declare both
      * under one name — a {@code let} whose name a behavior declares <em>is</em> that behavior's
-     * implementation. So the pair names the definition, as {@link TypeName} names a declared type.
+     * implementation. So the pair names the definition, as {@link TypeSymbol} names a declared type.
      */
     record OfValue(String module, String name) implements BindingOwner {
 
@@ -57,7 +57,7 @@ public sealed interface BindingOwner {
      * so the pass that resolves the invariant and the pass that emits it agree without either
      * repeating the other.
      */
-    record OfFields(TypeName declared) implements BindingOwner {
+    record OfFields(TypeSymbol declared) implements BindingOwner {
 
         @Override
         public String toString() {
@@ -66,7 +66,7 @@ public sealed interface BindingOwner {
     }
 
     /** What a data declaration writes for itself: an invariant, a decoder, an encoder. */
-    record OfData(TypeName declared) implements BindingOwner {
+    record OfData(TypeSymbol declared) implements BindingOwner {
 
         @Override
         public String toString() {

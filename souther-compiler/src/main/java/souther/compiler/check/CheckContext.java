@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 
 import java.util.Map;
 
@@ -14,22 +14,22 @@ import java.util.Map;
  * as separate parameters threaded through every method. What does change — the variable environment and
  * the expected type pushed down from the surrounding context — is passed separately.
  */
-public record CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs,
+public record CheckContext(Symbols symbols, Hir.Data data, Map<String, ReqSig> reqs,
                            Map<String, ReqSig> callees, boolean makingAnOptional,
                            Preserved preserved) {
 
-    public CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs,
+    public CheckContext(Symbols symbols, Hir.Data data, Map<String, ReqSig> reqs,
                         Map<String, ReqSig> callees, boolean makingAnOptional) {
         this(symbols, data, reqs, callees, makingAnOptional, Preserved.NONE);
     }
 
     /** A context with no behavior callable by name — every construction that predates the
      *  distinction, and every position where only injected behaviors are in sight. */
-    public CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs) {
+    public CheckContext(Symbols symbols, Hir.Data data, Map<String, ReqSig> reqs) {
         this(symbols, data, reqs, Map.of());
     }
 
-    public CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> reqs,
+    public CheckContext(Symbols symbols, Hir.Data data, Map<String, ReqSig> reqs,
                         Map<String, ReqSig> callees) {
         this(symbols, data, reqs, callees, false);
     }
@@ -41,7 +41,7 @@ public record CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> r
     }
 
     /** The same context checking a different {@code data}'s invariant, decoder, or encoder. */
-    public CheckContext forData(Ast.Data other) {
+    public CheckContext forData(Hir.Data other) {
         return new CheckContext(symbols, other, reqs, callees, makingAnOptional, preserved);
     }
 

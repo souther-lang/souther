@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.Objects;
 
@@ -51,13 +51,13 @@ public sealed interface BoundaryInput {
      */
     final class Nominal implements BoundaryInput {
 
-        private final TypeName name;
+        private final TypeSymbol name;
 
-        Nominal(TypeName name) {
+        Nominal(TypeSymbol name) {
             this.name = name;
         }
 
-        public TypeName name() {
+        public TypeSymbol name() {
             return name;
         }
 

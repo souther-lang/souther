@@ -1,9 +1,9 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.HashSet;
 import java.util.function.Predicate;
@@ -57,27 +57,27 @@ final class CardinalityTransfer {
      *                reached: a record holding it would otherwise be told it holds nothing by the
      *                very rules the supposing was about.
      */
-    static Cardinality upperOf(TypeName named, Ast.Def def, Symbols symbols,
-                               Map<TypeName, Cardinality> solution, Predicate<TypeName> granted) {
+    static Cardinality upperOf(TypeSymbol named, Hir.Def def, Symbols symbols,
+                               Map<TypeSymbol, Cardinality> solution, Predicate<TypeSymbol> granted) {
         return switch (def) {
-            case Ast.UnitData _ -> Cardinality.atMost(1);
-            case Ast.SumData sum -> {
+            case Hir.UnitData _ -> Cardinality.atMost(1);
+            case Hir.SumData sum -> {
                 // A case bottoming out is the whole sum bottoming out, so these are added and not
                 // multiplied: what has no value adds none, and the sum has none only where every one
                 // of them has none.
                 Cardinality across = Cardinality.NO_VALUE;
-                for (Ast.Name each : sum.cases()) {
+                for (Hir.Name each : sum.cases()) {
                     across = across.plus(known(solution, each.denotes()));
                 }
                 yield across;
             }
-            case Ast.Data data -> ofData(named, data, symbols, solution, granted);
+            case Hir.Data data -> ofData(named, data, symbols, solution, granted);
         };
     }
 
-    private static Cardinality ofData(TypeName named, Ast.Data data, Symbols symbols,
-                                      Map<TypeName, Cardinality> solution,
-                                      Predicate<TypeName> granted) {
+    private static Cardinality ofData(TypeSymbol named, Hir.Data data, Symbols symbols,
+                                      Map<TypeSymbol, Cardinality> solution,
+                                      Predicate<TypeSymbol> granted) {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses.
@@ -116,8 +116,8 @@ final class CardinalityTransfer {
      */
     static Cardinality upperAt(Type type, String path, OccurrenceCounts counts,
                                OccurrenceValues values, Symbols symbols,
-                               Map<TypeName, Cardinality> solution, Predicate<TypeName> granted,
-                               Set<TypeName> worn) {
+                               Map<TypeSymbol, Cardinality> solution, Predicate<TypeSymbol> granted,
+                               Set<TypeSymbol> worn) {
         return switch (type) {
             case Type.Prim prim -> switch (prim) {
                 case BOOL -> Cardinality.atMost(2);
@@ -147,7 +147,7 @@ final class CardinalityTransfer {
             }
             case Type.Union union -> {
                 Cardinality across = Cardinality.NO_VALUE;
-                for (TypeName each : union.members()) {
+                for (TypeSymbol each : union.members()) {
                     across = across.plus(known(solution, each));
                 }
                 yield across;
@@ -173,11 +173,11 @@ final class CardinalityTransfer {
      */
     private static Cardinality ofRef(Type.Ref ref, String path, OccurrenceCounts counts,
                                      OccurrenceValues values, Symbols symbols,
-                                     Map<TypeName, Cardinality> solution,
-                                     Predicate<TypeName> granted, Set<TypeName> worn) {
+                                     Map<TypeSymbol, Cardinality> solution,
+                                     Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         Cardinality named = known(solution, ref.name());
         if (granted.test(ref.name())
-                || !(symbols.get(ref.name()) instanceof Ast.Data data) || !data.newtype()
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || !data.newtype()
                 || !worn.add(ref.name())) {
             return named;
         }
@@ -192,8 +192,8 @@ final class CardinalityTransfer {
 
     /** A value a collection holds, which no rule of the collection's own was written about. */
     private static Cardinality ofType(Type type, Symbols symbols,
-                                      Map<TypeName, Cardinality> solution,
-                                      Predicate<TypeName> granted, Set<TypeName> worn) {
+                                      Map<TypeSymbol, Cardinality> solution,
+                                      Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         return upperAt(type, FieldDomains.THE_VALUE, OccurrenceCounts.NOTHING_READ,
                 OccurrenceValues.NOTHING_READ, symbols, solution, granted, worn);
     }
@@ -215,8 +215,8 @@ final class CardinalityTransfer {
     }
 
     private static Cardinality ofSet(Type element, String path, OccurrenceCounts counts,
-                                     Symbols symbols, Map<TypeName, Cardinality> solution,
-                                     Predicate<TypeName> granted, Set<TypeName> worn) {
+                                     Symbols symbols, Map<TypeSymbol, Cardinality> solution,
+                                     Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return withNothingToHold(counts, path);
         }
@@ -247,8 +247,8 @@ final class CardinalityTransfer {
     }
 
     private static Cardinality ofList(Type element, String path, OccurrenceCounts counts,
-                                      Symbols symbols, Map<TypeName, Cardinality> solution,
-                                      Predicate<TypeName> granted, Set<TypeName> worn) {
+                                      Symbols symbols, Map<TypeSymbol, Cardinality> solution,
+                                      Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return withNothingToHold(counts, path);
         }
@@ -271,8 +271,8 @@ final class CardinalityTransfer {
     }
 
     private static Cardinality ofMap(Type.MapOf map, String path, OccurrenceCounts counts,
-                                     Symbols symbols, Map<TypeName, Cardinality> solution,
-                                     Predicate<TypeName> granted, Set<TypeName> worn) {
+                                     Symbols symbols, Map<TypeSymbol, Cardinality> solution,
+                                     Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return withNothingToHold(counts, path);
         }
@@ -287,7 +287,7 @@ final class CardinalityTransfer {
     }
 
     /** What {@code solution} says of a name, which is nothing where it holds no answer for it. */
-    private static Cardinality known(Map<TypeName, Cardinality> solution, TypeName name) {
+    private static Cardinality known(Map<TypeSymbol, Cardinality> solution, TypeSymbol name) {
         Cardinality had = solution.get(name);
         return had == null ? Cardinality.UNKNOWN : had;
     }

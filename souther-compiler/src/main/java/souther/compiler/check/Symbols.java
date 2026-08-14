@@ -1,52 +1,34 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.ast.WrittenName;
-import souther.compiler.types.TypeName;
-import souther.compiler.types.TypeReachName;
+import souther.compiler.ast.Hir;
+import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * What a type name means in the module being compiled. It answers two different questions, and
- * keeping them apart is the point:
+ * A {@link Scope} and a {@link Declarations} together, for the readers that have both to hand.
  *
- * <ul>
- *   <li><b>What does this written name refer to?</b> {@link #resolve} takes a name as the source
- *       wrote it — bare {@code 金額}, qualified {@code probe.b.金額}, or through an import alias —
- *       and yields the {@link TypeName} it denotes here. Only source text goes in.</li>
- *   <li><b>What is that type made of?</b> {@link #get} takes a {@link TypeName} and yields the
- *       definition, from whichever module declares it.</li>
- * </ul>
- *
- * <p>A name that came from another module's declaration (a sum's case list, say) must never be
- * resolved as if it had been written here — it is already anchored to its module, so it is reached
- * with {@link TypeName#sibling}.
+ * <p>Not a thing of its own. It answers nothing itself except the one question that genuinely needs
+ * both — {@link #visible} takes the identities a bare name reaches here and asks what each is — and
+ * hands over its two parts otherwise. The two answer different questions and fail in different ways:
+ * a spelling nothing here writes is not a declaration that did not come out, and while one object
+ * answered both, which of them a reader was holding was something it worked out for itself.
  */
-public final class Symbols {
+public final class Symbols implements NameSense {
 
-    private final String module;
-    /** Where the declarations of this compilation are read from. */
-    private final Registry registry;
-    /** What a bare name means here: this module's own definitions plus the imported ones. */
-    private final Map<String, TypeName> scope;
-    /** Each {@code import ... as} alias → the module it names. A module of the compilation is also
-     * a qualifier under its own name, which {@link #moduleOfQualifier} reads off the registry
-     * rather than listing here — listing it would mean naming every module up front. */
-    private final Map<String, String> aliases;
+    private final TypeScope scope;
+    private final Declarations<Hir.Def> declarations;
 
-    private Symbols(String module, Registry registry,
-                    Map<String, TypeName> scope, Map<String, String> aliases) {
-        this.module = module;
-        this.registry = registry;
-        this.scope = scope;
-        this.aliases = aliases;
+    private Symbols(String module, Registry<Hir.Def> registry,
+                    Map<String, Denotation> names, Map<String, String> aliases) {
+        this.scope = new TypeScope(module, names, aliases, registry);
+        this.declarations = new Declarations<>(registry, Declarations.Vocabulary.ofLanguage());
     }
 
     /** No module at all — for signatures written over primitives and type variables only. */
@@ -55,283 +37,70 @@ public final class Symbols {
     }
 
     /** A lone module, compiled with nothing else in sight: bare names are its own definitions. */
-    public static Symbols of(Ast.Module m) {
-        Map<String, TypeName> scope = new HashMap<>();
-        for (String name : TypeChecker.ownDefs(m).keySet()) {
-            scope.put(name, new TypeName(m.name(), name));
+    public static Symbols of(Hir.Module m) {
+        Map<String, Denotation> names = new HashMap<>();
+        for (Hir.Def def : TypeChecker.ownDefs(m).values()) {
+            names.put(def.name(), new Denotation.Denotes(def.declares()));
         }
-        return new Symbols(m.name(), Registry.of(Map.of(m.name(), m)), scope, Map.of());
+        return new Symbols(m.name(), Registry.of(Map.of(m.name(), m)), names, Map.of());
     }
 
-    /** A module compiled against a registry: {@code scope} is what its bare names mean (own plus
+    /** A module compiled against a registry: {@code names} is what its bare names mean (own plus
      * imported) and {@code aliases} maps each {@code import ... as} alias to its module. */
-    public static Symbols of(Ast.Module m, Map<String, Ast.Module> registry,
-                             Map<String, TypeName> scope, Map<String, String> aliases) {
-        return of(m.name(), Registry.of(registry), scope, aliases);
+    public static Symbols of(Hir.Module m, Map<String, Hir.Module> registry,
+                             Map<String, Denotation> names, Map<String, String> aliases) {
+        return of(m.name(), Registry.of(registry), names, aliases);
     }
 
-    /** As {@link #of(Ast.Module, Map, Map, Map)}, over a registry that reads its declarations
+    /** As {@link #of(Hir.Module, Map, Map, Map)}, over a registry that reads its declarations
      * however it likes — the form a query-backed compilation uses, where a module's definitions are
      * asked for one at a time rather than held in a map. */
-    public static Symbols of(String module, Registry registry,
-                             Map<String, TypeName> scope, Map<String, String> aliases) {
-        return new Symbols(module, registry, scope, Map.copyOf(aliases));
+    public static Symbols of(String module, Registry<Hir.Def> registry,
+                             Map<String, Denotation> names, Map<String, String> aliases) {
+        return new Symbols(module, registry, names, Map.copyOf(aliases));
+    }
+
+    /** What a name written here means. */
+    @Override
+    public TypeScope scope() {
+        return scope;
+    }
+
+    /** What an identity is a declaration of. */
+    public Declarations<Hir.Def> declarations() {
+        return declarations;
+    }
+
+    @Override
+    public boolean declares(TypeKey address) {
+        return declarations.contains(address);
+    }
+
+    @Override
+    public java.util.Set<String> declaredNamesIn(String module) {
+        return declarations.declaredIn(module).keySet();
     }
 
     /** The module being compiled. */
     public String module() {
-        return module;
+        return scope.module();
     }
 
     /**
-     * The type a declaration of the module being compiled is.
+     * The definitions reachable here by a bare name: this module\'s own plus the imported ones.
      *
-     * <p>Asked with the declaration and not with a name. A spelling says nothing about which module
-     * declares what it spells, so stamping this module onto one answers for a declaration here
-     * whatever the spelling came from — a name read off a class, a name another module wrote. A
-     * caller holding the declaration is a caller that has it from this module's own tree.
+     * <p>The one question that is both. What is reachable is the scope\'s to say and what each of
+     * them is a declaration of is not, so this is written where both are to hand rather than in
+     * either of them.
      */
-    public TypeName own(Ast.Def def) {
-        TypeName named = new TypeName(module, def.name());
-        // Held to a name this module declares. Asked only where this module's declarations are
-        // known: a module in an import cycle is compiled with nothing registered for it, and
-        // refusing there would replace the report about the cycle with one about a declaration that
-        // is fine.
-        //
-        // Not held to being the declaration registered under that name. A module that declares a
-        // name twice registers one of them, and the pass that reports it walks both. So a
-        // declaration another module wrote under a name this one also writes is admitted here, and
-        // nothing this holds can tell the two apart — which declaration a definition is stays
-        // something worked out from a name until a declaration carries its own.
-        if (get(named) == null && !declaredIn(module).isEmpty()) {
-            throw new IllegalArgumentException(
-                    "`" + def.name() + "` is not declared in `" + module + "`");
-        }
-        return named;
-    }
-
-    /** The definition of {@code name}, or null when no module declares it. The runtime namespace
-     * declares the prelude's runtime-backed data ({@code RoundingMode}), which no module of the
-     * compilation holds, so it is answered from the prelude's registration. */
-    public Ast.Def get(TypeName name) {
-        Ast.Def def = registry.declaration(name);
-        return def != null ? def : Prelude.runtimeBackedDef(name);
-    }
-
-    public boolean contains(TypeName name) {
-        return get(name) != null;
-    }
-
-    /** Whether {@code name} is declared by a module of this compilation — as opposed to a
-     * declaration the language gives (the prelude's runtime-backed data), which resolves and types
-     * like any other but belongs to no module here. The construction discipline asks this: what a
-     * compilation declares is governed by {@code constructs}; the language's vocabulary is not. */
-    public boolean declaredByCompilation(TypeName name) {
-        return registry.declaration(name) != null;
-    }
-
-    /**
-     * What a written case name denotes. Beside the data cases a module declares or imports, an arm may
-     * name a case of a primitive-headed union: the primitive itself ({@code Int} in {@code Int |
-     * DivisionByZero}), or one of the error cases the runtime declares rather than any module. Null
-     * when it is none of those.
-     */
-    TypeName resolveCase(WrittenName written) {
-        return switch (written.canonical()) {
-            case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
-                    TypeName.primitive(written.canonical());
-            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" -> TypeName.runtime(written.canonical());
-            default -> resolve(written);
-        };
-    }
-
-    /** Whether {@code name} is declared in another module (spec §modules). */
-    public boolean isForeign(TypeName name) {
-        return !name.module().equals(module);
-    }
-
-    /** What the written name {@code written} denotes here, or null when nothing does. Accepts a bare
-     * name, a module-qualified one ({@code probe.b.金額}) and an alias-qualified one ({@code B.金額}).
-     * Visibility is enforced: a qualified name must be exposed by the module that declares it.
-     *
-     * <p>"Here" is the whole story: a name is resolved in the module that wrote it, by that module's
-     * own {@link Resolve} pass, so this never has to answer for a spelling written somewhere else.
-     */
-    TypeName resolve(WrittenName written) {
-        return resolveSpelling(written.canonical());
-    }
-
-    /** As above, of the spelling itself. Private: a spelling reaches this only from a name of this
-     *  module's own text, which is what a {@link WrittenName} is and a bare string is not. */
-    private TypeName resolveSpelling(String written) {
-        int dot = written.lastIndexOf('.');
-        if (dot < 0) {
-            TypeName name = scope.get(written);
-            // The prelude's runtime-backed data is nameable everywhere, on the lowest rung: a
-            // module's own declaration or import of the same name is what the name means there.
-            return name != null ? name : Prelude.runtimeBackedType(written);
-        }
-        String target = moduleOfQualifier(written.substring(0, dot));
-        if (target == null) {
-            return null;
-        }
-        TypeName candidate = new TypeName(target, written.substring(dot + 1));
-        return contains(candidate) && exposes(target, candidate.name()) ? candidate : null;
-    }
-
-    /**
-     * How this module writes {@code type} — the one thing a writer of surface text cannot work out
-     * from the type itself.
-     *
-     * <p>A section of {@link #resolve} rather than its inverse. Several spellings reach one
-     * declaration — {@code Amount}, {@code up.Amount} and {@code lib.Amount} may all be it — so
-     * there is no inverse to have; this picks one of them, and what it picks resolves back to the
-     * type it was asked about. That is the whole of the contract, and it is what a generated row
-     * being writable means.
-     *
-     * <p>Read back by whichever reader reads the position the name is written at, which for the
-     * language's own vocabulary is not this one: a primitive and the runtime's error cases are
-     * {@link #resolveCase}'s to answer, and {@code resolve} says nothing about them. They are
-     * written as themselves wherever they are written, so the section holds there through that
-     * reader.
-     *
-     * <p>Bare only where the bare spelling means this very declaration. Asked as "is the name in
-     * scope" instead, a module that declares an {@code Amount} of its own and reaches another
-     * module's under an alias would write the imported one bare, and the reference would name the
-     * declaration it is not — silently, since both spellings resolve.
-     *
-     * <p>An alias is chosen by name where a module has more than one, so that two runs of the same
-     * compilation write one reference. Nothing here picks the alias for being better than the
-     * others; it picks it for being the same one every time.
-     *
-     * <p>So a bare name is answered only where the bare name means this type <em>here</em>, and
-     * that is one question for every kind of type. A primitive's spelling is reserved (E1502), so
-     * nothing can be standing on it. The runtime namespace's own data is not reserved and is the
-     * lowest rung of a module's scope — a module declaring a {@code RoundingMode} of its own takes
-     * the spelling, and the language's one has no other, so it is unnameable there rather than bare
-     * (ADR-0087).
-     *
-     * <p>A qualified name reaches only what its module exposes, so a type another module keeps to
-     * itself has no name here at all. That happens without anything being wrong with the model: a
-     * sum is reached through its module and its cases through the sum, so a case a module does not
-     * expose is a value a reader takes and cannot write. It is answered as
-     * {@link TypeReachName.Unnameable} rather than as the qualified spelling, which would resolve to
-     * nothing wherever it was put.
-     */
-    public TypeReachName reach(TypeName type) {
-        if (type.isPrimitive() || type.equals(scope.get(type.name()))) {
-            return new TypeReachName.Bare(type);
-        }
-        if (TypeName.RUNTIME.equals(type.module())) {
-            // Reached bare, and only while nothing else here is: the runtime namespace is not a
-            // module a qualifier names, so a module declaring the spelling leaves it with no name.
-            return scope.containsKey(type.name()) ? new TypeReachName.Unnameable(type)
-                    : new TypeReachName.Bare(type);
-        }
-        if (!exposes(type.module(), type.name())) {
-            return new TypeReachName.Unnameable(type);
-        }
-        String alias = null;
-        for (Map.Entry<String, String> each : aliases.entrySet()) {
-            if (each.getValue().equals(type.module())
-                    && (alias == null || each.getKey().compareTo(alias) < 0)) {
-                alias = each.getKey();
-            }
-        }
-        return alias != null ? new TypeReachName.ViaAlias(alias, type)
-                : new TypeReachName.ViaModule(type);
-    }
-
-    /**
-     * The module of this compilation that exposes {@code name}, or null where that is not exactly
-     * one module.
-     *
-     * <p>Asked where a bare name resolved to nothing, so that a name left off an import list is told
-     * apart from a name nothing declares. This module is not among them: what it declares is already
-     * in scope, so reaching here means it does not.
-     *
-     * <p>Exactly one, because the answer is written into a report as the module to reach for. Two
-     * modules exposing the spelling makes naming either one a guess, and a guess in a hint is worse
-     * than the silence it replaces — the reader is already being told the name is not in scope.
-     */
-    public String moduleExposing(String name) {
-        String found = null;
-        for (String other : new java.util.TreeSet<>(registry.moduleNames())) {
-            if (other.equals(module) || !registry.exposedBy(other).contains(name)) {
-                continue;
-            }
-            if (found != null) {
-                return null;
-            }
-            found = other;
-        }
-        return found;
-    }
-
-    /** The module a qualifier names — a module of this compilation, or an import alias — or null
-     * when it names none. Used to tell "unknown module" apart from "unknown type in a known
-     * module". */
-    public String moduleOfQualifier(String qualifier) {
-        String alias = aliases.get(qualifier);
-        if (alias != null) {
-            return alias;
-        }
-        return registry.moduleNames().contains(qualifier) ? qualifier : null;
-    }
-
-    /** Every qualifier a reference may carry here — what a "did you mean" may offer for one. */
-    public Set<String> qualifiers() {
-        Set<String> all = new LinkedHashSet<>(registry.moduleNames());
-        all.addAll(aliases.keySet());
-        return all;
-    }
-
-    /** Whether {@code name} is reachable here as a bare name. */
-    public boolean inScope(String name) {
-        return scope.containsKey(name);
-    }
-
-    /** The bare names reachable here — what a "did you mean" suggestion may offer. */
-    public Set<String> namesInScope() {
-        return scope.keySet();
-    }
-
-    /** The definitions reachable here by a bare name: this module's own plus the imported ones. */
-    public Collection<Ast.Def> visible() {
-        List<Ast.Def> defs = new ArrayList<>();
-        for (TypeName name : new LinkedHashSet<>(scope.values())) {
-            Ast.Def def = get(name);
+    public Collection<Hir.Def> visible() {
+        List<Hir.Def> defs = new ArrayList<>();
+        for (TypeSymbol name : scope.visibleNames()) {
+            Hir.Def def = declarations.declaration(name.key());
             if (def != null) {
                 defs.add(def);
             }
         }
         return defs;
-    }
-
-    /** The names reachable here, canonical. */
-    public Collection<TypeName> visibleNames() {
-        return new LinkedHashSet<>(scope.values());
-    }
-
-    /** Every definition of one module, keyed by the name written there. The runtime namespace
-     * answers with the prelude's runtime-backed data. */
-    public Map<String, Ast.Def> declaredIn(String moduleName) {
-        if (TypeName.RUNTIME.equals(moduleName)) {
-            return Prelude.runtimeBackedDefs();
-        }
-        return registry.declaredIn(moduleName);
-    }
-
-    /** Whether the module that declares {@code name} exposes it — its own names always count. */
-    public boolean isExposed(TypeName name) {
-        return exposes(name.module(), name.name());
-    }
-
-    /** Whether {@code moduleName} exposes {@code name} (dropping any {@code .decoder} member). */
-    private boolean exposes(String moduleName, String name) {
-        if (moduleName.equals(module)) {
-            return true;   // a module reaches its own definitions whether it exposes them or not
-        }
-        return registry.exposedBy(moduleName).contains(name);
     }
 }

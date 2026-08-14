@@ -3,12 +3,16 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
@@ -54,14 +58,14 @@ class LocalEvidenceIsAskedOfBothProducersTest {
 
     private final Symbols symbols = Symbols.of(resolved());
 
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     private LocalInspection inspect(String type) {
         return LocalInspection.inspect(
-                PartitionInput.of(TypeView.of(Type.ref(new TypeName(symbols.module(), type)), symbols)),
+                PartitionInput.of(TypeView.of(Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), type))), symbols)),
                 TermPath.of("x"), symbols, null);
     }
 

@@ -9,7 +9,7 @@ import souther.compiler.types.LeafScalar;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.runtime.Representations;
 import souther.runtime.Sets;
 import souther.runtime.Temporals;
@@ -189,7 +189,7 @@ public final class JsonBoundary {
      * a reflective failure would mean the class this run emitted is not the class it emitted, which
      * is not something a reader of the boundary can say anything useful about.
      */
-    private static <I> Decoder<I, ?> codecOf(ClassLoader loader, TypeName type, String factory) {
+    private static <I> Decoder<I, ?> codecOf(ClassLoader loader, TypeSymbol type, String factory) {
         try {
             @SuppressWarnings("unchecked")
             Decoder<I, ?> decoder = (Decoder<I, ?>)

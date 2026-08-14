@@ -8,8 +8,15 @@ package souther.compiler.types;
  * been resolved to its declaring module. What the source wrote — a bare {@code 金額}, a qualified
  * {@code probe.b.金額}, or an alias {@code B.金額} — is settled during resolution and does not
  * survive into the type.
+ *
+ * <p>The pair itself is {@link TypeKey}, which is what a class file carries and what a declaration
+ * says of itself. This is that key where it stands for the declaration in the compiler's own
+ * reasoning, and the two are told apart by more than which type a signature names: a key is
+ * structural and anything holding two strings has one, while an identity comes from
+ * {@link TypeSymbols} and nowhere else. {@link #key()} goes down to the address; nothing here comes
+ * back up.
  */
-public record TypeName(String module, String name) implements Comparable<TypeName> {
+public final class TypeSymbol implements Comparable<TypeSymbol> {
 
     /** The module a primitive case name belongs to. {@code Int | DivisionByZero} unions a primitive
      * with a data case, so a primitive needs a name of this shape to sit in {@link Type.Union}; it
@@ -20,20 +27,44 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
      * their real runtime package, so they need no special case when a class name is derived. */
     public static final String RUNTIME = "souther.runtime";
 
-    public TypeName {
-        if (module == null || name == null) {
-            throw new IllegalArgumentException("module and name are required: " + module + "." + name);
-        }
+    private final TypeKey key;
+
+    /**
+     * Closed. An identity comes from {@link TypeSymbols}, which is the one edge from the structural
+     * address to the identity the compiler reasons with; a caller that could build one from two
+     * strings is a caller that could arrive at an identity without having been handed one.
+     */
+    TypeSymbol(String module, String name) {
+        this.key = new TypeKey(module, name);
+    }
+
+    /** Which declaration this is, written down.
+     *
+     * <p>One direction only. Nothing here builds a name from a key: a key is what a class file
+     * carries, and turning one back into the identity the compiler reasons with is the work of
+     * whatever knows the declarations, which is not this. */
+    public TypeKey key() {
+        return key;
+    }
+
+    /** The module that declares it. */
+    public String module() {
+        return key.module();
+    }
+
+    /** The name written there. */
+    public String name() {
+        return key.name();
     }
 
     /** A primitive case name ({@code Int}) as it appears in a union. */
-    public static TypeName primitive(String name) {
-        return new TypeName(PRIMITIVE, name);
+    public static TypeSymbol primitive(String name) {
+        return TypeSymbols.ofLanguage(PRIMITIVE, name);
     }
 
     /** The same, minted from the primitive itself, which is where the spelling comes from. */
-    public static TypeName primitive(Type.Prim prim) {
-        return new TypeName(PRIMITIVE, prim.shown());
+    public static TypeSymbol primitive(Type.Prim prim) {
+        return TypeSymbols.ofLanguage(PRIMITIVE, prim.shown());
     }
 
     /**
@@ -52,21 +83,21 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
     }
 
     /** A built-in error case ({@code DivisionByZero}). */
-    public static TypeName runtime(String name) {
-        return new TypeName(RUNTIME, name);
+    public static TypeSymbol runtime(String name) {
+        return TypeSymbols.ofLanguage(RUNTIME, name);
     }
 
     /** {@code Some} / {@code None}: written in a match arm over an {@code Option}, declared by no
      * module. They are named for the same reason a primitive case is — a name a pattern writes has to
      * denote something — and they name no class: an Option match dispatches on the runtime Option
      * classes, never on the arm's own name. */
-    public static final TypeName SOME = primitive("Some");
+    public static final TypeSymbol SOME = primitive("Some");
 
     /** @see #SOME */
-    public static final TypeName NONE = primitive("None");
+    public static final TypeSymbol NONE = primitive("None");
 
     /** Option's case of that spelling, or {@code null} for any other. */
-    public static TypeName optionCase(String written) {
+    public static TypeSymbol optionCase(String written) {
         return switch (written) {
             case "Some" -> SOME;
             case "None" -> NONE;
@@ -74,38 +105,28 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
         };
     }
 
-    /** The module of a name that denotes nothing. Not a real module, and no source may name it:
-     * a name of this shape stands for a name the compiler could not resolve. */
-    public static final String UNRESOLVED = "souther.unresolved";
-
-    /** A name nothing denotes, keeping the spelling that was written so a later reader can quote it.
-     * {@link TypeOps#denoted} turns it into {@link Type#ERRONEOUS}. */
-    public static TypeName unresolved(String written) {
-        return new TypeName(UNRESOLVED, written);
-    }
-
-    public boolean isUnresolved() {
-        return module.equals(UNRESOLVED);
-    }
-
-    /** Another name declared in the same module — a sum's case, given the sum. */
-    public TypeName sibling(String other) {
-        return new TypeName(module, other);
-    }
-
     public boolean isPrimitive() {
-        return module.equals(PRIMITIVE);
+        return module().equals(PRIMITIVE);
     }
 
     /** The fully qualified form, {@code probe.b.金額}. Also the generated class's binary name. */
     public String qualified() {
-        return module + "." + name;
+        return key.qualified();
     }
 
     @Override
-    public int compareTo(TypeName other) {
-        int byName = name.compareTo(other.name);
-        return byName != 0 ? byName : module.compareTo(other.module);
+    public int compareTo(TypeSymbol other) {
+        return key.compareTo(other.key);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof TypeSymbol other && key.equals(other.key);
+    }
+
+    @Override
+    public int hashCode() {
+        return key.hashCode();
     }
 
     @Override

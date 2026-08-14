@@ -1,6 +1,8 @@
 package souther.compiler;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -79,7 +81,7 @@ class CompileModuleChainTest {
         // pa's, so pb emits pb.EmptyCase and permits that.
         Map<String, byte[]> classes = Compiler.compileModules(List.of(PA, PB));
         BytesClassLoader loader = new BytesClassLoader(classes, CompileModuleChainTest.class.getClassLoader());
-        assertEquals(List.of(loader.loadClass(Emitted.bridgeCase("pb", new TypeName("pa", "Empty"))), loader.loadClass("pb.Receipt")),
+        assertEquals(List.of(loader.loadClass(Emitted.bridgeCase("pb", TypeSymbols.declared(new TypeKey("pa", "Empty")))), loader.loadClass("pb.Receipt")),
                 Arrays.asList(loader.loadClass(Emitted.result("pb", "checkout")).getPermittedSubclasses()));
 
         Object checkout = loader.loadClass("pb.Checkout").getMethod("of").invoke(null);
@@ -87,7 +89,7 @@ class CompileModuleChainTest {
                 "the mainline runs to the last stage and answers with this module's own case");
 
         Object departed = Codecs.apply(checkout, 0L);
-        assertEquals(Emitted.bridgeCase("pb", new TypeName("pa", "Empty")), departed.getClass().getName(),
+        assertEquals(Emitted.bridgeCase("pb", TypeSymbols.declared(new TypeKey("pa", "Empty"))), departed.getClass().getName(),
                 "the imported case departs at the first stage and joins the union bridged");
         assertEquals("pa.Empty",
                 departed.getClass().getMethod("value").invoke(departed).getClass().getName());

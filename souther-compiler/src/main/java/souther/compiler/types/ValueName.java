@@ -1,7 +1,7 @@
 package souther.compiler.types;
 
 /**
- * What a name written in the value namespace denotes — the answer {@link TypeName} gives for the
+ * What a name written in the value namespace denotes — the answer {@link TypeSymbol} gives for the
  * type namespace.
  *
  * <p>A behavior is named from a {@code >->} stage and from a {@code depends on} clause; a body names a
@@ -116,11 +116,11 @@ public sealed interface ValueName {
      * it wraps. Which of the two is decided by what the type is, not by how the name was written.
      *
      * <p>{@code origin} says where the construction came from. A unit data is *constructed* by being
-     * named, and a construction says where it came from ({@link souther.compiler.ast.Ast.NewData}) so
+     * named, and a construction says where it came from ({@link souther.compiler.ast.Hir.NewData}) so
      * that the permission check can tell the reader's own from one it was handed; a unit data has no
      * node of its own to say it on, so the name says it.
      */
-    record OfType(String name, TypeName type, ConstructionOrigin origin) implements ValueName {
+    record OfType(String name, TypeSymbol type, ConstructionOrigin origin) implements ValueName {
 
         /** The same name, carried into a reader by {@code module}'s published body. */
         public OfType publishedBy(String module) {

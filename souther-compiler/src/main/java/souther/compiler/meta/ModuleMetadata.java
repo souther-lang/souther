@@ -4,11 +4,11 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.types.TypeName;
 import souther.compiler.frontend.CstFrontend;
 
 import java.lang.classfile.Annotation;
@@ -75,7 +75,7 @@ public final class ModuleMetadata {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
-            add(out, new GeneratedClass.Value(new TypeName(module.name(), def.name())),
+            add(out, new GeneratedClass.Value(TypeSymbols.declared(def.declaredKey())),
                     Annotation.of(DATA_ANN,
                             AnnotationElement.ofString("value", slices.defs().get(def.name()))));
         }
@@ -190,8 +190,13 @@ public final class ModuleMetadata {
         Set<String> exposed = new java.util.HashSet<>(module.exposing());
         // A behavior's body is not published — a reader has its signature and calls it — so a
         // behavior's own `let` is not carried whatever its shape.
-        for (Ast.FnDef fn : HelperInliner.helpersOf(module).values()) {
-            if (exposed.contains(fn.name()) && fn.body() instanceof Ast.FnBody.Written w) {
+        Set<String> behaviorNames = new LinkedHashSet<>();
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            behaviorNames.add(b.name());
+        }
+        for (Ast.FnDef fn : own.values()) {
+            if (HelperInliner.isHelperName(behaviorNames, fn.name())
+                    && exposed.contains(fn.name()) && fn.body() instanceof Ast.FnBody.Written w) {
                 reached.add(fn.name());
                 reach(w.expr(), own, reached);
             }

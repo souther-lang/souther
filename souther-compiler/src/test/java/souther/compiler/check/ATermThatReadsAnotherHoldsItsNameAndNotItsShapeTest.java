@@ -3,7 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -44,14 +44,14 @@ class ATermThatReadsAnotherHoldsItsNameAndNotItsShapeTest {
      *  it twice. Answers the key of the last link. */
     private static String chainKey(Terms terms, int links) {
         Denotations at = Denotations.none();
-        Core value = new Core.Binary(Ast.BinOp.ADD, new Core.Int(1, Type.INT, NOWHERE),
+        Core value = new Core.Binary(Hir.BinOp.ADD, new Core.Int(1, Type.INT, NOWHERE),
                 new Core.Int(1, Type.INT, NOWHERE), CoverageOrigin.unwritten(), Type.INT, NOWHERE);
         String key = terms.bodyKey(value, at);
         for (int i = 0; i < links; i++) {
             BindingId id = new BindingId(OWNER, i);
             at = at.binding(id, value, new Denotes.Term(key, true));
             Core read = new Core.Read("v" + i, id, Type.INT, NOWHERE);
-            value = new Core.Binary(Ast.BinOp.ADD, read, read, CoverageOrigin.unwritten(),
+            value = new Core.Binary(Hir.BinOp.ADD, read, read, CoverageOrigin.unwritten(),
                     Type.INT, NOWHERE);
             key = terms.bodyKey(value, at);
         }

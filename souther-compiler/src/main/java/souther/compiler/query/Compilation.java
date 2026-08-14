@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
@@ -220,8 +220,8 @@ public final class Compilation {
     }
 
     /** A module as everything below the check reads it — derived, desugared, and carrying the
-     * recursive prelude helpers it reaches. */
-    public Ast.Module module(String name) {
+     * recursive prelude helpers it reaches. Null where it did not get that far. */
+    public Prepared module(String name) {
         return db.ask(new Shapes.Prepared(name)).value();
     }
 

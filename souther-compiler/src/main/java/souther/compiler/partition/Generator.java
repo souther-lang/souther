@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
@@ -12,7 +12,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayDeque;
@@ -429,7 +429,7 @@ public final class Generator {
             declared = at1 < 0 || at1 >= subject.types().size() ? null : subject.types().get(at1);
         }
         return declared == null ? null
-                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at, subject.symbols()::reach),
+                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at, subject.symbols().scope()::reach),
                         subject.symbols());
     }
 
@@ -862,7 +862,7 @@ public final class Generator {
      * <p>Depth first, so that a position is chosen against a projection that already has the ones
      * before it in it. The projection is the same one the whole search started from — what the
      * record's rules leave each of its fields — asked again with the assignment so far settled into
-     * it, which is what {@link FieldDomains#of(TypeName, Ast.Data, Symbols, Map)} is for.
+     * it, which is what {@link FieldDomains#of(TypeSymbol, Hir.Data, Symbols, Map)} is for.
      *
      * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
      * branch, and the search in front of it answers most rows without any of that; running this one
@@ -1086,7 +1086,7 @@ public final class Generator {
      */
     private static FieldDomains rulesOf(Type type, Symbols symbols, Map<String, Count> settled) {
         return type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
+                && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data && !data.newtype()
                 ? FieldDomains.of(ref.name(), data, symbols, settled) : FieldDomains.NONE;
     }
 
@@ -1282,12 +1282,12 @@ public final class Generator {
             // and a value composed without them is of a type the parameter does not declare.
             List<TypeReachName.Written> worn = new ArrayList<>();
             for (TypeOps.Layer layer : view.wrappers()) {
-                if (!(symbols.reach(layer.named()) instanceof TypeReachName.Written written)) {
+                if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written written)) {
                     return null;   // a name this module cannot write leaves no value to write
                 }
                 worn.add(written);
             }
-            if (!(symbols.reach(product.name()) instanceof TypeReachName.Written written)) {
+            if (!(symbols.scope().reach(product.name()) instanceof TypeReachName.Written written)) {
                 return null;
             }
             FixtureTemplate record = RepresentativeSource.under(worn,
@@ -1345,7 +1345,7 @@ public final class Generator {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             FixtureTemplate standing = Witnesses.wrapped(axis.type(),
-                    FixtureTemplate.on(carrier, at, symbols::reach), symbols);
+                    FixtureTemplate.on(carrier, at, symbols.scope()::reach), symbols);
             return standing == null
                     ? Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
                     : new Edge(List.of(standing), null, at, null);

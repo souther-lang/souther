@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,8 +35,8 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        Map<TypeName, Cardinality> solution =
-                TypeCardinality.solve(compilation.module("demo"), compilation.symbols("demo")).all();
+        Map<TypeSymbol, Cardinality> solution =
+                TypeCardinality.solve(compilation.module("demo").defs(), compilation.symbols("demo")).all();
         Map<String, Cardinality> byName = new LinkedHashMap<>();
         solution.forEach((name, each) -> byName.put(name.name(), each));
         return byName;

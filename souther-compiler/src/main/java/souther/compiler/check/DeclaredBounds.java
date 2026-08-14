@@ -1,11 +1,11 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ public final class DeclaredBounds {
      * they are two rules a row could be owed to, which is the accounting a cut already keeps. Holding
      * one would drop an obligation rather than a line of text.
      */
-    public record End(Endpoint at, List<TypeName> from) {
+    public record End(Endpoint at, List<TypeSymbol> from) {
 
         public Place value() {
             return at.at();
@@ -62,7 +62,7 @@ public final class DeclaredBounds {
             if (had.value().compareTo(one.value()) != 0) {
                 return at == had.at() ? had : one;
             }
-            List<TypeName> both = new ArrayList<>(had.from());
+            List<TypeSymbol> both = new ArrayList<>(had.from());
             one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
             return new End(at, List.copyOf(both));
         }
@@ -105,8 +105,8 @@ public final class DeclaredBounds {
         // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
         // and every layer that put an end where it is is kept, because each is a rule a row is owed.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+            for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     InvariantBound read = (measure == null ? InvariantBound.of(each, carrier)
                             : InvariantBound.ofSize(each, measure)).orElse(null);
                     if (read == null) {

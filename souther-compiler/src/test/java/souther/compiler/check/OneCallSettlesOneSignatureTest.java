@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.Compiler;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
@@ -33,15 +33,15 @@ class OneCallSettlesOneSignatureTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
     private static final Preserved KEPT = Preserved.byTheLanguagesOwnOperations();
-    private static final Ast.Binders BINDERS = new Ast.Binders(new BindingOwner.OfValue("demo", "t"));
+    private static final Hir.Binders BINDERS = new Hir.Binders(new BindingOwner.OfValue("demo", "t"));
 
     /** {@code List.filter(x -> true, [])} — nothing in the call says what the list holds. */
-    private static Ast.Expr filterOverAnEmptyList() {
-        Ast.Block predicate = new Ast.Block(List.of(BINDERS.binder("x", POS)),
-                new Ast.BoolLit(true, POS, null), POS, null);
-        return new Ast.Apply("List.filter", new ValueName.Stdlib("List", "filter"),
+    private static Hir.Expr filterOverAnEmptyList() {
+        Hir.Block predicate = new Hir.Block(List.of(BINDERS.binder("x", POS)),
+                new Hir.BoolLit(true, POS, null), POS, null);
+        return new Hir.Apply("List.filter", new ValueName.Stdlib("List", "filter"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "filter")),
-                List.of(predicate, new Ast.ListLit(List.of(), POS, null)), ConstructionOrigin.own(), POS, null);
+                List.of(predicate, new Hir.ListLit(List.of(), POS, null)), ConstructionOrigin.own(), POS, null);
     }
 
     @Test
@@ -96,7 +96,7 @@ class OneCallSettlesOneSignatureTest {
                 Type.fn(List.of(new Type.Var("a", false)), Type.BOOL),
                 Type.list(new Type.Var("a", false)));
         int[] reads = new int[params.size()];
-        Ast.Apply call = (Ast.Apply) filterOverAnEmptyList();
+        Hir.Apply call = (Hir.Apply) filterOverAnEmptyList();
 
         CallElaborator.settledByValues(call, params, Type.list(new Type.Var("a", false)),
                 Type.list(Type.INT), i -> {
@@ -113,7 +113,7 @@ class OneCallSettlesOneSignatureTest {
         // The same guarantee where the answers come from: what a rule reasoned about and what reached
         // the tree are one elaboration of one argument.
         CallElaborator.CallArgs args = new CallElaborator.CallArgs(
-                List.of(new Ast.IntLit(1, POS, null)), Scope.NONE, CheckContext.of(Symbols.none()));
+                List.of(new Hir.IntLit(1, POS, null)), Scope.NONE, CheckContext.of(Symbols.none()));
 
         args.type(0);
         Core first = args.cores().get(0);
@@ -127,15 +127,15 @@ class OneCallSettlesOneSignatureTest {
         // Option.withDefault : ('a, Option<'a>) -> 'a. The empty list states nothing about what it
         // holds, so the option beside it is what decides — the other order holds the option to the
         // element type of nothing.
-        Ast.Expr call = new Ast.Apply("Option.withDefault",
+        Hir.Expr call = new Hir.Apply("Option.withDefault",
                 new ValueName.Stdlib("Option", "withDefault"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("Option", "withDefault")),
-                List.of(new Ast.ListLit(List.of(), POS, null),
-                        new Ast.Apply("List.get", new ValueName.Stdlib("List", "get"),
+                List.of(new Hir.ListLit(List.of(), POS, null),
+                        new Hir.Apply("List.get", new ValueName.Stdlib("List", "get"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "get")),
-                                List.of(new Ast.IntLit(0, POS, null),
-                                        new Ast.ListLit(List.of(new Ast.ListLit(
-                                                List.of(new Ast.IntLit(1, POS, null)), POS, null)),
+                                List.of(new Hir.IntLit(0, POS, null),
+                                        new Hir.ListLit(List.of(new Hir.ListLit(
+                                                List.of(new Hir.IntLit(1, POS, null)), POS, null)),
                                                 POS, null)),
                                 ConstructionOrigin.own(), POS, null)),
                 ConstructionOrigin.own(), POS, null);

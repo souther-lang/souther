@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
@@ -10,7 +10,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -83,7 +83,7 @@ public sealed interface Carrier {
      * @param enumeration the sum whose declaration order this counts in
      * @param cases       its leaf cases, in that order
      */
-    record Ordinal(TypeName enumeration, List<TypeName> cases) implements Carrier {
+    record Ordinal(TypeSymbol enumeration, List<TypeSymbol> cases) implements Carrier {
 
         public Ordinal {
             cases = List.copyOf(cases);
@@ -91,14 +91,14 @@ public sealed interface Carrier {
 
         /** Where {@code name} comes in the declaration, or null where this enumeration has no such
          * case — which is a value of some other type and not a place on this order. */
-        public Place at(TypeName name) {
+        public Place at(TypeSymbol name) {
             int index = cases.indexOf(name);
             return index < 0 ? null : Count.of(index);
         }
 
         /** The case at a count. Only ever asked of a count this carrier holds, which is what
          * {@link Carrier#onTheGrid} is for. */
-        public TypeName caseAt(Place count) {
+        public TypeSymbol caseAt(Place count) {
             return cases.get(Count.number(count).at().intValueExact());
         }
     }
@@ -146,11 +146,11 @@ public sealed interface Carrier {
         // on their sum's order without ranging over it. Answered with that wider order, a position
         // declared as one case took the whole enumeration's counts, and the line drawn on it asked
         // for a row at a value the position cannot hold.
-        if (!(base instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.SumData sum)
+        if (!(base instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
                 || !TypeOps.isUnitOnlySum(base, symbols)) {
             return null;
         }
-        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+        List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
         return cases.isEmpty() ? null : new Ordinal(ref.name(), cases);
     }
 
@@ -417,7 +417,7 @@ public sealed interface Carrier {
      * reader instead, and an invariant and a {@code guard} at one position admitted different rules
      * with only one of them saying so.
      */
-    default Place literalOf(Ast.Expr e) {
+    default Place literalOf(Hir.Expr e) {
         return switch (this) {
             case Whole _ -> Count.of(InvariantBound.wholeLiteral(e));
             case Dense _ -> Count.of(InvariantBound.literalOf(e));
@@ -426,10 +426,10 @@ public sealed interface Carrier {
             // A case is named rather than written, so the literal is a name and what it denotes says
             // which case it is. Read off the denotation and not the text: a case is reachable under
             // an alias, and two enumerations may declare cases spelled the same way.
-            case Ordinal ordinal -> e instanceof Ast.Var v
+            case Ordinal ordinal -> e instanceof Hir.Var v
                     && v.denotes() instanceof ValueName.OfType named
                     ? ordinal.at(named.type()) : null;
-            case Text _ -> e instanceof Ast.StringLit lit
+            case Text _ -> e instanceof Hir.StringLit lit
                     ? souther.compiler.numeric.Text.of(lit.value()) : null;
         };
     }
@@ -437,10 +437,10 @@ public sealed interface Carrier {
     /** The count a written temporal is, or null where the expression is not one of that kind. A
      *  temporal is written as a literal with its text spelled out (spec
      *  §a-temporal-value-is-written-as-a-literal), so it is read here rather than run. */
-    private static Count temporal(Ast.Expr e, String written,
+    private static Count temporal(Hir.Expr e, String written,
                                   java.util.function.Function<String, Count> countOf) {
-        return e instanceof Ast.Apply call && written.equals(call.reaches())
-                && call.args().size() == 1 && call.args().get(0) instanceof Ast.StringLit iso
+        return e instanceof Hir.Apply call && written.equals(call.reaches())
+                && call.args().size() == 1 && call.args().get(0) instanceof Hir.StringLit iso
                 ? countOf.apply(iso.value()) : null;
     }
 

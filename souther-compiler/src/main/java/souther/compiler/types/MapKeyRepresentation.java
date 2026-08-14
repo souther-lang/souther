@@ -104,7 +104,7 @@ public sealed interface MapKeyRepresentation {
      * what its derived {@code encoder()} does, and each read back by the {@code decoder()} that
      * inverts it.
      */
-    record NamedKey(TypeName name) implements MapKeyRepresentation {
+    record NamedKey(TypeSymbol name) implements MapKeyRepresentation {
         @Override
         public Type type() {
             return Type.ref(name);

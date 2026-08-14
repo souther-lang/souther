@@ -4,7 +4,7 @@ package souther.compiler.types;
  * How a module writes a declared type — the answer {@link ReachName} gives for the value namespace.
  *
  * <p>Not the type's identity. Which module declares a type is a fact about the declaration and is
- * {@link TypeName}'s to say; this is a fact about a reference to it from somewhere, and neither can
+ * {@link TypeSymbol}'s to say; this is a fact about a reference to it from somewhere, and neither can
  * be derived from the other. One {@code lib.Amount} is written {@code Amount} in a module that
  * imported it, {@code up.Amount} in one that aliased {@code lib} as {@code up}, and
  * {@code lib.Amount} in one that did neither — three references, one declaration.
@@ -28,7 +28,7 @@ package souther.compiler.types;
 public sealed interface TypeReachName {
 
     /** The declaration this reference reaches. */
-    TypeName denotes();
+    TypeSymbol denotes();
 
     /** A reference this module can write. */
     sealed interface Written extends TypeReachName {
@@ -47,7 +47,7 @@ public sealed interface TypeReachName {
      * one qualified, and a reference that took the bare spelling because the name was in scope would
      * name the wrong declaration and compile.
      */
-    record Bare(TypeName denotes) implements Written {
+    record Bare(TypeSymbol denotes) implements Written {
 
         @Override
         public String rendered() {
@@ -61,7 +61,7 @@ public sealed interface TypeReachName {
     }
 
     /** A type reached under an {@code import ... as} alias, which names a module and is not one. */
-    record ViaAlias(String alias, TypeName denotes) implements Written {
+    record ViaAlias(String alias, TypeSymbol denotes) implements Written {
 
         public ViaAlias {
             if (alias == null) {
@@ -83,7 +83,7 @@ public sealed interface TypeReachName {
 
     /** A type reached under the name of the module that declares it — what is left where the module
      * neither declares it, imports it, nor aliases the module it comes from. */
-    record ViaModule(TypeName denotes) implements Written {
+    record ViaModule(TypeSymbol denotes) implements Written {
 
         @Override
         public String rendered() {
@@ -105,7 +105,7 @@ public sealed interface TypeReachName {
      * builds one; what cannot happen is a person writing that value down, which is what a generated
      * row is for.
      */
-    record Unnameable(TypeName denotes) implements TypeReachName {
+    record Unnameable(TypeSymbol denotes) implements TypeReachName {
 
         @Override
         public String toString() {
@@ -119,13 +119,13 @@ public sealed interface TypeReachName {
      *
      * <p>Taken as an argument by anything that writes a reference it did not read, so that the
      * question is asked of the module rather than answered from the declaration's own spelling. A
-     * writer that could reach for {@link TypeName#name()} instead is a writer that answers it wrong
+     * writer that could reach for {@link TypeSymbol#name()} instead is a writer that answers it wrong
      * wherever the bare spelling is not this module's word for the type.
      */
     @FunctionalInterface
     interface Naming {
 
         /** How the module this belongs to writes {@code type}. */
-        TypeReachName of(TypeName type);
+        TypeReachName of(TypeSymbol type);
     }
 }

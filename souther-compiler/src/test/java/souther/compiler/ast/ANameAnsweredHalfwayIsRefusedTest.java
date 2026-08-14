@@ -31,18 +31,17 @@ class ANameAnsweredHalfwayIsRefusedTest {
     private static final ValueName.Helper DECLARED = new ValueName.Helper("demo", "spin");
 
     /**
-     * A name the parser read: nothing has been answered about it yet, and that is a state. It says
-     * what it is written as, and refuses both questions that are about a declaration rather than
-     * about the characters — the answer either wants is the one that is missing, and handing back
-     * the spelling is what a table keyed by declarations misses on.
+     * A name the parser read says what it is written as and nothing else. It has no question about
+     * a declaration to refuse, because it carries no slot for one — the answers are
+     * {@link Hir.Var}'s, and this is the other representation.
      */
     @Test
-    void aNameNothingHasAnsweredYetSaysOnlyWhatItIsWrittenAs() {
+    void aNameTheParserReadSaysOnlyWhatItIsWrittenAs() {
         Ast.Var written = Ast.Var.written("spin", POS);
 
         assertEquals("spin", written.name());
-        assertThrows(IllegalStateException.class, written::bare);
-        assertThrows(IllegalStateException.class, written::reaches);
+        assertEquals(Ast.Var.class, written.getClass(),
+                "one form: what a name means is not something this representation can hold");
     }
 
     /**
@@ -54,10 +53,10 @@ class ANameAnsweredHalfwayIsRefusedTest {
     @Test
     void aNameAnsweredOnOneCountOnlyCannotBeBuilt() {
         IllegalArgumentException noReach = assertThrows(IllegalArgumentException.class,
-                () -> Ast.Var.denoting(WrittenName.of("spin", POS), DECLARED, null));
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), DECLARED, null, null));
         IllegalArgumentException noDenotation = assertThrows(IllegalArgumentException.class,
-                () -> Ast.Var.denoting(WrittenName.of("spin", POS), null,
-                        new ReachName.OfModule("demo", "spin")));
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null,
+                        new ReachName.OfModule("demo", "spin"), null));
 
         assertEquals(true, noReach.getMessage().contains("spin"), noReach.getMessage());
         assertEquals(true, noDenotation.getMessage().contains("spin"), noDenotation.getMessage());
@@ -68,29 +67,29 @@ class ANameAnsweredHalfwayIsRefusedTest {
      * answers and takes them as answers: the constructor that took a spelling alone is gone, and
      * this is the one that replaced it, so a caller with nothing to say cannot say it here either.
      *
-     * <p>Refused at the application rather than left to {@link Ast.Var}, which admits the pair
-     * being absent — that is the parser's state, and the parser builds its own callee. A pass has
-     * resolution behind it or is writing a name for someone downstream to resolve, which is what
-     * ADR-0067 rules out.
+     * <p>Refused at the application rather than left to {@link Hir.Var}: what a pass hands in is a
+     * spelling and two answers, and a caller with nothing to say would otherwise write a name for
+     * someone downstream to resolve, which is what ADR-0067 rules out.
      */
     @Test
     void anApplicationAPassWritesCannotLeaveItsNameUnanswered() {
         assertThrows(NullPointerException.class,
-                () -> new Ast.Apply("spin", null, new ReachName.OfModule("demo", "spin"),
+                () -> new Hir.Apply("spin", null, new ReachName.OfModule("demo", "spin"),
                         List.of(), ConstructionOrigin.own(), POS, null));
         assertThrows(NullPointerException.class,
-                () -> new Ast.Apply("spin", DECLARED, null,
+                () -> new Hir.Apply("spin", DECLARED, null,
                         List.of(), ConstructionOrigin.own(), POS, null));
         assertThrows(NullPointerException.class,
-                () -> new Ast.Apply("spin", null, null,
+                () -> new Hir.Apply("spin", null, null,
                         List.of(), ConstructionOrigin.own(), POS, null));
     }
 
     /** Answered, it says both. */
     @Test
     void aResolvedNameSaysWhatItDenotesAndHowItIsReached() {
-        Ast.Var resolved = Ast.Var.denoting(WrittenName.of("spin", POS), DECLARED,
-                new ReachName.OfModule("demo", "spin"));
+        WrittenName spin = WrittenName.of("spin", POS);
+        Hir.Var resolved = new Hir.Var.Denoting(spin, DECLARED,
+                new ReachName.OfModule("demo", "spin"), spin.region());
 
         assertEquals("spin", resolved.bare());
         assertEquals("demo.spin", resolved.reaches());

@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
@@ -33,9 +33,9 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
     @Test
     void aPolymorphicOperationSettlesItsVariablesFromItsArguments() {
         // List.length : (List<'a>) -> Int — the argument decides 'a, and the result is not a variable
-        Ast.Expr call = new Ast.Apply("List.length", new ValueName.Stdlib("List", "length"),
+        Hir.Expr call = new Hir.Apply("List.length", new ValueName.Stdlib("List", "length"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "length")),
-                List.of(new Ast.ListLit(List.of(new Ast.IntLit(1, POS, null)), POS, null)),
+                List.of(new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
@@ -53,12 +53,12 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // which is one operation's meaning and not what applying a signature is — leaves `'b` a
         // variable and refuses the call. Applying the signature settles it from what the function
         // answered.
-        Ast.Binders binders = new Ast.Binders(new BindingOwner.OfValue("demo", "test"));
-        Ast.Block step = new Ast.Block(List.of(binders.binder("x", POS)),
-                new Ast.ListLit(List.of(new Ast.IntLit(1, POS, null)), POS, null), POS, null);
-        Ast.Expr call = new Ast.Apply("List.flatMap", new ValueName.Stdlib("List", "flatMap"),
+        Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
+        Hir.Block step = new Hir.Block(List.of(binders.binder("x", POS)),
+                new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null), POS, null);
+        Hir.Expr call = new Hir.Apply("List.flatMap", new ValueName.Stdlib("List", "flatMap"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
-                List.of(step, new Ast.ListLit(List.of(new Ast.IntLit(2, POS, null)), POS, null)),
+                List.of(step, new Hir.ListLit(List.of(new Hir.IntLit(2, POS, null)), POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
@@ -89,8 +89,8 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
     void aModulesOwnHelperIsNotKeptByThisPolicy() {
         // nothing could be derived from leaving it standing, so it is expanded — and a tree that
         // still holds one is this compiler having failed to do that
-        Ast.Expr call = new Ast.Apply("half", new ValueName.Helper("demo", "half"),
-                new ReachName.Bare("half"), List.of(new Ast.IntLit(1, POS, null)),
+        Hir.Expr call = new Hir.Apply("half", new ValueName.Helper("demo", "half"),
+                new ReachName.Bare("half"), List.of(new Hir.IntLit(1, POS, null)),
                 ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,

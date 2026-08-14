@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Resolve;
 import souther.compiler.diag.SourcePos;
@@ -34,40 +34,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ResolvedValueNamesTest {
 
-    private static Ast.Module resolve(String source) {
+    private static Hir.Module resolve(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        return c.db().ask(new Names.Resolved("m.a")).value().module();
+        return c.db().ask(new Names.Resolved("m.a")).value();
     }
 
     /** Every name used as a value in the module's bodies, in the order it is written. */
-    private static List<Ast.Expr> named(Ast.Module m) {
-        List<Ast.Expr> out = new ArrayList<>();
-        for (Ast.FnDef fn : m.fns()) {
-            if (fn.body() instanceof Ast.FnBody.Written w) {
+    private static List<Hir.Expr> named(Hir.Module m) {
+        List<Hir.Expr> out = new ArrayList<>();
+        for (Hir.FnDef fn : m.fns()) {
+            if (fn.body() instanceof Hir.FnBody.Written w) {
                 collect(w.expr(), out);
             }
         }
         return out;
     }
 
-    private static void collect(Ast.Expr e, List<Ast.Expr> out) {
-        if (e instanceof Ast.Var || e instanceof Ast.Apply) {
+    private static void collect(Hir.Expr e, List<Hir.Expr> out) {
+        if (e instanceof Hir.Var || e instanceof Hir.Apply) {
             out.add(e);
         }
-        Ast.forEachChild(e, child -> collect(child, out));
+        Hir.forEachChild(e, child -> collect(child, out));
     }
 
-    private static ValueName denotes(Ast.Expr e) {
-        return e instanceof Ast.Var v ? v.denotes() : ((Ast.Apply) e).denotes();
+    private static ValueName denotes(Hir.Expr e) {
+        return e instanceof Hir.Var v ? v.denotes() : ((Hir.Apply) e).denotes();
     }
 
     /** The name written as {@code written}, whatever state resolution left it in. */
-    private static Ast.Var nameOf(String source, String written) {
-        for (Ast.Expr e : named(resolve(source))) {
-            Ast.Var v = e instanceof Ast.Var name ? name
-                    : ((Ast.Apply) e).function() instanceof Ast.Var f ? f : null;
+    private static Hir.Var nameOf(String source, String written) {
+        for (Hir.Expr e : named(resolve(source))) {
+            Hir.Var v = e instanceof Hir.Var name ? name
+                    : ((Hir.Apply) e).function() instanceof Hir.Var f ? f : null;
             if (v != null && v.name().equals(written)) {
                 return v;
             }
@@ -77,8 +77,8 @@ class ResolvedValueNamesTest {
 
     /** The one named {@code written}, which each of these writes once. */
     private static ValueName denotationOf(String source, String written) {
-        for (Ast.Expr e : named(resolve(source))) {
-            String spelled = e instanceof Ast.Var v ? v.name() : ((Ast.Apply) e).written();
+        for (Hir.Expr e : named(resolve(source))) {
+            String spelled = e instanceof Hir.Var v ? v.name() : ((Hir.Apply) e).written();
             if (spelled.equals(written)) {
                 return denotes(e);
             }
@@ -88,7 +88,7 @@ class ResolvedValueNamesTest {
 
     @Test
     void aParameterIsLocalToTheBindingThatIntroducedIt() {
-        Ast.Module m = resolve("""
+        Hir.Module m = resolve("""
                 module m.a exposing ( f )
 
                 behavior f : (n: Int) -> Int
@@ -138,7 +138,7 @@ class ResolvedValueNamesTest {
                 let g (n) = n
                 """;
         List<ValueName> locals = new ArrayList<>();
-        for (Ast.Expr e : named(resolve(source))) {
+        for (Hir.Expr e : named(resolve(source))) {
             locals.add(denotes(e));
         }
 
@@ -194,8 +194,8 @@ class ResolvedValueNamesTest {
                 let f (xs) = List.length(xs)
                 """;
 
-        for (Ast.Expr e : named(resolve(source))) {
-            if (e instanceof Ast.Apply call && call.written().equals("List.length")) {
+        for (Hir.Expr e : named(resolve(source))) {
+            if (e instanceof Hir.Apply call && call.written().equals("List.length")) {
                 assertEquals("List.length", call.reaches());
                 return;
             }
@@ -279,8 +279,8 @@ class ResolvedValueNamesTest {
                 let f (n) = nosuch
                 """;
 
-        Ast.Var name = nameOf(source, "nosuch");
-        assertInstanceOf(Ast.Var.Unanswered.class, name);
+        Hir.Var name = nameOf(source, "nosuch");
+        assertInstanceOf(Hir.Var.Unanswered.class, name);
         // and it holds no stand-in for a reader below to take for a declaration
         assertThrows(IllegalStateException.class, name::denotes);
     }
@@ -289,7 +289,7 @@ class ResolvedValueNamesTest {
      * work out for itself. */
     @Test
     void everyNameInABodyIsAnswered() {
-        Ast.Module m = resolve("""
+        Hir.Module m = resolve("""
                 module m.a exposing ( Amount, Approved, f )
 
                 data Amount = Int
@@ -305,8 +305,10 @@ class ResolvedValueNamesTest {
                 }
                 """);
 
-        for (Ast.Expr e : named(m)) {
-            assertFalse(e instanceof Ast.Var.Written, "name nothing has read in " + e);
+        // That nothing here has been left unread is the representation's to say: `Hir.Var` has
+        // no form for one. What is asked is the other half — that every one of them names
+        // something.
+        for (Hir.Expr e : named(m)) {
             assertTrue(denotes(e) != null, "unanswered name in " + e);
         }
     }
@@ -331,11 +333,11 @@ class ResolvedValueNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
 
-        List<souther.compiler.check.Resolve.Denotation> amount = c.db()
-                .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Amount")))
+        List<souther.compiler.check.Resolve.TypeUse> amount = c.db()
+                .ask(new Names.UsesOf("m.a", souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey("m.a", "Amount"))))
                 .value();
-        List<souther.compiler.check.Resolve.Denotation> approved = c.db()
-                .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Approved")))
+        List<souther.compiler.check.Resolve.TypeUse> approved = c.db()
+                .ask(new Names.UsesOf("m.a", souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey("m.a", "Approved"))))
                 .value();
 
         assertTrue(amount.stream().anyMatch(d -> d.pos().line() == 8),
@@ -351,7 +353,7 @@ class ResolvedValueNamesTest {
      */
     @Test
     void twoBindingsOfOneSpellingAreTwoBindings() {
-        Ast.Module m = resolve("""
+        Hir.Module m = resolve("""
                 module m.a exposing ( f )
 
                 behavior f : (n: Int) -> Int
@@ -366,8 +368,8 @@ class ResolvedValueNamesTest {
                 """);
 
         List<ValueName.Local> reads = new ArrayList<>();
-        for (Ast.Expr e : named(m)) {
-            if (e instanceof Ast.Var v && v.name().equals("x")
+        for (Hir.Expr e : named(m)) {
+            if (e instanceof Hir.Var v && v.name().equals("x")
                     && v.denotes() instanceof ValueName.Local local) {
                 reads.add(local);
             }

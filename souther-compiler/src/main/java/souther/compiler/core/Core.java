@@ -4,10 +4,10 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -56,14 +56,14 @@ public sealed interface Core {
 
     /** A unit data written where a value goes: the type has one value, and naming it is that value
      * (spec §unit-data). Which unit is on the node, so nothing resolves a spelling again. */
-    record UnitValue(TypeName data, Type type, SourcePos pos) implements Core {}
+    record UnitValue(TypeSymbol data, Type type, SourcePos pos) implements Core {}
 
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
-    /** {@code origin} is where the comparison was written; see {@link Ast.Binary}. */
-    record Binary(Ast.BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
+    /** {@code origin} is where the comparison was written; see {@link Hir.Binary}. */
+    record Binary(Hir.BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
                   SourcePos pos) implements Core {}
 
     /**
@@ -221,7 +221,7 @@ public sealed interface Core {
      * the {@code Result} carries selects one; the checker has already established that every named
      * clause is answered, so one always matches.
      */
-    record IfConstructed(NewData construct, Ast.Binder binder, Core then, List<ElseArm> els,
+    record IfConstructed(NewData construct, Hir.Binder binder, Core then, List<ElseArm> els,
                          CoverageOrigin origin, Type type, SourcePos pos) implements Core {}
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
@@ -231,7 +231,7 @@ public sealed interface Core {
     /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
      * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
      * empty collection bound here materialises at the written type rather than a bottom (issue #71). */
-    record LetIn(Ast.Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
+    record LetIn(Hir.Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
 
         public String name() {
             return binder.name();
@@ -243,11 +243,11 @@ public sealed interface Core {
      * inline, and only a block that escapes into a first-class position becomes a class. Its {@code
      * type} is the {@link Type.FnOf} the checker gave it — the parameter types the context fixed, and
      * the body's result type. */
-    record Block(List<Ast.Binder> params, Core body, Type type, SourcePos pos) implements Core {
+    record Block(List<Hir.Binder> params, Core body, Type type, SourcePos pos) implements Core {
 
         /** How the parameters were written, in order. */
         public List<String> paramNames() {
-            return params.stream().map(Ast.Binder::name).toList();
+            return params.stream().map(Hir.Binder::name).toList();
         }
     }
 
@@ -272,7 +272,7 @@ public sealed interface Core {
 
     /** {@code spreads} are the bindings the construction copies fields from — reads, not binders:
      * a spread names a value in force, it does not introduce one. */
-    record NewData(TypeName typeName, List<FieldInit> inits, List<Read> spreads, Type type,
+    record NewData(TypeSymbol typeName, List<FieldInit> inits, List<Read> spreads, Type type,
                    SourcePos pos) implements Core {
 
         /** How each spread source was written, in order. */
@@ -283,7 +283,7 @@ public sealed interface Core {
 
     /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
      * narrows to, or the element a {@code Some x} opens. */
-    record Case(List<TypeName> caseTypes, Ast.Binder binding, Core body, Type bindType,
+    record Case(List<TypeSymbol> caseTypes, Hir.Binder binding, Core body, Type bindType,
                 SourcePos pos) {
 
         /** How the binding was written, or null where the arm binds nothing. */

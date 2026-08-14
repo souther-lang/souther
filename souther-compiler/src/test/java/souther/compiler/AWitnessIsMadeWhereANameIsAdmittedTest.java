@@ -5,7 +5,7 @@ import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.Sig;
 import souther.compiler.types.MapKeyRepresentation;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -34,12 +34,12 @@ class AWitnessIsMadeWhereANameIsAdmittedTest {
 
     @Test
     void anInputNamingATypeIsMadeOnlyWhereThatNameIsAdmitted() throws Exception {
-        assertClosed(BoundaryInput.Nominal.class, TypeName.class);
+        assertClosed(BoundaryInput.Nominal.class, TypeSymbol.class);
     }
 
     @Test
     void anOutputNamingATypeIsMadeOnlyWhereThatNameIsAdmitted() throws Exception {
-        assertClosed(BoundaryOutput.Nominal.class, TypeName.class);
+        assertClosed(BoundaryOutput.Nominal.class, TypeSymbol.class);
         assertClosed(BoundaryOutput.Cases.class, List.class);
     }
 

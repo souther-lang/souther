@@ -1,10 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import org.junit.jupiter.api.Test;
 
@@ -63,9 +66,9 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
 
     /** A sum's cases are read by name, so the module has to be resolved before its enumerations can
      *  be asked about. */
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
     private MapKeyRepresentation classify(Type key) {
@@ -73,14 +76,14 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
     }
 
     private Type named(String name) {
-        return Type.ref(new TypeName(symbols.module(), name));
+        return Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), name)));
     }
 
     /** What a named key must classify as: the outermost name, whatever it wraps. Reaching for the
      *  base's representation would name a type whose codec is not the one the map's keys go
      *  through. */
     private void assertNamedKey(String name) {
-        assertEquals(new MapKeyRepresentation.NamedKey(new TypeName(symbols.module(), name)), classify(named(name)));
+        assertEquals(new MapKeyRepresentation.NamedKey(TypeSymbols.declared(new TypeKey(symbols.module(), name))), classify(named(name)));
     }
 
     // --- the leaves ---------------------------------------------------------------------------

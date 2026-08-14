@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
@@ -45,16 +45,16 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * another reader called unreadable, and every boundary of the value it sat in — its siblings'
      * included — was downgraded to one nothing promises is writable.
      */
-    public static Optional<InvariantBound> of(Ast.Expr clause, Carrier carrier) {
-        if (carrier == null || !(clause instanceof Ast.Binary bin)) {
+    public static Optional<InvariantBound> of(Hir.Expr clause, Carrier carrier) {
+        if (carrier == null || !(clause instanceof Hir.Binary bin)) {
             return Optional.empty();
         }
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
-        Ast.Expr left = bin.left();
-        Ast.Expr right = bin.right();
-        Ast.BinOp op = bin.op();
+        Hir.Expr left = bin.left();
+        Hir.Expr right = bin.right();
+        Hir.BinOp op = bin.op();
         if (!isValue(left) && isValue(right)) {
-            Ast.Expr swap = left;
+            Hir.Expr swap = left;
             left = right;
             right = swap;
             op = mirrored(op);
@@ -77,7 +77,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * adjacent one exactly as an {@code Int}'s does, and which size call this is does not come into
      * it — every one of them counts something.
      */
-    public static Optional<InvariantBound> ofSize(Ast.Expr clause, ValueName measure) {
+    public static Optional<InvariantBound> ofSize(Hir.Expr clause, ValueName measure) {
         // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
         // where one does.
         return sizeComparedIn(clause, measure, VALUE)
@@ -90,7 +90,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param op    the operator, with the count on the left however the clause was spelled
      * @param count what it is compared against
      */
-    public record SizeComparison(Ast.BinOp op, BigDecimal count) {}
+    public record SizeComparison(Hir.BinOp op, BigDecimal count) {}
 
     /**
      * The comparison {@code clause} makes about {@code measure} taken of {@code subject}, or empty
@@ -103,16 +103,16 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * itself. Recognised here so that the shape is read in one place and what it means in as many as
      * there are questions.
      */
-    public static Optional<SizeComparison> sizeComparedIn(Ast.Expr clause, ValueName measure,
+    public static Optional<SizeComparison> sizeComparedIn(Hir.Expr clause, ValueName measure,
                                                           String subject) {
-        if (!(clause instanceof Ast.Binary bin)) {
+        if (!(clause instanceof Hir.Binary bin)) {
             return Optional.empty();
         }
-        Ast.Expr left = bin.left();
-        Ast.Expr right = bin.right();
-        Ast.BinOp op = bin.op();
+        Hir.Expr left = bin.left();
+        Hir.Expr right = bin.right();
+        Hir.BinOp op = bin.op();
         if (!takesSizeOf(left, measure, subject) && takesSizeOf(right, measure, subject)) {
-            Ast.Expr swap = left;
+            Hir.Expr swap = left;
             left = right;
             right = swap;
             op = mirrored(op);
@@ -139,7 +139,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param op    the comparison, with the coordinate on its left
      * @param bound what the coordinate is compared against
      */
-    static Optional<InvariantBound> at(Ast.BinOp op, Ast.Expr bound, Carrier carrier) {
+    static Optional<InvariantBound> at(Hir.BinOp op, Hir.Expr bound, Carrier carrier) {
         if (carrier == null || bound == null) {
             return Optional.empty();
         }
@@ -148,12 +148,12 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /** Which comparison an operand on the right states of one on the left. */
-    static Ast.BinOp flipped(Ast.BinOp op) {
+    static Hir.BinOp flipped(Hir.BinOp op) {
         return mirrored(op);
     }
 
     /** Whether {@code op} says where values stop rather than which one a value is. */
-    static boolean ordering(Ast.BinOp op) {
+    static boolean ordering(Hir.BinOp op) {
         return orders(op);
     }
 
@@ -174,8 +174,8 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param measure the operation the number is taken by, or null where the number is the value
      *                itself
      */
-    public static boolean statesAnEnd(Ast.Expr clause, ValueName measure) {
-        if (!(clause instanceof Ast.Binary bin) || !orders(bin.op())) {
+    public static boolean statesAnEnd(Hir.Expr clause, ValueName measure) {
+        if (!(clause instanceof Hir.Binary bin) || !orders(bin.op())) {
             return false;
         }
         return measure == null
@@ -184,7 +184,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /** Whether an operator says where values stop rather than which one a value is. */
-    private static boolean orders(Ast.BinOp op) {
+    private static boolean orders(Hir.BinOp op) {
         return switch (op) {
             case LT, LE, GT, GE -> true;
             case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
@@ -192,7 +192,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /** One end, from the comparison and how the carrier's counts are spaced. */
-    private static Optional<InvariantBound> ordered(Ast.BinOp op, Place bound, Carrier carrier) {
+    private static Optional<InvariantBound> ordered(Hir.BinOp op, Place bound, Carrier carrier) {
         boolean steps = carrier.spacing() == Granularity.DISCRETE;
         return switch (op) {
             case GE -> Optional.of(new InvariantBound(true, Endpoint.inclusive(bound)));
@@ -212,16 +212,16 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * library operation be written without its qualifier, and a reader comparing text would miss
      * every clause written that way while looking as though it had read them.
      */
-    private static boolean takesSizeOfValue(Ast.Expr e, ValueName measure) {
+    private static boolean takesSizeOfValue(Hir.Expr e, ValueName measure) {
         return takesSizeOf(e, measure, VALUE);
     }
 
     /** The same of a named subject: {@code value} inside a newtype's rule, a field's name inside the
      * rule of the record that has it. */
-    private static boolean takesSizeOf(Ast.Expr e, ValueName measure, String subject) {
-        return e instanceof Ast.Apply call && call.args().size() == 1
-                && call.args().get(0) instanceof Ast.Var arg && arg.name().equals(subject)
-                && call.function() instanceof Ast.Var fn && measure.equals(fn.denotes());
+    private static boolean takesSizeOf(Hir.Expr e, ValueName measure, String subject) {
+        return e instanceof Hir.Apply call && call.args().size() == 1
+                && call.args().get(0) instanceof Hir.Var arg && arg.name().equals(subject)
+                && call.function() instanceof Hir.Var fn && measure.equals(fn.denotes());
     }
 
     /**
@@ -241,34 +241,34 @@ public record InvariantBound(boolean lower, Endpoint end) {
                 : Optional.of(new InvariantBound(lower, Endpoint.inclusive(onto)));
     }
 
-    private static boolean isValue(Ast.Expr e) {
-        return e instanceof Ast.Var v && v.name().equals(VALUE);
+    private static boolean isValue(Hir.Expr e) {
+        return e instanceof Hir.Var v && v.name().equals(VALUE);
     }
 
-    private static Ast.BinOp mirrored(Ast.BinOp op) {
+    private static Hir.BinOp mirrored(Hir.BinOp op) {
         return switch (op) {
-            case LT -> Ast.BinOp.GT;
-            case LE -> Ast.BinOp.GE;
-            case GT -> Ast.BinOp.LT;
-            case GE -> Ast.BinOp.LE;
+            case LT -> Hir.BinOp.GT;
+            case LE -> Hir.BinOp.GE;
+            case GT -> Hir.BinOp.LT;
+            case GE -> Hir.BinOp.LE;
             default -> op;
         };
     }
 
     /** A whole number a literal names, or null where it names one with a fraction: a value that
      *  steps one at a time is not bounded at a place between two of its values. */
-    public static BigDecimal wholeLiteral(Ast.Expr e) {
+    public static BigDecimal wholeLiteral(Hir.Expr e) {
         BigDecimal read = literalOf(e);
         return read == null || read.stripTrailingZeros().scale() > 0 ? null : read;
     }
 
     /** A numeric literal, negation included. A bare integer counts against a decimal, since a literal
      * takes the other side's type. */
-    public static BigDecimal literalOf(Ast.Expr e) {
+    public static BigDecimal literalOf(Hir.Expr e) {
         return switch (e) {
-            case Ast.IntLit lit -> BigDecimal.valueOf(lit.value());
-            case Ast.DecimalLit lit -> normalized(lit.value());
-            case Ast.Neg neg -> negated(literalOf(neg.operand()));
+            case Hir.IntLit lit -> BigDecimal.valueOf(lit.value());
+            case Hir.DecimalLit lit -> normalized(lit.value());
+            case Hir.Neg neg -> negated(literalOf(neg.operand()));
             case null, default -> null;
         };
     }

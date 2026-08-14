@@ -1,13 +1,13 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
@@ -62,14 +62,14 @@ final class PartitionClasses {
      * {@link LocalInspection}, which is where a case the model refuses stops being a class.
      */
     static List<PartitionClass> of(TypeView view, Symbols symbols) {
-        List<TypeName> worn = view.wrappers().stream().map(TypeOps.Layer::named).toList();
+        List<TypeSymbol> worn = view.wrappers().stream().map(TypeOps.Layer::named).toList();
         // The same names twice over, because two different questions are asked of them. Whether an
         // observed value is under this class is asked of the declarations, and what a row writes it
         // under is asked of the module doing the writing — one of these is an identity and the other
         // is a reference, and a module reaching a name through an alias answers them differently.
         List<TypeReachName.Written> writes = new ArrayList<>();
-        for (TypeName each : worn) {
-            if (!(symbols.reach(each) instanceof TypeReachName.Written written)) {
+        for (TypeSymbol each : worn) {
+            if (!(symbols.scope().reach(each) instanceof TypeReachName.Written written)) {
                 // A name the position wears that nothing here writes. The classes are still the
                 // position's, and no row for any of them can be written down, so each says that
                 // rather than being offered a value spelled with a name that resolves to nothing.
@@ -110,7 +110,7 @@ final class PartitionClasses {
      * anything about this generator.
      */
     private static List<PartitionClass> unwritable(TypeView view, Symbols symbols,
-                                                   List<TypeName> worn, TypeName unnamed) {
+                                                   List<TypeSymbol> worn, TypeSymbol unnamed) {
         String why = notExposed(unnamed);
         List<PartitionClass> out = new ArrayList<>();
         // The classes of the same position with no names to write them under. What each is and what
@@ -125,13 +125,13 @@ final class PartitionClasses {
     }
 
     /** Why nothing here can write a value of {@code unnamed}: no spelling reaches it. */
-    private static String notExposed(TypeName unnamed) {
+    private static String notExposed(TypeSymbol unnamed) {
         return "`" + unnamed.module() + "` does not expose `" + unnamed.name()
                 + "`, so nothing here can name it";
     }
 
     /** The two values of a {@code Bool}, under the names the position writes them under. */
-    private static List<PartitionClass> eitherWay(List<TypeName> worn,
+    private static List<PartitionClass> eitherWay(List<TypeSymbol> worn,
                                                   List<TypeReachName.Written> writes) {
         return List.of(
                 PartitionClass.of("true", "true",
@@ -145,7 +145,7 @@ final class PartitionClasses {
     }
 
     /** Whether an optional holds anything, which is the one division its type makes. */
-    private static List<PartitionClass> heldOrNot(Type element, List<TypeName> worn,
+    private static List<PartitionClass> heldOrNot(Type element, List<TypeSymbol> worn,
                                                   List<TypeReachName.Written> writes,
                                                   Symbols symbols) {
         List<FixtureTemplate> some = Partitions.representativesOf(element, symbols);
@@ -168,11 +168,11 @@ final class PartitionClasses {
     }
 
     /** A sum's cases, each a class, under the names the position writes them under. */
-    private static List<PartitionClass> caseClasses(Type sum, List<TypeName> worn,
+    private static List<PartitionClass> caseClasses(Type sum, List<TypeSymbol> worn,
                                                     List<TypeReachName.Written> writes,
                                                     Symbols symbols) {
         List<PartitionClass> cases = new ArrayList<>();
-        for (TypeName leaf : TypeOps.leafCases(sum, symbols)) {
+        for (TypeSymbol leaf : TypeOps.leafCases(sum, symbols)) {
             cases.add(caseClass(leaf, worn, writes, symbols));
         }
         return cases;
@@ -180,11 +180,11 @@ final class PartitionClasses {
 
     /** What a case's class is called, in one place: a reading that decides which cases the position
      *  holds names the same classes the reading above builds. */
-    static String idOfCase(TypeName leaf) {
+    static String idOfCase(TypeSymbol leaf) {
         return leaf.name();
     }
 
-    private static PartitionClass caseClass(TypeName leaf, List<TypeName> worn,
+    private static PartitionClass caseClass(TypeSymbol leaf, List<TypeSymbol> worn,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
         Classifier is = Classifier.under(worn, Classifier.byShape(v -> switch (v) {
             case ObservedValue.Unit u -> leaf.equals(u.type());
@@ -194,10 +194,10 @@ final class PartitionClasses {
         // A case whose module does not expose it: a value of the position all the same, and one no
         // author here can write down. Said as that, rather than offered under a spelling that
         // resolves to nothing wherever the row is pasted (issue #696).
-        if (!(symbols.reach(leaf) instanceof TypeReachName.Written names)) {
+        if (!(symbols.scope().reach(leaf) instanceof TypeReachName.Written names)) {
             return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
         }
-        if (!(symbols.get(leaf) instanceof Ast.Data data)) {
+        if (!(symbols.declarations().declaration(leaf.key()) instanceof Hir.Data data)) {
             return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));

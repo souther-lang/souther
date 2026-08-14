@@ -1,7 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.check.ResolvedModule;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.ValueCycles;
 import souther.compiler.diag.CompileException;
@@ -88,28 +87,37 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
     }
 
     /** Each tree a compile of {@code name} makes, by the stage that makes it. */
-    private static Map<String, Ast.Module> treesOf(Db db, String name) {
-        Map<String, Key<Ast.Module>> stages = new LinkedHashMap<>();
+    private static Map<String, Hir.Module> treesOf(Db db, String name) {
+        Map<String, Key<Hir.Module>> stages = new LinkedHashMap<>();
         // Resolution answers with the tree and the claim that it has been read, which the stages
         // below it hand on as an ordinary module.
-        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved(name));
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(name));
         assertTrue(resolved.present(), "resolved of " + name + ": " + resolved.reports());
-        stages.put("derived", new Shapes.Derived(name));
-        stages.put("desugared", new Shapes.Desugared(name));
-        stages.put("prepared", new Shapes.Prepared(name));
+        // The derived stage answers with the module where every declaration came out; what is asked
+        // about here is the tree it holds, which is a question about the payload and not about that.
+        Answer<souther.compiler.check.Derived.Module> derived = db.ask(new Shapes.Derived(name));
+        assertTrue(derived.present(), "derived of " + name + ": " + derived.reports());
+        Answer<souther.compiler.check.Desugared.Module> desugared =
+                db.ask(new Shapes.Desugared(name));
+        assertTrue(desugared.present(), "desugared of " + name + ": " + desugared.reports());
+        Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+        assertTrue(prepared.present(), "prepared of " + name + ": " + prepared.reports());
         stages.put("settled", new Bodies.Settled(name));
-        Map<String, Ast.Module> out = new LinkedHashMap<>();
-        out.put("resolved", resolved.value().module());
+        Map<String, Hir.Module> out = new LinkedHashMap<>();
+        out.put("resolved", resolved.value());
+        out.put("derived", derived.value().tree());
+        out.put("desugared", desugared.value().tree());
+        out.put("prepared", prepared.value().tree());
         stages.forEach((stage, key) -> {
-            Answer<Ast.Module> answer = db.ask(key);
+            Answer<Hir.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());
             out.put(stage, answer.value());
         });
         return out;
     }
 
-    private static Map<String, Ast.FnDef> publishedTo(Db db, String name) {
-        Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+    private static Map<String, Hir.FnDef> publishedTo(Db db, String name) {
+        Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
         return imported.present() ? imported.value() : Map.of();
     }
 
@@ -118,7 +126,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
         Db db = dbOf();
         Map<String, String> aValueOf = Map.of("m.a", "step", "m.b", "markup");
         aValueOf.forEach((name, value) -> {
-            Map<String, Ast.FnDef> published = publishedTo(db, name);
+            Map<String, Hir.FnDef> published = publishedTo(db, name);
             treesOf(db, name).forEach((stage, tree) -> {
                 // a value is still there to be asked about, so a stage that dropped the ones this
                 // module was written around is not passing by having nothing left to walk
@@ -134,7 +142,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
     /** And the stages are not one tree asked for five times. */
     @Test
     void theTreesAreDifferentTrees() {
-        Map<String, Ast.Module> trees = treesOf(dbOf(), "m.a");
+        Map<String, Hir.Module> trees = treesOf(dbOf(), "m.a");
 
         assertNotEquals(trees.get("resolved"), trees.get("settled"),
                 "nothing was rewritten between the tree that was checked and the tree expanded");
@@ -158,10 +166,10 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                     constructs Out
                 let go (i) = Out { n = i.n + step }
                 """), Set.of(), ModulePath.EMPTY).db();
-        Answer<ResolvedModule> resolved = db.ask(new Names.Resolved("m.a"));
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved("m.a"));
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");
 
         assertThrows(CompileException.class,
-                () -> ValueCycles.rejectIn(resolved.value().module(), Map.of()));
+                () -> ValueCycles.rejectIn(resolved.value(), Map.of()));
     }
 }

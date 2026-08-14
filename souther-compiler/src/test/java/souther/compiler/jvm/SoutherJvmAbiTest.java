@@ -1,7 +1,9 @@
 package souther.compiler.jvm;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class SoutherJvmAbiTest {
 
-    private static final TypeName ORDER = new TypeName("shop", "Order");
+    private static final TypeSymbol ORDER = TypeSymbols.declared(new TypeKey("shop", "Order"));
 
     /** The specification, as a table: an identity and what it is called. */
     private static List<Object[]> abi() {
@@ -45,9 +47,9 @@ class SoutherJvmAbiTest {
                 "在庫.引き当てる$Impl"});
 
         // A bridge case belongs to the module that emits it, not to the member's own module.
-        rows.add(new Object[] {new GeneratedClass.BridgeCase("ship", new TypeName("inv", "Shortage")),
+        rows.add(new Object[] {new GeneratedClass.BridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))),
                 "ship.ShortageCase"});
-        rows.add(new Object[] {new GeneratedClass.BridgeCase("m", TypeName.primitive("Int")),
+        rows.add(new Object[] {new GeneratedClass.BridgeCase("m", TypeSymbol.primitive("Int")),
                 "m.IntCase"});
 
         // A codec sits beside what it encodes, whatever that is — a declared type or a union the
@@ -113,22 +115,23 @@ class SoutherJvmAbiTest {
      * The one naming rule that runs backwards, and the half of the question it answers.
      *
      * <p>A value class is its type, so the two directions are one rule and it is written once. What
-     * comes back is the type whose value class <em>would</em> be spelled that way — nothing more.
-     * Whether such a type is declared is a scope's answer, and so is what was really emitted under
-     * the name: {@code shop.FindOrder$Impl} is not a declaration any source could write, and
-     * {@code souther.Int} is a primitive, which reaches codegen as a boxed class and never as a value
-     * class of its own. Both read back here all the same, because reading back is all this does.
+     * comes back is the address whose value class <em>would</em> be spelled that way — nothing more,
+     * and an address rather than an identity for that reason. Whether such a type is declared is a
+     * declaration world's answer, and so is what was really emitted under the name:
+     * {@code shop.FindOrder$Impl} is not a declaration any source could write, and {@code souther.Int}
+     * is a primitive, which reaches codegen as a boxed class and never as a value class of its own.
+     * Both read back here all the same, because reading back is all this does.
      */
     @Test
     void andAValueClassNameSaysWhichTypeItWouldBe() {
-        for (TypeName type : List.of(ORDER, new TypeName("在庫", "金額"),
-                new TypeName("a.b.c", "Deep"), TypeName.primitive("Int"))) {
-            assertEquals(type, SoutherJvmAbi.valueTypeCandidate(
+        for (TypeSymbol type : List.of(ORDER, TypeSymbols.declared(new TypeKey("在庫", "金額")),
+                TypeSymbols.declared(new TypeKey("a.b.c", "Deep")), TypeSymbol.primitive("Int"))) {
+            assertEquals(type.key(), SoutherJvmAbi.valueTypeCandidate(
                     SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
         }
-        assertEquals(new TypeName("shop", "FindOrder$Impl"),
+        assertEquals(new TypeKey("shop", "FindOrder$Impl"),
                 SoutherJvmAbi.valueTypeCandidate("shop.FindOrder$Impl"),
-                "a candidate for the name, and no claim about what is under it");
+                "an address for the name, and no claim about what is under it");
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate("Loose"), "a name with no module names no type");
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate(".Foo"));
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate("demo."));

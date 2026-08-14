@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -39,14 +39,14 @@ public final class Requirements {
      * construct, and both the emitter and the requirement walk below read it here so they cannot
      * disagree about one behavior.
      */
-    public static Set<String> injectedNames(Ast.Module module, Set<String> importedInjected) {
+    public static Set<String> injectedNames(Hir.Module module, Set<String> importedInjected) {
         Set<String> fns = new LinkedHashSet<>();
-        for (Ast.FnDef fn : module.fns()) {
+        for (Hir.FnDef fn : module.fns()) {
             fns.add(fn.name());
         }
         Set<String> injected = new LinkedHashSet<>(importedInjected);
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Ast.SpecBehavior spec && !fns.contains(spec.name())) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (bd instanceof Hir.SpecBehavior spec && !fns.contains(spec.name())) {
                 injected.add(spec.name());
             }
         }
@@ -61,15 +61,15 @@ public final class Requirements {
      * <p>{@code importedInjected} are the injection targets this module borrows; its own are read off
      * the module ({@link #injectedNames}).
      */
-    public static Map<String, List<BehaviorRequirement>> of(Ast.Module module,
+    public static Map<String, List<BehaviorRequirement>> of(Hir.Module module,
                                                             Set<String> importedInjected) {
         Set<String> injected = injectedNames(module, importedInjected);
-        Map<String, Ast.BehaviorDef> byName = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        Map<String, Hir.BehaviorDef> byName = new HashMap<>();
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             byName.put(bd.name(), bd);
         }
         Map<String, Map<String, List<String>>> memo = new LinkedHashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
+        for (Hir.BehaviorDef bd : module.behaviors()) {
             resolve(bd.name(), byName, injected, memo, new LinkedHashSet<>());
         }
         Map<String, List<BehaviorRequirement>> out = new LinkedHashMap<>();
@@ -98,7 +98,7 @@ public final class Requirements {
      * order. An injected behavior requires nothing to construct, and is reached as a dependency of
      * whatever names it rather than as a walk of its own.
      */
-    private static Map<String, List<String>> resolve(String name, Map<String, Ast.BehaviorDef> byName,
+    private static Map<String, List<String>> resolve(String name, Map<String, Hir.BehaviorDef> byName,
                                                      Set<String> injected,
                                                      Map<String, Map<String, List<String>>> memo,
                                                      LinkedHashSet<String> inProgress) {
@@ -109,7 +109,7 @@ public final class Requirements {
         if (cached != null) {
             return cached;
         }
-        Ast.BehaviorDef bd = byName.get(name);
+        Hir.BehaviorDef bd = byName.get(name);
         if (bd == null) {
             return Map.of();
         }
@@ -122,16 +122,16 @@ public final class Requirements {
         switch (bd) {
             // An injection target is answered above, so a SpecBehavior here has a body: what it
             // requires is what it declared, in that order (spec §depends-on, §requirement-propagation).
-            case Ast.SpecBehavior spec -> {
-                for (Ast.Var req : spec.dependsOn()) {
+            case Hir.SpecBehavior spec -> {
+                for (Hir.Var req : spec.dependsOn()) {
                     // Reported where it is written; it names no requirement to propagate.
                     if (!req.unresolved()) {
                         add(acc, req.bare(), name);
                     }
                 }
             }
-            case Ast.PipeBehavior pipe -> {
-                for (Ast.Var stage : pipe.stages()) {
+            case Hir.PipeBehavior pipe -> {
+                for (Hir.Var stage : pipe.stages()) {
                     if (stage.unresolved()) {
                         continue;   // it names no behavior, so it carries no requirement in
                     }

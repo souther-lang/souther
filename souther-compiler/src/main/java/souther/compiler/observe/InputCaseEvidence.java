@@ -1,6 +1,6 @@
 package souther.compiler.observe;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Set;
@@ -28,9 +28,9 @@ import java.util.Set;
  *                         no row can be written at them
  * @param unclassifiedRows rows whose input case could not be read
  */
-public record InputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
-                                Set<TypeName> executed, Set<TypeName> verified,
-                                Set<TypeName> excluded, int unclassifiedRows) {
+public record InputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> specified,
+                                Set<TypeSymbol> executed, Set<TypeSymbol> verified,
+                                Set<TypeSymbol> excluded, int unclassifiedRows) {
 
     public InputCaseEvidence {
         declared = Evidence.ordered(declared);
@@ -45,12 +45,12 @@ public record InputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
     }
 
     /** The cases a row can be written at: what the type declares, less what the body rules out. */
-    public List<TypeName> coverable() {
+    public List<TypeSymbol> coverable() {
         return declared.stream().filter(each -> !excluded.contains(each)).toList();
     }
 
     /** Cases this input can be that no row uses, and that a row could have been written for. */
-    public List<TypeName> unspecified() {
+    public List<TypeSymbol> unspecified() {
         return Evidence.missingFrom(declared, specified).stream()
                 .filter(each -> !excluded.contains(each)).toList();
     }

@@ -1,6 +1,8 @@
 package souther.compiler.jvm;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 /**
  * How a {@link GeneratedClass} is spelled on the JVM. The one place that maps a Souther identity to a
@@ -43,9 +45,9 @@ public final class SoutherJvmAbi {
     }
 
     /**
-     * The {@link TypeName} whose {@code Value} identity would have this binary name, or null where no
-     * type's would. It says nothing about whether such a type is declared, or about what was really
-     * emitted under the name.
+     * The address whose {@code Value} identity would have this binary name, or null where no type's
+     * would. It says nothing about whether such a type is declared, or about what was really emitted
+     * under the name.
      *
      * <p>The naming rule for a value class run backwards, and the only rule here that can be: a value
      * class is its type, so the two directions are one rule. Every other kind either adds something
@@ -53,18 +55,18 @@ public final class SoutherJvmAbi {
      * it is also the interface of a behavior {@code quote} — so a name alone does not say which, and
      * asking is the only way.
      *
-     * <p>Which is why this answers half a question and is named for its half. Whether a type is
-     * there is a module's scope to answer, and the caller that has one asks it:
-     * {@code candidate != null && symbols.contains(candidate)}. An ABI that answered both would be
-     * claiming a declaration it has no way to see — the same shape as an authority that hands out
-     * half an answer, pointed the other way.
+     * <p>Which is why it answers a {@link TypeKey} and not a {@link TypeSymbol}. An address is what a
+     * class file carries and a query is asked with; it becomes an identity where a declaration world
+     * says a declaration is there, which is what the caller does with this
+     * ({@code symbols.declarations().identify(candidate)}). An ABI that answered an identity would be
+     * claiming a declaration it has no way to see.
      */
-    public static TypeName valueTypeCandidate(String binaryName) {
+    public static TypeKey valueTypeCandidate(String binaryName) {
         int dot = binaryName.lastIndexOf('.');
         if (dot <= 0 || dot == binaryName.length() - 1) {
             return null;
         }
-        return new TypeName(binaryName.substring(0, dot), binaryName.substring(dot + 1));
+        return new TypeKey(binaryName.substring(0, dot), binaryName.substring(dot + 1));
     }
 
     /**

@@ -3,7 +3,9 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.diag.SourceNameResolver;
@@ -14,7 +16,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -55,18 +59,18 @@ class ANameGoesBackOnTheWayItCameOffTest {
 
     private final Symbols symbols = Symbols.of(resolved());
 
-    private static Ast.Module resolved() {
+    private static Hir.Module resolved() {
         Ast.Module parsed = CstFrontend.parse(MODULE);
-        return Resolve.module(parsed, Symbols.of(parsed));
+        return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
-    private TypeName named(String name) {
-        return new TypeName(symbols.module(), name);
+    private TypeSymbol named(String name) {
+        return TypeSymbols.declared(new TypeKey(symbols.module(), name));
     }
 
     /** The same name as this module writes it, which is what a row is written with. */
     private souther.compiler.types.TypeReachName.Written reached(String name) {
-        return (souther.compiler.types.TypeReachName.Written) symbols.reach(named(name));
+        return (souther.compiler.types.TypeReachName.Written) symbols.scope().reach(named(name));
     }
 
     private PartitionClass classOf(String type, String id) {

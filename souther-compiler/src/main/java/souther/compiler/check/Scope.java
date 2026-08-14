@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -87,7 +87,7 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> declared
     }
 
     /** This scope with {@code binder} bound to {@code type}; the outer one is left as it was. */
-    public Scope with(Ast.Binder binder, Type type) {
+    public Scope with(Hir.Binder binder, Type type) {
         return with(binder.id(), binder.name(), type);
     }
 

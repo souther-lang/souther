@@ -1,13 +1,13 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import java.util.List;
 import java.util.Set;
 
@@ -39,19 +39,19 @@ public final class BinaryElaborator {
      * twice again, so a chain of operators nested one inside the last cost two to the power of its
      * length: twenty-six links took ten seconds and a hundred did not finish.
      */
-    private static Core operand(Ast.Expr e, Ast.Binary bin, Scope env, CheckContext ctx) {
+    private static Core operand(Hir.Expr e, Hir.Binary bin, Scope env, CheckContext ctx) {
         Core read = Elaborator.elaborate(e, env, ctx);
         if (read.type() instanceof Type.Erroneous) {
             throw new Unanswerable(bin.pos());
         }
-        if (bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR) {
+        if (bin.op() == Hir.BinOp.AND || bin.op() == Hir.BinOp.OR) {
             Elaborator.requireType(e, read.type(), Type.BOOL, ctx.symbols(),
                     "operand of logical operator");
         }
         return read;
     }
 
-    static Core elaborateBinary(Ast.Binary bin, Scope env, CheckContext ctx) {
+    static Core elaborateBinary(Hir.Binary bin, Scope env, CheckContext ctx) {
         // Left to right, and the first operand that failed is the one reported: an operand that says
         // what is wrong with it has said it, and what stands beside it is not read at all where this
         // one left nothing to check against.
@@ -155,14 +155,14 @@ public final class BinaryElaborator {
                 // (`金額 == 数量`) have disjoint case sets and still fail.
                 // `==` is value equality, and a function value has none: comparing two would fall
                 // back to whether they are the same object, which is not a question the language asks
-                if (!TypeOps.supportsEquality(lt, ctx.symbols())
-                        || !TypeOps.supportsEquality(rt, ctx.symbols())) {
-                    Type carrier = TypeOps.supportsEquality(lt, ctx.symbols()) ? rt : lt;
+                if (!TypeOps.supportsEquality(lt)
+                        || !TypeOps.supportsEquality(rt)) {
+                    Type carrier = TypeOps.supportsEquality(lt) ? rt : lt;
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2).say(new TypeMessage.AFunctionHasNoValueToCompare(Type.show(carrier))).build());
                 }
-                Set<TypeName> lCases = TypeOps.leafCases(lt, ctx.symbols());
-                Set<TypeName> rCases = TypeOps.leafCases(rt, ctx.symbols());
+                Set<TypeSymbol> lCases = TypeOps.leafCases(lt, ctx.symbols());
+                Set<TypeSymbol> rCases = TypeOps.leafCases(rt, ctx.symbols());
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
                 if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())
@@ -182,17 +182,17 @@ public final class BinaryElaborator {
     /** A source literal (Int/Decimal/String/Bool, or a negated literal) — the only thing allowed to
      * take a newtype from the other operand. A variable of the underlying type is not (write the
      * newtype construction, e.g. {@code 金額(x)}). */
-    static boolean isLiteralExpr(Ast.Expr e) {
-        return e instanceof Ast.IntLit || e instanceof Ast.DecimalLit
-                || e instanceof Ast.StringLit || e instanceof Ast.BoolLit
-                || (e instanceof Ast.Neg n && isLiteralExpr(n.operand()));
+    static boolean isLiteralExpr(Hir.Expr e) {
+        return e instanceof Hir.IntLit || e instanceof Hir.DecimalLit
+                || e instanceof Hir.StringLit || e instanceof Hir.BoolLit
+                || (e instanceof Hir.Neg n && isLiteralExpr(n.operand()));
     }
 
     /** Whether {@code <}/{@code <=}/{@code >}/{@code >=} may compare the operands: both must reduce to
      * the same ordered base, and be either the same nominal type or a newtype paired with a bare
      * literal of its base (so {@code 金額 <= 金額} and {@code 金額 <= 100} pass, {@code 金額 <= 数量}
      * and {@code 金額 <= (Int variable)} do not). */
-    static boolean orderedComparable(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
+    static boolean orderedComparable(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
                                              Symbols symbols) {
         Type lb = TypeOps.base(lt, symbols);
         if (!TypeOps.isOrdered(lb) || !lb.equals(TypeOps.base(rt, symbols))) {
@@ -208,7 +208,7 @@ public final class BinaryElaborator {
 
     /** Whether {@code ==}/{@code /=} may pair a newtype with a bare literal of its base type (the
      * same-type and bottom cases are handled by the caller). */
-    static boolean eqCoercible(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
+    static boolean eqCoercible(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
                                        Symbols symbols) {
         return TypeOps.base(lt, symbols).equals(TypeOps.base(rt, symbols))
                 && literalPairsNewtype(lt, rt, le, re, symbols);
@@ -217,7 +217,7 @@ public final class BinaryElaborator {
     /** The refusal, pointed at the source: at the operand it is about, or — where the rule is about
      * the pair — at the operator with each operand named beside it, as a comparison of two
      * unrelated types is. */
-    private static CompileException refused(Ast.Binary bin, ArithmeticCheck.Refusal refusal,
+    private static CompileException refused(Hir.Binary bin, ArithmeticCheck.Refusal refusal,
                                             Type lt, Type rt) {
         Diagnostic.Builder d = refusal.saying();
         if (refusal.side() == ArithmeticCheck.Side.BOTH) {
@@ -225,7 +225,7 @@ public final class BinaryElaborator {
                     .secondary(bin.left().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
                     .secondary(bin.right().reportedAt(), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)));
         } else {
-            Ast.Expr faulted = refusal.side() == ArithmeticCheck.Side.LEFT ? bin.left() : bin.right();
+            Hir.Expr faulted = refusal.side() == ArithmeticCheck.Side.LEFT ? bin.left() : bin.right();
             d = d.at(faulted.reportedAt());
         }
         return CompileException.of(d.build());
@@ -242,15 +242,15 @@ public final class BinaryElaborator {
      * the one the operator accepts is the answer. Where it accepts neither, nothing follows and the
      * answer is null.
      */
-    static Type operandBeside(Ast.BinOp op, Type other, boolean onTheRight, Symbols symbols) {
-        if (op == Ast.BinOp.AND || op == Ast.BinOp.OR) {
+    static Type operandBeside(Hir.BinOp op, Type other, boolean onTheRight, Symbols symbols) {
+        if (op == Hir.BinOp.AND || op == Hir.BinOp.OR) {
             return Type.BOOL;
         }
         if (other == null) {
             return null;
         }
         Type base = TypeOps.directNumericNewtypeBase(other, symbols);
-        if (base == null || !(op == Ast.BinOp.MUL || op == Ast.BinOp.DIV)) {
+        if (base == null || !(op == Hir.BinOp.MUL || op == Hir.BinOp.DIV)) {
             return other;
         }
         for (Type candidate : List.of(other, base)) {
@@ -264,7 +264,7 @@ public final class BinaryElaborator {
     }
 
     /** One side is a single-value newtype and the other is a bare literal (not itself a newtype). */
-    static boolean literalPairsNewtype(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
+    static boolean literalPairsNewtype(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
                                                Symbols symbols) {
         return (TypeOps.isSingleValueNewtype(lt, symbols) && !TypeOps.isSingleValueNewtype(rt, symbols) && isLiteralExpr(re))
                 || (TypeOps.isSingleValueNewtype(rt, symbols) && !TypeOps.isSingleValueNewtype(lt, symbols) && isLiteralExpr(le));

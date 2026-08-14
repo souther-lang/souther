@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.Region;
@@ -39,7 +39,7 @@ import java.util.Map;
  * declaration's own name offered a row nobody could paste while handing the reader a name it
  * resolved to something else (issue #696).
  */
-public record FixtureTemplate(String text, Ast.Expr value) {
+public record FixtureTemplate(String text, Hir.Expr value) {
 
     /** Nothing generated is anywhere, and a fixture built here is never quoted back at a source. */
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
@@ -55,17 +55,17 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     }
 
     public static FixtureTemplate integer(long value) {
-        Ast.Expr magnitude = new Ast.IntLit(Math.abs(value), NOWHERE, NO_SOURCE);
+        Hir.Expr magnitude = new Hir.IntLit(Math.abs(value), NOWHERE, NO_SOURCE);
         return new FixtureTemplate(Long.toString(value),
-                value < 0 ? new Ast.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);
+                value < 0 ? new Hir.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);
     }
 
     public static FixtureTemplate decimal(BigDecimal value) {
         String written = value.stripTrailingZeros().toPlainString();
         BigDecimal magnitude = value.abs();
-        Ast.Expr literal = new Ast.DecimalLit(magnitude, NOWHERE, NO_SOURCE);
+        Hir.Expr literal = new Hir.DecimalLit(magnitude, NOWHERE, NO_SOURCE);
         return new FixtureTemplate(written + "m",
-                value.signum() < 0 ? new Ast.Neg(literal, NOWHERE, NO_SOURCE) : literal);
+                value.signum() < 0 ? new Hir.Neg(literal, NOWHERE, NO_SOURCE) : literal);
     }
 
     /**
@@ -88,11 +88,11 @@ public record FixtureTemplate(String text, Ast.Expr value) {
                 default -> written.append(c);
             }
         }
-        return new FixtureTemplate(written.append('"').toString(), new Ast.StringLit(value, NOWHERE, NO_SOURCE));
+        return new FixtureTemplate(written.append('"').toString(), new Hir.StringLit(value, NOWHERE, NO_SOURCE));
     }
 
     public static FixtureTemplate bool(boolean value) {
-        return new FixtureTemplate(Boolean.toString(value), new Ast.BoolLit(value, NOWHERE, NO_SOURCE));
+        return new FixtureTemplate(Boolean.toString(value), new Hir.BoolLit(value, NOWHERE, NO_SOURCE));
     }
 
     /** A date, written the way a row writes one: the constructor applied to an ISO 8601 string. */
@@ -124,15 +124,15 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     private static FixtureTemplate temporal(String type, String iso) {
         ValueName.Stdlib namespace = ValueName.Stdlib.namespace(type);
         return new FixtureTemplate(type + "(\"" + iso + "\")",
-                new Ast.Apply(type, namespace, new ReachName.OfLibrary(namespace),
-                        List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
+                new Hir.Apply(type, namespace, new ReachName.OfLibrary(namespace),
+                        List.of(new Hir.StringLit(iso, NOWHERE, NO_SOURCE)),
                         ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 
     /** The absent optional, which the language names rather than any module. */
     public static FixtureTemplate none() {
         return new FixtureTemplate("None",
-                Ast.Var.denoting(WrittenName.synthetic("None", NOWHERE),
+                Hir.Var.denoting(WrittenName.synthetic("None", NOWHERE),
                         new ValueName.Builtin("None"), new ReachName.Bare("None")));
     }
 
@@ -140,7 +140,7 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     public static FixtureTemplate unitCase(TypeReachName.Written type) {
         String written = type.rendered();
         return new FixtureTemplate(written,
-                Ast.Var.denoting(WrittenName.synthetic(written, NOWHERE),
+                Hir.Var.denoting(WrittenName.synthetic(written, NOWHERE),
                         new ValueName.OfType(written, type.denotes(), ConstructionOrigin.own()),
                         new ReachName.Bare(written)));
     }
@@ -191,7 +191,7 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     public static FixtureTemplate newtype(TypeReachName.Written type, FixtureTemplate inner) {
         String written = type.rendered();
         return new FixtureTemplate(written + "(" + inner.text() + ")",
-                new Ast.Apply(written, new ValueName.OfType(written, type.denotes(), null),
+                new Hir.Apply(written, new ValueName.OfType(written, type.denotes(), null),
                         new ReachName.Bare(written), List.of(inner.value()),
                         ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
@@ -210,32 +210,32 @@ public record FixtureTemplate(String text, Ast.Expr value) {
      * the position declares rather than anything spelled here.
      */
     public static FixtureTemplate collection(List<FixtureTemplate> elements) {
-        List<Ast.Expr> values = new ArrayList<>();
+        List<Hir.Expr> values = new ArrayList<>();
         List<String> written = new ArrayList<>();
         for (FixtureTemplate each : elements) {
             values.add(each.value());
             written.add(each.text());
         }
         return new FixtureTemplate("[" + String.join(", ", written) + "]",
-                new Ast.ListLit(List.copyOf(values), NOWHERE, NO_SOURCE));
+                new Hir.ListLit(List.copyOf(values), NOWHERE, NO_SOURCE));
     }
 
     /** One entry of a map: the pair a fixture writes a key and its value as. */
     public static FixtureTemplate entry(FixtureTemplate key, FixtureTemplate value) {
         return new FixtureTemplate("(" + key.text() + ", " + value.text() + ")",
-                new Ast.Tuple(List.of(key.value(), value.value()), NOWHERE, NO_SOURCE));
+                new Hir.Tuple(List.of(key.value(), value.value()), NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared. */
     public static FixtureTemplate record(TypeReachName.Written type, Map<String, FixtureTemplate> fields) {
         List<String> written = new ArrayList<>();
-        List<Ast.FieldInit> inits = new ArrayList<>();
+        List<Hir.FieldInit> inits = new ArrayList<>();
         for (Map.Entry<String, FixtureTemplate> field : fields.entrySet()) {
             written.add(field.getKey() + " = " + field.getValue().text());
-            inits.add(new Ast.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
+            inits.add(new Hir.FieldInit(field.getKey(), field.getValue().value(), NOWHERE));
         }
         return new FixtureTemplate(type.rendered() + " { " + String.join(", ", written) + " }",
-                new Ast.NewData(Ast.Name.reached(type, NOWHERE), inits, List.of(),
+                new Hir.NewData(Hir.Name.reached(type, NOWHERE), inits, List.of(),
                         ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 }

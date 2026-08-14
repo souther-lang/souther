@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.HelperInvariants;
@@ -14,7 +14,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -236,7 +236,7 @@ public sealed interface LocalInspection {
             return declared;   // no order for a rule to name a value on, so nothing is taken away
         }
         Set<String> refused = new LinkedHashSet<>();
-        for (TypeName each : order.cases()) {
+        for (TypeSymbol each : order.cases()) {
             Place at = order.at(each);
             if (at != null && !within.admits(at)) {
                 refused.add(PartitionClasses.idOfCase(each));
@@ -262,8 +262,8 @@ public sealed interface LocalInspection {
                                                    Carrier carried, ValueName measure) {
         List<UnreadRule> out = new ArrayList<>();
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+            for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     BlockReason why = whyUnread(each, carried, measure);
                     // Once per position, as a comparison is: what a reader has to lift is the first
                     // limit in the way, and a second clause behind it says nothing further.
@@ -278,7 +278,7 @@ public sealed interface LocalInspection {
 
     /** What stopped one clause from being an end, or null where nothing did — either because it was
      * read, or because it is not a rule about where the value stops. */
-    private static BlockReason whyUnread(Ast.Expr clause, Carrier carried, ValueName measure) {
+    private static BlockReason whyUnread(Hir.Expr clause, Carrier carried, ValueName measure) {
         if (InvariantBound.statesAnEnd(clause, null)) {
             if (carried == null) {
                 // The value is ordered — it is compared in the clause — and this reads no line on
@@ -336,7 +336,7 @@ public sealed interface LocalInspection {
      *               one for at least one of them
      */
     private static List<Cut> cutsOf(Type type, DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
-                                    List<TypeName> under, List<TypeName> over) {
+                                    List<TypeSymbol> under, List<TypeSymbol> over) {
         // Nothing about the shape of the position's type. An end is here because some clause placed
         // it, and a clause naming a field of a record places one on a bare `Int` and on the length of
         // a bare `List<Int>` as readily as on a newtype over either. Asking for a `Type.Ref` here was
@@ -354,7 +354,7 @@ public sealed interface LocalInspection {
 
     /** One end as a cut, owed once to each rule that put it there. */
     private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
-                            String clause, Carrier carrier, List<TypeName> within) {
+                            String clause, Carrier carrier, List<TypeSymbol> within) {
         if (end == null) {
             return;
         }
@@ -362,13 +362,13 @@ public sealed interface LocalInspection {
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
-        for (TypeName from : end.from()) {
-            put(into, carrier, end.value(), from, clause, moved ? within : List.<TypeName>of());
+        for (TypeSymbol from : end.from()) {
+            put(into, carrier, end.value(), from, clause, moved ? within : List.<TypeSymbol>of());
         }
     }
 
-    private static void put(Map<String, Cut> into, Carrier carrier, Place at, TypeName type,
-                            String clause, List<TypeName> narrowedBy) {
+    private static void put(Map<String, Cut> into, Carrier carrier, Place at, TypeSymbol type,
+                            String clause, List<TypeSymbol> narrowedBy) {
         OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
         if (!narrowedBy.isEmpty()) {
             origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);

@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -38,7 +38,7 @@ import java.util.TreeSet;
  * <p>Which of the two a helper is comes from its declaration. A module emits the recursive helpers it
  * reaches as its own methods, so an imported one sits in this module's fns under a name of the same
  * shape as the module's own; the declaration is the only thing that still says who wrote it
- * ({@link Ast.FnDef#declaredBy}). Deciding it any other way is deciding it by spelling, and this is a
+ * ({@link Hir.FnDef#declaredBy}). Deciding it any other way is deciding it by spelling, and this is a
  * rule about which module carries the guarantee.
  *
  * <p>Three things are asked of a declaration rather than of this graph, because a soundness rule may
@@ -86,7 +86,7 @@ final class PartialReachability {
 
     static PartialReachability of(HelperInliner inliner) {
         Map<String, List<String>> calls = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> entry : inliner.held().entrySet()) {
+        for (Map.Entry<String, Hir.FnDef> entry : inliner.held().entrySet()) {
             // Only what this module declared is a node. What it took on to emit — a prelude helper,
             // one another module published — is a terminal, because its declaration already answers
             // for its whole closure (ADR-0098). It is in the same map and under a name of the same
@@ -94,7 +94,7 @@ final class PartialReachability {
             if (!entry.getValue().declaredBy(inliner.moduleName())) {
                 continue;
             }
-            if (entry.getValue().body() instanceof Ast.FnBody.Written written) {
+            if (entry.getValue().body() instanceof Hir.FnBody.Written written) {
                 calls.put(entry.getKey(), reachedBy(written.expr(), inliner));
             }
             // an intrinsic declares no body to read what it reaches out of
@@ -117,7 +117,7 @@ final class PartialReachability {
         Set<String> reaching = new LinkedHashSet<>();
         Deque<String> work = new ArrayDeque<>();
         for (String node : nodes) {
-            Ast.FnDef declared = inliner.helper(node);
+            Hir.FnDef declared = inliner.helper(node);
             if (declared != null && declared.partial() && reaching.add(node)) {
                 work.add(node);
             }
@@ -142,7 +142,7 @@ final class PartialReachability {
      * soundness rule may not rest on it.
      */
     private boolean isPartial(String name) {
-        Ast.FnDef declared = inliner.helper(name);
+        Hir.FnDef declared = inliner.helper(name);
         return declared != null && declared.partial();
     }
 
@@ -150,11 +150,11 @@ final class PartialReachability {
      * Whether {@code v} names a {@code partial} helper that takes arguments — the one thing that may
      * not be written where a value goes. A value takes none and is read rather than handed over.
      */
-    boolean isPartialFunctionNamed(Ast.Var v) {
+    boolean isPartialFunctionNamed(Hir.Var v) {
         if (v.answered() == null) {
             return false;   // it names no helper, partial or otherwise
         }
-        Ast.FnDef declared = declarationOf(v.denotes(), v.reachedAs(), inliner);
+        Hir.FnDef declared = declarationOf(v.denotes(), v.reachedAs(), inliner);
         return declared != null && declared.partial() && !declared.params().isEmpty();
     }
 
@@ -171,7 +171,7 @@ final class PartialReachability {
      * The shortest path from the helpers {@code e} calls to a {@code partial} one, or empty where it
      * reaches none. The expression is not on the path — its caller names what it is.
      */
-    Optional<List<String>> fromExpression(Ast.Expr e) {
+    Optional<List<String>> fromExpression(Hir.Expr e) {
         return search(reachedBy(e, inliner));
     }
 
@@ -245,30 +245,30 @@ final class PartialReachability {
      * goes it becomes a function, and a {@code partial} one may not be written there at all
      * (spec §fn-rules), which is checked on its own and is why no edge is made for it here.
      */
-    private static List<String> reachedBy(Ast.Expr e, HelperInliner inliner) {
+    private static List<String> reachedBy(Hir.Expr e, HelperInliner inliner) {
         Set<String> reached = new TreeSet<>();
         collectReached(e, inliner, reached);
         return List.copyOf(reached);
     }
 
-    private static void collectReached(Ast.Expr e, HelperInliner inliner, Set<String> out) {
+    private static void collectReached(Hir.Expr e, HelperInliner inliner, Set<String> out) {
         switch (e) {
             // A name nothing answered reaches no declaration, so it makes no edge.
-            case Ast.Apply call when call.answered() != null -> {
-                Ast.FnDef applied = declarationOf(call.denotes(), call.reachedAs(), inliner);
+            case Hir.Apply call when call.answered() != null -> {
+                Hir.FnDef applied = declarationOf(call.denotes(), call.reachedAs(), inliner);
                 if (applied != null) {
                     out.add(keyOf(call.denotes(), call.reachedAs()));
                 }
             }
-            case Ast.Var v when v.answered() != null -> {
-                Ast.FnDef read = declarationOf(v.denotes(), v.reachedAs(), inliner);
+            case Hir.Var v when v.answered() != null -> {
+                Hir.FnDef read = declarationOf(v.denotes(), v.reachedAs(), inliner);
                 if (read != null && read.params().isEmpty()) {
                     out.add(keyOf(v.denotes(), v.reachedAs()));
                 }
             }
             default -> { }
         }
-        Ast.forEachChild(e, child -> collectReached(child, inliner, out));
+        Hir.forEachChild(e, child -> collectReached(child, inliner, out));
     }
 
     /**
@@ -292,7 +292,7 @@ final class PartialReachability {
         };
     }
 
-    private static Ast.FnDef declarationOf(ValueName denotes, ReachName reachedAs,
+    private static Hir.FnDef declarationOf(ValueName denotes, ReachName reachedAs,
                                            HelperInliner inliner) {
         String key = keyOf(denotes, reachedAs);
         return key == null ? null : inliner.helper(key);

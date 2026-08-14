@@ -2,7 +2,9 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -51,7 +53,7 @@ class ANameLeftUnansweredCountsWhetherOrNotItWasReportedTest {
     }
 
     private static boolean has(Compilation c, String declared) {
-        return c.db().ask(new Names.Definition(new TypeName("app.main", declared))).present();
+        return c.db().ask(new Names.Definition(new TypeKey("app.main", declared))).present();
     }
 
     @Test

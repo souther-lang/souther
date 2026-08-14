@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -45,9 +45,9 @@ public final class HelperInvariants {
      * the spelling the table is keyed by — {@link HelperNames#qualifyImports} does it again for the
      * bodies below, and says the same thing both times.
      */
-    public static Ast.Module withSettledInvariants(Ast.Module m, Symbols symbols,
-                                                   Map<String, Ast.FnDef> published) {
-        Ast.Module settled = settled(m, symbols);
+    static Hir.Module withSettledInvariants(Hir.Module m, Symbols symbols,
+                                            Map<String, Hir.FnDef> published) {
+        Hir.Module settled = settled(m, symbols);
         return withInlinedInvariants(HelperInliner.forModule(settled, published), settled);
     }
 
@@ -62,16 +62,17 @@ public final class HelperInvariants {
      * for it, which is where an imported clause falls outside the statically dischargeable fragment
      * (spec §invariant-discharge).
      */
-    public static Map<TypeName, List<Ast.InvariantClause>> invariantsForDischarge(
-            Ast.Module m, Symbols symbols, Map<String, Ast.FnDef> published) {
-        Ast.Module settled = settled(m, symbols);
+    public static Map<TypeSymbol, List<Hir.InvariantClause>> invariantsForDischarge(
+            Expandable expandable, Symbols symbols, Map<String, Hir.FnDef> published) {
+        Hir.Module m = expandable.module();
+        Hir.Module settled = settled(m, symbols);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
                 published, InliningPolicy.DISCHARGE);
-        Map<TypeName, List<Ast.InvariantClause>> out = new LinkedHashMap<>();
-        for (Ast.Def def : settled.defs()) {
-            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                TypeName declared = new TypeName(m.name(), d.name());
-                out.put(declared, Ast.mapClauses(d.invariants(),
+        Map<TypeSymbol, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
+        for (Hir.Def def : settled.defs()) {
+            if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
+                TypeSymbol declared = d.declares();
+                out.put(declared, Hir.mapClauses(d.invariants(),
                         clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));
             }
         }
@@ -81,7 +82,7 @@ public final class HelperInvariants {
     /** {@code m} with its helper parameter types settled and the names in its invariants written
      * qualified — what both representations are expanded from, so neither reads a table the other
      * would key differently. */
-    private static Ast.Module settled(Ast.Module m, Symbols symbols) {
+    private static Hir.Module settled(Hir.Module m, Symbols symbols) {
         return HelperNames.withQualifiedInvariants(HelperParams.settle(m, symbols, Map.of()));
     }
 
@@ -90,28 +91,28 @@ public final class HelperInvariants {
      * (e.g. {@code invariant 正の数(value)}) expands to its body before the invariant is type-checked
      * or emitted — the same lowering a behavior body gets (spec §blocks, §invariant-expressions).
      */
-    private static Ast.Module withInlinedInvariants(HelperInliner inliner, Ast.Module m) {
-        List<Ast.Def> defs = new ArrayList<>();
-        for (Ast.Def def : m.defs()) {
-            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                BindingOwner declared = new BindingOwner.OfData(new TypeName(m.name(), d.name()));
-                defs.add(new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
-                        Ast.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
+    private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m) {
+        List<Hir.Def> defs = new ArrayList<>();
+        for (Hir.Def def : m.defs()) {
+            if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
+                BindingOwner declared = new BindingOwner.OfData(d.declares());
+                defs.add(new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
+                        Hir.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
                         d.decoder(), d.encoder(), d.pos()));
             } else {
                 defs.add(def);
             }
         }
-        return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+        return new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
                 m.exampleFileTarget(), m.pos());
     }
 
     /** The conjuncts of an invariant expression, flattened, in the order they are written — what a
      * reader sees as separate clauses. */
-    public static List<Ast.Expr> conjunctsOf(Ast.Expr e) {
-        if (e instanceof Ast.Binary b && b.op() == Ast.BinOp.AND) {
-            List<Ast.Expr> out = new ArrayList<>(conjunctsOf(b.left()));
+    public static List<Hir.Expr> conjunctsOf(Hir.Expr e) {
+        if (e instanceof Hir.Binary b && b.op() == Hir.BinOp.AND) {
+            List<Hir.Expr> out = new ArrayList<>(conjunctsOf(b.left()));
             out.addAll(conjunctsOf(b.right()));
             return out;
         }

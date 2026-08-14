@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -199,14 +201,14 @@ class TheAbiIsSpelledInOnePlaceTest {
      * module-level one is the module plus a suffix, so the difference is the spelling in both cases.
      */
     private static Set<String> abiSpellings() {
-        TypeName x = new TypeName("m", "X");
+        TypeSymbol x = TypeSymbols.declared(new TypeKey("m", "X"));
         GeneratedClass.Value value = new GeneratedClass.Value(x);
         Set<String> out = new LinkedHashSet<>();
         out.add(beyond(new GeneratedClass.BehaviorImpl("m", "x"),
                 new GeneratedClass.BehaviorInterface("m", "x")));
         out.add(beyond(new GeneratedClass.BehaviorResult("m", "x"),
                 new GeneratedClass.BehaviorInterface("m", "x")));
-        out.add(beyond(new GeneratedClass.BridgeCase("m", new TypeName("n", "X")), value));
+        out.add(beyond(new GeneratedClass.BridgeCase("m", TypeSymbols.declared(new TypeKey("n", "X"))), value));
         out.add(beyond(new GeneratedClass.Encoder(value), value));
         for (DecoderKind kind : DecoderKind.values()) {
             out.add(beyond(new GeneratedClass.Decoder(value, kind), value));

@@ -2,7 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -81,17 +82,17 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().get(0);
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         Core body = checked.behaviorBodies().get(spec.name());
         CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of(spec.name(), body, plan,
-                spec.params().stream().map(Ast.Param::name).toList(), symbols);
+                spec.params().stream().map(Hir.Param::name).toList(), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
                 Partitions.of(spec, sigs.get(spec.name()), symbols, Exclusions.NONE),
                 guards.thresholds(), symbols);

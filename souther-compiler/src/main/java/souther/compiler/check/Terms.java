@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain.LinearForm;
@@ -9,7 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -45,7 +45,7 @@ import java.util.Set;
 final class Terms {
 
     private final Symbols symbols;
-    private final Map<TypeName, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
+    private final Map<TypeSymbol, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
     /** How the values of each atom this has named are spaced. Kept here because this is where an
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
      * anywhere else would be a second place that has to agree about which is which. */
@@ -76,7 +76,7 @@ final class Terms {
      * rather than on a second path that would have to be kept saying the same thing. */
     static Core asOperator(Core e) {
         if (e instanceof Core.PreservedCall call && call.args().size() == 2) {
-            Ast.BinOp op = DischargeRules.operator(call.operation());
+            Hir.BinOp op = DischargeRules.operator(call.operation());
             if (op != null) {
                 // Not a comparison any source wrote: a preserved call read as the operator it
                 // stands for. This tree is the discharge reader's, never the tree that runs.
@@ -124,14 +124,14 @@ final class Terms {
             case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Core.Decimal d -> LinearForm.constant(d.value());
             case Core.Neg n -> negate(affine(n.operand(), at, leaf));
-            case Core.Binary b when b.op() == Ast.BinOp.ADD ->
+            case Core.Binary b when b.op() == Hir.BinOp.ADD ->
                     add(affine(b.left(), at, leaf), affine(b.right(), at, leaf), false);
-            case Core.Binary b when b.op() == Ast.BinOp.SUB ->
+            case Core.Binary b when b.op() == Hir.BinOp.SUB ->
                     add(affine(b.left(), at, leaf), affine(b.right(), at, leaf), true);
             // scalar multiply by a constant (Amount * 2) is linear; `/` and a variable product are not
             // (a divide truncates for Int, and a variable factor is non-linear), so those come back
             // here as one value rather than as arithmetic over two.
-            case Core.Binary b when b.op() == Ast.BinOp.MUL ->
+            case Core.Binary b when b.op() == Hir.BinOp.MUL ->
                     scale(affine(b.left(), at, leaf), affine(b.right(), at, leaf));
             // A newtype's `.value` read off something that is not a place: what it wraps is what it
             // is, which is the rule a location is keyed by ({@link #pathKey}) read of a computed
@@ -162,7 +162,7 @@ final class Terms {
     /** What {@code e} folds to where every part of it is written out, or {@code null} where any part
      * of it is computed at run time and there is nothing to fold. */
     static Object folded(Core e) {
-        Ast.Expr written = asWrittenValue(e);
+        Hir.Expr written = asWrittenValue(e);
         return written == null ? null : ConstEval.eval(written).orElse(null);
     }
 
@@ -542,7 +542,7 @@ final class Terms {
     /** {@code bound} with each of {@code binders} keyed by where it is bound rather than by which
      * binding it is, so two expressions that differ only in what they bound are one term. */
     static Map<BindingId, String> binding(Map<BindingId, String> bound,
-                                                  List<Ast.Binder> binders, int depth) {
+                                                  List<Hir.Binder> binders, int depth) {
         Map<BindingId, String> inner = new HashMap<>(bound);
         for (int i = 0; i < binders.size(); i++) {
             inner.put(binders.get(i).id(), "#" + depth + "." + i);
@@ -570,10 +570,10 @@ final class Terms {
      * however the author reached for it — which matters wherever the comparison is not the whole
      * condition, since only there can the denial not be carried by the polarity instead.
      */
-    static String binaryKey(Ast.BinOp op, String l, String r) {
+    static String binaryKey(Hir.BinOp op, String l, String r) {
         return switch (op) {
             case EQ -> l.compareTo(r) <= 0 ? cmp("EQ", l, r) : cmp("EQ", r, l);
-            case NE -> "!" + binaryKey(Ast.BinOp.EQ, l, r);
+            case NE -> "!" + binaryKey(Hir.BinOp.EQ, l, r);
             case LT -> cmp("LT", l, r);
             case GT -> cmp("LT", r, l);
             case GE -> "!" + cmp("LT", l, r);
@@ -792,35 +792,35 @@ final class Terms {
      * a rendering and not a second tree — everything computed answers with nothing, and the fold then
      * has nothing to fold.
      */
-    static Ast.Expr asWrittenValue(Core e) {
+    static Hir.Expr asWrittenValue(Core e) {
         // Written over nothing, every one of them. A value rendered back out of what was computed is
         // the value and not the characters any of it came from: the fold has already been over them,
         // and what it arrived at may be a number no line of the file spells.
         return switch (e) {
-            case Core.Int i -> new Ast.IntLit(i.value(), i.pos(), null);
-            case Core.Decimal d -> new Ast.DecimalLit(d.value(), d.pos(), null);
-            case Core.Str s -> new Ast.StringLit(s.value(), s.pos(), null);
-            case Core.Bool b -> new Ast.BoolLit(b.value(), b.pos(), null);
+            case Core.Int i -> new Hir.IntLit(i.value(), i.pos(), null);
+            case Core.Decimal d -> new Hir.DecimalLit(d.value(), d.pos(), null);
+            case Core.Str s -> new Hir.StringLit(s.value(), s.pos(), null);
+            case Core.Bool b -> new Hir.BoolLit(b.value(), b.pos(), null);
             case Core.Neg n -> {
-                Ast.Expr operand = asWrittenValue(n.operand());
-                yield operand == null ? null : new Ast.Neg(operand, n.pos(), null);
+                Hir.Expr operand = asWrittenValue(n.operand());
+                yield operand == null ? null : new Hir.Neg(operand, n.pos(), null);
             }
             case Core.Binary b -> {
-                Ast.Expr left = asWrittenValue(b.left());
-                Ast.Expr right = asWrittenValue(b.right());
+                Hir.Expr left = asWrittenValue(b.left());
+                Hir.Expr right = asWrittenValue(b.right());
                 yield left == null || right == null ? null
-                        : new Ast.Binary(b.op(), left, right, b.origin(), b.pos(), null);
+                        : new Hir.Binary(b.op(), left, right, b.origin(), b.pos(), null);
             }
             case Core.PreservedCall call -> {
-                List<Ast.Expr> args = new ArrayList<>();
+                List<Hir.Expr> args = new ArrayList<>();
                 for (Core arg : call.args()) {
-                    Ast.Expr written = asWrittenValue(arg);
+                    Hir.Expr written = asWrittenValue(arg);
                     if (written == null) {
                         yield null;
                     }
                     args.add(written);
                 }
-                yield new Ast.Apply(call.operation().name(), call.operation(),
+                yield new Hir.Apply(call.operation().name(), call.operation(),
                         reachOf(call.operation()), args, ConstructionOrigin.own(), call.pos(),
                         null);
             }
@@ -832,7 +832,7 @@ final class Terms {
 
 
     /** A read of {@code binder}, as the expression naming the value it holds. */
-    static Core.Read read(Ast.Binder binder, Type type, SourcePos pos) {
+    static Core.Read read(Hir.Binder binder, Type type, SourcePos pos) {
         return new Core.Read(binder.name(), binder.id(), type, pos);
     }
 
@@ -851,7 +851,7 @@ final class Terms {
      * declaration this module can see. Asked of the one field, since resolving the whole
      * declaration's fields is a question about a declaration this reader may not own. */
     Type fieldType(Type owner, String field) {
-        return owner instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.Data data
+        return owner instanceof Type.Ref r && symbols.declarations().declaration(r.name().key()) instanceof Hir.Data data
                 ? TypeOps.fieldType(data, field, symbols) : null;
     }
 
@@ -915,8 +915,8 @@ final class Terms {
     }
 
 
-    static boolean isArith(Ast.BinOp op) {
-        return op == Ast.BinOp.ADD || op == Ast.BinOp.SUB || op == Ast.BinOp.MUL || op == Ast.BinOp.DIV;
+    static boolean isArith(Hir.BinOp op) {
+        return op == Hir.BinOp.ADD || op == Hir.BinOp.SUB || op == Hir.BinOp.MUL || op == Hir.BinOp.DIV;
     }
     /** How a preserved call's operation is reached: it is the library's, named under the alias the
      * library publishes it under. */

@@ -1,7 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.generated.MemoryClassLoader;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Prelude;
@@ -14,7 +14,7 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.runtime.Sets;
 
@@ -68,17 +68,17 @@ import java.util.function.Supplier;
  */
 public final class FixtureReader {
 
-    private final Ast.Module module;
+    private final souther.compiler.check.Prepared.ExampleExecution module;
     private final Symbols symbols;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
-    private final Map<String, Ast.FnDef> values;
+    private final Map<String, Hir.FnDef> values;
     private final MemoryClassLoader loader;
     /** Runs a helper a fixture applies. One reading's, because what it is running is one reading's. */
     private final HelperInvoker helpers;
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
     private final NeutralForm neutral;
 
-    FixtureReader(Ast.Module module, Symbols symbols, Map<String, Ast.FnDef> values,
+    FixtureReader(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Hir.FnDef> values,
                   MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
@@ -101,13 +101,13 @@ public final class FixtureReader {
 
         /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
          * the runtime is absent, which is not a fact about the value. */
-        java.util.Optional<String> refuse(BoundaryInput at, Ast.Expr fixture);
+        java.util.Optional<String> refuse(BoundaryInput at, Hir.Expr fixture);
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
-    public static Construction constructing(Ast.Module module, Symbols symbols,
+    public static Construction constructing(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                             Map<String, byte[]> classes, ClassLoader parent,
-                                            Map<String, Ast.FnDef> values) {
+                                            Map<String, Hir.FnDef> values) {
         // A reader is the whole of it. There are no rows, so nothing runs on a worker and no budget is
         // read; what a behavior takes and what stands in for what it depends on are not questions about
         // whether a value builds, so this does not ask for the answers to them.
@@ -128,25 +128,25 @@ public final class FixtureReader {
     }
 
     /** One written fixture, decoded against the type of the position it is written in. */
-    Object built(Ast.Expr written, Type type) {
+    Object built(Hir.Expr written, Type type) {
         return built(written, FixtureShape.of(type, symbols));
     }
 
     /** The same at a position a behavior's boundary established, which carries its own admitted
      *  answer: it is read rather than the type it was admitted from being put through the walk
      *  again. */
-    Object built(Ast.Expr written, BoundaryInput in) {
+    Object built(Hir.Expr written, BoundaryInput in) {
         return built(written, FixtureShape.of(in));
     }
 
     /** The same, where the position's shape has already been settled. */
-    Object built(Ast.Expr written, FixtureShape shape) {
+    Object built(Hir.Expr written, FixtureShape shape) {
         return built(written, shape, Admission.HELD);
     }
 
     /** The same, saying whether what is read is a value the model is given or one it is compared
      *  against. */
-    private Object built(Ast.Expr written, FixtureShape shape, Admission admission) {
+    private Object built(Hir.Expr written, FixtureShape shape, Admission admission) {
         return decode(shape, raw(written, shape.type(), admission));
     }
 
@@ -156,15 +156,15 @@ public final class FixtureReader {
      * <p>What a stand-in installs. A fake row and a {@code with} both have to produce one of these to
      * stand in at all, so both are read this way and neither is read as an assertion.
      */
-    record BuiltFixture(TypeName caseName, Object value) {}
+    record BuiltFixture(TypeSymbol caseName, Object value) {}
     /**
      * The whole value {@code written} states. Throws where it does not build or does not finish —
      * a fixture is one or the other, and what to make of that is the caller's.
      */
-    BuiltFixture buildFixture(Ast.Expr written, BoundaryOutput out) {
+    BuiltFixture buildFixture(Hir.Expr written, BoundaryOutput out) {
         Type outType = out.type();
         Object value = builtStandIn(written, out);
-        TypeName was = caseOfValue(value, outType);
+        TypeSymbol was = caseOfValue(value, outType);
         return new BuiltFixture(was != null ? was : constructedCase(written), value);
     }
 
@@ -178,9 +178,9 @@ public final class FixtureReader {
      * type is not a disagreement to report but a fixture that cannot be built. Admitting it here is
      * what keeps the model from being handed a value it could not have been given.
      */
-    private Object builtStandIn(Ast.Expr written, BoundaryOutput out) {
+    private Object builtStandIn(Hir.Expr written, BoundaryOutput out) {
         FixtureShape whole = FixtureShape.ofWholeAnswer(out);
-        TypeName asserted = constructedCase(written);
+        TypeSymbol asserted = constructedCase(written);
         if (asserted != null) {
             // Through the case the row named, not the one the output declares: a row naming another
             // type builds that type and is refused for being it, rather than being read as the
@@ -248,7 +248,7 @@ public final class FixtureReader {
             // and a `?` position takes the value itself as well as a `Some` around it.
             case Type.OptionOf o -> value == null || NeutralForm.isAbsent(value)
                     || holds(NeutralForm.heldBy(value), o.element());
-            case Type.Prim p -> represents(TypeName.primitive(p), value);
+            case Type.Prim p -> represents(TypeSymbol.primitive(p), value);
             case Type.Ref r when r.name().isPrimitive() -> represents(r.name(), value);
             case Type.Ref _, Type.Union _ -> caseOfValue(value, position) != null;
             case Type.ListOf l -> value instanceof List<?> els && each(els, l.element());
@@ -275,7 +275,7 @@ public final class FixtureReader {
             return "missing value";
         }
         for (LeafScalar scalar : LeafScalar.values()) {
-            if (represents(TypeName.primitive(scalar.type()), value)) {
+            if (represents(TypeSymbol.primitive(scalar.type()), value)) {
                 return scalar.type().shown();
             }
         }
@@ -297,11 +297,11 @@ public final class FixtureReader {
      * case reads as no case at all — and resolving one in this module's scope would answer for a case
      * this module happens to declare under the same spelling rather than for the one the value is.
      */
-    private TypeName caseOfValue(Object value, Type outType) {
+    private TypeSymbol caseOfValue(Object value, Type outType) {
         if (value == null) {
             return null;
         }
-        for (TypeName candidate : TypeOps.leafCases(outType, symbols)) {
+        for (TypeSymbol candidate : TypeOps.leafCases(outType, symbols)) {
             if (represents(candidate, value)) {
                 return candidate;
             }
@@ -311,7 +311,7 @@ public final class FixtureReader {
 
     /** Whether {@code value} is how {@code candidate} is represented at run time: the class a data
      * case is generated as, and for a primitive case the class its values arrive in. */
-    private static boolean represents(TypeName candidate, Object value) {
+    private static boolean represents(TypeSymbol candidate, Object value) {
         if (value == null) {
             return false;   // nothing is how a type is represented; an absent value has its own reader
         }
@@ -327,7 +327,7 @@ public final class FixtureReader {
             default -> null;
         };
         String is = value.getClass().getName();
-        return TypeName.PRIMITIVE.equals(candidate.module())
+        return TypeSymbol.PRIMITIVE.equals(candidate.module())
                 ? carried != null && carried.equals(is)
                 : is.equals(candidate.qualified());
     }
@@ -340,8 +340,8 @@ public final class FixtureReader {
      * <p>The case's own name, not the spelling: what came out carries the name its type was declared
      * under, so a row spelling that type qualified asserts the same case.
      */
-    TypeName caseOnly(Ast.Expr expected) {
-        return expected instanceof Ast.Var v && v.denotes() instanceof ValueName.OfType named
+    TypeSymbol caseOnly(Hir.Expr expected) {
+        return expected instanceof Hir.Var v && v.denotes() instanceof ValueName.OfType named
                 ? named.type() : null;
     }
 
@@ -386,22 +386,22 @@ public final class FixtureReader {
      * is what keeps {@code Amount("x")} a fixture that cannot be built while leaving
      * {@code Receipt { total = 1 }} a value of its own to disagree with what came out.
      */
-    Asserted assertedExpected(Ast.Expr expected, BoundaryOutput out) {
+    Asserted assertedExpected(Hir.Expr expected, BoundaryOutput out) {
         return asserted(expected, out.type());
     }
 
-    private Asserted asserted(Ast.Expr e, Type position) {
+    private Asserted asserted(Hir.Expr e, Type position) {
         return switch (e) {
             // No position is read for these: a literal is the value it spells, and the arithmetic
             // over literals is folded where it is written.
-            case Ast.IntLit _, Ast.DecimalLit _, Ast.BoolLit _, Ast.Neg _, Ast.Binary _ ->
+            case Hir.IntLit _, Hir.DecimalLit _, Hir.BoolLit _, Hir.Neg _, Hir.Binary _ ->
                     new Asserted.Value(structured(raw(e, null, Admission.UNHELD)));
             // A `String` is a `String` wherever it is written. That a temporal position takes a
             // temporal is a fact about the answer, so a row writing one as text disagrees with what
             // came out rather than stating a fixture that could not be built.
-            case Ast.StringLit s -> new Asserted.Value(new ObservedValue.Text(s.value()));
-            case Ast.Var v -> assertedName(v, position);
-            case Ast.LetIn let -> {
+            case Hir.StringLit s -> new Asserted.Value(new ObservedValue.Text(s.value()));
+            case Hir.Var v -> assertedName(v, position);
+            case Hir.LetIn let -> {
                 BindingId binding = let.binder().id();
                 bindings.put(binding, let.value());
                 try {
@@ -410,10 +410,10 @@ public final class FixtureReader {
                     bindings.remove(binding);
                 }
             }
-            case Ast.NewData nd -> assertedRecord(nd, position);
-            case Ast.Apply c -> assertedApply(c, position);
-            case Ast.ListLit l -> assertedCollection(l, position);
-            case Ast.FieldAccess fa -> assertedProjection(fa);
+            case Hir.NewData nd -> assertedRecord(nd, position);
+            case Hir.Apply c -> assertedApply(c, position);
+            case Hir.ListLit l -> assertedCollection(l, position);
+            case Hir.FieldAccess fa -> assertedProjection(fa);
             default -> throw new FixtureException(
                     "an example fixture must be a literal or a construction");
         };
@@ -425,7 +425,7 @@ public final class FixtureReader {
      * that walk answers with already carries the field under the name its construction gave it, so a
      * value written out and one a helper answered with are read the same way.
      */
-    private Asserted assertedProjection(Ast.FieldAccess fa) {
+    private Asserted assertedProjection(Hir.FieldAccess fa) {
         if (!(asserted(fa.target(), null) instanceof Asserted.Built built)) {
             throw new FixtureException("`" + fa.field()
                     + "` is read off a value that is not a record, so it has no field to take");
@@ -438,14 +438,14 @@ public final class FixtureReader {
         return taken;
     }
 
-    private Asserted assertedName(Ast.Var v, Type position) {
+    private Asserted assertedName(Hir.Var v, Type position) {
         return switch (v.denotes()) {
             case ValueName.Builtin b when b.name().equals("None") ->
                     new Asserted.Value(new ObservedValue.Absent());
-            case ValueName.OfType named when symbols.get(named.type()) instanceof Ast.UnitData ->
+            case ValueName.OfType named when symbols.declarations().declaration(named.type().key()) instanceof Hir.UnitData ->
                     new Asserted.Value(new ObservedValue.Unit(named.type()));
             case ValueName.Local local -> {
-                Ast.Expr held = bindings.get(local.id());
+                Hir.Expr held = bindings.get(local.id());
                 if (held == null) {
                     throw new FixtureException("`" + v.name()
                             + "` is bound to no value a fixture can name");
@@ -453,7 +453,7 @@ public final class FixtureReader {
                 yield assertedUnder(local, held, position);
             }
             case ValueName.Helper helper -> {
-                Ast.Expr body = valueBody(v.name());
+                Hir.Expr body = valueBody(v.name());
                 if (body == null) {
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
                 }
@@ -469,7 +469,7 @@ public final class FixtureReader {
 
     /** A name's body, read as the name stands rather than re-read at some other position, with the
      *  cycle check every expansion goes through. */
-    private Asserted assertedUnder(ValueName named, Ast.Expr body, Type position) {
+    private Asserted assertedUnder(ValueName named, Hir.Expr body, Type position) {
         if (expanding.contains(named)) {
             List<String> cycle = new ArrayList<>();
             expanding.forEach(open -> cycle.add(open.name()));
@@ -502,17 +502,17 @@ public final class FixtureReader {
      * declares it to be — which is where the name under it comes from, and it is this value's own
      * type that says so rather than whatever encloses it.
      */
-    private Asserted assertedRecord(Ast.NewData nd, Type position) {
-        TypeName built = nd.typeName().denotes();
-        Map<String, Ast.TypeRef> declared = neutral.fieldTypes(built);
+    private Asserted assertedRecord(Hir.NewData nd, Type position) {
+        TypeSymbol built = nd.typeName().denotes();
+        Map<String, Hir.TypeRef> declared = neutral.fieldTypes(built);
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
             return assertedNewtype(built, nd.inits().get(0).value(), nd.typeName().written());
         }
         Map<String, Asserted> fields = new LinkedHashMap<>();
-        for (Ast.Var ref : nd.spreads()) {
+        for (Hir.Var ref : nd.spreads()) {
             String spread = ref.name();
-            Ast.Expr value = ref.denotes() instanceof ValueName.Local local
+            Hir.Expr value = ref.denotes() instanceof ValueName.Local local
                     ? bindings.get(local.id()) : valueBody(spread);
             if (value == null) {
                 throw new FixtureException("`" + spread + "` is not a value a fixture can spread");
@@ -529,7 +529,7 @@ public final class FixtureReader {
                 }
             }
         }
-        for (Ast.FieldInit fi : nd.inits()) {
+        for (Hir.FieldInit fi : nd.inits()) {
             fields.put(fi.name(), asserted(fi.value(), neutral.shapeOf(declared.get(fi.name()))));
         }
         // Leaving a field out is how an optional is written empty, and it is only that: a position
@@ -537,7 +537,7 @@ public final class FixtureReader {
         // its own type at all. What is written empty is present here as absence rather than left out,
         // so reading it answers "empty" instead of "not there" — the same rule the observation of a
         // built value is read under.
-        for (Map.Entry<String, Ast.TypeRef> f : declared.entrySet()) {
+        for (Map.Entry<String, Hir.TypeRef> f : declared.entrySet()) {
             if (fields.containsKey(f.getKey())) {
                 continue;
             }
@@ -562,7 +562,7 @@ public final class FixtureReader {
      * it is the disagreement it reports, and asking a rule about a value nobody wrote would answer
      * for a value nobody wrote.
      */
-    private void admitsItself(Asserted.Built whole, Ast.NewData nd, TypeName built) {
+    private void admitsItself(Asserted.Built whole, Hir.NewData nd, TypeSymbol built) {
         if (TypeOps.effectiveInvariants(declared(built), symbols).isEmpty()
                 || !states(whole, Type.ref(built))) {
             return;
@@ -580,20 +580,20 @@ public final class FixtureReader {
      * and a row generated for an aliased type resolved to nothing at all (issue #696) — all three
      * silently, since a miss is what a table keyed by names does with a key it has not got.
      */
-    private static TypeName constructs(Ast.Apply c) {
+    private static TypeSymbol constructs(Hir.Apply c) {
         return c.denotes() instanceof ValueName.OfType named ? named.type() : null;
     }
 
     /** Whether an application is a newtype's construction written in call form (ADR-0032). */
-    private boolean constructsANewtype(Ast.Apply c) {
-        TypeName built = constructs(c);
+    private boolean constructsANewtype(Hir.Apply c) {
+        TypeSymbol built = constructs(c);
         return built != null && neutral.isNewtype(built);
     }
 
-    private Asserted assertedApply(Ast.Apply c, Type position) {
+    private Asserted assertedApply(Hir.Apply c, Type position) {
         Type.Prim written = Type.Prim.named(c.reaches());
         if (written != null && written.temporal()) {
-            if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
+            if (c.args().size() != 1 || !(c.args().get(0) instanceof Hir.StringLit lit)) {
                 throw new FixtureException("`" + c.written() + "` takes one written string");
             }
             return new Asserted.Value(
@@ -606,7 +606,7 @@ public final class FixtureReader {
             if (c.args().size() != 1) {
                 throw new FixtureException("`" + c.written() + "` takes one argument");
             }
-            if (!(c.args().get(0) instanceof Ast.ListLit listed)) {
+            if (!(c.args().get(0) instanceof Hir.ListLit listed)) {
                 throw new FixtureException("`" + c.written() + "` takes a written list");
             }
             return "Map.fromList".equals(c.reaches())
@@ -649,7 +649,7 @@ public final class FixtureReader {
      * parts, its decoder would read those parts at what this newtype declares, which is the reading
      * this whole walk exists to remove — so the parts stand as they were written.
      */
-    private Asserted assertedNewtype(TypeName built, Ast.Expr argument, String written) {
+    private Asserted assertedNewtype(TypeSymbol built, Hir.Expr argument, String written) {
         Type base = neutral.shapeOf(neutral.newtypeBaseType(built));
         Asserted held = asserted(argument, base);
         // First: what this newtype takes. Asked of the value as the row wrote it, which is why it is
@@ -671,8 +671,8 @@ public final class FixtureReader {
         return new Asserted.Built(built, field);
     }
 
-    private Ast.Data declared(TypeName name) {
-        return symbols.get(name) instanceof Ast.Data data ? data : null;
+    private Hir.Data declared(TypeSymbol name) {
+        return symbols.declarations().declaration(name.key()) instanceof Hir.Data data ? data : null;
     }
 
     /**
@@ -691,11 +691,11 @@ public final class FixtureReader {
             // it holds. Left out of this walk, everything under a `?` was admitted unasked.
             case Type.OptionOf o -> absent(a) || states(a, o.element());
             case Type.Prim p -> a instanceof Asserted.Value(ObservedValue v)
-                    && spells(v, TypeName.primitive(p));
+                    && spells(v, TypeSymbol.primitive(p));
             case Type.Ref r when r.name().isPrimitive() -> a instanceof Asserted.Value(ObservedValue v)
                     && spells(v, r.name());
             case Type.Ref _, Type.Union _ -> {
-                TypeName name = named(a);
+                TypeSymbol name = named(a);
                 yield name != null && TypeOps.leafCases(type, symbols).contains(name)
                         && parts(a, name);
             }
@@ -739,16 +739,16 @@ public final class FixtureReader {
      * to something that constructs, it is an argument, and there is no value of {@code Receipt} for
      * it to be.
      */
-    private boolean parts(Asserted a, TypeName name) {
+    private boolean parts(Asserted a, TypeSymbol name) {
         if (!(a instanceof Asserted.Built built)) {
             return true;   // a unit case carries nothing to hold
         }
-        Ast.TypeRef base = neutral.newtypeBaseType(name);
+        Hir.TypeRef base = neutral.newtypeBaseType(name);
         if (base != null) {
             Asserted held = built.fields().get("value");
             return held == null || states(held, neutral.shapeOf(base));
         }
-        for (Map.Entry<String, Ast.TypeRef> f : neutral.fieldTypes(name).entrySet()) {
+        for (Map.Entry<String, Hir.TypeRef> f : neutral.fieldTypes(name).entrySet()) {
             Asserted field = built.fields().get(f.getKey());
             if (field != null && !states(field, neutral.shapeOf(f.getValue()))) {
                 return false;
@@ -758,7 +758,7 @@ public final class FixtureReader {
     }
 
     /** The name a written value wears, or null where it wears none. */
-    private static TypeName named(Asserted a) {
+    private static TypeSymbol named(Asserted a) {
         return switch (a) {
             case Asserted.Built built -> built.type();
             case Asserted.Value(ObservedValue v) when v instanceof ObservedValue.Unit unit ->
@@ -770,7 +770,7 @@ public final class FixtureReader {
     /** Whether a written value with no parts is of {@code name}. Asked of what the row wrote, which
      *  is why it is not asked of a decoder: one reads a whole number where a `Decimal` stands, and a
      *  row writing `1` there wrote an `Int`. */
-    private static boolean spells(ObservedValue v, TypeName name) {
+    private static boolean spells(ObservedValue v, TypeSymbol name) {
         return name.primitiveKind() != null && name.primitiveKind() == ValueRendering.primitiveOf(v);
     }
 
@@ -798,20 +798,20 @@ public final class FixtureReader {
      * nothing else: what stands at each element is read at what this collection holds, under the name
      * the element itself wrote.
      */
-    private Asserted assertedCollection(Ast.ListLit l, Type position) {
+    private Asserted assertedCollection(Hir.ListLit l, Type position) {
         return NeutralForm.open(position) instanceof Type.MapOf
                 ? assertedEntries(l, position, false)
                 : new Asserted.Elements(Asserted.Container.UNSTATED, assertedElements(l, position));
     }
 
-    private List<Asserted> assertedElements(Ast.ListLit l, Type position) {
+    private List<Asserted> assertedElements(Hir.ListLit l, Type position) {
         Type element = switch (NeutralForm.open(position)) {
             case Type.ListOf list -> list.element();
             case Type.SetOf set -> set.element();
             case null, default -> null;
         };
         List<Asserted> out = new ArrayList<>();
-        for (Ast.Expr el : l.elements()) {
+        for (Hir.Expr el : l.elements()) {
             out.add(asserted(el, element));
         }
         return out;
@@ -825,14 +825,14 @@ public final class FixtureReader {
      * reading them into what the position declares its keys to be is the coercion this walk exists to
      * remove, and it would call {@code 1} and {@code AmountN(1)} one key.
      */
-    private Asserted assertedEntries(Ast.ListLit l, Type position, boolean stated) {
+    private Asserted assertedEntries(Hir.ListLit l, Type position, boolean stated) {
         Type open = NeutralForm.open(position);
         Type key = open instanceof Type.MapOf m ? m.key() : null;
         Type value = open instanceof Type.MapOf m ? m.value() : null;
         ValueMatch same = new ValueMatch(neutral, new ValueRendering(neutral));
         List<Asserted.Entry> entries = new ArrayList<>();
-        for (Ast.Expr el : l.elements()) {
-            if (!(el instanceof Ast.Tuple t) || t.elements().size() != 2) {
+        for (Hir.Expr el : l.elements()) {
+            if (!(el instanceof Hir.Tuple t) || t.elements().size() != 2) {
                 throw new FixtureException("a map's entries are written `(key, value)`");
             }
             Asserted written = asserted(t.elements().get(0), key);
@@ -917,8 +917,8 @@ public final class FixtureReader {
         // The type the value is, and not this module's reading of its spelling: a helper a fixture
         // applies may be one another module published, and what it answered with is that module's
         // type however this module spells the same name.
-        TypeName type = typeOf(live);
-        if (type != null && symbols.get(type) instanceof Ast.Data data) {
+        TypeSymbol type = typeOf(live);
+        if (type != null && symbols.declarations().declaration(type.key()) instanceof Hir.Data data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             if (data.newtype()) {
                 fields.put("value", assertedLive(ObservedValues.readOrNull(live, "value")));
@@ -944,18 +944,18 @@ public final class FixtureReader {
      * compared against their own neutral form, and a row that was right was reported as a mismatch
      * (issue #214).
      */
-    private Object helperAnswer(Ast.Expr e, Set<String> followed) {
+    private Object helperAnswer(Hir.Expr e, Set<String> followed) {
         return switch (e) {
-            case Ast.Apply c when appliedHelper(c) instanceof Applied helper -> answered(c, helper);
-            case Ast.LetIn let -> helperAnswer(let.body(), followed);
+            case Hir.Apply c when appliedHelper(c) instanceof Applied helper -> answered(c, helper);
+            case Hir.LetIn let -> helperAnswer(let.body(), followed);
             // a binding holds what it was bound to; a value stands for the body it was defined as.
             // A name that denotes a type is a case, and no helper answered it.
-            case Ast.Var v when v.denotes() instanceof ValueName.Local local -> {
-                Ast.Expr held = bindings.get(local.id());
+            case Hir.Var v when v.denotes() instanceof ValueName.Local local -> {
+                Hir.Expr held = bindings.get(local.id());
                 yield held == null ? null : helperAnswer(held, followed);
             }
-            case Ast.Var v when v.denotes() instanceof ValueName.Helper -> {
-                Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
+            case Hir.Var v when v.denotes() instanceof ValueName.Helper -> {
+                Hir.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
                 yield body == null ? null : helperAnswer(body, followed);
             }
             case null, default -> null;
@@ -964,14 +964,14 @@ public final class FixtureReader {
 
     /** The arm an expected names, as it was written — what a row that names no case of the target is
      * told it wrote. Which case it stands for is {@link #constructedCase}. */
-    String expectedArm(Ast.Expr expected) {
-        if (expected instanceof Ast.Var v) {
+    String expectedArm(Hir.Expr expected) {
+        if (expected instanceof Hir.Var v) {
             return v.name();
         }
-        if (expected instanceof Ast.NewData nd) {
+        if (expected instanceof Hir.NewData nd) {
             return nd.typeName().written();
         }
-        if (expected instanceof Ast.Apply c && constructsANewtype(c)) {
+        if (expected instanceof Hir.Apply c && constructsANewtype(c)) {
             return c.written();
         }
         return null;   // a literal expected (a primitive output)
@@ -986,7 +986,7 @@ public final class FixtureReader {
      * value is the only thing that says which case it is, and reading the name found a type of that
      * spelling or nothing (issue #206).
      */
-    TypeName constructedCase(Ast.Expr e) {
+    TypeSymbol constructedCase(Hir.Expr e) {
         return constructedCase(e, new LinkedHashSet<>(), List.of());
     }
 
@@ -1007,7 +1007,7 @@ public final class FixtureReader {
      * @param worn the names the position writes its values under, outermost first, as
      *             {@link souther.compiler.check.TypeView} reads them off it
      */
-    TypeName caseUnder(List<TypeName> worn, Ast.Expr e) {
+    TypeSymbol caseUnder(List<TypeSymbol> worn, Hir.Expr e) {
         return constructedCase(e, new LinkedHashSet<>(), worn);
     }
 
@@ -1026,37 +1026,37 @@ public final class FixtureReader {
      * a name is followed to what it stands for with the same names still to take off, since where the
      * fixture is written says nothing about which of them a published value already carries.
      */
-    private TypeName constructedCase(Ast.Expr e, Set<String> followed, List<TypeName> worn) {
+    private TypeSymbol constructedCase(Hir.Expr e, Set<String> followed, List<TypeSymbol> worn) {
         return switch (e) {
-            case Ast.NewData nd -> nd.typeName().denotes();
-            case Ast.Apply c when constructsANewtype(c) -> {
-                TypeName named = constructs(c);
+            case Hir.NewData nd -> nd.typeName().denotes();
+            case Hir.Apply c when constructsANewtype(c) -> {
+                TypeSymbol named = constructs(c);
                 yield wears(named, c, worn)
                         ? constructedCase(c.args().get(0), followed, worn.subList(1, worn.size()))
                         : named;
             }
-            case Ast.LetIn let -> constructedCase(let.body(), followed, worn);
-            case Ast.Var v -> namedCase(v, followed, worn);
+            case Hir.LetIn let -> constructedCase(let.body(), followed, worn);
+            case Hir.Var v -> namedCase(v, followed, worn);
             case null, default -> null;
         };
     }
 
     /** Whether {@code c} is the outermost name still to come off, holding the one value under it. */
-    private static boolean wears(TypeName named, Ast.Apply c, List<TypeName> worn) {
+    private static boolean wears(TypeSymbol named, Hir.Apply c, List<TypeSymbol> worn) {
         return !worn.isEmpty() && worn.get(0).equals(named) && c.args().size() == 1;
     }
 
     /** The case a bare name stands for: the type it denotes where it denotes one — a unit case, or a
      * case written bare — and otherwise the case the value or binding it names constructs. */
-    private TypeName namedCase(Ast.Var v, Set<String> followed, List<TypeName> worn) {
+    private TypeSymbol namedCase(Hir.Var v, Set<String> followed, List<TypeSymbol> worn) {
         return switch (v.denotes()) {
             case ValueName.OfType named -> named.type();
             case ValueName.Local local -> {
-                Ast.Expr held = bindings.get(local.id());
+                Hir.Expr held = bindings.get(local.id());
                 yield held == null ? null : constructedCase(held, followed, worn);
             }
             case ValueName.Helper _ -> {
-                Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
+                Hir.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
                 yield body == null ? null : constructedCase(body, followed, worn);
             }
             case null, default -> null;
@@ -1125,7 +1125,7 @@ public final class FixtureReader {
     /** {@code result} through the derived {@code encoder()} of the type it is, or null where the type
      * is not one a module declares and so has no derived codec to reach. The type names the class
      * whether or not the reader spells it the way its module does. */
-    private Object encodedOrNull(Object result, TypeName type) {
+    private Object encodedOrNull(Object result, TypeSymbol type) {
         return type == null ? null : encoded(result, type.qualified());
     }
 
@@ -1204,7 +1204,7 @@ public final class FixtureReader {
 
     /** Turns a fixture expression into its neutral (decoder-input) form: a literal to a boxed value,
      * a newtype construction to its inner value, a record construction to a field map. */
-    private Object raw(Ast.Expr e) {
+    private Object raw(Hir.Expr e) {
         return raw(e, null);
     }
 
@@ -1215,7 +1215,7 @@ public final class FixtureReader {
      * position has no declared type — and then the case's own sums decide, which is right whenever
      * they agree.
      */
-    private Object raw(Ast.Expr e, Type expected) {
+    private Object raw(Hir.Expr e, Type expected) {
         return raw(e, expected, Admission.HELD);
     }
 
@@ -1249,36 +1249,36 @@ public final class FixtureReader {
     }
 
     /** As above, saying whether this frame is one that states a value at {@code expected}. */
-    private Object raw(Ast.Expr e, Type expected, Admission admission) {
+    private Object raw(Hir.Expr e, Type expected, Admission admission) {
         if (admission == Admission.HELD) {
             admitWritten(e, expected);
         }
         Admission inside = below(admission);
         return switch (e) {
-            case Ast.IntLit i -> i.value();
-            case Ast.DecimalLit d -> d.value();
-            case Ast.StringLit s -> text(s, expected);
-            case Ast.BoolLit b -> b.value();
-            case Ast.Neg n -> negate(raw(n.operand()));
-            case Ast.Binary bin -> fold(bin);
+            case Hir.IntLit i -> i.value();
+            case Hir.DecimalLit d -> d.value();
+            case Hir.StringLit s -> text(s, expected);
+            case Hir.BoolLit b -> b.value();
+            case Hir.Neg n -> negate(raw(n.operand()));
+            case Hir.Binary bin -> fold(bin);
             // The three that go on at this same position, so what this frame is read under travels
             // with them: a name stands for a body, a `let` for its own body, and an application for
             // the value it answers with.
-            case Ast.Apply c -> collectionOrNewtype(c, expected, admission);
-            case Ast.Var v -> named(v, expected, admission);
-            case Ast.LetIn let -> bound(let, expected, admission);
-            case Ast.NewData nd -> record(nd, expected, admission);
-            case Ast.ListLit l -> {
+            case Hir.Apply c -> collectionOrNewtype(c, expected, admission);
+            case Hir.Var v -> named(v, expected, admission);
+            case Hir.LetIn let -> bound(let, expected, admission);
+            case Hir.NewData nd -> record(nd, expected, admission);
+            case Hir.ListLit l -> {
                 Type element = NeutralForm.elementOf(expected);
                 List<Object> out = new ArrayList<>();
-                for (Ast.Expr el : l.elements()) {
+                for (Hir.Expr el : l.elements()) {
                     out.add(raw(el, element, inside));
                 }
                 yield out;
             }
             // a `(key, value)` pair: only a `Map` field's entries are written this way, and `shaped`
             // collects them into the map the decoder reads (a tuple is not a data field type itself).
-            case Ast.Tuple t -> {
+            case Hir.Tuple t -> {
                 List<Type> parts = NeutralForm.entryTypes(expected, t.elements().size());
                 List<Object> out = new ArrayList<>();
                 for (int i = 0; i < t.elements().size(); i++) {
@@ -1286,7 +1286,7 @@ public final class FixtureReader {
                 }
                 yield out;
             }
-            case Ast.FieldAccess fa -> rawProjection(fa, expected, admission);
+            case Hir.FieldAccess fa -> rawProjection(fa, expected, admission);
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
     }
@@ -1316,11 +1316,11 @@ public final class FixtureReader {
      * <p>The answer is taken before it becomes a form, and the helper runs once — here, at the foot
      * of however long the chain above it is.
      */
-    private Projected projectTarget(Ast.Expr e, Admission admission) {
+    private Projected projectTarget(Hir.Expr e, Admission admission) {
         Admission below = admission == Admission.UNHELD ? admission : Admission.HELD_BELOW;
         return switch (e) {
-            case Ast.FieldAccess inner -> takeField(projectTarget(inner.target(), admission), inner);
-            case Ast.LetIn let -> {
+            case Hir.FieldAccess inner -> takeField(projectTarget(inner.target(), admission), inner);
+            case Hir.LetIn let -> {
                 BindingId binding = let.binder().id();
                 bindings.put(binding, let.value());
                 try {
@@ -1329,9 +1329,9 @@ public final class FixtureReader {
                     bindings.remove(binding);
                 }
             }
-            case Ast.Var v -> {
+            case Hir.Var v -> {
                 ValueName denotes = v.denotes();
-                Ast.Expr body = denotes instanceof ValueName.Local local ? bindings.get(local.id())
+                Hir.Expr body = denotes instanceof ValueName.Local local ? bindings.get(local.id())
                         : denotes instanceof ValueName.Helper ? valueBody(v.name()) : null;
                 // A name standing for no value is not one a field can be taken off; the ordinary
                 // reading below says what it is instead of this one guessing.
@@ -1342,7 +1342,7 @@ public final class FixtureReader {
                 yield body == null ? projectedAtItsDeclaredType(v, below)
                         : expanding(denotes, () -> projectTarget(body, admission));
             }
-            case Ast.Apply c when appliedHelper(c) instanceof Applied helper ->
+            case Hir.Apply c when appliedHelper(c) instanceof Applied helper ->
                     new Projected.Live(answered(c, helper), c.written());
             default -> projectedAtItsDeclaredType(e, below);
         };
@@ -1350,13 +1350,13 @@ public final class FixtureReader {
 
     /** What a projection takes a field off, read at the type it is declared with — the one type the
      *  evidence it carries is stated in, so the value and the type it is read at come from one place. */
-    private Projected projectedAtItsDeclaredType(Ast.Expr e, Admission below) {
+    private Projected projectedAtItsDeclaredType(Hir.Expr e, Admission below) {
         Type declared = declaredTypeOf(e, new HashSet<>());
         return new Projected.Declared(declared, raw(e, declared, below));
     }
 
     /** One step of a chain: evidence in, evidence out. */
-    private Projected takeField(Projected target, Ast.FieldAccess fa) {
+    private Projected takeField(Projected target, Hir.FieldAccess fa) {
         return switch (target) {
             case Projected.Live(Object value, String written) -> {
                 // Which field may be taken is the declaration's to say, and it is asked before
@@ -1364,7 +1364,7 @@ public final class FixtureReader {
                 // and a fixture is not elaborated, so a value's Java surface would otherwise be
                 // reachable as though it were the data's — `.isEmpty` on a `String` is a method
                 // here and a field nowhere.
-                TypeName answered = typeOf(value);
+                TypeSymbol answered = typeOf(value);
                 if (answered == null || fieldTypeOf(Type.ref(answered), fa.field()) == null) {
                     throw new FixtureException("`" + written + "` answered with a value that"
                             + " declares no field `" + fa.field() + "`");
@@ -1409,7 +1409,7 @@ public final class FixtureReader {
      * A field taken off a value, in the neutral form the decoder reads. Only the outermost step
      * stands at a position, so only it admits and only it becomes a form.
      */
-    private Object rawProjection(Ast.FieldAccess fa, Type expected, Admission admission) {
+    private Object rawProjection(Hir.FieldAccess fa, Type expected, Admission admission) {
         return switch (projectTarget(fa, admission)) {
             // Held by `states` before this frame was read, but built at the position the field
             // declares rather than at this one. A neutral form is decided by a position and not
@@ -1448,7 +1448,7 @@ public final class FixtureReader {
     private sealed interface Admits {
 
         /** One of these names, and no other, and not a value wearing none. */
-        record OneOf(Set<TypeName> names) implements Admits {}
+        record OneOf(Set<TypeSymbol> names) implements Admits {}
 
         /** No name: a value written under one is a value of that name and not of this position. */
         record NoName() implements Admits {}
@@ -1488,7 +1488,7 @@ public final class FixtureReader {
     private sealed interface Stated {
 
         /** A construction, or a name denoting a case: this name, said here. */
-        record Name(TypeName name) implements Stated {}
+        record Name(TypeSymbol name) implements Stated {}
 
         /** A field taken: its declaration says the whole of what was supplied, and the value found
          *  there is not read. This is the one frame that states a complete type, which is why it is
@@ -1520,7 +1520,7 @@ public final class FixtureReader {
      * anything reaches a decoder, and at every frame rather than at the outermost one — a field, an
      * element and a helper's argument are each a position a value is written at.
      */
-    private void admitWritten(Ast.Expr e, Type expected) {
+    private void admitWritten(Hir.Expr e, Type expected) {
         Admits admits = admits(expected);
         Admits held = admits instanceof Admits.OrAbsent(Admits under) ? under : admits;
         if (held instanceof Admits.Unsaid) {
@@ -1534,8 +1534,8 @@ public final class FixtureReader {
                             + " position holds a value of `" + Type.show(expected) + "`");
                 }
             }
-            case Stated.Name(TypeName named) -> {
-                if (!(held instanceof Admits.OneOf(Set<TypeName> names) && names.contains(named))) {
+            case Stated.Name(TypeSymbol named) -> {
+                if (!(held instanceof Admits.OneOf(Set<TypeSymbol> names) && names.contains(named))) {
                     throw wrongName(named, held, expected);
                 }
             }
@@ -1555,7 +1555,7 @@ public final class FixtureReader {
                 }
             }
             case Stated.NoName _ -> {
-                if (held instanceof Admits.OneOf(Set<TypeName> names)) {
+                if (held instanceof Admits.OneOf(Set<TypeSymbol> names)) {
                     throw noName(names, expected);
                 }
             }
@@ -1573,19 +1573,19 @@ public final class FixtureReader {
      * too. Each is refused where it is read, for being what it is, and a rule about names would
      * otherwise reach them first and tell a row that named a behavior about a type.
      */
-    private Stated states(Ast.Expr e) {
+    private Stated states(Hir.Expr e) {
         return switch (e) {
-            case Ast.LetIn _ -> ELSEWHERE;
-            case Ast.NewData nd -> new Stated.Name(nd.typeName().denotes());
-            case Ast.Var v -> statedByName(v);
-            case Ast.Apply c when appliedHelper(c) != null -> ELSEWHERE;
-            case Ast.Apply c when constructsANewtype(c) -> caseNamed(constructs(c));
+            case Hir.LetIn _ -> ELSEWHERE;
+            case Hir.NewData nd -> new Stated.Name(nd.typeName().denotes());
+            case Hir.Var v -> statedByName(v);
+            case Hir.Apply c when appliedHelper(c) != null -> ELSEWHERE;
+            case Hir.Apply c when constructsANewtype(c) -> caseNamed(constructs(c));
             // `Date("…")` is a temporal, and `Set.fromList([…])` a collection: values under no name.
-            case Ast.Apply c when Type.Prim.named(c.reaches()) != null
+            case Hir.Apply c when Type.Prim.named(c.reaches()) != null
                     || "Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches()) ->
                     STATES_NO_NAME;
-            case Ast.Apply _ -> ELSEWHERE;
-            case Ast.FieldAccess fa -> {
+            case Hir.Apply _ -> ELSEWHERE;
+            case Hir.FieldAccess fa -> {
                 Type declared = declaredTypeOf(fa, new HashSet<>());
                 yield declared == null ? ELSEWHERE : new Stated.Declared(declared);
             }
@@ -1595,7 +1595,7 @@ public final class FixtureReader {
 
     /** Which declaration a live value is — {@link NeutralForm#typeOf}, which every reader of a run
      *  asks, and {@link #represents} is the same discipline the other way about. */
-    TypeName typeOf(Object value) {
+    TypeSymbol typeOf(Object value) {
         return neutral.typeOf(value);
     }
 
@@ -1608,12 +1608,12 @@ public final class FixtureReader {
         if (!(record instanceof Type.Ref r)) {
             return null;
         }
-        TypeName named = r.name();
+        TypeSymbol named = r.name();
         if (neutral.isNewtype(named)) {
             // A newtype declares one field, and it is what it wraps (ADR-0032).
             return "value".equals(field) ? neutral.shapeOf(neutral.newtypeBaseType(named)) : null;
         }
-        Ast.TypeRef declared = neutral.fieldTypes(named).get(field);
+        Hir.TypeRef declared = neutral.fieldTypes(named).get(field);
         return declared == null ? null : neutral.shapeOf(declared);
     }
 
@@ -1625,7 +1625,7 @@ public final class FixtureReader {
      * <p>Nothing is run here. This walk reads names {@code Resolve} already settled, so asking it
      * costs no helper a second application against the row's one budget.
      */
-    private Type declaredTypeOf(Ast.Expr e, Set<ValueName> seen) {
+    private Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen) {
         return declaredTypeOf(e, seen, new HashMap<>());
     }
 
@@ -1635,18 +1635,18 @@ public final class FixtureReader {
      * bindings in a table of its own. Two walks over one expression that disagree about what is in
      * scope disagree about what is admitted, and the one that answers nothing admits nothing.
      */
-    private Type declaredTypeOf(Ast.Expr e, Set<ValueName> seen, Map<BindingId, Ast.Expr> bound) {
+    private Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen, Map<BindingId, Hir.Expr> bound) {
         return switch (e) {
-            case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
+            case Hir.NewData nd -> Type.ref(nd.typeName().denotes());
             // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
-            case Ast.Apply c when constructsANewtype(c) -> Type.ref(constructs(c));
-            case Ast.FieldAccess fa -> {
+            case Hir.Apply c when constructsANewtype(c) -> Type.ref(constructs(c));
+            case Hir.FieldAccess fa -> {
                 Type target = declaredTypeOf(fa.target(), seen, bound);
                 yield target == null ? null : fieldTypeOf(target, fa.field());
             }
-            case Ast.LetIn let -> {
+            case Hir.LetIn let -> {
                 BindingId binding = let.binder().id();
-                Ast.Expr outer = bound.put(binding, let.value());
+                Hir.Expr outer = bound.put(binding, let.value());
                 try {
                     yield declaredTypeOf(let.body(), seen, bound);
                 } finally {
@@ -1657,13 +1657,13 @@ public final class FixtureReader {
                     }
                 }
             }
-            case Ast.Var v -> {
+            case Hir.Var v -> {
                 ValueName denotes = v.denotes();
                 // A name reached twice is the cycle the reading itself reports; this walk only stops.
                 if (denotes == null || !seen.add(denotes)) {
                     yield null;
                 }
-                Ast.Expr body;
+                Hir.Expr body;
                 if (denotes instanceof ValueName.Local local) {
                     // What this walk bound, then what the reading around it has in force.
                     body = bound.containsKey(local.id()) ? bound.get(local.id())
@@ -1679,11 +1679,11 @@ public final class FixtureReader {
 
     /** A name resolved to a case, or a value under no name where this module has no such case — the
      *  reading that follows says what it could not build. */
-    private static Stated caseNamed(TypeName resolved) {
+    private static Stated caseNamed(TypeSymbol resolved) {
         return resolved == null ? STATES_NO_NAME : new Stated.Name(resolved);
     }
 
-    private Stated statedByName(Ast.Var v) {
+    private Stated statedByName(Hir.Var v) {
         return switch (v.denotes()) {
             case ValueName.OfType of -> new Stated.Name(of.type());
             case ValueName.Builtin b when b.name().equals("None") -> ABSENCE;
@@ -1713,15 +1713,15 @@ public final class FixtureReader {
                 + "`, which is not a value of `" + Type.show(expected) + "`");
     }
 
-    private FixtureException wrongName(TypeName supplied, Admits admits, Type expected) {
+    private FixtureException wrongName(TypeSymbol supplied, Admits admits, Type expected) {
         String at = Type.show(NeutralForm.open(expected));
         return new FixtureException("`" + supplied.name() + "` is written where a value of `" + at
-                + "` stands; " + (admits instanceof Admits.OneOf(Set<TypeName> names)
+                + "` stands; " + (admits instanceof Admits.OneOf(Set<TypeSymbol> names)
                         ? "one is written " + writtenAs(names)
                         : "a value of `" + at + "` wears no name"));
     }
 
-    private FixtureException noName(Set<TypeName> admits, Type expected) {
+    private FixtureException noName(Set<TypeSymbol> admits, Type expected) {
         return new FixtureException("nothing here names a value of `" + Type.show(NeutralForm.open(expected))
                 + "`; one is written " + writtenAs(admits));
     }
@@ -1729,11 +1729,11 @@ public final class FixtureReader {
     /** How a value of an admitted name is written, which is the declaration's own form and not a rule
      *  of this reading: a newtype takes its value in parens, a record its fields in braces, a unit
      *  case is the bare name. */
-    private String writtenAs(Set<TypeName> admits) {
+    private String writtenAs(Set<TypeSymbol> admits) {
         List<String> forms = new ArrayList<>();
-        for (TypeName name : admits) {
+        for (TypeSymbol name : admits) {
             forms.add(neutral.isNewtype(name) ? "`" + name.name() + "(...)`"
-                    : symbols.get(name) instanceof Ast.Data ? "`" + name.name() + " { ... }`"
+                    : symbols.declarations().declaration(name.key()) instanceof Hir.Data ? "`" + name.name() + " { ... }`"
                     : "`" + name.name() + "`");
         }
         return admits.size() == 1 ? forms.get(0) : "as one of " + String.join(", ", forms);
@@ -1747,7 +1747,7 @@ public final class FixtureReader {
      * a helper returned asks too: a row reaches the neutral form both ways, and the rule is about the
      * form.
      */
-    private Object text(Ast.StringLit s, Type expected) {
+    private Object text(Hir.StringLit s, Type expected) {
         if (neutral.temporalUnder(expected) instanceof Type.Prim temporal) {
             throw NeutralForm.notWrittenAsATemporal(temporal, s.value());
         }
@@ -1760,16 +1760,16 @@ public final class FixtureReader {
      * <p>Which of the four it is was settled where the name was written, so it is not worked out
      * again here: a binding in force is the value it holds, whatever else bears its spelling.
      */
-    private Object named(Ast.Var v, Type expected, Admission admission) {
+    private Object named(Hir.Var v, Type expected, Admission admission) {
         return switch (v.denotes()) {
             // `None` maps to a null, which the optional decoder reads as the absent optional
             // (spec §absence-is-written-as-null, absent/null -> None), the same as omitting a `T?` field
             case ValueName.Builtin b when b.name().equals("None") -> null;
             case ValueName.OfType named
-                    when symbols.get(named.type()) instanceof Ast.UnitData ->
+                    when symbols.declarations().declaration(named.type().key()) instanceof Hir.UnitData ->
                     unitInput(named.type(), expected);
             case ValueName.Local local -> {
-                Ast.Expr held = bindings.get(local.id());
+                Hir.Expr held = bindings.get(local.id());
                 if (held == null) {
                     throw new FixtureException("`" + v.name()
                             + "` is bound to no value a fixture can name");
@@ -1777,7 +1777,7 @@ public final class FixtureReader {
                 yield expandedValue(local, held, expected, admission);
             }
             case ValueName.Helper helper -> {
-                Ast.Expr value = valueBody(v.name());
+                Hir.Expr value = valueBody(v.name());
                 if (value == null) {
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
                 }
@@ -1796,7 +1796,7 @@ public final class FixtureReader {
 
     /** A unit case as a fixture writes it: a unit's decoder ignores the input, so an empty map
      * stands in. */
-    private Object unitInput(TypeName caseName, Type expected) {
+    private Object unitInput(TypeSymbol caseName, Type expected) {
         {
             // A fixture is built in the neutral form the boundary reads, so a case of an enumeration
             // is written the way that sum travels: its name, bare (issue #161). The same unit data may
@@ -1821,11 +1821,11 @@ public final class FixtureReader {
      * local already has. That binding is what the spread then names, so a fixture reads one the way it
      * reads a value: the position says what type to read it as.
      */
-    private final Map<BindingId, Ast.Expr> bindings = new LinkedHashMap<>();
+    private final Map<BindingId, Hir.Expr> bindings = new LinkedHashMap<>();
 
     /** A {@code let} inside a fixture: its name stands for what it was bound to while the body is
      * built, and a binding of the same spelling that was already in force is put back afterwards. */
-    private Object bound(Ast.LetIn let, Type expected, Admission admission) {
+    private Object bound(Hir.LetIn let, Type expected, Admission admission) {
         BindingId binding = let.binder().id();
         bindings.put(binding, let.value());
         try {
@@ -1852,10 +1852,10 @@ public final class FixtureReader {
      * of another such value. So the body is read the same way the row's own text is, and a chain of
      * values holds.
      */
-    private Ast.Expr valueBody(String name) {
-        Ast.FnDef value = values.get(name);
+    private Hir.Expr valueBody(String name) {
+        Hir.FnDef value = values.get(name);
         return value != null && value.params().isEmpty()
-                && value.body() instanceof Ast.FnBody.Written w ? w.expr() : null;
+                && value.body() instanceof Hir.FnBody.Written w ? w.expr() : null;
     }
 
     /**
@@ -1867,7 +1867,7 @@ public final class FixtureReader {
      */
     private final Deque<ValueName> expanding = new ArrayDeque<>();
 
-    private Object expandedValue(ValueName named, Ast.Expr body, Type expected,
+    private Object expandedValue(ValueName named, Hir.Expr body, Type expected,
                                  Admission admission) {
         return expanding(named, () -> raw(body, expected, admission));
     }
@@ -1903,7 +1903,7 @@ public final class FixtureReader {
      * <p>The empty collection is admitted for the same reason, but it is named rather than applied
      * ({@code Map.empty}), so it is read in {@link #named}.
      */
-    private Object collectionOrNewtype(Ast.Apply c, Type expected, Admission admission) {
+    private Object collectionOrNewtype(Hir.Apply c, Type expected, Admission admission) {
         if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())) {
             if (c.args().size() != 1) {
                 throw new FixtureException("`" + c.written() + "` takes one argument");
@@ -1923,19 +1923,19 @@ public final class FixtureReader {
      * Each was looked up on its own, and each looked up a spelling, so which declaration a fixture
      * read and which method it ran were two answers that happened to agree.
      */
-    private record Applied(String reached, Ast.FnDef def) {}
+    private record Applied(String reached, Hir.FnDef def) {}
 
     /** The helper an application applies, or null where the call is not one: a {@code fromList} is the
      * fixture's own notation for a collection and a newtype application is a construction, so neither is
      * a helper however it is spelled. Asked wherever an application has to be told from a construction,
      * so the two readers of a call cannot come to different answers. */
-    private Applied appliedHelper(Ast.Apply c) {
+    private Applied appliedHelper(Hir.Apply c) {
         if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())
                 || constructsANewtype(c)) {
             return null;
         }
         String reached = helperKey(c);
-        Ast.FnDef helper = reached == null ? null : helperDef(reached);
+        Hir.FnDef helper = reached == null ? null : helperDef(reached);
         return helper == null ? null : new Applied(reached, helper);
     }
 
@@ -1949,7 +1949,7 @@ public final class FixtureReader {
      * shares a helper's spelling is still the binding. Under what name it is then looked up is the
      * reach name the reference carries, settled at resolution and not worked out again here.
      */
-    private String helperKey(Ast.Apply c) {
+    private String helperKey(Hir.Apply c) {
         return switch (c.denotes()) {
             case ValueName.Helper _, ValueName.Stdlib _ -> c.reaches();
             case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _,
@@ -1975,8 +1975,8 @@ public final class FixtureReader {
      * so a table keyed by reach names misses on it, silently, and the row is reported as having named
      * a construction it cannot make.
      */
-    private Ast.FnDef helperDef(String reached) {
-        Ast.FnDef helper = values.get(reached);
+    private Hir.FnDef helperDef(String reached) {
+        Hir.FnDef helper = values.get(reached);
         if (helper == null) {
             // A library function this module did not take on to emit is written into no module, so
             // the table above misses on it. Its declaration is what says whether a fixture may apply
@@ -1994,8 +1994,8 @@ public final class FixtureReader {
      * produces a function, and that reads as this. The reach name for the reason {@link #helperDef}
      * takes one: this module's fns are keyed by the names it reaches them by. */
     private boolean noMethod(String reached) {
-        for (List<Ast.FnDef> component : List.of(module.fns(), module.takenOn())) {
-            for (Ast.FnDef fn : component) {
+        for (List<Hir.FnDef> component : List.of(module.fns(), module.takenOn())) {
+            for (Hir.FnDef fn : component) {
                 if (fn.name().equals(reached) && !fn.params().isEmpty()) {
                     return true;
                 }
@@ -2010,7 +2010,7 @@ public final class FixtureReader {
      * a field of a record and an element of a list alike. An application that encloses nothing is
      * {@link #helperAnswer}: there the value itself is what the row asserts.
      */
-    private Object applied(Ast.Apply c, Applied helper, Type expected, Admission admission) {
+    private Object applied(Hir.Apply c, Applied helper, Type expected, Admission admission) {
         Object answer = answered(c, helper);
         // Before the value becomes a form. A neutral form is what its position reads, so a `Long`
         // read as an `Amount` is a form nothing can tell from the one `Amount(1)` writes — which is
@@ -2024,20 +2024,20 @@ public final class FixtureReader {
     /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
      * built against its parameter types, so an argument breaking one of those types' invariants is
      * reported as the fixture it is. */
-    private Object answered(Ast.Apply c, Applied helper) {
-        List<Ast.FnParam> params = helper.def().params();
+    private Object answered(Hir.Apply c, Applied helper) {
+        List<Hir.FnParam> params = helper.def().params();
         if (c.args().size() != params.size()) {
             throw new FixtureException("`" + c.written() + "` takes " + params.size()
                     + " argument(s) but is called with " + c.args().size());
         }
         Object[] args = new Object[params.size()];
         for (int i = 0; i < args.length; i++) {
-            Ast.FnParam p = params.get(i);
+            Hir.FnParam p = params.get(i);
             if (p.type() == null) {
                 throw new FixtureException("`" + c.written() + "` parameter `" + p.name()
                         + "` has no type a fixture can be built against");
             }
-            Type paramType = TypeOps.resolveParamType(p.type(), symbols);
+            Type paramType = TypeOps.resolveParamType(p.type());
             // A parameter whose element each call decides has no one type here. A call settles it
             // from the argument it is given; a fixture is built before there is a call to settle it,
             // so the order is what refuses this rather than the type being unsupported. Asked of the
@@ -2058,17 +2058,17 @@ public final class FixtureReader {
      * reaches it by. What the helper <em>is</em> stays {@link Applied#reached()}, which is what a
      * report about it names. */
     private static String emittedAs(Applied helper) {
-        return helper.def().body() instanceof Ast.FnBody.Intrinsic
+        return helper.def().body() instanceof Hir.FnBody.Intrinsic
                 ? HelperInliner.intrinsicWrapperName(helper.reached())
                 : helper.reached();
     }
 
-    private Object newtypeInner(Ast.Apply c, Type expected, Admission admission) {
+    private Object newtypeInner(Hir.Apply c, Type expected, Admission admission) {
         Type.Prim written = Type.Prim.named(c.reaches());
         if (written != null && written.temporal()) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
-            if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
+            if (c.args().size() != 1 || !(c.args().get(0) instanceof Hir.StringLit lit)) {
                 throw new FixtureException("`" + c.written() + "` takes one written string");
             }
             return CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt());
@@ -2083,7 +2083,7 @@ public final class FixtureReader {
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
-        TypeName built = constructs(c);
+        TypeSymbol built = constructs(c);
         if (c.args().size() != 1) {
             throw new FixtureException("`" + c.written() + "` takes one argument");
         }
@@ -2101,11 +2101,11 @@ public final class FixtureReader {
                         neutral.shapeOf(neutral.newtypeBaseType(built))));
     }
 
-    private Object record(Ast.NewData nd, Type expected, Admission admission) {
+    private Object record(Hir.NewData nd, Type expected, Admission admission) {
         // `金額(500)` is the record literal `金額 { value = 500 }` written in call form (ADR-0032), and
         // a value's body reaches here already written the second way. Either spelling is the newtype's
         // own neutral form — its inner value — not a field map.
-        TypeName built = nd.typeName().denotes();
+        TypeSymbol built = nd.typeName().denotes();
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
             return neutral.newtypeAt(expected, built,
@@ -2113,18 +2113,18 @@ public final class FixtureReader {
                                     neutral.shapeOf(neutral.newtypeBaseType(built)), below(admission)),
                             neutral.shapeOf(neutral.newtypeBaseType(built))));
         }
-        Map<String, Ast.TypeRef> declared = neutral.fieldTypes(nd.typeName().denotes());
+        Map<String, Hir.TypeRef> declared = neutral.fieldTypes(nd.typeName().denotes());
         Map<String, Object> map = new LinkedHashMap<>();
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought.
-        for (Ast.Var ref : nd.spreads()) {
+        for (Hir.Var ref : nd.spreads()) {
             // A spread names a value in force, so what it copies is what that name denotes: a binding
             // holds what it was bound to, and a definition stands for its body. A definition is
             // reached by the name this row spells it with — a definition of this module by its own
             // name, one another module published by that module's name and its own. `bare()` is the
             // name it was *declared* under, which is not that key for an imported value (issue #212).
             String spread = ref.name();
-            Ast.Expr value = ref.denotes() instanceof ValueName.Local local
+            Hir.Expr value = ref.denotes() instanceof ValueName.Local local
                     ? bindings.get(local.id()) : valueBody(spread);
             if (value == null) {
                 throw new FixtureException("`" + spread
@@ -2152,7 +2152,7 @@ public final class FixtureReader {
                 }
             }
         }
-        for (Ast.FieldInit fi : nd.inits()) {
+        for (Hir.FieldInit fi : nd.inits()) {
             Object v = neutral.shaped(raw(fi.value(), neutral.shapeOf(declared.get(fi.name())),
                             below(admission)),
                     neutral.shapeOf(declared.get(fi.name())));
@@ -2180,7 +2180,7 @@ public final class FixtureReader {
         throw new FixtureException("only a number can be negated in a fixture");
     }
 
-    private Object fold(Ast.Binary b) {
+    private Object fold(Hir.Binary b) {
         Object l = raw(b.left());
         Object r = raw(b.right());
         if (l instanceof Long x && r instanceof Long y) {
@@ -2402,7 +2402,7 @@ public final class FixtureReader {
         return new ValueRendering(neutral).typeShown(v, position);
     }
 
-    java.util.Optional<String> refuse(BoundaryInput at, Ast.Expr fixture) {
+    java.util.Optional<String> refuse(BoundaryInput at, Hir.Expr fixture) {
         try {
             built(fixture, at);
             return java.util.Optional.empty();

@@ -4,6 +4,7 @@ import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
@@ -24,7 +25,7 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -83,15 +84,15 @@ public final class Output {
          * ran. Two copies of this would be two chances for the measured classes and the shipped ones to
          * stop being the same program, which is the one thing a measurement of them may not do.
          */
-        record Inputs(Ast.Module lowered, Symbols scope, Map<String, String> typePackages,
+        record Inputs(Hir.Module lowered, Symbols scope, Map<String, String> typePackages,
                       Map<String, Sig> sigs, Map<String, Sig> imported, Set<String> injected,
                       Map<String, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
-                      TypeChecker.Checked checked,
-                      Map<TypeName, List<Ast.InvariantClause>> dischargeClauses) {}
+                      Bodies.Elaborated checked,
+                      Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses) {}
 
         static Inputs inputs(Db db, String name) {
-            Answer<TypeChecker.Checked> checked = db.ask(new Bodies.Checked(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             // The same answer the check read. The backend replays the composition walk and emits
@@ -101,12 +102,12 @@ public final class Output {
             Answer<Map<String, Sig>> imported = db.ask(new Bodies.Imported(name));
             Answer<Set<String>> injected = db.ask(new Bodies.ImportedInjected(name));
             Answer<Map<String, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Bodies.Requirements(name));
             // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
             // is written against the operations an author wrote — which the lowered module no longer has.
-            Answer<Map<TypeName, List<Ast.InvariantClause>>> dischargeClauses =
+            Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
                     || !signatures.present() || !injected.present() || !callees.present()
@@ -114,7 +115,7 @@ public final class Output {
                 return null;
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
-                    typePackages(prepared.value()), signatures.value(), imported.value(),
+                    prepared.value().importedFrom(), signatures.value(), imported.value(),
                     injected.value(),
                     callees.value(), requirements.value(), checked.value(), dischargeClauses.value());
         }
@@ -155,15 +156,6 @@ public final class Output {
         }
 
         /** Maps each imported type name to its declaring module, for cross-package references. */
-        private static Map<String, String> typePackages(Ast.Module m) {
-            Map<String, String> packages = new LinkedHashMap<>();
-            for (Ast.Import imp : m.imports()) {
-                for (String imported : imp.names()) {
-                    packages.put(imported, imp.module());
-                }
-            }
-            return packages;
-        }
     }
 
     /**
@@ -325,7 +317,7 @@ public final class Output {
         /** The plan of the same module, for a caller that needs to read what a hit set means. Made
          * from the same answer the classes were generated from, so the numbers agree. */
         public static CoverageSites.Plan planOf(Db db, String module) {
-            TypeChecker.Checked checked = db.ask(new Bodies.Checked(module)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
             return checked == null ? CoverageSites.Plan.NONE
                     : CoverageSites.of(sourceIdOf(db, module), checked.behaviorBodies());
         }
@@ -487,14 +479,14 @@ public final class Output {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
             List<DataChecker.ConstCheck> checks;
             try {
-                checks = DataChecker.constNewtypeChecks(prepared.value(), scope.value());
+                checks = DataChecker.constNewtypeChecks(prepared.value().fns(), scope.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -541,14 +533,14 @@ public final class Output {
          * report.
          */
         private String failingClause(Db db, DataChecker.ConstCheck check, Class<?> ctfe) {
-            Answer<Ast.Module> declaring = db.ask(new Shapes.Prepared(check.type().module()));
+            Answer<souther.compiler.check.Prepared> declaring = db.ask(new Shapes.Prepared(check.type().module()));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(check.type().module()));
             if (!declaring.present() || !scope.present()) {
                 return null;
             }
-            List<Ast.InvariantClause> clauses = null;
-            for (Ast.Def def : declaring.value().defs()) {
-                if (def instanceof Ast.Data d && d.name().equals(check.type().name())) {
+            List<Hir.InvariantClause> clauses = null;
+            for (Hir.Def def : declaring.value().defs()) {
+                if (def instanceof Hir.Data d && d.name().equals(check.type().name())) {
                     clauses = TypeOps.effectiveInvariants(d, scope.value());
                 }
             }
@@ -604,13 +596,13 @@ public final class Output {
 
         @Override
         public Answer<souther.compiler.examples.ExampleStatements.Readings> compute(Db db) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            if (db.ask(new Bodies.Checked(name)).value() == null) {
+            if (!db.ask(new Bodies.Checked(name)).present()) {
                 // a module that did not check states nothing yet
                 return Answer.of(souther.compiler.examples.ExampleStatements.Readings.NONE);
             }
@@ -624,11 +616,12 @@ public final class Output {
                     || exampleOrigins == null || fakeOrigins == null) {
                 return Answer.absent();
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
+            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // `requirements` is asked for above as a readiness condition — a module whose
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
-            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(prepared.value(),
+            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
+                    prepared.value().forExamples(prepared.value().examples()),
                     scope.value(), sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     deadlineOf(db), policyOf(db)));
@@ -832,13 +825,13 @@ public final class Output {
          * that is the one that picks what this source's share of them is.
          */
         private static List<Diagnostic> fakeTables(Db db, String name, String sourceId) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return List.of();
             }
-            if (db.ask(new Bodies.Checked(name)).value() == null) {
+            if (!db.ask(new Bodies.Checked(name)).present()) {
                 return List.of();   // a module that did not check has nothing to build a value with
             }
             Map<String, byte[]> classes =
@@ -849,9 +842,10 @@ public final class Output {
             if (classes == null || requirements == null || fakeOrigins == null) {
                 return List.of();
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
+            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // As above: `requirements` says this module is ready to be read, not what to read.
-            return souther.compiler.examples.ExampleStatements.fakeTables(prepared.value(), scope.value(),
+            return souther.compiler.examples.ExampleStatements.fakeTables(
+                    prepared.value().forExamples(prepared.value().examples()), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     deadlineOf(db), policyOf(db));
@@ -867,13 +861,13 @@ public final class Output {
          */
         static Answer<Of> evaluate(Db db, String name, String sourceId, Map<String, byte[]> classes,
                                    CoverageMode coverage) {
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            if (db.ask(new Bodies.Checked(name)).value() == null) {
+            if (!db.ask(new Bodies.Checked(name)).present()) {
                 return Answer.absent();   // a module that did not check has nothing to run
             }
             if (classes == null) {
@@ -887,7 +881,9 @@ public final class Output {
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
-            Ast.Module rows = written(db, name, sourceId, prepared.value());
+            souther.compiler.check.Prepared.ExampleExecution rows =
+                    prepared.value().forExamples(writtenIn(db, name, sourceId,
+                            prepared.value().examples()));
             if (rows.examples().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
@@ -900,7 +896,7 @@ public final class Output {
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
+            Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             souther.compiler.examples.ExampleVerifier.Observations observed =
                     souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
                             requirements, evaluationLoader(db),
@@ -960,23 +956,22 @@ public final class Output {
             return names;
         }
 
-        /** The module carrying only the rows written in {@code sourceId}. The fakes stay whole: a
+        /** The rows of {@code rows} written in {@code sourceId}. The fakes are not selected: a
          * module's own fakes are what its attached files' rows run against, and the other way
          * round. */
-        private static Ast.Module written(Db db, String name, String sourceId, Ast.Module m) {
+        private static List<Hir.Example> writtenIn(Db db, String name, String sourceId,
+                                                   List<Hir.Example> rows) {
             List<String> origins = db.ask(new Front.ExampleOrigins(name)).value();
-            if (origins == null || origins.size() != m.examples().size()) {
-                return m;
+            if (origins == null || origins.size() != rows.size()) {
+                return rows;
             }
-            List<Ast.Example> mine = new ArrayList<>();
+            List<Hir.Example> mine = new ArrayList<>();
             for (int i = 0; i < origins.size(); i++) {
                 if (origins.get(i).equals(sourceId)) {
-                    mine.add(m.examples().get(i));
+                    mine.add(rows.get(i));
                 }
             }
-            return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), m.defs(),
-                    m.behaviors(), m.fns(), m.takenOn(), mine, m.fakes(), m.exampleFileTarget(),
-                    m.pos());
+            return mine;
         }
     }
 }

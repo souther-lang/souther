@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.diag.SourceRef;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,7 +17,7 @@ import java.util.Optional;
 public sealed interface OriginRef {
 
     /** The cases of a sum, or the two values of a {@code Bool}: the type itself says the partition. */
-    record TypeOrigin(TypeName type) implements OriginRef {}
+    record TypeOrigin(TypeSymbol type) implements OriginRef {}
 
     /**
      * A clause of a {@code data}'s invariant.
@@ -25,7 +25,7 @@ public sealed interface OriginRef {
      * @param at empty for a type that arrived from a module compiled elsewhere, whose clause has no
      *           position in this compilation
      */
-    record InvariantOrigin(Optional<SourceRef> at, TypeName type, String clause)
+    record InvariantOrigin(Optional<SourceRef> at, TypeSymbol type, String clause)
             implements OriginRef {
 
         public InvariantOrigin {
@@ -105,7 +105,7 @@ public sealed interface OriginRef {
      *               the end where it is, since each is then as much the answer as the others and
      *               choosing would invent the one that is not known
      */
-    record NarrowedOrigin(OriginRef bound, List<TypeName> within) implements OriginRef {
+    record NarrowedOrigin(OriginRef bound, List<TypeSymbol> within) implements OriginRef {
 
         public NarrowedOrigin {
             within = List.copyOf(within);
@@ -134,7 +134,7 @@ public sealed interface OriginRef {
      */
     record Line(OriginRef rule, souther.compiler.coverage.CoverageSites.Obligation comparison,
                 boolean valueBelongsBelow, GuardOrigin.Witness witness, boolean holdsAtTheValue,
-                boolean singles, List<TypeName> narrowedWithin) {}
+                boolean singles, List<TypeSymbol> narrowedWithin) {}
 
     /** The line this origin drew, said the way {@link Line} says it. */
     default Line line() {
@@ -157,7 +157,7 @@ public sealed interface OriginRef {
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
             case GuardOrigin g -> "guard@" + g.at().pos();
             case NarrowedOrigin n -> n.bound().describe() + " within "
-                    + n.within().stream().map(TypeName::name)
+                    + n.within().stream().map(TypeSymbol::name)
                             .collect(java.util.stream.Collectors.joining(" or "));
         };
     }

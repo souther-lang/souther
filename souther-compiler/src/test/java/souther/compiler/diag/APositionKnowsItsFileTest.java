@@ -2,6 +2,7 @@ package souther.compiler.diag;
 
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 
@@ -101,7 +102,7 @@ class APositionKnowsItsFileTest {
      */
     @Test
     void aModuleReadOffThePathCarriesNoFileOfThisCompiles() {
-        Ast.FnDef helper = Prelude.helpers().values().iterator().next();
+        Hir.FnDef helper = Prelude.helpers().values().iterator().next();
 
         assertNull(helper.pos().sourceId(),
                 "the prelude is in no source of the compile that reads it");

@@ -6,7 +6,10 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.ast.WrittenName;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
@@ -72,15 +75,15 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     }
 
     /** Every declaration this compilation has, which is what a position here may turn out to be. */
-    private static List<TypeName> everyDeclaration() {
-        List<TypeName> named = new ArrayList<>();
+    private static List<TypeSymbol> everyDeclaration() {
+        List<TypeSymbol> named = new ArrayList<>();
         for (String each : List.of("Shown", "Hidden", "One", "Two", "Sum")) {
-            named.add(new TypeName("lib", each));
+            named.add(TypeSymbols.declared(new TypeKey("lib", each)));
         }
         for (String each : List.of("Own", "RoundingMode", "In")) {
-            named.add(new TypeName("app", each));
+            named.add(TypeSymbols.declared(new TypeKey("app", each)));
         }
-        named.add(TypeName.runtime("RoundingMode"));
+        named.add(TypeSymbol.runtime("RoundingMode"));
         return named;
     }
 
@@ -90,11 +93,11 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         Symbols symbols = scopeOf("app", LIB, APP);
 
         List<String> broken = new ArrayList<>();
-        for (TypeName type : everyDeclaration()) {
-            if (symbols.reach(type) instanceof TypeReachName.Written written) {
-                if (!type.equals(symbols.resolve(spelled(written.rendered())))) {
+        for (TypeSymbol type : everyDeclaration()) {
+            if (symbols.scope().reach(type) instanceof TypeReachName.Written written) {
+                if (!type.equals(symbols.scope().resolve(spelled(written.rendered())).type())) {
                     broken.add(written.rendered() + " is written for " + type + " and resolves to "
-                            + symbols.resolve(spelled(written.rendered())));
+                            + symbols.scope().resolve(spelled(written.rendered())).type());
                 }
             }
         }
@@ -107,19 +110,19 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     void whatHasNoNameHereIsNotReachedByAnySpellingThisModuleWrites() {
         Symbols symbols = scopeOf("app", LIB, APP);
 
-        List<TypeName> unnameable = new ArrayList<>();
-        for (TypeName type : everyDeclaration()) {
-            if (symbols.reach(type) instanceof TypeReachName.Unnameable u) {
+        List<TypeSymbol> unnameable = new ArrayList<>();
+        for (TypeSymbol type : everyDeclaration()) {
+            if (symbols.scope().reach(type) instanceof TypeReachName.Unnameable u) {
                 unnameable.add(u.denotes());
             }
         }
 
-        assertEquals(List.of(new TypeName("lib", "Hidden"), TypeName.runtime("RoundingMode")),
+        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Hidden")), TypeSymbol.runtime("RoundingMode")),
                 unnameable, "one its module keeps to itself, one this module took the spelling of");
-        for (TypeName type : unnameable) {
+        for (TypeSymbol type : unnameable) {
             for (String spelling : List.of(type.name(), type.qualified(),
                     "up." + type.name(), "lib." + type.name())) {
-                assertFalse(type.equals(symbols.resolve(spelled(spelling))),
+                assertFalse(type.equals(symbols.scope().resolve(spelled(spelling)).type()),
                         "`" + spelling + "` reaches " + type + " after all");
             }
         }
@@ -132,22 +135,22 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
      */
     @Test
     void aRuntimeBackedTypeThisModuleTookTheSpellingOfHasNoNameHere() {
-        TypeName language = TypeName.runtime("RoundingMode");
+        TypeSymbol language = TypeSymbol.runtime("RoundingMode");
 
-        assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).reach(language));
-        assertEquals(new TypeName("app", "RoundingMode"),
-                scopeOf("app", LIB, APP).resolve(spelled("RoundingMode")));
+        assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).scope().reach(language));
+        assertEquals(TypeSymbols.declared(new TypeKey("app", "RoundingMode")),
+                scopeOf("app", LIB, APP).scope().resolve(spelled("RoundingMode")).type());
     }
 
     /** And where nothing here took it, it is written as itself. */
     @Test
     void aRuntimeBackedTypeNothingHereShadowsIsWrittenBare() {
         Symbols symbols = scopeOf("lib", LIB, APP);
-        TypeName language = TypeName.runtime("RoundingMode");
+        TypeSymbol language = TypeSymbol.runtime("RoundingMode");
 
         assertEquals("RoundingMode", assertInstanceOf(TypeReachName.Written.class,
-                symbols.reach(language)).rendered());
-        assertEquals(language, symbols.resolve(spelled("RoundingMode")));
+                symbols.scope().reach(language)).rendered());
+        assertEquals(language, symbols.scope().resolve(spelled("RoundingMode")).type());
     }
 
     /**
@@ -163,15 +166,15 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     void theLanguagesOwnVocabularyIsWrittenAsItselfAndReadBackAsACase() {
         Symbols symbols = scopeOf("app", LIB, APP);
 
-        for (TypeName vocabulary : List.of(TypeName.primitive("Int"),
-                TypeName.runtime("DivisionByZero"))) {
+        for (TypeSymbol vocabulary : List.of(TypeSymbol.primitive("Int"),
+                TypeSymbol.runtime("DivisionByZero"))) {
             TypeReachName.Written written = assertInstanceOf(TypeReachName.Written.class,
-                    symbols.reach(vocabulary), vocabulary.toString());
+                    symbols.scope().reach(vocabulary), vocabulary.toString());
 
             assertEquals(vocabulary.name(), written.rendered());
-            assertEquals(vocabulary, symbols.resolveCase(spelled(written.rendered())),
+            assertEquals(vocabulary, symbols.scope().resolveCase(spelled(written.rendered())).type(),
                     "the reader of the position a case name stands at");
-            assertEquals(null, symbols.resolve(spelled(written.rendered())),
+            assertEquals(Denotation.NOT_IN_SCOPE, symbols.scope().resolve(spelled(written.rendered())),
                     "and not this one, which answers for declarations");
         }
     }

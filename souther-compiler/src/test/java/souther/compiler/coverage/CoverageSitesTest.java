@@ -49,7 +49,7 @@ class CoverageSitesTest {
     private static Map<String, Core> bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        TypeChecker.Checked checked = compilation.db()
+        Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
         return checked.behaviorBodies();

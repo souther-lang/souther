@@ -1,7 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.generated.MemoryClassLoader;
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -17,7 +17,7 @@ import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,12 +53,12 @@ import java.util.Set;
  */
 public final class ExampleStatements {
 
-    private final Ast.Module module;
+    private final souther.compiler.check.Prepared.ExampleExecution module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     private final MemoryClassLoader loader;
     /** The values a statement may name: this module's own, and the ones its imports bring in. */
-    private final Map<String, Ast.FnDef> values;
+    private final Map<String, Hir.FnDef> values;
     /** A reader kept for showing a value that was already built ({@link #shown}), which is the one
      * thing a reader does that reads none of its own state: nothing is expanded, no binding is put in
      * force and no helper is run, so there is no reading here to isolate. What it is for is the
@@ -72,8 +72,8 @@ public final class ExampleStatements {
      * say, not by how fast the host reading them is. */
     private final EvaluationPolicy policy;
 
-    private ExampleStatements(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
-                              MemoryClassLoader loader, Map<String, Ast.FnDef> values,
+    private ExampleStatements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Sig> sigs,
+                              MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                               Deadline deadline, EvaluationPolicy policy) {
         this.module = module;
         this.symbols = symbols;
@@ -96,7 +96,7 @@ public final class ExampleStatements {
         return new FixtureReader(module, symbols, values, loader);
     }
 
-    private Set<TypeName> outCases(Type out) {
+    private Set<TypeSymbol> outCases(Type out) {
         return TypeOps.outputCases(out, symbols);
     }
 
@@ -115,9 +115,9 @@ public final class ExampleStatements {
      * itself dispatches with ({@link Standins#answering}) — the same rule, not a second reading of it — and
      * the two answers are compared as the written values they are built into.
      */
-    public static Readings disagreements(Ast.Module module, Symbols symbols,
+    public static Readings disagreements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                         ClassLoader parent, Map<String, Ast.FnDef> values,
+                                         ClassLoader parent, Map<String, Hir.FnDef> values,
                                          List<String> exampleOrigins,
                                          List<String> fakeOrigins, Deadline deadline,
                                          EvaluationPolicy policy) {
@@ -166,9 +166,9 @@ public final class ExampleStatements {
      * a report in the wrong file is a report, and the reason to know the file is to place it, while
      * nothing else would say what is wrong with the table at all.
      */
-    public static List<Diagnostic> fakeTables(Ast.Module module, Symbols symbols,
+    public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                              ClassLoader parent, Map<String, Ast.FnDef> values,
+                                              ClassLoader parent, Map<String, Hir.FnDef> values,
                                               List<String> fakeOrigins, String sourceId,
                                               Deadline deadline, EvaluationPolicy policy) {
         if (module.fakes().isEmpty()) {
@@ -180,7 +180,7 @@ public final class ExampleStatements {
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
         for (int i = 0; i < module.fakes().size(); i++) {
-            Ast.Fake fk = module.fakes().get(i);
+            Hir.Fake fk = module.fakes().get(i);
             if (!answering.add(fk.target())) {
                 continue;   // a second table for one dependency answers nothing, here as anywhere
             }
@@ -367,14 +367,14 @@ public final class ExampleStatements {
 
     /** The behaviors this module both stands in for — the target of a {@code fake}, the dependency a
      * {@code with} that takes no input answers for ({@link #againstWiths}) — and records rows of. */
-    private static Set<String> contested(Ast.Module module, Map<String, Sig> sigs) {
+    private static Set<String> contested(souther.compiler.check.Prepared.ExampleExecution module, Map<String, Sig> sigs) {
         Set<String> stoodIn = new LinkedHashSet<>();
-        for (Ast.Fake fk : module.fakes()) {
+        for (Hir.Fake fk : module.fakes()) {
             stoodIn.add(fk.target());
         }
-        for (Ast.Example ex : module.examples()) {
-            for (Ast.ExampleRow row : ex.rows()) {
-                for (Ast.With w : row.withs()) {
+        for (Hir.Example ex : module.examples()) {
+            for (Hir.ExampleRow row : ex.rows()) {
+                for (Hir.With w : row.withs()) {
                     Sig depSig = sigs.get(w.dep());
                     if (depSig != null && depSig.inputTypes().isEmpty()) {
                         stoodIn.add(w.dep());
@@ -383,7 +383,7 @@ public final class ExampleStatements {
             }
         }
         Set<String> both = new LinkedHashSet<>();
-        for (Ast.Example ex : module.examples()) {
+        for (Hir.Example ex : module.examples()) {
             if (stoodIn.contains(ex.target())) {
                 both.add(ex.target());
             }
@@ -394,13 +394,13 @@ public final class ExampleStatements {
     /** One recorded row, read as far as it can be without running it. What it says is left as written
      * — rendering it builds the fixture a second time, and only a row that turns out to disagree is
      * ever shown. */
-    private record RecordedRow(SourceRef at, Ast.Expr expected, Object[] arguments, Answered answer) {}
+    private record RecordedRow(SourceRef at, Hir.Expr expected, Object[] arguments, Answered answer) {}
 
     private Readings collectDisagreements(List<String> exampleOrigins,
                                           List<String> fakeOrigins, Set<String> contested) {
         Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
         for (int i = 0; i < module.examples().size(); i++) {
-            Ast.Example ex = module.examples().get(i);
+            Hir.Example ex = module.examples().get(i);
             if (contested.contains(ex.target())) {
                 readRecorded(ex, exampleOrigins.get(i), recorded);
             }
@@ -416,7 +416,7 @@ public final class ExampleStatements {
         // disagree with. What that second table is, is its own question.
         Set<String> answering = new LinkedHashSet<>();
         for (int j = 0; j < module.fakes().size(); j++) {
-            Ast.Fake fk = module.fakes().get(j);
+            Hir.Fake fk = module.fakes().get(j);
             if (answering.add(fk.target())) {
                 againstFake(fk, fakeOrigins.get(j), recorded, found, timedOut);
             }
@@ -436,13 +436,13 @@ public final class ExampleStatements {
      * arm or fixture error it is where the row is evaluated — and a row read otherwise here than there
      * would be held to a stand-in on an assertion the model itself refuses.
      */
-    private void readRecorded(Ast.Example ex, String origin, Map<String, List<RecordedRow>> into) {
+    private void readRecorded(Hir.Example ex, String origin, Map<String, List<RecordedRow>> into) {
         Sig sig = sigs.get(ex.target());
         if (sig == null) {
             return;
         }
-        Set<TypeName> cases = outCases(sig.outputType());
-        for (Ast.ExampleRow row : ex.rows()) {
+        Set<TypeSymbol> cases = outCases(sig.outputType());
+        for (Hir.ExampleRow row : ex.rows()) {
             if (row.inputs().size() != sig.inputTypes().size()) {
                 continue;
             }
@@ -470,7 +470,7 @@ public final class ExampleStatements {
     }
 
     /** One fake against the rows recorded for the behavior it stands in for. */
-    private void againstFake(Ast.Fake fk, String origin, Map<String, List<RecordedRow>> recorded,
+    private void againstFake(Hir.Fake fk, String origin, Map<String, List<RecordedRow>> recorded,
                              List<Disagreement> found, List<UnreadFake> timedOut) {
         List<RecordedRow> rows = recorded.get(fk.target());
         Sig sig = sigs.get(fk.target());
@@ -561,10 +561,10 @@ public final class ExampleStatements {
      * statement about the same behavior, written for every other row and every other run, and a
      * {@code with} beside it does not settle what it states.
      */
-    private void againstWiths(Ast.Example ex, String origin, Map<String, List<RecordedRow>> recorded,
+    private void againstWiths(Hir.Example ex, String origin, Map<String, List<RecordedRow>> recorded,
                               List<Disagreement> found) {
-        for (Ast.ExampleRow row : ex.rows()) {
-            for (Ast.With w : row.withs()) {
+        for (Hir.ExampleRow row : ex.rows()) {
+            for (Hir.With w : row.withs()) {
                 List<RecordedRow> rows = recorded.get(w.dep());
                 Sig depSig = sigs.get(w.dep());
                 if (rows == null || depSig == null || !depSig.inputTypes().isEmpty()) {
@@ -602,7 +602,7 @@ public final class ExampleStatements {
      * date is its ISO form, a qualified case name is its short one — so a marker measured from it
      * underlines the wrong columns and can run past the end of the line.
      */
-    private Statement said(String sourceId, Ast.Expr written, Answered asserted) {
+    private Statement said(String sourceId, Hir.Expr written, Answered asserted) {
         return new Statement(sourceId, written.reportedAt(), shown(asserted));
     }
 
@@ -621,7 +621,7 @@ public final class ExampleStatements {
     /** The written inputs decoded against {@code types}, or null where one would not build — that is
      * <em>E1903</em>'s to say where the row is evaluated, and a row whose inputs are not values names
      * no input to hold a stand-in against. */
-    private static Object[] builtOrNull(FixtureReader fixtures, List<Ast.Expr> written,
+    private static Object[] builtOrNull(FixtureReader fixtures, List<Hir.Expr> written,
                                         List<BoundaryInput> types) {
         Object[] values = new Object[types.size()];
         for (int i = 0; i < types.size(); i++) {
@@ -797,7 +797,7 @@ public final class ExampleStatements {
 
     /** One row of a fake's table: the arguments it states — none, for the {@code _} row — and the
      * answer it was built into. */
-    record Standin(Object[] arguments, Ast.FakeRow row, FixtureReader.BuiltFixture answer) {}
+    record Standin(Object[] arguments, Hir.FakeRow row, FixtureReader.BuiltFixture answer) {}
 
     /**
      * {@code fk}'s table, decoded against {@code ins} and {@code outType}; null (with a diagnostic
@@ -809,9 +809,9 @@ public final class ExampleStatements {
      * so a table with an arity slip and a slow or non-terminating output reported the second problem
      * instead of the first, or ran out of time before reporting either.
      */
-    static Standins standins(FixtureReader fixtures, Ast.Fake fk, List<BoundaryInput> ins,
+    static Standins standins(FixtureReader fixtures, Hir.Fake fk, List<BoundaryInput> ins,
                                      BoundaryOutput outType, List<Diagnostic> out) {
-        for (Ast.FakeRow r : fk.rows()) {
+        for (Hir.FakeRow r : fk.rows()) {
             if (!r.isDefault() && r.inputs().size() != ins.size()) {
                 out.add(unbuildableFake(r.pos(), fk.target(), "a row has " + r.inputs().size()
                         + " input(s) where the dependency takes " + ins.size()));
@@ -821,7 +821,7 @@ public final class ExampleStatements {
         List<Standin> explicit = new ArrayList<>();
         Standin fallback = null;
         try {
-            for (Ast.FakeRow r : fk.rows()) {
+            for (Hir.FakeRow r : fk.rows()) {
                 // A dependency that returns a sum has no single decoder; each row names one case,
                 // so decode the row's output against that case's type (as an expected value is).
                 FixtureReader.BuiltFixture answer = fixtures.buildFixture(r.output(), outType);
@@ -864,7 +864,7 @@ public final class ExampleStatements {
      * The budget is the one this wait was held to rather than the setting read back later, and it is
      * written out rather than passed as a number, which a locale would group into a budget nobody set.
      */
-    private static Diagnostic unreadableFake(Ast.Fake fk, Unread why) {
+    private static Diagnostic unreadableFake(Hir.Fake fk, Unread why) {
         Diagnostic.Builder said = Diagnostic.at(fk.pos(), fk.target().length())
                 .say(why.isDepth()
                         ? new ExampleMessage.TheTableReachedItsDepthLimit(fk.target(),
@@ -905,7 +905,7 @@ public final class ExampleStatements {
     sealed interface Answered {
 
         /** The case, and nothing under it: a bare name denoting one. */
-        record CaseOnly(TypeName name) implements Answered {}
+        record CaseOnly(TypeSymbol name) implements Answered {}
 
         /** The whole value. */
         record Whole(FixtureReader.BuiltFixture fixture) implements Answered {}
@@ -920,8 +920,8 @@ public final class ExampleStatements {
      * What a stand-in stands in with: the whole value, always. Unreadable where it will not build,
      * which is where it stands in for nothing at all — that is reported where the fake is resolved.
      */
-    private static Answered readStandIn(FixtureReader fixtures, Ast.Expr written,
-                                        BoundaryOutput outType, Set<TypeName> cases) {
+    private static Answered readStandIn(FixtureReader fixtures, Hir.Expr written,
+                                        BoundaryOutput outType, Set<TypeSymbol> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
             return new Answered.Unreadable();
         }
@@ -940,8 +940,8 @@ public final class ExampleStatements {
      * the row asserts: a value a helper answered with is that value, not that value read back into
      * the form a fixture is written in and decoded again (issue #214).
      */
-    private static Answered readExpected(FixtureReader fixtures, Ast.Expr written,
-                                         BoundaryOutput outType, Set<TypeName> cases) {
+    private static Answered readExpected(FixtureReader fixtures, Hir.Expr written,
+                                         BoundaryOutput outType, Set<TypeSymbol> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
             return new Answered.Unreadable();
         }
@@ -957,9 +957,9 @@ public final class ExampleStatements {
 
     /** Whether {@code written} names a case the position cannot hold — <em>E1904</em> where the row
      * is evaluated, and nothing about the behavior it was written for. */
-    private static boolean refusedCase(FixtureReader fixtures, Ast.Expr written,
-                                       Set<TypeName> cases) {
-        TypeName named = fixtures.constructedCase(written);
+    private static boolean refusedCase(FixtureReader fixtures, Hir.Expr written,
+                                       Set<TypeSymbol> cases) {
+        TypeSymbol named = fixtures.constructedCase(written);
         return named != null && !cases.isEmpty() && !cases.contains(named);
     }
 
@@ -982,13 +982,13 @@ public final class ExampleStatements {
         if (left instanceof Answered.Whole l && right instanceof Answered.Whole r) {
             return !souther.runtime.Values.equal(l.fixture().value(), r.fixture().value());
         }
-        TypeName one = caseOf(left);
-        TypeName other = caseOf(right);
+        TypeSymbol one = caseOf(left);
+        TypeSymbol other = caseOf(right);
         return one != null && other != null && !one.equals(other);
     }
 
     /** The case an assertion is about, or null where nothing says. */
-    private static TypeName caseOf(Answered a) {
+    private static TypeSymbol caseOf(Answered a) {
         return switch (a) {
             case Answered.CaseOnly c -> c.name();
             case Answered.Whole w -> w.fixture().caseName();

@@ -1,7 +1,7 @@
 package souther.compiler.observe;
 
 import souther.compiler.diag.SourceRef;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Set;
@@ -68,9 +68,9 @@ public record RowOutcome(SourceRef at,
                          Stage stage,
                          Disposition disposition,
                          FailurePhase failurePhase,
-                         TypeName expectedArm,
-                         TypeName resultArm,
-                         List<TypeName> inputCases,
+                         TypeSymbol expectedArm,
+                         TypeSymbol resultArm,
+                         List<TypeSymbol> inputCases,
                          List<ObservedValue> inputs,
                          Set<Integer> hits,
                          long stepsSpent) {

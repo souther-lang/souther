@@ -132,7 +132,7 @@ class ObservedValuesTest {
         Map<String, ObservedValue> fields = ObservedValue.fields();
         fields.put("a", new ObservedValue.Integer(1L));
         ObservedValue.Constructed constructed =
-                new ObservedValue.Constructed(new souther.compiler.types.TypeName("m", "T"), fields);
+                new ObservedValue.Constructed(souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey("m", "T")), fields);
         fields.put("b", new ObservedValue.Integer(2L));
         assertEquals(1, constructed.fields().size());
     }

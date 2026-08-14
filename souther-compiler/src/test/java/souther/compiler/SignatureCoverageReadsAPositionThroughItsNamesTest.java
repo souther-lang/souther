@@ -8,7 +8,7 @@ import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -208,7 +208,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
         return compilation;
     }
 
-    private static List<String> names(java.util.Collection<TypeName> cases) {
-        return cases.stream().map(TypeName::name).toList();
+    private static List<String> names(java.util.Collection<TypeSymbol> cases) {
+        return cases.stream().map(TypeSymbol::name).toList();
     }
 }

@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -41,7 +41,7 @@ import java.util.Map;
  * author is told about. An author reads their file from the top.
  *
  * <p>Nothing here answers which module declared a taken-on helper: the declaration answers that
- * ({@link Ast.FnDef#declaredBy}), because the name it is reached by cannot — {@code List.foldFrom}
+ * ({@link Hir.FnDef#declaredBy}), because the name it is reached by cannot — {@code List.foldFrom}
  * is reached under the library's alias and declared in {@code souther.list}.
  *
  * <p>What is in the table depends on {@link InliningPolicy}, which is what an expanded tree is a
@@ -51,12 +51,12 @@ public final class HelperTable {
 
     private final String module;
     private final InliningPolicy policy;
-    private final Map<String, Ast.FnDef> reached;
-    private final Map<String, Ast.FnDef> declared;
-    private final Map<String, Ast.FnDef> emits;
+    private final Map<String, Hir.FnDef> reached;
+    private final Map<String, Hir.FnDef> declared;
+    private final Map<String, Hir.FnDef> emits;
 
-    private HelperTable(String module, InliningPolicy policy, Map<String, Ast.FnDef> reached,
-                        Map<String, Ast.FnDef> declared, Map<String, Ast.FnDef> emits) {
+    private HelperTable(String module, InliningPolicy policy, Map<String, Hir.FnDef> reached,
+                        Map<String, Hir.FnDef> declared, Map<String, Hir.FnDef> emits) {
         this.module = module;
         this.policy = policy;
         this.reached = reached;
@@ -74,16 +74,16 @@ public final class HelperTable {
      * module has every published definition as a fn of its own, and the caller that held the three
      * apart answered that it has none of them.
      */
-    public static HelperTable of(String module, Map<String, Ast.FnDef> declared,
-                                 Map<String, Ast.FnDef> takenOn,
-                                 Map<String, Ast.FnDef> imported, InliningPolicy policy) {
+    public static HelperTable of(String module, Map<String, Hir.FnDef> declared,
+                                 Map<String, Hir.FnDef> takenOn,
+                                 Map<String, Hir.FnDef> imported, InliningPolicy policy) {
         // In the order they are written, so a module with two helpers to complain about complains
         // about the earlier one first.
-        Map<String, Ast.FnDef> emits = new LinkedHashMap<>(declared);
+        Map<String, Hir.FnDef> emits = new LinkedHashMap<>(declared);
         emits.putAll(takenOn);
-        Map<String, Ast.FnDef> joined = new LinkedHashMap<>(imported);
+        Map<String, Hir.FnDef> joined = new LinkedHashMap<>(imported);
         joined.putAll(emits);
-        Map<String, Ast.FnDef> reached;
+        Map<String, Hir.FnDef> reached;
         if (policy == InliningPolicy.FULL) {
             reached = new LinkedHashMap<>(Prelude.helpers());
             reached.putAll(joined);
@@ -94,7 +94,7 @@ public final class HelperTable {
     }
 
     /** The same, reading the two components off the module rather than being handed them. */
-    public static HelperTable of(Ast.Module module, Map<String, Ast.FnDef> imported,
+    public static HelperTable of(Hir.Module module, Map<String, Hir.FnDef> imported,
                                  InliningPolicy policy) {
         return of(module.name(), HelperInliner.helpersOf(module),
                 HelperInliner.takenOnBy(module), imported, policy);
@@ -112,7 +112,7 @@ public final class HelperTable {
      * a narrowed table would find {@code foldFrom} non-recursive and expand its self-call forever.
      */
     public HelperTable hiding(Collection<String> names) {
-        Map<String, Ast.FnDef> narrowed = new LinkedHashMap<>(reached);
+        Map<String, Hir.FnDef> narrowed = new LinkedHashMap<>(reached);
         boolean any = false;
         for (String name : names) {
             any |= narrowed.remove(name) != null;
@@ -131,7 +131,7 @@ public final class HelperTable {
     }
 
     /** The declaration {@code name} reaches, or null where it reaches none. */
-    public Ast.FnDef reached(String name) {
+    public Hir.FnDef reached(String name) {
         return reached.get(name);
     }
 
@@ -141,22 +141,22 @@ public final class HelperTable {
     }
 
     /** Everything reachable, by the name it is reached by — what the call graph is built over. */
-    public Map<String, Ast.FnDef> reachable() {
+    public Map<String, Hir.FnDef> reachable() {
         return Collections.unmodifiableMap(reached);
     }
 
     /** What this module's source wrote, in the order it wrote it. A helper the module only took on to
      * emit is not among these, however it is reached — and which of the two one is, the declaration
-     * says ({@link Ast.FnDef#declaredBy}); a rule about the declaring module asks it there rather
+     * says ({@link Hir.FnDef#declaredBy}); a rule about the declaring module asks it there rather
      * than reading which component a fn arrived in. */
-    public Map<String, Ast.FnDef> declarations() {
+    public Map<String, Hir.FnDef> declarations() {
         return Collections.unmodifiableMap(declared);
     }
 
     /** What this module has as fns of its own, in the order it wrote its own: what it declared, and
      * what it took on to emit. Not what becomes a method — that is decided at lowering. Which of the
-     * two one is, the declaration says ({@link Ast.FnDef#declaredBy}). */
-    public Map<String, Ast.FnDef> held() {
+     * two one is, the declaration says ({@link Hir.FnDef#declaredBy}). */
+    public Map<String, Hir.FnDef> held() {
         return Collections.unmodifiableMap(emits);
     }
 

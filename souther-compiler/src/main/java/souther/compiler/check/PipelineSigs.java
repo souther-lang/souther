@@ -1,13 +1,13 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,20 +29,16 @@ public final class PipelineSigs {
     private PipelineSigs() {}
 
     /** Builds the input/output signature of every behavior, checking pipeline composition. */
-    public static Map<String, Sig> signatures(Ast.Module module, Symbols symbols) {
-        return signatures(module, symbols, Map.of());
-    }
-
     /**
      * Builds the input/output signature of every behavior, checking pipeline composition. The
      * {@code imported} map seeds the resolvable behaviors with those imported from other modules
      * (spec §modules, §composition), so a stage naming an imported behavior resolves through {@link #stageSig}.
      */
-    public static Map<String, Sig> signatures(Ast.Module module, Symbols symbols,
+    public static Map<String, Sig> signatures(List<Hir.BehaviorDef> behaviors, Symbols symbols,
                                               Map<String, Sig> imported) {
         Map<String, Sig> sigs = new HashMap<>(imported);
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec) {
+        for (Hir.BehaviorDef b : behaviors) {
+            if (b instanceof Hir.SpecBehavior spec) {
                 // A behavior's signature is what it declares, whether a `let` implements it here or the Java
                 // side is injected (spec §injected-behavior): both are named the same way from a `>->` or a
                 // `depends on`, and both need the output union's generated interface. Where the arity rules
@@ -58,9 +54,9 @@ public final class PipelineSigs {
                 }
             }
         }
-        Map<String, List<Ast.Var>> pipeStages = pipelineStages(module);
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.PipeBehavior pipe) {
+        Map<String, List<Hir.Var>> pipeStages = pipelineStages(behaviors);
+        for (Hir.BehaviorDef b : behaviors) {
+            if (b instanceof Hir.PipeBehavior pipe) {
                 try {
                     sigs.put(pipe.name(), pipeSig(pipe, sigs, symbols, pipeStages));
                 } catch (Unanswerable _) {
@@ -75,10 +71,16 @@ public final class PipelineSigs {
     }
 
     /** Maps each pipeline behavior's name to its declared stages (for flattening, spec §type-routing). */
-    public static Map<String, List<Ast.Var>> pipelineStages(Ast.Module module) {
-        Map<String, List<Ast.Var>> stages = new HashMap<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.PipeBehavior pipe) {
+    public static Map<String, List<Hir.Var>> pipelineStages(Hir.Module module) {
+        return pipelineStages(module.behaviors());
+    }
+
+    /** The same, of the behaviors themselves — what a reader holding them rather than a module
+     * asks. */
+    public static Map<String, List<Hir.Var>> pipelineStages(List<Hir.BehaviorDef> behaviors) {
+        Map<String, List<Hir.Var>> stages = new HashMap<>();
+        for (Hir.BehaviorDef b : behaviors) {
+            if (b instanceof Hir.PipeBehavior pipe) {
                 stages.put(pipe.name(), pipe.stages());
             }
         }
@@ -92,22 +94,22 @@ public final class PipelineSigs {
      * finish}, exactly as the flat form would, so a retired case stays retired across a named
      * intermediate. A pipeline viewed on its own still has the merged output its own stages produce.
      */
-    public static List<Ast.Var> flattenStages(List<Ast.Var> stages,
-                                                   Map<String, List<Ast.Var>> pipeStages,
+    public static List<Hir.Var> flattenStages(List<Hir.Var> stages,
+                                                   Map<String, List<Hir.Var>> pipeStages,
                                                    SourcePos pos) {
-        List<Ast.Var> out = new ArrayList<>();
+        List<Hir.Var> out = new ArrayList<>();
         flattenInto(stages, pipeStages, out, new LinkedHashSet<>(), pos);
         return out;
     }
 
-    private static void flattenInto(List<Ast.Var> stages,
-                                    Map<String, List<Ast.Var>> pipeStages,
-                                    List<Ast.Var> out, Set<String> inProgress, SourcePos pos) {
-        for (Ast.Var s : stages) {
+    private static void flattenInto(List<Hir.Var> stages,
+                                    Map<String, List<Hir.Var>> pipeStages,
+                                    List<Hir.Var> out, Set<String> inProgress, SourcePos pos) {
+        for (Hir.Var s : stages) {
             // A stage that names nothing was reported where it is written. It is no pipeline to
             // splice in, and the composition it is part of is abandoned where its signature is
             // asked for rather than here.
-            List<Ast.Var> sub = s.unresolved() ? null : pipeStages.get(s.bare());
+            List<Hir.Var> sub = s.unresolved() ? null : pipeStages.get(s.bare());
             if (sub == null) {
                 out.add(s);
                 continue;
@@ -129,7 +131,7 @@ public final class PipelineSigs {
      * composition has no meaning to work out: the behavior it belongs to is abandoned, and the
      * definitions around it are checked as they would be without it.
      */
-    public static Sig stageSig(Ast.Var stage, Map<String, Sig> sigs, Symbols symbols,
+    public static Sig stageSig(Hir.Var stage, Map<String, Sig> sigs, Symbols symbols,
                                SourcePos pos) {
         if (stage.unresolved()) {
             throw new Unanswerable(stage.pos());
@@ -143,13 +145,13 @@ public final class PipelineSigs {
         return s;
     }
 
-    private static Sig pipeSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
-                               Map<String, List<Ast.Var>> pipeStages) {
+    private static Sig pipeSig(Hir.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
+                               Map<String, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
-        List<Ast.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Hir.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
         Type mainline = first.outputType();
-        Set<TypeName> retired = new LinkedHashSet<>();
+        Set<TypeSymbol> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
             Sig g = stageSig(stages.get(i), sigs, symbols, pipe.pos());
             // Every stage after the first takes exactly one input (spec §sequential-composition).
@@ -168,8 +170,8 @@ public final class PipelineSigs {
         // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
         // accepted.
         if (pipe.declaredOut() != null) {
-            Set<TypeName> inferred = TypeOps.leafCases(out, symbols);
-            Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut(), symbols), symbols);
+            Set<TypeSymbol> inferred = TypeOps.leafCases(out, symbols);
+            Set<TypeSymbol> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut()), symbols);
             if (!inferred.equals(declared)) {
                 throw CompileException.of(Diagnostic.at(pipe.pos())
                                 
@@ -186,20 +188,20 @@ public final class PipelineSigs {
     }
 
     /** Formats a set of case names as {@code A | B} (sorted, for a stable diagnostic). */
-    static String caseList(Set<TypeName> cases) {
+    static String caseList(Set<TypeSymbol> cases) {
         java.util.TreeSet<String> names = new java.util.TreeSet<>();
-        for (TypeName c : cases) {
+        for (TypeSymbol c : cases) {
             names.add(c.name());
         }
         return String.join(" | ", names);
     }
 
     /** The pipeline's output: what the last stage yields, plus everything that left the main line. */
-    private static Type withRetired(Type mainline, Set<TypeName> retired) {
+    private static Type withRetired(Type mainline, Set<TypeSymbol> retired) {
         if (retired.isEmpty()) {
             return mainline;
         }
-        Set<TypeName> all = new LinkedHashSet<>(TypeOps.caseNamesOf(mainline));
+        Set<TypeSymbol> all = new LinkedHashSet<>(TypeOps.caseNamesOf(mainline));
         if (all.isEmpty()) {
             throw new IllegalStateException("cannot merge non-data stage output with retired cases");
         }
@@ -208,9 +210,9 @@ public final class PipelineSigs {
     }
 
     /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec §type-routing). */
-    public static List<TypeName> mainlineCases(Type mainline, Sig g, Symbols symbols) {
-        List<TypeName> accepted = new ArrayList<>();
-        for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
+    public static List<TypeSymbol> mainlineCases(Type mainline, Sig g, Symbols symbols) {
+        List<TypeSymbol> accepted = new ArrayList<>();
+        for (TypeSymbol caseName : TypeOps.leafCases(mainline, symbols)) {
             if (TypeOps.assignable(Type.ref(caseName), g.in(), symbols)) {
                 accepted.add(caseName);
             }
@@ -239,15 +241,15 @@ public final class PipelineSigs {
      * saying it once left a main line (§unmarked-sum), the plumbing is structural. Viewed on its own, `fg`
      * still has the merged sum `f`+`g` produce as its output.
      */
-    private static Type route(Type mainline, Sig g, Set<TypeName> retired, Symbols symbols,
+    private static Type route(Type mainline, Sig g, Set<TypeSymbol> retired, Symbols symbols,
                               SourcePos pos) {
         Type in = g.in();
         if (TypeOps.isDataLike(mainline)) {
-            Set<TypeName> consumed = new LinkedHashSet<>();
-            Set<TypeName> passed = new LinkedHashSet<>();
+            Set<TypeSymbol> consumed = new LinkedHashSet<>();
+            Set<TypeSymbol> passed = new LinkedHashSet<>();
             // route over the leaf cases: a named sum output splits into its members, so a stage that
             // accepts one of them consumes it while the rest retire (spec §sum-data, §type-routing)
-            for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
+            for (TypeSymbol caseName : TypeOps.leafCases(mainline, symbols)) {
                 if (TypeOps.assignable(Type.ref(caseName), in, symbols)) {
                     consumed.add(caseName);
                 } else {

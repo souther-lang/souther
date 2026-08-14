@@ -43,7 +43,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW;
 
         /** How this primitive is written. One table, read forwards by everything that shows a type
-         *  and backwards by {@link TypeName#primitiveKind()} — a primitive case name is minted from
+         *  and backwards by {@link TypeSymbol#primitiveKind()} — a primitive case name is minted from
          *  this spelling, so recovering the primitive has to read the same one and not a copy. */
         public String shown() {
             return switch (this) {
@@ -168,7 +168,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     }
 
     /** A reference to a named data type (product or sum). */
-    record Ref(TypeName name) implements Leaf {
+    record Ref(TypeSymbol name) implements Leaf {
         public Ref {
             if (name == null) {
                 throw new IllegalArgumentException("a type reference needs a resolved name");
@@ -192,7 +192,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     record OptionOf(Type element) implements Compound {}
 
     /** An anonymous union of data types (a behavior's multi-success output). */
-    record Union(java.util.Set<TypeName> members) implements Leaf {}
+    record Union(java.util.Set<TypeSymbol> members) implements Leaf {}
 
     /** A function type {@code (params...) -> result}. Written only on a helper {@code fn}'s
      * parameter (spec §fn-declaration); a value of this type is never stored in a data field, so it
@@ -232,7 +232,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     /** The type of {@code unreachable "reason"} (see {@link Never}). */
     Type NEVER = new Never();
 
-    static Type ref(TypeName name) {
+    static Type ref(TypeSymbol name) {
         return new Ref(name);
     }
 
@@ -258,7 +258,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         return new SetOf(element);
     }
 
-    static Type union(java.util.Set<TypeName> members) {
+    static Type union(java.util.Set<TypeSymbol> members) {
         return new Union(members);
     }
 
@@ -389,13 +389,13 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      * module, so a mismatch does not read as {@code Mid} against {@code Mid}.
      */
     static String show(Type t, Type against) {
-        java.util.Map<String, TypeName> here = new java.util.HashMap<>();
+        java.util.Map<String, TypeSymbol> here = new java.util.HashMap<>();
         collectNames(t, here);
-        java.util.Map<String, TypeName> there = new java.util.HashMap<>();
+        java.util.Map<String, TypeSymbol> there = new java.util.HashMap<>();
         collectNames(against, there);
         java.util.Set<String> ambiguous = new java.util.HashSet<>();
-        for (java.util.Map.Entry<String, TypeName> e : here.entrySet()) {
-            TypeName other = there.get(e.getKey());
+        for (java.util.Map.Entry<String, TypeSymbol> e : here.entrySet()) {
+            TypeSymbol other = there.get(e.getKey());
             if (other != null && !other.equals(e.getValue())) {
                 ambiguous.add(e.getKey());
             }
@@ -412,7 +412,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      * this asks whether one holds a name, and {@link Ref} and {@link Union} are leaves that do. A
      * constructor added later has to answer for itself, so it stops the build here. Only the descent
      * is delegated: which positions a compound holds is still {@link #atChildren}'s to say. */
-    private static void collectNames(Type t, java.util.Map<String, TypeName> out) {
+    private static void collectNames(Type t, java.util.Map<String, TypeSymbol> out) {
         switch (t) {
             case Ref r -> out.putIfAbsent(r.name().name(), r.name());
             case Union u -> u.members().forEach(m -> out.putIfAbsent(m.name(), m));
@@ -428,13 +428,13 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      * imports, so no name is left to be resolved by whatever happens to be in scope.
      */
     static String showQualified(Type t) {
-        java.util.Map<String, TypeName> names = new java.util.HashMap<>();
+        java.util.Map<String, TypeSymbol> names = new java.util.HashMap<>();
         collectNames(t, names);
         return show(t, names.keySet());
     }
 
     /** {@code name}, written with its module when the simple name is one of {@code qualify}. */
-    private static String showName(TypeName name, java.util.Set<String> qualify) {
+    private static String showName(TypeSymbol name, java.util.Set<String> qualify) {
         return qualify.contains(name.name()) ? name.qualified() : name.name();
     }
 

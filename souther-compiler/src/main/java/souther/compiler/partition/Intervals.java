@@ -196,7 +196,7 @@ final class Intervals {
                                                     Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
             FixtureTemplate standing = Witnesses.wrapped(type,
-                    FixtureTemplate.on(carrier, inside, symbols::reach), symbols);
+                    FixtureTemplate.on(carrier, inside, symbols.scope()::reach), symbols);
             return standing == null ? List.of() : List.of(standing);
         }
         int size = CountDomain.asCount(inside);

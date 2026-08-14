@@ -2,13 +2,16 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -31,11 +34,11 @@ class PartitionsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Ast.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         assertNotNull(prepared);
         assertNotNull(sigs);
-        Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         return Partitions.of(spec, sigs.get(behavior),
                 compilation.db().ask(new Shapes.Scope(module)).value(), Exclusions.NONE);
@@ -245,7 +248,7 @@ class PartitionsTest {
         Partitions.Partitioning partitioning = partitioningOf(KINDS, "submit");
         Axis kind = axis(partitioning, "request.kind");
         assertEquals(Membership.MATCH, kind.classes().get(0).classifier().membershipOf(
-                        new ObservedValue.Unit(new TypeName("example.trip", "Domestic"))),
+                        new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("example.trip", "Domestic")))),
                 "a unit case is recognised by the type it names");
 
         Axis urgent = axis(partitioning, "request.urgent");
