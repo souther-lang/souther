@@ -151,9 +151,11 @@ final class Clauses {
      * not settle, and what it says it by is the name — which the clauses were flattened out of
      * before reaching here, leaving every unproven clause reported as "the invariant".
      *
-     * <p>The name stays optional the whole way, as {@link Hir.InvariantClause} writes it. Reading it
-     * as a null String put "no name was written" and "there is no clause" into one value, which is
-     * where a clause with no name stopped being counted.
+     * <p>The name stays optional the whole way, as {@link Hir.InvariantClause} writes it. A clause
+     * with no name was always a clause — one is here for each of them, and a clause that is not
+     * stated is one this list does not hold — so what the absence of a name is the absence of is the
+     * name. Written as an {@code Optional} so that it says that where it is read: a null String says
+     * only that something is missing, and leaves each reader to decide what.
      */
     record Stated(Optional<ClauseName> name, TypeSymbol declaredOn, Core expr) {}
 

@@ -1610,8 +1610,14 @@ public final class InvariantChecker {
     }
 
     /**
-     * What a refuted invariant is said as. One question here and not two: what an error reports is
-     * the clause the value fails, and there is nothing it establishes to name alongside it.
+     * What a refuted invariant is said as. One question here and not two, because what this error
+     * reports is the clause the value fails and nothing else.
+     *
+     * <p>A refuted invariant may well have clauses the guards established, and {@code judgment}
+     * holds their names when it does — E2010 does not report them, which is a decision about what
+     * this diagnostic is for and not an observation that there were none. Anything that starts
+     * reporting them here asks {@link Judgment#canNameSettled()}, as the warning does, rather than
+     * reading the answer off the set it is already writing out.
      */
     private static Diagnostic.Builder rejects(Hir.Data type, Judgment judgment, boolean onAPath) {
         if (onAPath) {
