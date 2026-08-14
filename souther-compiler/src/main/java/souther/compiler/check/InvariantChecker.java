@@ -565,13 +565,6 @@ public final class InvariantChecker {
         end.ifPresent(read -> out.add(new Direct(on.path(), on.measured(), from, read)));
     }
 
-    /** Whether both sides of {@code bin} reach a coordinate, which is what makes it a relation
-     * rather than a bound. */
-    private boolean relates(Core.Binary bin, Map<String, Coordinate> byName, Denotations at) {
-        return byName.containsKey(nameOf(bin.left(), at))
-                && byName.containsKey(nameOf(bin.right(), at));
-    }
-
     /**
      * Files {@code from} under every coordinate this comparison could carry a bound to.
      *
