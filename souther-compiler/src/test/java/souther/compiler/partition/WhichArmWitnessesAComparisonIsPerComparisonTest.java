@@ -51,7 +51,7 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         TypeChecker.Checked checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);

@@ -33,7 +33,7 @@ class PartitionsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         assertNotNull(prepared);
         assertNotNull(sigs);

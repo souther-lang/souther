@@ -104,17 +104,9 @@ public final class Desugared {
             return module.name();
         }
 
-        /**
-         * The same module with every imported name written as the definition it denotes.
-         *
-         * <p>A transformation and not a projection: what comes back is desugared too — writing a
-         * name qualified does not touch a construction — and it is handed over as a tree all the
-         * same, so the claim stops here. It is the one reader's, and that reader is the state above
-         * this one: whatever holds "imports qualified" is where this belongs, and it should take
-         * this state rather than a tree when it exists.
-         */
-        public Hir.Module withImportsQualified() {
-            return HelperNames.qualifyImports(module);
+        /** The tree, for the state above this one, which is what qualifies its imports. */
+        Hir.Module module() {
+            return module;
         }
 
         /**

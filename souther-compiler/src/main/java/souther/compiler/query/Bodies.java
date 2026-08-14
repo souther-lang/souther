@@ -383,7 +383,7 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, ReqSig>> compute(Db db) {
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Dependencies(name));
@@ -393,7 +393,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.dependencies(prepared.value(), scope.value(),
+                return Answer.of(InjectionSigs.dependencies(prepared.value().tree(), scope.value(),
                         own.value(), imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
@@ -417,7 +417,7 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, ReqSig>> compute(Db db) {
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Callable(name));
@@ -427,7 +427,7 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.callable(prepared.value(), scope.value(), own.value(),
+                return Answer.of(InjectionSigs.callable(prepared.value().tree(), scope.value(), own.value(),
                         imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
@@ -472,14 +472,14 @@ public final class Bodies {
 
         @Override
         public Answer<Hir.Module> compute(Db db) {
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             if (!prepared.present() || !scope.present() || !reqSigs.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(Lower.settle(prepared.value(), scope.value(), reqSigs.value()));
+                return Answer.of(Lower.settle(prepared.value().tree(), scope.value(), reqSigs.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

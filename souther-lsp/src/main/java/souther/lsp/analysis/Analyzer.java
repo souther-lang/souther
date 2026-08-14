@@ -388,7 +388,7 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Hir.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module written = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
         if (written == null) {
             return List.of();
         }
@@ -569,7 +569,7 @@ public final class Analyzer {
         if (module == null) {
             return List.of();
         }
-        Hir.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Hir.Module written = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
         if (written == null) {
             return List.of();
         }

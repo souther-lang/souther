@@ -222,7 +222,7 @@ public final class Compilation {
     /** A module as everything below the check reads it — derived, desugared, and carrying the
      * recursive prelude helpers it reaches. */
     public Hir.Module module(String name) {
-        return db.ask(new Shapes.Prepared(name)).value();
+        return db.ask(new Shapes.Prepared(name)).value().tree();
     }
 
     /** What the names in {@code module} denote — the table a question about a type is asked against. */

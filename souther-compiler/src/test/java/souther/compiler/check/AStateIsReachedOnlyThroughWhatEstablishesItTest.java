@@ -42,7 +42,7 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
     private static final List<Class<?>> STATES =
             List.of(Expandable.class, InvariantSettled.class, InvariantSettled.Def.class,
                     Derived.Def.class, Derived.Module.class, Desugared.Fn.class,
-                    Desugared.Module.class);
+                    Desugared.Module.class, Prepared.class);
 
     private static Hir.Module resolved(String source) {
         Ast.Module parsed = CstFrontend.parse(source);
@@ -85,6 +85,27 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
         assertEquals(Set.of("assemble(InvariantSettled, Map)"), waysInto(Derived.Module.class));
         assertEquals(Set.of("desugar(FnDef, Symbols)"), waysInto(Desugared.Fn.class));
         assertEquals(Set.of("assemble(Module, Map)"), waysInto(Desugared.Module.class));
+        assertEquals(Set.of("prepare(Module, Map)"), waysInto(Prepared.class));
+    }
+
+    /**
+     * What a module prepares is not asked per output file.
+     *
+     * <p>The classes are emitted once per module, and every example row attached to it runs against
+     * them, so the helpers its artifact must carry are gathered over all of those rows. Which rows
+     * are reported on is asked later, where the source file is in the key. A state taking one would
+     * pull an output's concern into what the module is — and would make every reader of it, the
+     * checks and the adequacy report among them, answer per file.
+     */
+    @Test
+    void whatAModulePreparesDoesNotDependOnAnOutputFile() {
+        for (Method m : Prepared.class.getMethods()) {
+            for (Class<?> takes : m.getParameterTypes()) {
+                assertFalse(takes == String.class,
+                        "Prepared." + signature(m) + " takes a name, and the only one it could be "
+                                + "is an output's");
+            }
+        }
     }
 
     /**

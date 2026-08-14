@@ -337,14 +337,14 @@ public final class Shapes {
      * new way to reach a construction from Java. Only the reached ones are added; a module that never
      * folds gets none.
      */
-    public record Prepared(String name) implements Key<Hir.Module> {
+    public record Prepared(String name) implements Key<souther.compiler.check.Prepared> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Hir.Module> compute(Db db) {
+        public Answer<souther.compiler.check.Prepared> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             if (!desugared.present()) {
@@ -353,30 +353,9 @@ public final class Shapes {
             // A module whose imports form a cycle takes nothing from them — the cycle is reported
             // where it is found, and this module is not compiled either way.
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
-            // An imported definition is written here bare and denotes the module that declares it.
-            // Spelling it out, once, settles the name this module reaches it by, which is what the
-            // table a call expands against is keyed by and what the method a recursive helper becomes
-            // is called. It settles nothing about where the definition came from: the fns below hold
-            // declarations of several modules under names of one shape, and which module wrote each is
-            // carried on the declaration (Hir.FnDef.declaredIn).
-            Hir.Module m = desugared.value().withImportsQualified();
             try {
-                HelperInliner inliner = HelperInliner.forModule(m, published);
-                Map<String, Hir.FnDef> injected =
-                        new java.util.LinkedHashMap<>(inliner.injectedRecursiveHelpers());
-                // A helper an example row applies is emitted for that reason (ADR-0077); one this
-                // module does not declare is taken on here, as a recursive one it reaches is.
-                inliner.injectedExampleHelpers().forEach(injected::putIfAbsent);
-                if (injected.isEmpty()) {
-                    return Answer.of(m);
-                }
-                // Beside what the module declared, not among it. Both are emitted and only the first
-                // was written here, and a reader asking which is which asks the component it is in
-                // rather than the shape of a name.
-                return Answer.of(new Hir.Module(m.name(), m.exposing(), m.exposedOutputs(),
-                        m.imports(), m.defs(), m.behaviors(), m.fns(),
-                        List.copyOf(injected.values()), m.examples(), m.fakes(),
-                        m.exampleFileTarget(), m.pos()));
+                return Answer.of(
+                        souther.compiler.check.Prepared.prepare(desugared.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

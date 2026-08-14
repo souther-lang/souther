@@ -108,7 +108,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
             Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
             Map<TypeSymbol, List<Hir.InvariantClause>> declared =
                     compilation.db().ask(new Shapes.InvariantsForDischarge(module)).value();
-            Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+            Hir.Module prepared = compilation.db().ask(new Shapes.Prepared(module)).value().tree();
             assertNotNull(symbols);
             assertNotNull(declared);
             assertNotNull(prepared);

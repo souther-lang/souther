@@ -50,7 +50,7 @@ public final class HelperNames {
      * <p>Done once, here, because the spelling travels as far as the emitted method name; deciding it
      * at each reader is how one of them comes to disagree.
      */
-    public static Hir.Module qualifyImports(Hir.Module m) {
+    static Hir.Module qualifyImports(Hir.Module m) {
         List<Hir.FnDef> fns = new ArrayList<>();
         for (Hir.FnDef fn : m.fns()) {
             fns.add(fn.body() instanceof Hir.FnBody.Written w

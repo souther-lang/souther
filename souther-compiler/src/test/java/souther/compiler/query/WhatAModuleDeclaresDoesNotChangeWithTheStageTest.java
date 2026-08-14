@@ -70,12 +70,14 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
         Answer<souther.compiler.check.Desugared.Module> desugared =
                 db.ask(new Shapes.Desugared(name));
         assertTrue(desugared.present(), "desugared of " + name + ": " + desugared.reports());
-        keys.put("prepared", new Shapes.Prepared(name));
+        Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+        assertTrue(prepared.present(), "prepared of " + name + ": " + prepared.reports());
         keys.put("settled", new Bodies.Settled(name));
         Map<String, Hir.Module> out = new LinkedHashMap<>();
         out.put("resolved", resolved.value());
         out.put("derived", derived.value().tree());
         out.put("desugared", desugared.value().tree());
+        out.put("prepared", prepared.value().tree());
         keys.forEach((stage, key) -> {
             Answer<Hir.Module> answer = db.ask(key);
             assertTrue(answer.present(), stage + " of " + name + ": " + answer.reports());
@@ -149,7 +151,7 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                     | "a row applies a published helper" : (In { n = doubled(3) }) -> Out { m = 6 }
                 """), Set.of(), ModulePath.EMPTY).db();
 
-        Hir.Module prepared = db.ask(new Shapes.Prepared("app")).value();
+        Hir.Module prepared = db.ask(new Shapes.Prepared("app")).value().tree();
         // `run` implements a behavior, which is not a helper and is lowered on its own.
         assertEquals(Set.of(), HelperInliner.helpersOf(prepared).keySet());
         assertEquals(Set.of("rules.doubled"), HelperInliner.takenOnBy(prepared).keySet());

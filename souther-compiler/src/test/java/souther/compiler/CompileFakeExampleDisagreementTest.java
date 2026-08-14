@@ -444,7 +444,7 @@ class CompileFakeExampleDisagreementTest {
         c.db().ask(new souther.compiler.query.Output.All());
         String name = c.modules().get(0);
         return ExampleStatements.disagreements(
-                c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value(),
+                c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value().tree(),
                 c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(

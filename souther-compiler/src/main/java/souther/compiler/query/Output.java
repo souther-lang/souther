@@ -102,7 +102,7 @@ public final class Output {
             Answer<Map<String, Sig>> imported = db.ask(new Bodies.Imported(name));
             Answer<Set<String>> injected = db.ask(new Bodies.ImportedInjected(name));
             Answer<Map<String, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Bodies.Requirements(name));
             // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
@@ -115,7 +115,7 @@ public final class Output {
                 return null;
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
-                    typePackages(prepared.value()), signatures.value(), imported.value(),
+                    typePackages(prepared.value().tree()), signatures.value(), imported.value(),
                     injected.value(),
                     callees.value(), requirements.value(), checked.value(), dischargeClauses.value());
         }
@@ -488,14 +488,14 @@ public final class Output {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
             List<DataChecker.ConstCheck> checks;
             try {
-                checks = DataChecker.constNewtypeChecks(prepared.value(), scope.value());
+                checks = DataChecker.constNewtypeChecks(prepared.value().tree(), scope.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -542,13 +542,13 @@ public final class Output {
          * report.
          */
         private String failingClause(Db db, DataChecker.ConstCheck check, Class<?> ctfe) {
-            Answer<Hir.Module> declaring = db.ask(new Shapes.Prepared(check.type().module()));
+            Answer<souther.compiler.check.Prepared> declaring = db.ask(new Shapes.Prepared(check.type().module()));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(check.type().module()));
             if (!declaring.present() || !scope.present()) {
                 return null;
             }
             List<Hir.InvariantClause> clauses = null;
-            for (Hir.Def def : declaring.value().defs()) {
+            for (Hir.Def def : declaring.value().tree().defs()) {
                 if (def instanceof Hir.Data d && d.name().equals(check.type().name())) {
                     clauses = TypeOps.effectiveInvariants(d, scope.value());
                 }
@@ -605,7 +605,7 @@ public final class Output {
 
         @Override
         public Answer<souther.compiler.examples.ExampleStatements.Readings> compute(Db db) {
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -629,7 +629,7 @@ public final class Output {
             // `requirements` is asked for above as a readiness condition — a module whose
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
-            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(prepared.value(),
+            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(prepared.value().tree(),
                     scope.value(), sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     deadlineOf(db), policyOf(db)));
@@ -833,7 +833,7 @@ public final class Output {
          * that is the one that picks what this source's share of them is.
          */
         private static List<Diagnostic> fakeTables(Db db, String name, String sourceId) {
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -852,7 +852,7 @@ public final class Output {
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // As above: `requirements` says this module is ready to be read, not what to read.
-            return souther.compiler.examples.ExampleStatements.fakeTables(prepared.value(), scope.value(),
+            return souther.compiler.examples.ExampleStatements.fakeTables(prepared.value().tree(), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     deadlineOf(db), policyOf(db));
@@ -868,7 +868,7 @@ public final class Output {
          */
         static Answer<Of> evaluate(Db db, String name, String sourceId, Map<String, byte[]> classes,
                                    CoverageMode coverage) {
-            Answer<Hir.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
@@ -888,7 +888,7 @@ public final class Output {
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
-            Hir.Module rows = written(db, name, sourceId, prepared.value());
+            Hir.Module rows = written(db, name, sourceId, prepared.value().tree());
             if (rows.examples().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
