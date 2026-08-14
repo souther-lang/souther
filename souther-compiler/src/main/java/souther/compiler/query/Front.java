@@ -10,6 +10,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.observe.RowIdentity;
 import souther.compiler.meta.PublishedModule;
 import souther.compiler.types.ValueName;
 
@@ -652,6 +653,91 @@ public final class Front {
                 }
             }
             return Answer.absent();
+        }
+    }
+
+    /**
+     * The rows this source names, held to naming one row each.
+     *
+     * <p>A name is what says which row is meant from outside the file it is written in — a report
+     * line two runs are compared on, a test that prepares an environment for one row. Two rows of one
+     * behavior carrying one name leave that unanswerable, and the failure it produces is the silent
+     * one: whatever keys on the name finds one of the two and nothing says the other was meant. So a
+     * name is unique among the rows one behavior has, over the module's own source and every
+     * {@code examples for} file attached to it, which is where two rows of one behavior most easily
+     * collide.
+     *
+     * <p>Every row carrying a name more than one row carries is reported, each in the source it is
+     * written in. Neither of two colliding rows is "the duplicate": which source came first is what a
+     * caller hands the compiler — a build walks its files sorted, a command line takes them as typed —
+     * so a rule that named one of them would say different things about one model depending on how
+     * the compile was started. Reporting both needs no order at all, and it is what "checked where
+     * the row is written" means when the two rows are written in different files.
+     *
+     * <p>Per source, because a position is a line and a column: this key can be quoted against this
+     * file, and the module's key could only be quoted against the module's own (the reason
+     * {@link Output.Examples} reports a duplicate value name the same way).
+     */
+    public record RowNames(String id) implements Key<Boolean> {
+
+        /** One name, as one behavior's rows carry it. */
+        private record Carried(String target, String name) {}
+
+        @Override
+        public String sourceId() {
+            return id;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            String module = db.ask(new ModuleOf(id)).value();
+            Layout.Of layout = db.ask(new Layout()).value();
+            CstFrontend.Parsed here = db.ask(new Parsed(id)).value();
+            if (module == null || layout == null || here == null) {
+                return Answer.of(Boolean.TRUE);   // what is wrong with the source is said where it is read
+            }
+            Map<Carried, Integer> carried = new LinkedHashMap<>();
+            for (String source : sourcesOf(layout, module)) {
+                CstFrontend.Parsed parsed = db.ask(new Parsed(source)).value();
+                if (parsed != null) {
+                    forEachNamedRow(parsed.module(),
+                            (target, name, _) -> carried.merge(new Carried(target, name), 1, Integer::sum));
+                }
+            }
+            List<Report> reports = new ArrayList<>();
+            forEachNamedRow(here.module(), (target, name, pos) -> {
+                if (carried.getOrDefault(new Carried(target, name), 0) > 1) {
+                    reports.add(Report.of(Diagnostic.at(pos)
+                            .say(new ExampleMessage.TheNameIsOnMoreThanOneRow(name, target))
+                            .build()));
+                }
+            });
+            return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.of(Boolean.TRUE, reports);
+        }
+
+        /** The sources that write this module's rows: its own, and every file attached to it. */
+        private static List<String> sourcesOf(Layout.Of layout, String module) {
+            List<String> sources = new ArrayList<>();
+            String own = layout.idOfModule().get(module);
+            if (own != null) {
+                sources.add(own);
+            }
+            sources.addAll(layout.exampleFilesOf().getOrDefault(module, List.of()));
+            return sources;
+        }
+
+        private static void forEachNamedRow(Ast.Module m, NamedRow read) {
+            for (Ast.Example example : m.examples()) {
+                for (Ast.ExampleRow row : example.rows()) {
+                    if (row.identity() instanceof RowIdentity.Named named) {
+                        read.accept(example.target(), named.name(), row.pos());
+                    }
+                }
+            }
+        }
+
+        private interface NamedRow {
+            void accept(String target, String name, SourcePos pos);
         }
     }
 

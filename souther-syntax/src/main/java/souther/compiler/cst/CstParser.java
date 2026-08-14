@@ -646,7 +646,14 @@ public final class CstParser {
     private void exampleRow() {
         start(SyntaxKind.EXAMPLE_ROW);
         if (at(SyntaxKind.STRING_LIT) && nth(1) == SyntaxKind.COLON) {
-            bump();   // "description"
+            // A row's name is what says which row it is from outside the file, so a name written
+            // here is held to naming something. Said where the name is written, on the text of the
+            // literal rather than on its spelling: `"\t"` is written with two characters and names
+            // as little as `""` does.
+            if (CstLexer.textOf(tokenText(mi(0))).isBlank()) {
+                error(new ParseMessage.ARowNameSaysNothing());
+            }
+            bump();   // "name"
             bump();   // :
         }
         argList();   // the input tuple, reusing ARG_LIST
