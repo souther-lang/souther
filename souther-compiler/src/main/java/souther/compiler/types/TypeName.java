@@ -11,10 +11,10 @@ package souther.compiler.types;
  *
  * <p>The pair itself is {@link TypeKey}, which is what a class file carries and what a declaration
  * says of itself. This is that key where it stands for the declaration in the compiler's own
- * reasoning, and it is still built from two strings by anything that has two strings — which is
- * what makes it an identity a reader can assemble rather than one it was handed. Closing that is
- * the work {@code TypeSymbol} is for; until then, what a key is and what an identity is are told
- * apart by which of the two types a signature names.
+ * reasoning, and the two are told apart by more than which type a signature names: a key is
+ * structural and anything holding two strings has one, while an identity comes from
+ * {@link TypeSymbols} and nowhere else. {@link #key()} goes down to the address; nothing here comes
+ * back up.
  */
 public final class TypeName implements Comparable<TypeName> {
 
@@ -29,7 +29,12 @@ public final class TypeName implements Comparable<TypeName> {
 
     private final TypeKey key;
 
-    public TypeName(String module, String name) {
+    /**
+     * Closed. An identity comes from {@link TypeSymbols}, which is the one edge from the structural
+     * address to the identity the compiler reasons with; a caller that could build one from two
+     * strings is a caller that could arrive at an identity without having been handed one.
+     */
+    TypeName(String module, String name) {
         this.key = new TypeKey(module, name);
     }
 
@@ -54,12 +59,12 @@ public final class TypeName implements Comparable<TypeName> {
 
     /** A primitive case name ({@code Int}) as it appears in a union. */
     public static TypeName primitive(String name) {
-        return new TypeName(PRIMITIVE, name);
+        return TypeSymbols.ofLanguage(PRIMITIVE, name);
     }
 
     /** The same, minted from the primitive itself, which is where the spelling comes from. */
     public static TypeName primitive(Type.Prim prim) {
-        return new TypeName(PRIMITIVE, prim.shown());
+        return TypeSymbols.ofLanguage(PRIMITIVE, prim.shown());
     }
 
     /**
@@ -79,7 +84,7 @@ public final class TypeName implements Comparable<TypeName> {
 
     /** A built-in error case ({@code DivisionByZero}). */
     public static TypeName runtime(String name) {
-        return new TypeName(RUNTIME, name);
+        return TypeSymbols.ofLanguage(RUNTIME, name);
     }
 
     /** {@code Some} / {@code None}: written in a match arm over an {@code Option}, declared by no

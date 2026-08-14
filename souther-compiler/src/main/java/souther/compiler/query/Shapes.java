@@ -16,6 +16,7 @@ import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -163,7 +164,7 @@ public final class Shapes {
      * nothing. A module still derives its declarations together, and this is read through that, so
      * what it depends on is still the module — what it is about is the one declaration.
      */
-    public record DerivedDef(TypeName named) implements Key<Hir.Def> {
+    public record DerivedDef(TypeKey named) implements Key<Hir.Def> {
         @Override
         public String module() {
             return named.module();

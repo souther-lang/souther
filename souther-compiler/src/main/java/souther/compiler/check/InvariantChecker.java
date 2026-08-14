@@ -443,7 +443,7 @@ public final class InvariantChecker {
             worn = under;
         }
         if (depth > FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || data.newtype()) {
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || data.newtype()) {
             return;
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
@@ -653,7 +653,7 @@ public final class InvariantChecker {
             }
         }
         for (Type type : TypeOps.fieldTypes(data, symbols).values()) {
-            if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name()) instanceof Hir.Data inner
+            if (type instanceof Type.Ref ref && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data inner
                     && !everyRuleRead(ref.name(), inner, symbols, seen)) {
                 return false;
             }
@@ -929,7 +929,7 @@ public final class InvariantChecker {
 
     private void checkIfConstruction(Core e, Known k, Denotations at, boolean attempted) {
         if (e instanceof Core.NewData nd && nd.spreads().isEmpty()) {
-            if (symbols.declarations().declaration(nd.typeName()) instanceof Hir.Data type) {
+            if (symbols.declarations().declaration(nd.typeName().key()) instanceof Hir.Data type) {
                 report(nd, type, nd.pos(), attempted, verdictOf(nd, type, k, at));
             }
             return;
@@ -938,7 +938,7 @@ public final class InvariantChecker {
         // the operator applied, and the result constructed again, so the invariant is owed here.
         if (Terms.asOperator(e) instanceof Core.Binary bin && Terms.isArith(bin.op())
                 && bin.type() instanceof Type.Ref r
-                && symbols.declarations().declaration(r.name()) instanceof Hir.Data type && type.newtype()) {
+                && symbols.declarations().declaration(r.name().key()) instanceof Hir.Data type && type.newtype()) {
             BindingId value = clauses.bindingsOf(r.name(), type).get("value");
             if (value != null && terms.affineOf(bin, at, k) != null) {
                 report(bin, type, bin.pos(), attempted,
@@ -1682,7 +1682,7 @@ public final class InvariantChecker {
                 || reach.stopAt().test(ref.name())) {
             return k;
         }
-        if (!(symbols.declarations().declaration(ref.name()) instanceof Hir.Data data) || !onPath.add(ref.name())) {
+        if (!(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || !onPath.add(ref.name())) {
             return k;
         }
         Map<String, Type> fields = clauses.fieldsOf(data);

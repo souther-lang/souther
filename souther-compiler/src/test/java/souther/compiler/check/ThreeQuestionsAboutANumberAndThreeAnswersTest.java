@@ -3,6 +3,8 @@ package souther.compiler.check;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
@@ -51,7 +53,7 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
         Type t = switch (type) {
             case "Int" -> Type.INT;
             case "Decimal" -> Type.DECIMAL;
-            default -> Type.ref(new TypeName(module, type));
+            default -> Type.ref(TypeSymbols.declared(new TypeKey(module, type)));
         };
         Type base = TypeOps.base(t, symbols);
         return new Answers(

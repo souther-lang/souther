@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Symbols;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.math.BigDecimal;
@@ -183,7 +185,7 @@ class ValueMatchTest {
     @Test
     void aValueUnderANameIsNotTheBaseItWraps() {
         // The whole of #653, at the level the comparison works at: one representation, two types.
-        TypeName amount = new TypeName("demo", "AmountN");
+        TypeName amount = TypeSymbols.declared(new TypeKey("demo", "AmountN"));
         ObservedValue wrapped = new ObservedValue.Constructed(amount,
                 java.util.Map.of("value", n(1)));
         ValueMatch.Mismatch m = differs(said(n(1)), wrapped, Type.ref(amount));
@@ -192,9 +194,9 @@ class ValueMatchTest {
 
     @Test
     void twoNamesOverOneBaseAreTwoTypes() {
-        Asserted one = new Asserted.Built(new TypeName("demo", "AmountN"),
+        Asserted one = new Asserted.Built(TypeSymbols.declared(new TypeKey("demo", "AmountN")),
                 java.util.Map.of("value", said(n(1))));
-        ObservedValue other = new ObservedValue.Constructed(new TypeName("demo", "OtherAmountN"),
+        ObservedValue other = new ObservedValue.Constructed(TypeSymbols.declared(new TypeKey("demo", "OtherAmountN")),
                 java.util.Map.of("value", n(1)));
         assertEquals(ValueMatch.Reason.TYPE, differs(one, other, null).reason());
     }

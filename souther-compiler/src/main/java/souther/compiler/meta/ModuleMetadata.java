@@ -1,10 +1,10 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.DeclaredIdentity;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.jvm.GeneratedClass;
@@ -75,8 +75,7 @@ public final class ModuleMetadata {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             types.add(def.name());
-            add(out, new GeneratedClass.Value(
-                            DeclaredIdentity.of(def.declaredIn(), def.name())),
+            add(out, new GeneratedClass.Value(TypeSymbols.declared(def.declaredKey())),
                     Annotation.of(DATA_ANN,
                             AnnotationElement.ofString("value", slices.defs().get(def.name()))));
         }

@@ -4,6 +4,8 @@ import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
 import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 /**
@@ -58,7 +60,7 @@ public final class Emitted {
     }
 
     public static String value(String module, String type) {
-        return name(new GeneratedClass.Value(new TypeName(module, type)));
+        return name(new GeneratedClass.Value(TypeSymbols.declared(new TypeKey(module, type))));
     }
 
     public static String encoder(String module, String type) {
@@ -98,7 +100,7 @@ public final class Emitted {
     }
 
     private static GeneratedClass.Value valueOf(String module, String type) {
-        return new GeneratedClass.Value(new TypeName(module, type));
+        return new GeneratedClass.Value(TypeSymbols.declared(new TypeKey(module, type)));
     }
 
     private static String name(GeneratedClass generated) {

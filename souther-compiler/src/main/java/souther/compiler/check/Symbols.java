@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -71,8 +72,8 @@ public final class Symbols implements NameSense {
     }
 
     @Override
-    public boolean declares(TypeName name) {
-        return declarations.contains(name);
+    public boolean declares(TypeKey address) {
+        return declarations.contains(address);
     }
 
     @Override
@@ -95,7 +96,7 @@ public final class Symbols implements NameSense {
     public Collection<Hir.Def> visible() {
         List<Hir.Def> defs = new ArrayList<>();
         for (TypeName name : scope.visibleNames()) {
-            Hir.Def def = declarations.declaration(name);
+            Hir.Def def = declarations.declaration(name.key());
             if (def != null) {
                 defs.add(def);
             }

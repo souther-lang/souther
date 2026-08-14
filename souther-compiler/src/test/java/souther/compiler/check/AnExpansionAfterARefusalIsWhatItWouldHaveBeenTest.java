@@ -6,6 +6,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
@@ -87,7 +89,7 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     @Test
     void twoWritingsIntoOneBodyDoNotWriteTheSameBinding() {
         HelperInliner inliner = inliner();
-        BindingOwner body = new BindingOwner.OfData(new TypeName("demo", "X"));
+        BindingOwner body = new BindingOwner.OfData(TypeSymbols.declared(new TypeKey("demo", "X")));
         Hir.Expr clause = inliner.held().get("right").writtenBody();
 
         Set<BindingId> first = bindingsOf(inliner.inline(clause, body));

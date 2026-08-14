@@ -4,7 +4,6 @@ import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
-import souther.compiler.check.DeclaredIdentity;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
@@ -27,7 +26,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -67,10 +68,10 @@ public final class Names {
     public static Registry<Hir.Def> registry(Db db, Stage stage) {
         return new Registry<Hir.Def>() {
             @Override
-            public Hir.Def declaration(TypeName named) {
+            public Hir.Def declaration(TypeKey address) {
                 Answer<Hir.Def> def = switch (stage) {
-                    case RESOLVED -> db.ask(new ResolvedDeclaration(named));
-                    case DERIVED -> db.ask(new Shapes.DerivedDef(named));
+                    case RESOLVED -> db.ask(new ResolvedDeclaration(address));
+                    case DERIVED -> db.ask(new Shapes.DerivedDef(address));
                 };
                 return def.present() ? def.value() : null;
             }
@@ -109,8 +110,8 @@ public final class Names {
     public static Registry<Ast.Def> writtenRegistry(Db db) {
         return new Registry<Ast.Def>() {
             @Override
-            public Ast.Def declaration(TypeName named) {
-                Answer<Ast.Def> def = db.ask(new Declaration(named));
+            public Ast.Def declaration(TypeKey address) {
+                Answer<Ast.Def> def = db.ask(new Declaration(address));
                 return def.present() ? def.value() : null;
             }
 
@@ -244,7 +245,7 @@ public final class Names {
      * this key's business: what a reader depends on is the answer, and this answer says what one
      * declaration says.
      */
-    public record Declaration(TypeName named) implements Key<Ast.Def> {
+    public record Declaration(TypeKey named) implements Key<Ast.Def> {
         @Override
         public String module() {
             return named.module();
@@ -262,7 +263,7 @@ public final class Names {
     }
 
     /** The same, with every written name in it resolved. */
-    public record ResolvedDeclaration(TypeName named) implements Key<Hir.Def> {
+    public record ResolvedDeclaration(TypeKey named) implements Key<Hir.Def> {
         @Override
         public String module() {
             return named.module();
@@ -330,7 +331,7 @@ public final class Names {
             Map<String, Denotation> scope = new HashMap<>();
             for (Ast.Def own : registry.declaredIn(name).values()) {
                 scope.put(own.name(),
-                        new Denotation.Denotes(DeclaredIdentity.of(own.declaredIn(), own.name())));
+                        new Denotation.Denotes(TypeSymbols.declared(own.declaredKey())));
             }
             Set<String> ownNames = Ordered.set(scope.keySet());
             // Which import brought each name in, so a second one naming it is reported against that
@@ -379,7 +380,8 @@ public final class Names {
                     }
                     // asked one name at a time: what else that module declares is not what this
                     // import is about, and reading it would make this module depend on it
-                    if (registry.declaration(new TypeName(imp.module(), imported)) == null) {
+                    TypeName brought = registry.identify(new TypeKey(imp.module(), imported));
+                    if (brought == null) {
                         // a behavior import is resolved separately, and so is a value or a helper:
                         // none of them is a data Def, so none goes into the symbols map
                         if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
@@ -398,7 +400,7 @@ public final class Names {
                     }
                     // A name a failed import line only stood in for is not a claim on it: an import
                     // that can do the job takes it, and says nothing about the line that could not.
-                    scope.put(imported, new Denotation.Denotes(new TypeName(imp.module(), imported)));
+                    scope.put(imported, new Denotation.Denotes(brought));
                     from.put(imported, imp);
                 }
             }
@@ -530,7 +532,7 @@ public final class Names {
      * there is nothing to hand a later pass, and it is not built rather than built around what is
      * missing.
      */
-    public record Definition(TypeName named) implements Key<Hir.Def> {
+    public record Definition(TypeKey named) implements Key<Hir.Def> {
         @Override
         public String module() {
             return named.module();
@@ -999,7 +1001,7 @@ public final class Names {
                 for (Ast.Def def : defs.value().values()) {
                     if (spans(def.written(), at)) {
                         return Answer.of(
-                                DeclaredIdentity.of(def.declaredIn(), def.name()));
+                                TypeSymbols.declared(def.declaredKey()));
                     }
                 }
             }

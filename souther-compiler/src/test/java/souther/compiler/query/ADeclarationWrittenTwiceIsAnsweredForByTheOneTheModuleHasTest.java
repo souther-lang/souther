@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.LinkedHashMap;
@@ -29,7 +31,7 @@ class ADeclarationWrittenTwiceIsAnsweredForByTheOneTheModuleHasTest {
     }
 
     private static boolean has(Compilation c, String declared) {
-        return c.db().ask(new Names.Definition(new TypeName("m.a", declared))).present();
+        return c.db().ask(new Names.Definition(new TypeKey("m.a", declared))).present();
     }
 
     /** The second `A` names nothing; the first, which is the one the module has, is made of `Int`. */

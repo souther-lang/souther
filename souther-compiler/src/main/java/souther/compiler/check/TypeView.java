@@ -30,7 +30,7 @@ import java.util.List;
  *       position back to an author.
  * </ul>
  *
- * <p><b>A reader does not re-decide any of this.</b> Asking {@code symbols.declarations().declaration(ref.name())} again
+ * <p><b>A reader does not re-decide any of this.</b> Asking {@code symbols.declarations().declaration(ref.name().key())} again
  * to find out whether a name is a newtype is the defect this exists to remove, not a shortcut around
  * it.
  *
@@ -99,7 +99,7 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
      * so there is no base to read a shape from.
      */
     private static Shape denoted(TypeName name, Symbols symbols) {
-        return switch (symbols.declarations().declaration(name)) {
+        return switch (symbols.declarations().declaration(name.key())) {
             case Hir.SumData _ -> new Shape.Sum(name);
             case Hir.UnitData _ -> new Shape.Unit(name);
             case Hir.Data data when data.newtype() -> new Shape.Unresolved(name);

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 import org.junit.jupiter.api.Test;
 
@@ -64,14 +66,14 @@ class CompileCrossModuleUnionTest {
                 """;
         Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
-        assertEquals(List.of(loader.loadClass("ship.Shipped"), loader.loadClass(Emitted.bridgeCase("ship", new TypeName("inv", "Shortage")))),
+        assertEquals(List.of(loader.loadClass("ship.Shipped"), loader.loadClass(Emitted.bridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))))),
                 Arrays.asList(loader.loadClass(Emitted.result("ship", "allocateAndShip")).getPermittedSubclasses()));
 
         Object composed = loader.loadClass("ship.AllocateAndShip").getMethod("of").invoke(null);
         assertEquals("ship.Shipped",
                 Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", "SKU-1")).getClass().getName());
         Object departed = Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", ""));
-        assertEquals(Emitted.bridgeCase("ship", new TypeName("inv", "Shortage")), departed.getClass().getName());
+        assertEquals(Emitted.bridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))), departed.getClass().getName());
         assertEquals("inv.Shortage",
                 departed.getClass().getMethod("value").invoke(departed).getClass().getName(),
                 "the bridge case holds the imported value as it is");

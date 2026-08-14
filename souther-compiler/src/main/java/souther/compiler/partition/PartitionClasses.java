@@ -197,7 +197,7 @@ final class PartitionClasses {
         if (!(symbols.scope().reach(leaf) instanceof TypeReachName.Written names)) {
             return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
         }
-        if (!(symbols.declarations().declaration(leaf) instanceof Hir.Data data)) {
+        if (!(symbols.declarations().declaration(leaf.key()) instanceof Hir.Data data)) {
             return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));

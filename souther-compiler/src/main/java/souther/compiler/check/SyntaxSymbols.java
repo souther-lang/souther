@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -43,7 +45,7 @@ public final class SyntaxSymbols implements NameSense {
         Map<String, Denotation> names = new HashMap<>();
         for (Ast.Def def : Registry.ownDefs(m).values()) {
             names.put(def.name(),
-                    new Denotation.Denotes(DeclaredIdentity.of(def.declaredIn(), def.name())));
+                    new Denotation.Denotes(TypeSymbols.declared(def.declaredKey())));
         }
         return new SyntaxSymbols(m.name(), Registry.ofWritten(Map.of(m.name(), m)), names, Map.of());
     }
@@ -72,8 +74,8 @@ public final class SyntaxSymbols implements NameSense {
     }
 
     @Override
-    public boolean declares(TypeName name) {
-        return declarations.contains(name);
+    public boolean declares(TypeKey address) {
+        return declarations.contains(address);
     }
 
     @Override

@@ -334,10 +334,10 @@ class ResolvedValueNamesTest {
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
 
         List<souther.compiler.check.Resolve.TypeUse> amount = c.db()
-                .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Amount")))
+                .ask(new Names.UsesOf("m.a", souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey("m.a", "Amount"))))
                 .value();
         List<souther.compiler.check.Resolve.TypeUse> approved = c.db()
-                .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Approved")))
+                .ask(new Names.UsesOf("m.a", souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey("m.a", "Approved"))))
                 .value();
 
         assertTrue(amount.stream().anyMatch(d -> d.pos().line() == 8),

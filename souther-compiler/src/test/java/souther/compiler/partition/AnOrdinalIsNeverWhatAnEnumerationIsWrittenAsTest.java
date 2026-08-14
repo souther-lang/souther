@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.List;
@@ -30,13 +32,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
 
-    private static final TypeName STAGE = new TypeName("example.stage", "Stage");
+    private static final TypeName STAGE = TypeSymbols.declared(new TypeKey("example.stage", "Stage"));
 
     private static Carrier.Ordinal carrier() {
         return new Carrier.Ordinal(STAGE, List.of(
-                new TypeName("example.stage", "Prospecting"),
-                new TypeName("example.stage", "Qualified"),
-                new TypeName("example.stage", "Won")));
+                TypeSymbols.declared(new TypeKey("example.stage", "Prospecting")),
+                TypeSymbols.declared(new TypeKey("example.stage", "Qualified")),
+                TypeSymbols.declared(new TypeKey("example.stage", "Won"))));
     }
 
     /** The counts are the places, and the values are the cases. Neither is the other. */
@@ -45,10 +47,10 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
         Carrier.Ordinal stage = carrier();
 
         assertEquals(Count.of(0), stage.placeOf(
-                new ObservedValue.Unit(new TypeName("example.stage", "Prospecting"))));
+                new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("example.stage", "Prospecting")))));
         assertEquals(Count.of(2), stage.placeOf(
-                new ObservedValue.Unit(new TypeName("example.stage", "Won"))));
-        assertEquals(new ObservedValue.Unit(new TypeName("example.stage", "Qualified")),
+                new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("example.stage", "Won")))));
+        assertEquals(new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("example.stage", "Qualified"))),
                 stage.valueOf(Count.of(1)));
         assertEquals("Qualified", stage.written(Count.of(1)));
     }
@@ -62,7 +64,7 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
      */
     @Test
     void aCaseThisEnumerationDoesNotListHasNoPlaceOnIt() {
-        assertNull(carrier().placeOf(new ObservedValue.Unit(new TypeName("elsewhere", "Won"))));
+        assertNull(carrier().placeOf(new ObservedValue.Unit(TypeSymbols.declared(new TypeKey("elsewhere", "Won")))));
         assertNull(carrier().placeOf(new ObservedValue.Integer(1)),
                 "a number is not a case, whatever the ordinal of a case happens to be");
     }
@@ -116,10 +118,10 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
                 compilation.db().ask(new souther.compiler.query.Shapes.Scope(module)).value();
 
         assertNull(Carrier.ofValue(
-                souther.compiler.types.Type.ref(new TypeName("example.onecase", "Qualified")),
+                souther.compiler.types.Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Qualified"))),
                 symbols), "one case of a sum is not the sum");
         assertNotNull(Carrier.ofValue(
-                souther.compiler.types.Type.ref(new TypeName("example.onecase", "Stage")),
+                souther.compiler.types.Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Stage"))),
                 symbols), "and the sum itself still is");
     }
 

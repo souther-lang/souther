@@ -460,7 +460,7 @@ public final class SpecChecker {
         for (Hir.Name name : spec.constructs()) {
             String c = name.written();
             TypeName built = name.denotes();
-            if (symbols.declarations().declaration(built) instanceof Hir.UnitData) {
+            if (symbols.declarations().declaration(built.key()) instanceof Hir.UnitData) {
                 continue;   // a unit has a generated factory
             }
             // What Java needs is a way in: the decoder, which a module publishes by exposing the type.

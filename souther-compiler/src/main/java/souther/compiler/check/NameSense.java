@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
 
 import java.util.Set;
 
@@ -22,7 +22,7 @@ public interface NameSense {
     TypeScope scope();
 
     /** Whether anything declares {@code name} — this compilation or the language. */
-    boolean declares(TypeName name);
+    boolean declares(TypeKey address);
 
     /** The names one module declares. For a report offering what the author might have meant. */
     Set<String> declaredNamesIn(String module);

@@ -290,7 +290,7 @@ public final class Deriver {
             return;   // a sum that reaches itself; DataChecker reports it, this only has to terminate
         }
         for (Hir.Name caseName : s.cases()) {
-            if (symbols.declarations().declaration(caseName.denotes()) instanceof Hir.SumData nested) {
+            if (symbols.declarations().declaration(caseName.denotes().key()) instanceof Hir.SumData nested) {
                 collectLeafCases(nested, symbols, out, visiting);
             } else if (!out.contains(caseName)) {
                 out.add(caseName);

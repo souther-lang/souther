@@ -2,6 +2,8 @@ package souther.compiler;
 
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
@@ -36,7 +38,7 @@ class ThePrimitiveAMemberNamesIsReadOffTheNameItWasMintedFromTest {
     void aNameThatNamesNoPrimitiveAnswersNothing() {
         assertNull(TypeName.SOME.primitiveKind());
         assertNull(TypeName.NONE.primitiveKind());
-        assertNull(new TypeName("demo", "Int").primitiveKind());
+        assertNull(TypeSymbols.declared(new TypeKey("demo", "Int")).primitiveKind());
     }
 
     /** `Raw` is a primitive and no scalar a leaf codec exists for, which is the one place the two

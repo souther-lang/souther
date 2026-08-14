@@ -1,6 +1,8 @@
 package souther.compiler.jvm;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -22,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class SoutherJvmAbiTest {
 
-    private static final TypeName ORDER = new TypeName("shop", "Order");
+    private static final TypeName ORDER = TypeSymbols.declared(new TypeKey("shop", "Order"));
 
     /** The specification, as a table: an identity and what it is called. */
     private static List<Object[]> abi() {
@@ -45,7 +47,7 @@ class SoutherJvmAbiTest {
                 "在庫.引き当てる$Impl"});
 
         // A bridge case belongs to the module that emits it, not to the member's own module.
-        rows.add(new Object[] {new GeneratedClass.BridgeCase("ship", new TypeName("inv", "Shortage")),
+        rows.add(new Object[] {new GeneratedClass.BridgeCase("ship", TypeSymbols.declared(new TypeKey("inv", "Shortage"))),
                 "ship.ShortageCase"});
         rows.add(new Object[] {new GeneratedClass.BridgeCase("m", TypeName.primitive("Int")),
                 "m.IntCase"});
@@ -121,12 +123,12 @@ class SoutherJvmAbiTest {
      */
     @Test
     void andAValueClassNameSaysWhichTypeItWouldBe() {
-        for (TypeName type : List.of(ORDER, new TypeName("在庫", "金額"),
-                new TypeName("a.b.c", "Deep"), TypeName.primitive("Int"))) {
+        for (TypeName type : List.of(ORDER, TypeSymbols.declared(new TypeKey("在庫", "金額")),
+                TypeSymbols.declared(new TypeKey("a.b.c", "Deep")), TypeName.primitive("Int"))) {
             assertEquals(type, SoutherJvmAbi.valueTypeCandidate(
                     SoutherJvmAbi.nameOf(new GeneratedClass.Value(type)).binaryName()));
         }
-        assertEquals(new TypeName("shop", "FindOrder$Impl"),
+        assertEquals(TypeSymbols.declared(new TypeKey("shop", "FindOrder$Impl")),
                 SoutherJvmAbi.valueTypeCandidate("shop.FindOrder$Impl"),
                 "a candidate for the name, and no claim about what is under it");
         assertEquals(null, SoutherJvmAbi.valueTypeCandidate("Loose"), "a name with no module names no type");

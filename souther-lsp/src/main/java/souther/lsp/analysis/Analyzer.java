@@ -7,6 +7,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.ClauseDischarge;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
@@ -1410,7 +1412,7 @@ public final class Analyzer {
         Map<TypeName, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
         List<ClauseDischarge> clauses = byType == null
-                ? null : byType.get(new TypeName(module, nameOf(name)));
+                ? null : byType.get(TypeSymbols.declared(new TypeKey(module, nameOf(name))));
         if (clauses == null || clauses.isEmpty()) {
             return Optional.empty();
         }

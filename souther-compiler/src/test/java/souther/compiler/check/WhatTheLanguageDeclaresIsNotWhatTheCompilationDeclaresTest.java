@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,32 +37,32 @@ class WhatTheLanguageDeclaresIsNotWhatTheCompilationDeclaresTest {
     /** The language's own data is there to be read. */
     @Test
     void aRuntimeBackedDeclarationIsAnswered() {
-        assertNotNull(declarations().declaration(TypeName.runtime("RoundingMode")));
-        assertTrue(declarations().contains(TypeName.runtime("RoundingMode")));
+        assertNotNull(declarations().declaration(TypeName.runtime("RoundingMode").key()));
+        assertTrue(declarations().contains(TypeName.runtime("RoundingMode").key()));
     }
 
     /** And is declared by no module here. */
     @Test
     void andIsNotDeclaredByThisCompilation() {
-        assertFalse(declarations().declaredByCompilation(TypeName.runtime("RoundingMode")));
+        assertFalse(declarations().declaredByCompilation(TypeName.runtime("RoundingMode").key()));
     }
 
     /** While what the compilation writes answers yes to both. */
     @Test
     void aDeclarationOfThisCompilationAnswersBoth() {
-        TypeName note = new TypeName("app", "Note");
+        TypeName note = TypeSymbols.declared(new TypeKey("app", "Note"));
 
-        assertNotNull(declarations().declaration(note));
-        assertTrue(declarations().declaredByCompilation(note));
+        assertNotNull(declarations().declaration(note.key()));
+        assertTrue(declarations().declaredByCompilation(note.key()));
     }
 
     /** And a name neither of them declares is answered by neither. */
     @Test
     void aNameNothingDeclaresIsAnsweredByNeither() {
-        TypeName nothing = new TypeName("app", "Missing");
+        TypeName nothing = TypeSymbols.declared(new TypeKey("app", "Missing"));
 
-        assertNull(declarations().declaration(nothing));
-        assertFalse(declarations().declaredByCompilation(nothing));
+        assertNull(declarations().declaration(nothing.key()));
+        assertFalse(declarations().declaredByCompilation(nothing.key()));
     }
 
     private static Declarations declarations() {

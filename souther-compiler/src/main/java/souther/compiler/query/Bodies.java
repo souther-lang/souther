@@ -1189,7 +1189,7 @@ public final class Bodies {
                 // is one or there is not, and the reasons belong to the pass that settles them.
                 Set<String> settled = new LinkedHashSet<>();
                 for (Hir.Def def : lowering.value().settled().defs()) {
-                    if (db.ask(new Names.Definition(def.declares())).present()) {
+                    if (db.ask(new Names.Definition(def.declaredKey())).present()) {
                         settled.add(def.name());
                     }
                 }

@@ -12,6 +12,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.Collections;
@@ -41,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AFieldIsBoundByTheDeclarationThatWroteItTest {
 
-    private static final TypeName RANGE = new TypeName("up", "Range");
+    private static final TypeName RANGE = TypeSymbols.declared(new TypeKey("up", "Range"));
 
     private static final String DECLARING = """
             module up exposing ( Range )
@@ -85,7 +87,7 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
     }
 
     private static Hir.Data range(Compilation c) {
-        Hir.Def def = c.db().ask(new Names.ResolvedDeclaration(RANGE)).value();
+        Hir.Def def = c.db().ask(new Names.ResolvedDeclaration(RANGE.key())).value();
         assertNotNull(def, "the model under test compiles");
         return (Hir.Data) def;
     }
@@ -176,8 +178,8 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         Compilation c = compiled(Reached.BESIDE_THE_READERS_OWN);
         Clauses read = readBy(c, "demo");
 
-        TypeName ours = new TypeName("demo", "Range");
-        Hir.Data mine = (Hir.Data) c.db().ask(new Names.ResolvedDeclaration(ours)).value();
+        TypeName ours = TypeSymbols.declared(new TypeKey("demo", "Range"));
+        Hir.Data mine = (Hir.Data) c.db().ask(new Names.ResolvedDeclaration(ours.key())).value();
 
         assertTrue(Collections.disjoint(read.bindingsOf(RANGE, range(c)).values(),
                         read.bindingsOf(ours, mine).values()),

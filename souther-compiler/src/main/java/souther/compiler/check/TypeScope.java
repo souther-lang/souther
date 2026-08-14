@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeReachName;
 
@@ -101,9 +102,12 @@ public final class TypeScope {
         if (target == null) {
             return Denotation.NOT_IN_SCOPE;
         }
-        TypeName candidate = new TypeName(target, written.substring(dot + 1));
-        return registry.declaration(candidate) != null && exposes(target, candidate.name())
-                ? new Denotation.Denotes(candidate) : Denotation.NOT_IN_SCOPE;
+        String bare = written.substring(dot + 1);
+        // Asked rather than assembled: an address is not an identity until something declares one
+        // there, and what comes back is that identity or nothing.
+        TypeName denoted = registry.identify(new TypeKey(target, bare));
+        return denoted != null && exposes(target, bare)
+                ? new Denotation.Denotes(denoted) : Denotation.NOT_IN_SCOPE;
     }
 
     /** Whether {@code name} is declared in another module (spec §modules). */

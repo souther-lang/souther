@@ -16,6 +16,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.List;
@@ -63,7 +65,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     }
 
     private TypeName named(String name) {
-        return new TypeName(symbols.module(), name);
+        return TypeSymbols.declared(new TypeKey(symbols.module(), name));
     }
 
     /** The same name as this module writes it, which is what a row is written with. */

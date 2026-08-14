@@ -6,6 +6,8 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.BindingId;
@@ -60,7 +62,7 @@ class CallElaboratorNoCalleeTest {
     @Test
     void aTypeIsToldItConstructs() {
         RuntimeException e = answerFor(
-                new ValueName.OfType("Yen", new TypeName("m", "Yen"), null));
+                new ValueName.OfType("Yen", TypeSymbols.declared(new TypeKey("m", "Yen")), null));
         CompileException c = assertInstanceOf(CompileException.class, e);
         assertInstanceOf(DataMessage.AConstructionCannotBeWrittenHere.class, c.diagnostic().said());
         assertEquals(List.of("Yen"), List.copyOf(c.diagnostic().values().values()));

@@ -1,6 +1,8 @@
 package souther.compiler.jvm;
 
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
 /**
  * How a {@link GeneratedClass} is spelled on the JVM. The one place that maps a Souther identity to a
@@ -55,7 +57,7 @@ public final class SoutherJvmAbi {
      *
      * <p>Which is why this answers half a question and is named for its half. Whether a type is
      * there is a module's scope to answer, and the caller that has one asks it:
-     * {@code candidate != null && symbols.declarations().contains(candidate)}. An ABI that answered both would be
+     * {@code candidate != null && symbols.declarations().contains(candidate.key())}. An ABI that answered both would be
      * claiming a declaration it has no way to see — the same shape as an authority that hands out
      * half an answer, pointed the other way.
      */
@@ -64,7 +66,8 @@ public final class SoutherJvmAbi {
         if (dot <= 0 || dot == binaryName.length() - 1) {
             return null;
         }
-        return new TypeName(binaryName.substring(0, dot), binaryName.substring(dot + 1));
+        return TypeSymbols.recovered(
+                new TypeKey(binaryName.substring(0, dot), binaryName.substring(dot + 1)));
     }
 
     /**

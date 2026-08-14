@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
@@ -27,7 +29,7 @@ class InvariantCapabilitiesTest {
         Compilation c = Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY);
         Map<TypeName, List<ClauseDischarge>> caps =
                 c.db().ask(new Shapes.InvariantCapabilities("m.a")).value();
-        return caps == null ? List.of() : caps.getOrDefault(new TypeName("m.a", type), List.of());
+        return caps == null ? List.of() : caps.getOrDefault(TypeSymbols.declared(new TypeKey("m.a", type)), List.of());
     }
 
     @Test

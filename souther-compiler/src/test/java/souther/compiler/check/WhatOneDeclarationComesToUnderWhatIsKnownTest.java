@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.HashMap;
@@ -40,11 +42,11 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         Symbols symbols = compilation.symbols("demo");
         Map<TypeName, Cardinality> solution = new HashMap<>();
         for (int each = 0; each < assumed.length; each += 2) {
-            solution.put(new TypeName(symbols.module(), (String) assumed[each]), (Cardinality) assumed[each + 1]);
+            solution.put(TypeSymbols.declared(new TypeKey(symbols.module(), (String) assumed[each])), (Cardinality) assumed[each + 1]);
         }
         for (Hir.Def def : compilation.module("demo").defs()) {
             if (def.name().equals(name)) {
-                return CardinalityTransfer.upperOf(new TypeName(symbols.module(), name), def, symbols, solution, _ -> false);
+                return CardinalityTransfer.upperOf(TypeSymbols.declared(new TypeKey(symbols.module(), name)), def, symbols, solution, _ -> false);
             }
         }
         throw new IllegalArgumentException("no such declaration: " + name);

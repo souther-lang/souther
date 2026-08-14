@@ -4,6 +4,8 @@ import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
@@ -117,7 +119,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
                 if (!(def instanceof Hir.Data data)) {
                     continue;
                 }
-                TypeName named = new TypeName(module, data.name());
+                TypeName named = TypeSymbols.declared(new TypeKey(module, data.name()));
                 for (Hir.InvariantClause clause : clauses.of(named, data)) {
                     assertNotNull(clauses.typed(clause.expr(), named, data),
                             "`" + data.name() + "` declares a clause this check could not type:\n"

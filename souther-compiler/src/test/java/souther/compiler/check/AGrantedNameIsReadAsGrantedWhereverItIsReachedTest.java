@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.List;
@@ -50,10 +52,10 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Symbols symbols = compilation.symbols("demo");
         TypeCardinality.Cardinalities solved =
                 TypeCardinality.solve(compilation.module("demo"), symbols);
-        assertEquals(Cardinality.NO_VALUE, solved.of(new TypeName(symbols.module(), reader)),
+        assertEquals(Cardinality.NO_VALUE, solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))),
                 "`" + reader + "` has no value while nothing is granted");
-        assertFalse(solved.granting(Set.of(new TypeName(symbols.module(), granted)))
-                        .get(new TypeName(symbols.module(), reader)).none(),
+        assertFalse(solved.granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), granted))))
+                        .get(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` reaches `" + granted + "` and was granted it has values");
     }
 
@@ -134,7 +136,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Symbols symbols = compilation.symbols("demo");
         assertEquals(Cardinality.NO_VALUE,
                 TypeCardinality.solve(compilation.module("demo"), symbols)
-                        .granting(Set.of(new TypeName(symbols.module(), "Granted"))).get(new TypeName(symbols.module(), "Bad")),
+                        .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))),
                 "and what it wraps was not granted anything");
     }
 
@@ -169,7 +171,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 TypeCardinality.solve(compilation.module("demo"), symbols);
 
         assertEquals(List.of(Cardinality.NO_VALUE, Cardinality.NO_VALUE),
-                List.of(solved.of(new TypeName(symbols.module(), "A")), solved.of(new TypeName(symbols.module(), "B"))),
+                List.of(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "A"))), solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "B")))),
                 "neither of them can be built");
     }
 }

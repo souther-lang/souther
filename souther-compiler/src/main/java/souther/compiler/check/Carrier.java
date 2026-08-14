@@ -146,7 +146,7 @@ public sealed interface Carrier {
         // on their sum's order without ranging over it. Answered with that wider order, a position
         // declared as one case took the whole enumeration's counts, and the line drawn on it asked
         // for a row at a value the position cannot hold.
-        if (!(base instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name()) instanceof Hir.SumData sum)
+        if (!(base instanceof Type.Ref ref) || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
                 || !TypeOps.isUnitOnlySum(base, symbols)) {
             return null;
         }

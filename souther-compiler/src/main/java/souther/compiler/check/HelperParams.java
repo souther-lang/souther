@@ -1012,7 +1012,7 @@ final class HelperParams {
 
         /** Each field of a construction, asked for the type that field holds. */
         private void visitInits(Hir.NewData nd, Scope env, BindingId target) {
-            Hir.Data data = symbols.declarations().declaration(nd.typeName().denotes()) instanceof Hir.Data d ? d : null;
+            Hir.Data data = symbols.declarations().declaration(nd.typeName().denotes().key()) instanceof Hir.Data d ? d : null;
             for (Hir.FieldInit init : nd.inits()) {
                 visit(init.value(), env, target,
                         data == null ? null : TypeOps.fieldType(data, init.name(), symbols));

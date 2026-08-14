@@ -197,7 +197,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         return Partitions.representativesOf(
                         souther.compiler.types.Type.ref(
-                                new souther.compiler.types.TypeName(module, name)), symbols)
+                                souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))), symbols)
                 .stream().map(FixtureTemplate::text).toList();
     }
 

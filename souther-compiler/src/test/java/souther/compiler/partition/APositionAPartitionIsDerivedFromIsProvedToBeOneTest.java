@@ -10,6 +10,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
@@ -61,7 +63,7 @@ class APositionAPartitionIsDerivedFromIsProvedToBeOneTest {
     }
 
     private Type named(String name) {
-        return Type.ref(new TypeName(symbols.module(), name));
+        return Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), name)));
     }
 
     // --- what a partition may be derived from ---------------------------------------------------
@@ -104,7 +106,7 @@ class APositionAPartitionIsDerivedFromIsProvedToBeOneTest {
     @Test
     void aShapeNoPositionCanHaveIsThisCompilerDisagreeingWithItself() {
         List<Type> unreachable = List.of(
-                Type.union(java.util.Set.of(new TypeName(symbols.module(), "Prospecting"), new TypeName(symbols.module(), "Won"))),
+                Type.union(java.util.Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Prospecting")), TypeSymbols.declared(new TypeKey(symbols.module(), "Won")))),
                 Type.tuple(List.of(Type.INT, Type.STRING)),
                 Type.fn(List.of(Type.INT), Type.INT),
                 Type.NEVER,

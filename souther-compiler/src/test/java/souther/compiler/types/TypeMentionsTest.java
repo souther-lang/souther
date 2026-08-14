@@ -1,5 +1,7 @@
 package souther.compiler.types;
 
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.TypeKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -39,7 +41,7 @@ class TypeMentionsTest {
 
     @Test
     void aUnionMemberIsANameNotANestedType() {
-        Type union = Type.union(Set.of(new TypeName("m", "A"), new TypeName("m", "B")));
+        Type union = Type.union(Set.of(TypeSymbols.declared(new TypeKey("m", "A")), TypeSymbols.declared(new TypeKey("m", "B"))));
         assertFalse(Type.mentions(union, t -> t instanceof Type.Ref));
     }
 

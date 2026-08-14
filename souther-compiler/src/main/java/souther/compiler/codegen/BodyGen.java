@@ -70,9 +70,9 @@ final class BodyGen {
     /** The fields a construction spread copies from a value of {@code src}: a data's own, or the part
      * every case of a sum spreads, which the sum's sealed interface declares as accessors. */
     private Map<String, Type> spreadableFields(TypeName src) {
-        return symbols.declarations().declaration(src) instanceof Hir.SumData sum
+        return symbols.declarations().declaration(src.key()) instanceof Hir.SumData sum
                 ? TypeOps.commonSpreadFields(sum, symbols)
-                : fieldTypes((Hir.Data) symbols.declarations().declaration(src));
+                : fieldTypes((Hir.Data) symbols.declarations().declaration(src.key()));
     }
 
     private Type successType(Hir.RetType ret) {
@@ -240,7 +240,7 @@ final class BodyGen {
          */
         private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
             MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
-            if (symbols.declarations().declaration(ownerName) instanceof Hir.SumData) {
+            if (symbols.declarations().declaration(ownerName.key()) instanceof Hir.SumData) {
                 // a field every case spreads is declared on the sum's sealed interface (issue #160)
                 code.invokeinterface(cd(ownerName), field, mtd);
             } else {
@@ -253,7 +253,7 @@ final class BodyGen {
          * non-newtype operand untouched. Used so comparison operators read the value a newtype wraps. */
         private Type unwrapNewtypeValue(Type t) {
             if (t instanceof Type.Ref ref
-                    && symbols.declarations().declaration(ref.name()) instanceof Hir.Data d && d.newtype()) {
+                    && symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data d && d.newtype()) {
                 Type inner = fieldTypes(d).get("value");
                 if (inner != null) {
                     emitFieldRead(code, ref.name(), "value", inner);
@@ -438,7 +438,7 @@ final class BodyGen {
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName()));
+                    Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName().key()));
                     emitFieldValues(flds, nd.inits(), nd.spreads());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
@@ -937,7 +937,7 @@ final class BodyGen {
         }
 
         private void newData(Core.NewData nd) {
-            Hir.Data owner = (Hir.Data) symbols.declarations().declaration(nd.typeName());
+            Hir.Data owner = (Hir.Data) symbols.declarations().declaration(nd.typeName().key());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
             TypeName built = nd.typeName();
@@ -1008,7 +1008,7 @@ final class BodyGen {
          */
         private Attempt emitAttempt(Core.IfConstructed ic) {
             Core.NewData nd = ic.construct();
-            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName()));
+            Map<String, Type> flds = fieldTypes((Hir.Data) symbols.declarations().declaration(nd.typeName().key()));
             ClassDesc cdType = cd(nd.typeName());
             emitFieldValues(flds, nd.inits(), nd.spreads());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
@@ -1109,7 +1109,7 @@ final class BodyGen {
          * violation, which a behavior's guard is meant to have discharged); a plain newtype is stashed
          * and built with {@code new}/{@code <init>}. */
         private Type wrapNewtypeValue(TypeName ntName, Type base) {
-            Hir.Data owner = (Hir.Data) symbols.declarations().declaration(ntName);
+            Hir.Data owner = (Hir.Data) symbols.declarations().declaration(ntName.key());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(ntName);
             if (DataChecker.isInvariantBearing(ntName, symbols) || symbols.scope().isForeign(ntName)) {

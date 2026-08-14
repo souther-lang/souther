@@ -8,6 +8,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.List;
@@ -28,14 +30,14 @@ class AFloorHoldsWhereverItIsWrittenTest {
     private record Model(Symbols symbols, String module) {
 
         FieldDomains domainsOf(String type) {
-            TypeName named = new TypeName(module, type);
-            Hir.Data data = (Hir.Data) symbols.declarations().declaration(named);
+            TypeName named = TypeSymbols.declared(new TypeKey(module, type));
+            Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
             assertNotNull(data, "no `" + type + "`");
             return FieldDomains.of(named, data, symbols);
         }
 
         Type ref(String type) {
-            return new Type.Ref(new TypeName(module, type));
+            return new Type.Ref(TypeSymbols.declared(new TypeKey(module, type)));
         }
     }
 

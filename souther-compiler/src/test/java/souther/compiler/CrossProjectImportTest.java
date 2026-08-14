@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
@@ -354,7 +356,7 @@ class CrossProjectImportTest {
                 let owed (a, b) = if a.value >= b.value then Amount(a.value - b.value) else NothingOwed
                 """), published(LIBRARY));
 
-        assertTrue(app.containsKey(Emitted.bridgeCase("app.billing", new TypeName("shared.money", "Amount"))),
+        assertTrue(app.containsKey(Emitted.bridgeCase("app.billing", TypeSymbols.declared(new TypeKey("shared.money", "Amount")))),
                 "the bridge case is this project's own class");
         assertFalse(app.containsKey("shared.money.Amount"),
                 "and the library is not emitted again to carry the interface");

@@ -117,7 +117,7 @@ public final class UnreachableReasons {
     /** The fields as the data declares them, or nothing where this construction's type cannot be
      * read — in which case the initializers keep the order they were written in. */
     private static List<String> declaredFields(Core.NewData nd, Symbols symbols) {
-        if (symbols == null || !(symbols.declarations().declaration(nd.typeName()) instanceof Hir.Data data)) {
+        if (symbols == null || !(symbols.declarations().declaration(nd.typeName().key()) instanceof Hir.Data data)) {
             return List.of();
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);

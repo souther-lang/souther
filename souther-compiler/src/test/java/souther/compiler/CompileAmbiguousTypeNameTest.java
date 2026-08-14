@@ -2,6 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 import souther.compiler.diag.CompileException;
 
@@ -68,9 +70,9 @@ class CompileAmbiguousTypeNameTest {
     /** The rendering reaches inside a collection, and only the colliding name is written out. */
     @Test
     void onlyTheCollidingNameIsQualified() {
-        Type listOfUpMid = Type.list(Type.ref(new TypeName("up", "Mid")));
-        Type listOfOtherMid = Type.list(Type.ref(new TypeName("other", "Mid")));
-        Type listOfOut = Type.list(Type.ref(new TypeName("d", "Out")));
+        Type listOfUpMid = Type.list(Type.ref(TypeSymbols.declared(new TypeKey("up", "Mid"))));
+        Type listOfOtherMid = Type.list(Type.ref(TypeSymbols.declared(new TypeKey("other", "Mid"))));
+        Type listOfOut = Type.list(Type.ref(TypeSymbols.declared(new TypeKey("d", "Out"))));
 
         assertEquals("List<up.Mid>", Type.show(listOfUpMid, listOfOtherMid));
         assertEquals("List<Mid>", Type.show(listOfUpMid, listOfOut));

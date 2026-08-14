@@ -104,7 +104,7 @@ final class NeutralForm {
             throw new FixtureException("`" + helper + "` returned a " + name
                     + ", which is not a type this example can read");
         }
-        if (!(symbols.declarations().declaration(caseName) instanceof Hir.Data data)) {
+        if (!(symbols.declarations().declaration(caseName.key()) instanceof Hir.Data data)) {
             // a unit case: its name where the position reads one, else the tag its sum's decoder reads
             if (readsABareName(position, caseName)) {
                 return caseName.name();
@@ -182,7 +182,7 @@ final class NeutralForm {
         // Anything but a sum reads the case as itself: its own type, and — since a union is written
         // only as a behavior's own answer, where it arrives with no declared type below — nothing else.
         if (!(open(declaredType) instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name()) instanceof Hir.SumData sum)
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
                 || sum.decoder().isEmpty()) {
             return;
         }
@@ -341,7 +341,7 @@ final class NeutralForm {
             // name rather than one spelled at the call.
             for (TypeName caseName : TypeOps.leafCases(from, symbols)) {
                 if (!caseName.name().equals(written)
-                        || symbols.declarations().declaration(caseName) instanceof Hir.Data) {
+                        || symbols.declarations().declaration(caseName.key()) instanceof Hir.Data) {
                     continue;
                 }
                 if (readsABareName(to, caseName)) {
@@ -395,7 +395,7 @@ final class NeutralForm {
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
     Map<String, Hir.TypeRef> fieldTypes(TypeName typeName) {
         Map<String, Hir.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.declarations().declaration(typeName) instanceof Hir.Data d) {
+        if (symbols.declarations().declaration(typeName.key()) instanceof Hir.Data d) {
             for (Hir.Name inc : d.includes()) {
                 out.putAll(fieldTypes(inc.denotes()));
             }
@@ -425,13 +425,13 @@ final class NeutralForm {
      * an imported value's body names its own module's types, which the module reading the row need
      * not have imported, and a module of its own may declare something else of that spelling. */
     boolean isNewtype(TypeName name) {
-        return name != null && symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype();
+        return name != null && symbols.declarations().declaration(name.key()) instanceof Hir.Data d && d.newtype();
     }
 
     /** The written form of what a newtype wraps, kept whole so a generic base
      * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
     Hir.TypeRef newtypeBaseType(TypeName name) {
-        return name != null && symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype()
+        return name != null && symbols.declarations().declaration(name.key()) instanceof Hir.Data d && d.newtype()
                 && d.fields().size() == 1 && d.fields().get(0).type() instanceof Hir.TypeRef base
                 ? base : null;
     }
@@ -590,7 +590,7 @@ final class NeutralForm {
             return null;
         }
         TypeName candidate = SoutherJvmAbi.valueTypeCandidate(live.getClass().getName());
-        return candidate != null && symbols.declarations().contains(candidate) ? candidate : null;
+        return candidate != null && symbols.declarations().contains(candidate.key()) ? candidate : null;
     }
 
     /** What a report quotes a live value's class as. Its own name, and not the type's identity —

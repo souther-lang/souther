@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
-import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeKey;
 
 import java.util.Map;
 
@@ -52,7 +52,7 @@ public final class Declarations<D> {
     public interface Vocabulary<D> {
 
         /** The declaration this identity names, or null where the language declares none. */
-        D declaration(TypeName name);
+        D declaration(TypeKey address);
 
         /** Everything it declares, keyed by bare name. */
         Map<String, D> declaredIn();
@@ -61,8 +61,8 @@ public final class Declarations<D> {
         static Vocabulary<Hir.Def> ofLanguage() {
             return new Vocabulary<>() {
                 @Override
-                public Hir.Def declaration(TypeName name) {
-                    return Prelude.runtimeBackedDef(name);
+                public Hir.Def declaration(TypeKey address) {
+                    return Prelude.runtimeBackedDef(address);
                 }
 
                 @Override
@@ -76,7 +76,7 @@ public final class Declarations<D> {
         static Vocabulary<Ast.Def> ofNothing() {
             return new Vocabulary<>() {
                 @Override
-                public Ast.Def declaration(TypeName name) {
+                public Ast.Def declaration(TypeKey address) {
                     return null;
                 }
 
@@ -89,28 +89,28 @@ public final class Declarations<D> {
     }
 
     /** The declaration {@code name} names, or null when nothing declares it. */
-    public D declaration(TypeName name) {
-        D def = registry.declaration(name);
-        return def != null ? def : language.declaration(name);
+    public D declaration(TypeKey address) {
+        D def = registry.declaration(address);
+        return def != null ? def : language.declaration(address);
     }
 
     /** Whether anything declares {@code name} — this compilation or the language. */
-    public boolean contains(TypeName name) {
-        return declaration(name) != null;
+    public boolean contains(TypeKey address) {
+        return declaration(address) != null;
     }
 
     /** Whether {@code name} is declared by a module of this compilation — as opposed to a
      * declaration the language gives (the prelude's runtime-backed data), which resolves and types
      * like any other but belongs to no module here. The construction discipline asks this: what a
      * compilation declares is governed by {@code constructs}; the language's vocabulary is not. */
-    public boolean declaredByCompilation(TypeName name) {
-        return registry.declaration(name) != null;
+    public boolean declaredByCompilation(TypeKey address) {
+        return registry.declaration(address) != null;
     }
 
     /** Every definition of one module, keyed by the name written there. The runtime namespace
      * answers with the prelude's runtime-backed data. */
     public Map<String, D> declaredIn(String moduleName) {
-        if (TypeName.RUNTIME.equals(moduleName)) {
+        if (souther.compiler.types.TypeName.RUNTIME.equals(moduleName)) {
             return language.declaredIn();
         }
         return registry.declaredIn(moduleName);

@@ -7,6 +7,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.TypeReachName;
 
@@ -76,10 +78,10 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     private static List<TypeName> everyDeclaration() {
         List<TypeName> named = new ArrayList<>();
         for (String each : List.of("Shown", "Hidden", "One", "Two", "Sum")) {
-            named.add(new TypeName("lib", each));
+            named.add(TypeSymbols.declared(new TypeKey("lib", each)));
         }
         for (String each : List.of("Own", "RoundingMode", "In")) {
-            named.add(new TypeName("app", each));
+            named.add(TypeSymbols.declared(new TypeKey("app", each)));
         }
         named.add(TypeName.runtime("RoundingMode"));
         return named;
@@ -115,7 +117,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
             }
         }
 
-        assertEquals(List.of(new TypeName("lib", "Hidden"), TypeName.runtime("RoundingMode")),
+        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Hidden")), TypeName.runtime("RoundingMode")),
                 unnameable, "one its module keeps to itself, one this module took the spelling of");
         for (TypeName type : unnameable) {
             for (String spelling : List.of(type.name(), type.qualified(),
@@ -136,7 +138,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
         TypeName language = TypeName.runtime("RoundingMode");
 
         assertInstanceOf(TypeReachName.Unnameable.class, scopeOf("app", LIB, APP).scope().reach(language));
-        assertEquals(new TypeName("app", "RoundingMode"),
+        assertEquals(TypeSymbols.declared(new TypeKey("app", "RoundingMode")),
                 scopeOf("app", LIB, APP).scope().resolve(spelled("RoundingMode")).type());
     }
 

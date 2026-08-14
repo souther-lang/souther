@@ -6,6 +6,8 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.util.List;
@@ -102,7 +104,7 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
 
     @Test
     void aModuleReachingTheTypeThroughAnAliasObservesTheCasesItsRowsAnswerWith() {
-        assertEquals(List.of(new TypeName("lib", "Yes"), new TypeName("lib", "No")),
+        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Yes")), TypeSymbols.declared(new TypeKey("lib", "No"))),
                 armsAnsweredIn("viaalias", THROUGH_AN_ALIAS),
                 "the case a row answered with is the one the value is, whatever this module calls it");
     }
@@ -114,7 +116,7 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
      */
     @Test
     void aModuleThatSpellsSomethingElseTheSameObservesTheCasesItsRowsAnswerWith() {
-        assertEquals(List.of(new TypeName("lib", "Yes"), new TypeName("lib", "No")),
+        assertEquals(List.of(TypeSymbols.declared(new TypeKey("lib", "Yes")), TypeSymbols.declared(new TypeKey("lib", "No"))),
                 armsAnsweredIn("shadows", SPELLS_ITS_OWN),
                 "the case a row answered with is the one the value is, and this module's `Yes` is"
                         + " not a value any of these rows produced");

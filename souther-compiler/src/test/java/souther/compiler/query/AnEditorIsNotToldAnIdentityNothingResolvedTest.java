@@ -3,6 +3,8 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 
@@ -78,14 +80,14 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
     /** Both names are written in one field list, so what separates them is what they name. */
     @Test
     void aFieldTypeIsAnsweredAndOneNamingNothingIsNot() {
-        assertEquals(new TypeName("m", "D"), typeAt(4, 15));
+        assertEquals(TypeSymbols.declared(new TypeKey("m", "D")), typeAt(4, 15));
         assertNull(typeAt(4, 21), "no declaration is named `Nowhere`, so the field's type is none");
     }
 
     /** Both names are written in one {@code constructs} clause. */
     @Test
     void aClauseEntryIsAnsweredAndOneNamingNothingIsNot() {
-        assertEquals(new TypeName("m", "A"),
+        assertEquals(TypeSymbols.declared(new TypeKey("m", "A")),
                 (TypeName) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 16, ID))));
         assertNull((TypeName) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 19, ID))),
                 "no declaration is named `Nowhere`, so the clause names none");

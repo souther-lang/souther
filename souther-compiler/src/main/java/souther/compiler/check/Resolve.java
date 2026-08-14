@@ -18,6 +18,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
 
@@ -702,10 +703,28 @@ public final class Resolve {
 
     // --- definitions ---
 
+    /**
+     * The identity of a declaration this module wrote.
+     *
+     * <p>The scope this module is resolved against was built from what it declares, so for a
+     * declaration the module has, the answer is already there and is taken rather than made. For one
+     * it wrote and does not have, there is nothing to take: this pass meets it all the same, because
+     * it walks the text rather than the declarations, and gives it the identity its own two facts
+     * say it is.
+     */
+    private TypeName declaredHere(Ast.Def def) {
+        return symbols.scope().resolve(def.written()) instanceof Denotation.Denotes d
+                ? d.type() : TypeSymbols.declared(def.declaredKey());
+    }
+
     private Hir.Def def(Ast.Def def) {
-        // The one place a declaration's identity comes into existence: it is minted here, from the
-        // module that wrote the declaration and the name written there, and carried from here on.
-        TypeName declared = DeclaredIdentity.of(def.declaredIn(), def.name());
+        // Asked of the declaration world where it can answer, and minted where it cannot. This pass
+        // walks every declaration the module wrote; the index holds the ones the module has, which
+        // is fewer — a name declared twice keeps the first, `Some` and `None` are refused outright,
+        // and a module in an import cycle is indexed not at all. Reading the tree rather than the
+        // declarations it settled is #708's, and until that is done a lookup here would have
+        // nothing to answer with for the declarations this pass still meets.
+        TypeName declared = declaredHere(def);
         owner = new BindingOwner.OfData(declared);
         return switch (def) {
             case Ast.UnitData u -> new Hir.UnitData(u.written(), declared, u.pos());

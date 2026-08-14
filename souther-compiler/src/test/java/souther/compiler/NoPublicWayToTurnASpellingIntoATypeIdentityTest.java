@@ -8,12 +8,15 @@ import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -87,33 +90,46 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
     }
 
     /**
-     * And nothing public turns a key into one either.
+     * An address turns into an identity in one place, and every other reader that takes one gets
+     * back an answer about the declaration world rather than an identity.
      *
-     * <p>A {@link souther.compiler.types.TypeKey} is what a class file carries, so it is structural
-     * and public on purpose. What must not follow is a way to hand one back and be given the
-     * identity the compiler reasons with, or the declaration it names: a key read off a class is
-     * exactly what a reader would otherwise assemble, and the whole of the difference is that
-     * nothing accepts it.
+     * <p>A key is what a class file carries and what a query is asked with, and it is structural and
+     * public on purpose. What must not follow is a second way to hand one back and be given the
+     * identity the compiler reasons with: a key read off a class is exactly what a reader would
+     * otherwise assemble, and the whole of the difference is where it may be exchanged.
+     *
+     * <p>The list is the exchange and the questions around it, named rather than counted — one that
+     * appears later is a capability someone was given, and it fails here until it is either narrowed
+     * or written down as this one is.
      */
     @Test
-    void nothingPublicTurnsAKeyIntoAnIdentityOrADeclaration() {
-        List<String> accepting = new ArrayList<>();
-        for (Class<?> c : List.of(TypeName.class, souther.compiler.check.Declarations.class,
-                souther.compiler.check.TypeScope.class, souther.compiler.check.Registry.class,
-                Symbols.class, Hir.Def.class)) {
+    void anAddressBecomesAnIdentityInOnePlace() {
+        Set<String> exchanging = new java.util.LinkedHashSet<>();
+        Set<String> asking = new java.util.LinkedHashSet<>();
+        for (Class<?> c : List.of(TypeName.class, souther.compiler.types.TypeSymbols.class,
+                souther.compiler.check.Declarations.class, souther.compiler.check.TypeScope.class,
+                souther.compiler.check.Registry.class, Symbols.class, Hir.Def.class)) {
             for (Method m : c.getMethods()) {
-                if (List.of(m.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
-                    accepting.add(c.getSimpleName() + "." + m.getName());
+                if (!List.of(m.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
+                    continue;
                 }
+                String named = c.getSimpleName() + "." + m.getName();
+                (TypeName.class.equals(m.getReturnType()) ? exchanging : asking).add(named);
             }
             for (java.lang.reflect.Constructor<?> k : c.getConstructors()) {
                 if (List.of(k.getParameterTypes()).contains(souther.compiler.types.TypeKey.class)) {
-                    accepting.add("new " + c.getSimpleName());
+                    exchanging.add("new " + c.getSimpleName());
                 }
             }
         }
-        assertEquals(List.of(), accepting,
-                "a key is written down and read back; nothing here takes one");
+        assertEquals(Set.of("TypeSymbols.declared", "TypeSymbols.recovered", "Registry.identify"),
+                exchanging,
+                "an address becomes an identity where a declaration world says one is declared there");
+        assertEquals(Set.of("Declarations.declaration", "Declarations.contains",
+                        "Declarations.declaredByCompilation", "Registry.declaration",
+                        "Symbols.declares"),
+                asking,
+                "everything else that takes an address answers about the declaration world");
     }
 
     /** A declaration says which one it is without being told the module. */
@@ -144,8 +160,8 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
      */
     @Test
     void aDeclarationAnswersWithTheModuleThatWroteIt() {
-        assertEquals(new TypeName("app", "Note"), declarationOf(APP, "Note").declares());
-        assertEquals(new TypeName("lib", "Amount"), declarationOf(LIB, "Amount").declares());
+        assertEquals(TypeSymbols.declared(new TypeKey("app", "Note")), declarationOf(APP, "Note").declares());
+        assertEquals(TypeSymbols.declared(new TypeKey("lib", "Amount")), declarationOf(LIB, "Amount").declares());
     }
 
     /**

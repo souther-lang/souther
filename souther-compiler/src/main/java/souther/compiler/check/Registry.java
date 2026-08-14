@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -28,7 +30,18 @@ public interface Registry<D> {
      * declaring something new — which nobody can even see yet — reaches every module that imported
      * anything from there.
      */
-    D declaration(TypeName name);
+    D declaration(TypeKey address);
+
+    /**
+     * The identity of the declaration that address names, or null where nothing declares it.
+     *
+     * <p>Asking rather than assembling. A reader with a module and a name has an address, and an
+     * address is not an identity until something declares one there — so this is where the two are
+     * told apart, and a reader that gets nothing back has nothing it could have gone on with.
+     */
+    default TypeName identify(TypeKey address) {
+        return declaration(address) != null ? TypeSymbols.declared(address) : null;
+    }
 
     /** Every definition of one module, keyed by the name written there. Empty when this compilation
      * has no such module.
@@ -57,8 +70,8 @@ public interface Registry<D> {
             private final Map<String, Set<String>> exposed = new HashMap<>();
 
             @Override
-            public Hir.Def declaration(TypeName name) {
-                return declaredIn(name.module()).get(name.name());
+            public Hir.Def declaration(TypeKey address) {
+                return declaredIn(address.module()).get(address.name());
             }
 
             @Override
@@ -101,8 +114,8 @@ public interface Registry<D> {
             private final Map<String, Map<String, Ast.Def>> defs = new HashMap<>();
 
             @Override
-            public Ast.Def declaration(TypeName name) {
-                return declaredIn(name.module()).get(name.name());
+            public Ast.Def declaration(TypeKey address) {
+                return declaredIn(address.module()).get(address.name());
             }
 
             @Override

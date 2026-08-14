@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeName;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,14 +41,14 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = compilation.symbols("demo");
-        return FieldDomains.of(new TypeName(symbols.module(), name), data(compilation, name), symbols);
+        return FieldDomains.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols);
     }
 
     private static OccurrenceCounts countsOf(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = compilation.symbols("demo");
-        return OccurrenceCounts.of(new TypeName(symbols.module(), name), data(compilation, name), symbols);
+        return OccurrenceCounts.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols);
     }
 
     /** Two clauses that cannot both hold, both of them read. */

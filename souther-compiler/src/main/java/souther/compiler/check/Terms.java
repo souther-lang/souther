@@ -851,7 +851,7 @@ final class Terms {
      * declaration this module can see. Asked of the one field, since resolving the whole
      * declaration's fields is a question about a declaration this reader may not own. */
     Type fieldType(Type owner, String field) {
-        return owner instanceof Type.Ref r && symbols.declarations().declaration(r.name()) instanceof Hir.Data data
+        return owner instanceof Type.Ref r && symbols.declarations().declaration(r.name().key()) instanceof Hir.Data data
                 ? TypeOps.fieldType(data, field, symbols) : null;
     }
 

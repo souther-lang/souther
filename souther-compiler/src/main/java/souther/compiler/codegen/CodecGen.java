@@ -240,7 +240,7 @@ final class CodecGen {
     }
 
     private void invokeCodec(CodeBuilder code, TypeName type, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type) instanceof Hir.SumData);
+        code.invokestatic(cd(type), method, mtd, symbols.declarations().declaration(type.key()) instanceof Hir.SumData);
     }
 
     byte[] generateSumEncoder(Hir.SumData sum, Hir.SumEncoder enc) {
@@ -534,7 +534,7 @@ final class CodecGen {
             }
             for (Hir.Name written : sum.cases()) {
                 TypeName caseName = written.denotes();
-                Hir.Def caseDef = symbols.declarations().declaration(caseName);
+                Hir.Def caseDef = symbols.declarations().declaration(caseName.key());
                 if (caseDef instanceof Hir.UnitData) continue;   // the discriminator alone, no column
                 if (!(caseDef instanceof Hir.Data d)) return false;   // a nested sum is not a row
                 // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
@@ -564,7 +564,7 @@ final class CodecGen {
         if (t instanceof Type.ListOf || t instanceof Type.MapOf || t instanceof Type.SetOf
                 || t instanceof Type.Union) return false;
         if (t instanceof Type.Ref r) {
-            return symbols.declarations().declaration(r.name()) instanceof Hir.Data d
+            return symbols.declarations().declaration(r.name().key()) instanceof Hir.Data d
                     && d.decoder().orElse(null) instanceof Hir.PrimDecoder;   // newtype column only
         }
         return true;   // primitive scalar
@@ -848,7 +848,7 @@ final class CodecGen {
     }
 
     boolean isMapInput(Hir.Name typeName) {
-        return isMapInputOf(symbols.declarations().declaration(typeName.denotes()));
+        return isMapInputOf(symbols.declarations().declaration(typeName.denotes().key()));
     }
 
     private boolean isMapInputOf(Hir.Def def) {
@@ -1997,7 +1997,7 @@ final class CodecGen {
      * travels as that member's name — the form a named sum of units has (spec §encoder-derivation). */
     private boolean isEnumeration(List<TypeName> members) {
         for (TypeName member : members) {
-            if (!(symbols.declarations().declaration(member) instanceof Hir.UnitData)) {
+            if (!(symbols.declarations().declaration(member.key()) instanceof Hir.UnitData)) {
                 return false;
             }
         }
