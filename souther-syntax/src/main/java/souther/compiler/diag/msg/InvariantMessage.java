@@ -47,6 +47,29 @@ public sealed interface InvariantMessage extends Message {
     /** What to write where a relation between inputs is what guarantees the clause. */
     record ReifyTheRelationOntoAnInput(String data) implements InvariantMessage, Supporting {}
 
+    /**
+     * A clause the guards did not establish, said at the clause.
+     *
+     * <p>What E2011 points at. It says no more than that, because the clauses it is written over are
+     * the ones nothing here established: some of them the values may fail, and some of them are
+     * clauses this check simply could not decide. A label claiming more would be untrue of the
+     * second kind.
+     *
+     * <p>Nothing here names the clause. What the label is written beside is the clause, which a
+     * reader is being shown; naming it as well would be the diagnostic saying the same thing twice
+     * in the one place a reader does not need it said.
+     */
+    record ThisClauseIsNotEstablishedHere() implements InvariantMessage, Supporting {}
+
+    /**
+     * A clause the value being built fails, said at the clause.
+     *
+     * <p>What E2010 points at, and stronger than the label above because the clauses it is written
+     * over are stronger: E2010 is raised on a refutation, and what it is given is the clauses that
+     * were refuted rather than every clause left standing beside them.
+     */
+    record ThisClauseRejectsThisValue() implements InvariantMessage, Supporting {}
+
     /** The value being built is one the invariant rejects, whatever the path. */
     @Code(DiagnosticCode.E2010)
     record TheValueIsOneTheInvariantRejects(String data, String unsettled)

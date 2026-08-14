@@ -141,31 +141,49 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
 
     // --- what it kept for a diagnostic to name ---------------------------------------------------
 
-    /** The sets hold the names that were written and no others, on both sides independently. */
+    /** The names a message can write out are the ones that were written, on both sides
+     *  independently. */
     @Test
-    void theSetsHoldWhatWasNamedAndNothingElse() {
-        assertEquals(List.of(), names(judgmentOn(NEITHER).namedUnsettled()));
-        assertEquals(List.of(), names(judgmentOn(NEITHER).namedSettled()));
+    void onlyTheClausesThatWereNamedCanBeNamed() {
+        assertEquals(List.of(), names(judgmentOn(NEITHER).unsettled()));
+        assertEquals(List.of(), names(judgmentOn(NEITHER).settled()));
 
-        assertEquals(List.of("ordered"), names(judgmentOn(UNSETTLED_ONLY).namedUnsettled()));
-        assertEquals(List.of(), names(judgmentOn(UNSETTLED_ONLY).namedSettled()));
+        assertEquals(List.of("ordered"), names(judgmentOn(UNSETTLED_ONLY).unsettled()));
+        assertEquals(List.of(), names(judgmentOn(UNSETTLED_ONLY).settled()));
 
-        assertEquals(List.of("ordered"), names(judgmentOn(BOTH).namedUnsettled()));
-        assertEquals(List.of("lowNonNegative"), names(judgmentOn(BOTH).namedSettled()));
+        assertEquals(List.of("ordered"), names(judgmentOn(BOTH).unsettled()));
+        assertEquals(List.of("lowNonNegative"), names(judgmentOn(BOTH).settled()));
+    }
+
+    /**
+     * And the sides themselves hold every clause, named or not. Which is the same distinction one
+     * layer down from where {@link #onlyTheClausesThatWereNamedCanBeNamed} holds it: a side that
+     * held only the clauses a message could name would have nothing left to say about the others,
+     * and being unable to say what a clause is called is not being unable to say anything.
+     */
+    @Test
+    void bothSidesHoldEveryClauseAndNotOnlyTheNamedOnes() {
+        assertEquals(1, judgmentOn(NEITHER).unsettled().size(),
+                "one clause, left standing, written with no name");
+        assertEquals(0, judgmentOn(NEITHER).settled().size());
+
+        assertEquals(1, judgmentOn(SETTLED_ONLY).unsettled().size(),
+                "the unnamed clause the guards left standing is on this side");
+        assertEquals(1, judgmentOn(SETTLED_ONLY).settled().size());
     }
 
     /**
      * The one that fixes the two questions apart. An unnamed clause the guards left standing keeps
-     * the verdict unproven and puts nothing in {@code namedUnsettled}, while the clause they did
+     * the verdict unproven and leaves nothing in {@code unsettled} to name, while the clause they did
      * establish is there to be named — so a reader of either set alone reads it wrongly.
      */
     @Test
     void anUnnamedUnsettledClauseLeavesTheSettledOneNameable() {
         Judgment judgment = judgmentOn(SETTLED_ONLY);
         assertEquals(Verdict.UNKNOWN, judgment.verdict());
-        assertEquals(List.of(), names(judgment.namedUnsettled()),
+        assertEquals(List.of(), names(judgment.unsettled()),
                 "the clause left standing was written without a name");
-        assertEquals(List.of("lowNonNegative"), names(judgment.namedSettled()),
+        assertEquals(List.of("lowNonNegative"), names(judgment.settled()),
                 "the clause the guard established was written with one");
     }
 
@@ -241,8 +259,10 @@ class TheAbsenceOfANameIsNotTheAbsenceOfAClauseTest {
                 .judgment();
     }
 
-    private static List<String> names(java.util.SequencedSet<ClauseName> clauses) {
-        return clauses.stream().map(ClauseName::value).toList();
+    /** The names of the clauses on a side that carry one, which is what a message writes out. */
+    private static List<String> names(java.util.SequencedMap<Clause.Id, Clause> clauses) {
+        return clauses.values().stream().map(Clause::name)
+                .flatMap(java.util.Optional::stream).map(ClauseName::value).toList();
     }
 
     private static Message warningOn(String source) {
