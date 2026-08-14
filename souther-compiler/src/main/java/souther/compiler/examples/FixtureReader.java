@@ -3,7 +3,10 @@ package souther.compiler.examples;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CallElaborator;
-import souther.compiler.check.HelperInliner;
+import souther.compiler.check.FixtureApplication;
+import souther.compiler.check.FixtureArgumentTypes;
+import souther.compiler.check.FixtureEvidence;
+import souther.compiler.check.FixtureCallable;
 import souther.compiler.check.Prelude;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -1613,16 +1616,14 @@ public final class FixtureReader {
      * different answers about which field of what is being read.
      */
     private Type fieldTypeOf(Type record, String field) {
-        if (!(record instanceof Type.Ref r)) {
-            return null;
-        }
-        TypeSymbol named = r.name();
-        if (neutral.isNewtype(named)) {
-            // A newtype declares one field, and it is what it wraps (ADR-0032).
-            return "value".equals(field) ? neutral.shapeOf(neutral.newtypeBaseType(named)) : null;
-        }
-        Hir.TypeRef declared = neutral.fieldTypes(named).get(field);
-        return declared == null ? null : neutral.shapeOf(declared);
+        return evidence().fieldTypeOf(record, field);
+    }
+
+    /** What declarations say about what this row wrote, with what a {@code let} has in force here.
+     *  The pass that emits the methods a row's calls need reads the same walk, so what settles a
+     *  call there is what settles it here. */
+    private FixtureEvidence evidence() {
+        return new FixtureEvidence(symbols, values, bindings);
     }
 
     /**
@@ -1634,55 +1635,11 @@ public final class FixtureReader {
      * costs no helper a second application against the row's one budget.
      */
     private Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen) {
-        return declaredTypeOf(e, seen, new HashMap<>());
-    }
-
-    /**
-     * As above. {@code bound} is this walk's own binding environment: a {@code let} the walk enters
-     * has to be in force for the name it binds, and the reading that takes the value keeps its
-     * bindings in a table of its own. Two walks over one expression that disagree about what is in
-     * scope disagree about what is admitted, and the one that answers nothing admits nothing.
-     */
-    private Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen, Map<BindingId, Hir.Expr> bound) {
-        return switch (e) {
-            case Hir.NewData nd -> Type.ref(nd.typeName().denotes());
-            // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
-            case Hir.Apply c when constructsANewtype(c) -> Type.ref(constructs(c));
-            case Hir.FieldAccess fa -> {
-                Type target = declaredTypeOf(fa.target(), seen, bound);
-                yield target == null ? null : fieldTypeOf(target, fa.field());
-            }
-            case Hir.LetIn let -> {
-                BindingId binding = let.binder().id();
-                Hir.Expr outer = bound.put(binding, let.value());
-                try {
-                    yield declaredTypeOf(let.body(), seen, bound);
-                } finally {
-                    if (outer == null) {
-                        bound.remove(binding);
-                    } else {
-                        bound.put(binding, outer);
-                    }
-                }
-            }
-            case Hir.Var v -> {
-                ValueName denotes = v.denotes();
-                // A name reached twice is the cycle the reading itself reports; this walk only stops.
-                if (denotes == null || !seen.add(denotes)) {
-                    yield null;
-                }
-                Hir.Expr body;
-                if (denotes instanceof ValueName.Local local) {
-                    // What this walk bound, then what the reading around it has in force.
-                    body = bound.containsKey(local.id()) ? bound.get(local.id())
-                            : bindings.get(local.id());
-                } else {
-                    body = valueBody(v.name());
-                }
-                yield body == null ? null : declaredTypeOf(body, seen, bound);
-            }
-            case null, default -> null;
-        };
+        // The walk's own binding environment starts from what the reading around it has in force: a
+        // `let` the walk enters has to be in force for the name it binds, and so does one the
+        // reading entered before it got here. Two walks over one expression that disagree about
+        // what is in scope disagree about what is admitted.
+        return evidence().declaredTypeOf(e, seen, new HashMap<>(bindings));
     }
 
     /** A name resolved to a case, or a value under no name where this module has no such case — the
@@ -2034,46 +1991,47 @@ public final class FixtureReader {
         return neutral.of(answer, at, c.written());
     }
 
-    /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
-     * built against its parameter types, so an argument breaking one of those types' invariants is
-     * reported as the fixture it is. */
+    /**
+     * The value a helper answers with, run as the method its module emits.
+     *
+     * <p>What the row applies is one instance of the declaration, settled from the arguments the row
+     * wrote ({@link FixtureApplication}). Its arguments are then fixtures built against that
+     * instance's parameter types — a `List<Int>` where the declaration wrote `List<'a>` — so an
+     * argument breaking one of those types' invariants is reported as the fixture it is.
+     */
     private Object answered(Hir.Apply c, Applied helper) {
-        List<Hir.FnParam> params = helper.def().params();
-        if (c.args().size() != params.size()) {
-            throw new FixtureException("`" + c.written() + "` takes " + params.size()
-                    + " argument(s) but is called with " + c.args().size());
-        }
+        FixtureApplication.SettledCall settled = settled(c, helper);
+        List<Type> params = settled.params();
         Object[] args = new Object[params.size()];
         for (int i = 0; i < args.length; i++) {
-            Hir.FnParam p = params.get(i);
-            if (p.type() == null) {
-                throw new FixtureException("`" + c.written() + "` parameter `" + p.name()
-                        + "` has no type a fixture can be built against");
-            }
-            Type paramType = TypeOps.resolveParamType(p.type());
-            // A parameter whose element each call decides has no one type here. A call settles it
-            // from the argument it is given; a fixture is built before there is a call to settle it,
-            // so the order is what refuses this rather than the type being unsupported. Asked of the
-            // reading that also decides which kernels a method is emitted for, so a call this admits
-            // is one there is a method for (#680).
-            if (HelperInliner.decidedByEachCall(paramType)) {
-                throw new FixtureException("`" + c.written() + "` parameter `" + p.name() + "` is "
-                        + Type.show(paramType) + "; what it holds is decided by each call, and a"
-                        + " fixture is built before a call can decide it");
-            }
-            args[i] = built(c.args().get(i), paramType);
+            args[i] = built(c.args().get(i), params.get(i));
         }
-        return helpers.invoke(helper.reached(), emittedAs(helper), args);
+        return helpers.invoke(helper.reached(), FixtureCallable.resolve(settled).method(), args);
     }
 
-    /** Where {@code helper}'s method went. A kernel's wrapper is emitted under a name of its own so
-     * that nothing else reaches it (#680); everything else is emitted under the name this module
-     * reaches it by. What the helper <em>is</em> stays {@link Applied#reached()}, which is what a
-     * report about it names. */
-    private static String emittedAs(Applied helper) {
-        return helper.def().body() instanceof Hir.FnBody.Intrinsic
-                ? HelperInliner.intrinsicWrapperName(helper.reached())
-                : helper.reached();
+    /**
+     * The one instance of {@code helper} that {@code c} applies, or the reason the call determines
+     * none.
+     *
+     * <p>The reason is the call's, not the declaration's. A helper being written with type variables
+     * is what lets a call have several instances; what a row is refused for is the variable its own
+     * arguments left open, which is the thing whoever wrote the row can do something about.
+     */
+    private FixtureApplication.SettledCall settled(Hir.Apply c, Applied helper) {
+        return switch (FixtureApplication.settle(helper.reached(), helper.def(),
+                FixtureArgumentTypes.of(c, evidence()), symbols)) {
+            case FixtureApplication.Settled(FixtureApplication.SettledCall call) -> call;
+            case FixtureApplication.Miscalled(int written, int declared) ->
+                    throw new FixtureException("`" + c.written() + "` takes " + declared
+                            + " argument(s) but is called with " + written);
+            case FixtureApplication.Undeclared(String parameter) ->
+                    throw new FixtureException("`" + c.written() + "` parameter `" + parameter
+                            + "` has no type a fixture can be built against");
+            case FixtureApplication.Open(Type.Var variable) ->
+                    throw new FixtureException("`" + c.written() + "` leaves " + Type.show(variable)
+                            + " open: a fixture applies the one instance the arguments it wrote"
+                            + " settle, and nothing written here settles this one");
+        };
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {

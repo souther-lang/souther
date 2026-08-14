@@ -90,6 +90,13 @@ public sealed interface FixtureShape {
      * The shape a fixture may supply at a position of type {@code t}, refusing what no decoder
      * reads. {@link FixtureException} rather than a diagnostic: a fixture's failures are reported
      * against the row that wrote it.
+     *
+     * <p>{@code t} is a type something settled, and there are three of those: a name a row wrote
+     * ({@code Type.ref}), a parameter of a call a fixture settled, and a position inside one of
+     * those, which this walk takes from the type it was handed. A behavior's boundary does not come
+     * through here at all — {@link #of(BoundaryInput)} projects what was admitted where it was
+     * established. So none of them can carry a type variable, and the case below says what it means
+     * that one did.
      */
     static FixtureShape of(Type t, Symbols symbols) {
         return switch (t) {
@@ -108,9 +115,14 @@ public sealed interface FixtureShape {
             case Type.Union u -> throw new FixtureException(
                     "`" + Type.show(u) + "` names several types, and a fixture supplies a value of"
                             + " one; write the case it is");
-            case Type.Var _, Type.MetaVar _ -> throw new FixtureException(
-                    "`" + Type.show(t) + "` is decided by each call, and a fixture is built before a"
-                            + " call can decide it");
+            // Not a refusal, and not a sentence to give an author. A variable reaching here would
+            // mean a settled call carried one, which is what `FixtureApplication` answers no to
+            // before anything is built — so this is the compiler disagreeing with itself, and a
+            // diagnostic here would state a rule the language no longer has: that a fixture cannot
+            // apply what a declaration wrote a variable in. It can, at the instance the row settled.
+            // Turning this back into a `FixtureException` would put that rule back.
+            case Type.Var _, Type.MetaVar _ -> throw new IllegalStateException(
+                    Type.show(t) + " reached a fixture, which is built at settled types only");
             case Type.Nothing _, Type.Never _, Type.Erroneous _ -> throw new FixtureException(
                     "`" + Type.show(t) + "` is not a type a fixture can be built against");
         };

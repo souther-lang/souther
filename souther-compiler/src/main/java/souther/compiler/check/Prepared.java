@@ -100,6 +100,9 @@ public final class Prepared {
         // A helper an example row applies is emitted for that reason (ADR-0077); one this module
         // does not declare is taken on here, as a recursive one it reaches is.
         inliner.injectedExampleHelpers().forEach(injected::putIfAbsent);
+        // A kernel a row applies is emitted at the instance the row settled, which is why this is
+        // read off the calls rather than off the helpers a row names.
+        inliner.fixtureKernels(written.module(), scope).forEach(injected::putIfAbsent);
         // Beside what the module declared, not among it. Both are emitted and only the first was
         // written here, and a reader asking which is which asks the component it is in rather than
         // the shape of a name.

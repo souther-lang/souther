@@ -418,105 +418,77 @@ public final class HelperInliner {
                 out.add(name);
             }
         }
-        // The intrinsics a row applies, collected on their own because the table has none of them:
-        // it holds what may be expanded into a body, and an intrinsic is lowered at its call site
-        // instead. That is a fact about the backend, and a row that applies one is asking the same
-        // thing of it as a row applying any other library function (#680).
-        Deque<Hir.Expr> kernels = new ArrayDeque<>();
-        forEachExampleExpr(module, kernels::add);
-        // Named as they are emitted, not as they are written. This set is what decides which fns
-        // survive lowering, and what has to survive for a kernel is the wrapper — the kernel's own
-        // name belongs to the call the wrapper makes.
-        followingValues(kernels, table, e -> intrinsicCallsIn(e, out));
         return out;
     }
 
     /**
-     * Adds the intrinsic each application in {@code e} reaches, where a fixture could apply it.
+     * The methods the kernels a row applies are emitted as, under the name each is emitted with.
+     *
+     * <p>Collected on their own because the table has none of them: it holds what may be expanded
+     * into a body, and a kernel is lowered at its call site instead. A row applying one asks the same
+     * thing of it as a row applying any other library function (ADR-0077), and what makes that
+     * answerable is a body written for it here.
+     *
+     * <p>One per instance the rows settled, which is why this reads the calls and not the
+     * declarations: what is emitted for {@code List.length([ 1, 2 ])} is a method taking a
+     * {@code List<Int>}, and a row summing decimals elsewhere in the module gets a method of its own.
+     */
+    public static Map<String, Hir.FnDef> fixtureKernels(Hir.Module module,
+                                                        Map<String, Hir.FnDef> table,
+                                                        Symbols symbols) {
+        Map<String, Hir.FnDef> out = new LinkedHashMap<>();
+        Deque<Hir.Expr> kernels = new ArrayDeque<>();
+        forEachExampleExpr(module, kernels::add);
+        FixtureEvidence evidence = new FixtureEvidence(symbols, table);
+        followingValues(kernels, table, e -> kernelCallsIn(e, evidence, out));
+        return out;
+    }
+
+    /** As above, over the module this inliner reads. */
+    public Map<String, Hir.FnDef> fixtureKernels(Hir.Module module, Symbols symbols) {
+        return fixtureKernels(module, table.reachable(), symbols);
+    }
+
+    /**
+     * Adds the method each kernel application in {@code e} is emitted as, where the row's arguments
+     * settle the call.
      *
      * <p>Kept apart from {@link #helperCallsIn}, which feeds the recursion graph. What recurses is
-     * decided from calls between bodies that have one; an intrinsic has no body and belongs to
-     * neither that question nor that answer.
+     * decided from calls between bodies that have one; a kernel has no body and belongs to neither
+     * that question nor that answer.
      *
-     * <p>A kernel a fixture may not apply is not collected, and which those are is {@link
-     * #decidedByEachCall} — the same reading that refuses one where a fixture is built. Asked once,
-     * because a kernel one reading admitted and the other missed would be admitted by the fixture and
-     * then told it has no method, which is the representation-shaped refusal this removes.
+     * <p>Whether the call is one a fixture may apply is not asked here: it is
+     * {@link FixtureApplication}'s, and the witness it answers with is what this hands on. A kernel
+     * whose call settles nothing is not emitted, and the row is told which variable stayed open by
+     * the reading that found it — so nothing is admitted here and refused there, or the other way
+     * about.
      */
-    private static void intrinsicCallsIn(Hir.Expr e, Set<String> out) {
+    private static void kernelCallsIn(Hir.Expr e, FixtureEvidence evidence,
+                                      Map<String, Hir.FnDef> out) {
         if (e instanceof Hir.Apply call && call.answered() != null
                 && call.denotes() instanceof ValueName.Stdlib) {
             Prelude.PreludeEntry entry = Prelude.entry(call.reaches());
             if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic
                     && !entry.declaration().params().isEmpty()
-                    && appliableInAFixture(entry.signature().params())) {
-                out.add(intrinsicWrapperName(call.reaches()));
+                    && FixtureApplication.settle(call.reaches(), entry.declaration(),
+                            FixtureArgumentTypes.of(call, evidence), evidence.symbols())
+                            instanceof FixtureApplication.Settled(var settled)) {
+                FixtureCallable.Realization realization = FixtureCallable.resolve(settled);
+                if (realization.synthesized() != null) {
+                    out.put(realization.method(), realization.synthesized());
+                }
             }
         }
-        Hir.forEachChild(e, c -> intrinsicCallsIn(c, out));
-    }
-
-    /** Whether a declaration taking {@code paramTypes} is one a fixture may apply. */
-    private static boolean appliableInAFixture(List<Type> paramTypes) {
-        for (Type t : paramTypes) {
-            if (decidedByEachCall(t)) {
-                return false;
-            }
+        // A `let` is entered with what it binds in force, as the reading that builds the row enters
+        // it: a call under one settles from what its name stands for there, and a walk that did not
+        // carry the binding would settle fewer calls than the row does — leaving one with no method.
+        if (e instanceof Hir.LetIn let) {
+            FixtureEvidence inside = evidence.with(let.binder().id(), let.value());
+            kernelCallsIn(let.value(), evidence, out);
+            kernelCallsIn(let.body(), inside, out);
+            return;
         }
-        return true;
-    }
-
-    /**
-     * Whether {@code t} leaves something for each call to decide, which a fixture has no call to do:
-     * it is built before there is a call that could settle it.
-     *
-     * <p>The one reading of that question. It decides which kernels a method is emitted for and which
-     * calls a fixture may apply, and those are the same question — a second reading of it is a second
-     * set, free to come apart from the first.
-     */
-    public static boolean decidedByEachCall(Type t) {
-        return Type.mentions(t, x -> x instanceof Type.Var);
-    }
-
-    /**
-     * The name a kernel's wrapper is emitted under: where its method goes, and not what the function
-     * is. A report names the kernel the row applied; only a method lookup takes this.
-     *
-     * <p>Not the kernel's own name. Under that name the emitted method would be a helper the table
-     * reaches, and a body calling {@code String.length} would expand into it — into a body whose one
-     * call is to {@code String.length}, which is the same call again. The name is written nowhere a
-     * source could spell, so what is emitted here is reached from a fixture and from nothing else.
-     */
-    public static String intrinsicWrapperName(String reached) {
-        return INTRINSIC_PREFIX + reached;
-    }
-
-    /** The kernel {@code emitted} wraps, or null where it is not one of these at all. */
-    private static String intrinsicWrapped(String emitted) {
-        return emitted.startsWith(INTRINSIC_PREFIX)
-                ? emitted.substring(INTRINSIC_PREFIX.length()) : null;
-    }
-
-    private static final String INTRINSIC_PREFIX = "$intrinsic.";
-
-    /**
-     * {@code kernel} as a helper with a body: it applies the intrinsic to its own parameters.
-     *
-     * <p>What the module could not take on before. An intrinsic has no body to emit, so nothing was
-     * emitted and a row applying one was told a rule about the standard library; the eta-expansion is
-     * a body, and the backend lowers the one call in it exactly as it lowers that call anywhere else.
-     * So this materialises a method without teaching anything a second way to run a kernel.
-     */
-    private static Hir.FnDef fixtureWrapper(String reached, Hir.FnDef kernel) {
-        List<Hir.Expr> args = new ArrayList<>();
-        for (Hir.FnParam p : kernel.params()) {
-            args.add(Hir.Var.local(p.binder(), kernel.pos()));
-        }
-        ValueName.Stdlib target = Prelude.operation(reached);
-        Hir.Expr body = new Hir.Apply(reached, target, new ReachName.OfLibrary(target), args,
-                ConstructionOrigin.own(), kernel.pos(), null);
-        return kernel.reachedAs(intrinsicWrapperName(reached))
-                .withBody(new Hir.FnBody.Written(body));
+        Hir.forEachChild(e, c -> kernelCallsIn(c, evidence, out));
     }
 
     /** As {@link #exampleHelpers(Hir.Module, Map)}, for the module this inliner reads: the ones it must
@@ -532,12 +504,6 @@ public final class HelperInliner {
         Map<String, Hir.FnDef> out = new java.util.LinkedHashMap<>();
         for (String name : exampleHelpers) {
             if (table.held().containsKey(name)) {
-                continue;
-            }
-            if (intrinsicWrapped(name) instanceof String kernel) {
-                // A kernel, which the table does not reach: it has no body to expand into a caller,
-                // which is the only thing that table holds. Its wrapper is written here.
-                out.put(name, fixtureWrapper(kernel, Prelude.entry(kernel).declaration()));
                 continue;
             }
             out.put(name, table.reached(name).reachedAs(name));
