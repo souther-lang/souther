@@ -16,6 +16,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The envelope a value wears is the one the position reads it through, not one its case is owed
@@ -47,21 +48,40 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
             data Appeal = Decision | Withdrawn
             """;
 
-    private final Compilation compilation = compiled();
+    /**
+     * A second module: the same declarations and one more sum, which lists {@code Filed} beside a
+     * case that bears a field.
+     *
+     * <p>{@code Filed} because it is the case the two modules disagree about if membership is what
+     * answers. In the first, the only sum listing it is the enumeration {@code Stage}, so a search
+     * over the sums answers "a bare name"; in the second, {@code Revision} is not an enumeration, so
+     * the same search answers "the tag {@code Stage} reads it under". Nothing reads a value through
+     * either sum where the form below is asked for, so neither may be part of the answer.
+     */
+    private static final String AND_ANOTHER_SUM = MODULE + """
+
+            data Revision = Filed | Note
+            """;
+
+    private final Compilation compilation = compiled(MODULE);
     private final Symbols symbols = compilation.symbols("demo");
     private final NeutralForm neutral = new NeutralForm(symbols);
 
-    private static Compilation compiled() {
-        Compilation c = Compilation.ofSource(MODULE, "Main");
+    private static Compilation compiled(String module) {
+        Compilation c = Compilation.ofSource(module, "Main");
         c.answerEverything();
         return c;
     }
 
     /** A value of {@code type}, as a helper would have answered with one: through its own decoder,
      *  which is the one place a case is built here without going through a sum. */
-    @SuppressWarnings("unchecked")
     private Object value(String type, Object written) throws Exception {
-        Decoder<Object, ?> decoder = (Decoder<Object, ?>) compilation.loader()
+        return value(compilation, type, written);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object value(Compilation from, String type, Object written) throws Exception {
+        Decoder<Object, ?> decoder = (Decoder<Object, ?>) from.loader()
                 .loadClass("demo." + type).getMethod("decoder").invoke(null);
         return ((Ok<?>) decoder.decode(written, Path.ROOT)).value();
     }
@@ -78,8 +98,12 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
         return value("Paid", 500L);
     }
 
-    private Type at(String type) {
-        return Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), type)));
+    private Position at(String type) {
+        return at(symbols, type);
+    }
+
+    private static Position at(Symbols symbols, String type) {
+        return Position.at(Type.ref(TypeSymbols.declared(new TypeKey(symbols.module(), type))));
     }
 
     @Test
@@ -94,13 +118,14 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
     }
 
     /**
-     * Two sums may list one case. That they read it under the same key and tag is a fact about
-     * derivation and not about either position: every discriminator is derived, keyed {@code "type"}
-     * and tagged with the case's own name, so there is nothing here for a position to disagree about
-     * yet. Held so that #698 — a written discriminator — has to come past it.
+     * Two sums may list one case, and each writes what it reads the case under. That the two agree
+     * today is a fact about derivation — every discriminator is derived, keyed {@code "type"} and
+     * tagged with the case's own name — and not one either answer rests on: each is read off the
+     * decoder of the sum at the position, so a sum that read it under another key would move its own
+     * position and no other.
      */
     @Test
-    void twoDerivedSumsThatListOneCaseCurrentlyAgreeOnItsDiscriminator() throws Exception {
+    void eachSumThatListsOneCaseWritesWhatItReadsItUnder() throws Exception {
         assertEquals(neutral.of(approved(), at("Decision"), "h"),
                 neutral.of(approved(), at("Outcome"), "h"));
     }
@@ -138,14 +163,66 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
     }
 
     /**
-     * Where the position has no declared type — an answer of several types, which admission and not
-     * a decoder decides — the sums that list the case answer instead. Held here because it is the
-     * one thing the position cannot be asked for, and because it is right only for as long as every
-     * discriminator is derived (issue #683).
+     * Where nothing reads the value — an answer of several types, which admission and not a decoder
+     * decides, and a place no declaration names — the case is written as it is on its own. A
+     * discriminator is what a sum reading the case asks to be written beside it, and there is no such
+     * sum here; a bare name is what an enumeration reads, and there is no such enumeration either.
+     *
+     * <p>The same forms a position typed by the case itself gives, which is what the two tests above
+     * hold.
      */
     @Test
-    void aPositionWithNoDeclaredTypeIsAnsweredByTheSumsThatListTheCase() throws Exception {
-        assertEquals(Map.of("id", 1L, "type", "Approved"), neutral.of(approved(), null, "h"));
-        assertEquals(Map.of("type", "Draft"), neutral.of(unit("Draft"), null, "h"));
+    void aPlaceNothingReadsWritesTheCaseAsItIsOnItsOwn() throws Exception {
+        assertEquals(Map.of("id", 1L), neutral.of(approved(), Position.UNREAD, "h"));
+        assertEquals(Map.of(), neutral.of(unit("Draft"), Position.UNREAD, "h"));
+    }
+
+    /**
+     * And it is the same form when another sum listing the case is declared. A sum nothing here reads
+     * the value through says where the case may be read and not where it is, so it is no part of the
+     * answer. A rule reading membership could not hold this: declaring {@code Revision} moved what it
+     * answered for a case standing somewhere else entirely.
+     *
+     * <p>The form itself is stated rather than the two being compared with each other, because both
+     * would move together under a rule that reads membership.
+     */
+    @Test
+    void anotherSumListingTheCaseDoesNotMoveWhatAPlaceNothingReadsWrites() throws Exception {
+        Compilation with = compiled(AND_ANOTHER_SUM);
+        Symbols theirs = with.symbols("demo");
+        NeutralForm and = new NeutralForm(theirs);
+        assertEquals(Map.of(), neutral.of(unit("Filed"), Position.UNREAD, "h"));
+        assertEquals(Map.of(), and.of(value(with, "Filed", Map.of()), Position.UNREAD, "h"));
+        // and each sum that does read it there still writes what it reads it under
+        assertEquals("Filed", and.of(value(with, "Filed", Map.of()), at(theirs, "Stage"), "h"));
+        assertEquals(Map.of("type", "Filed"),
+                and.of(value(with, "Filed", Map.of()), at(theirs, "Revision"), "h"));
+    }
+
+    /**
+     * A value moving to a place nothing reads keeps the form it is in. What a position adds is what
+     * it asks to be written beside the case; a place that reads nothing asks for nothing, and does
+     * not ask for what is already there to come off. Rendering the case's own form here would lose
+     * which case it is — {@code "Draft"} says, the {@code {}} it would become does not, and nothing
+     * is left to put it back from.
+     */
+    @Test
+    void aValueRereadWhereNothingReadsItKeepsTheFormItIsIn() {
+        assertEquals("Draft", neutral.reread("Draft", at("Stage"), Position.UNREAD));
+        assertEquals(Map.of("id", 1L, "type", "Approved"),
+                neutral.reread(Map.of("id", 1L, "type", "Approved"), at("Decision"), Position.UNREAD));
+    }
+
+    /**
+     * The other direction is not a reading and says so. A value nothing read is in the case's own
+     * form, which does not say which case it is — every unit case is {@code {}} there — so no
+     * discriminator could be written from it. Nothing asks for it today: a projection whose target
+     * declares nothing is refused before a value reaches this. Held so that a call site added later
+     * is told, rather than being handed the value back unchanged and reading it as an answer.
+     */
+    @Test
+    void aValueNothingReadIsNotRereadAtAPosition() {
+        assertThrows(IllegalStateException.class,
+                () -> neutral.reread(Map.of(), Position.UNREAD, at("Step")));
     }
 }
