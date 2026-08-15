@@ -24,7 +24,25 @@ import java.util.Objects;
  * the view on the diagnostic's own source, where the anchor is always the primary region and
  * nothing changes places.
  */
-public record DiagnosticView(Spot anchor, List<Spot> others, List<LabeledRegion> unquotable) {
+public record DiagnosticView(Spot anchor, List<Spot> others, List<Unquotable> unquotable) {
+
+    /**
+     * Something a report has to say about code it cannot point at: where that code came from, and
+     * what is being said about it.
+     *
+     * <p>Its own type rather than a {@link LabeledRegion} the readers cast. Held as labels, the rule
+     * that every one of them is {@link DiagnosticPlace.Unavailable} lived in this class's factory
+     * and in three casts written against it, which is a convention and not a fact — the same shape
+     * this whole change is about, one level up.
+     */
+    public record Unquotable(DiagnosticPlace.Unavailable place,
+                             souther.compiler.diag.msg.Message said) {
+
+        public Unquotable {
+            Objects.requireNonNull(place, "something said about code out of sight says where it is");
+            Objects.requireNonNull(said, "something said about code out of sight says something");
+        }
+    }
 
     /**
      * How {@code d} reads from {@code publishedSourceId}, given that its primary region is in
@@ -46,13 +64,14 @@ public record DiagnosticView(Spot anchor, List<Spot> others, List<LabeledRegion>
      */
     public static DiagnosticView of(Diagnostic d, String primarySourceId, String publishedSourceId) {
         List<Spot> spots = new ArrayList<>();
-        List<LabeledRegion> unquotable = new ArrayList<>();
+        List<Unquotable> unquotable = new ArrayList<>();
         spots.add(Spot.primary(d, primarySourceId));
         for (LabeledRegion label : d.secondary()) {
             switch (label.place()) {
                 case DiagnosticPlace.InSource in ->
                         spots.add(new Spot(in.source(), in.region(), label.said()));
-                case DiagnosticPlace.Unavailable _ -> unquotable.add(label);
+                case DiagnosticPlace.Unavailable out ->
+                        unquotable.add(new Unquotable(out, label.said()));
             }
         }
         int at = -1;

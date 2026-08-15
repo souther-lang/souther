@@ -32,6 +32,30 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
 
+    /**
+     * Associativity, held over the grouping that used to break it.
+     *
+     * <p>A reading that can point absorbs one that cannot. So a rule refusing a disagreement between
+     * two unpointable readings finds it or not depending on which pair is merged first, and what
+     * becomes order-dependent is not the answer but whether the compiler notices it contradicts
+     * itself. Held here over the three readings that show it.
+     */
+    @org.junit.jupiter.api.Test
+    void aGroupingDoesNotDecideWhetherTheReadingsAgree() {
+        Clause known = clause(FIRST, "ordered", at("model.sou", 8));
+        Clause fromA = clause(FIRST, "ordered", new DiagnosticPlace.Unavailable(
+                new SourceProvenance.APublishedModule("lib.a")));
+        Clause fromB = clause(FIRST, "ordered", new DiagnosticPlace.Unavailable(
+                new SourceProvenance.APublishedModule("lib.b")));
+
+        assertEquals(Clause.merge(Clause.merge(known, fromA), fromB),
+                Clause.merge(known, Clause.merge(fromA, fromB)),
+                "which pair is merged first is not something a reader should be able to see");
+        assertEquals(known, Clause.merge(known, Clause.merge(fromA, fromB)),
+                "and the reading that can point is what survives either way");
+    }
+
+
     private static final TypeSymbol BOUND = TypeSymbols.declared(new TypeKey("demo", "Bound"));
     private static final TypeSymbol OTHER = TypeSymbols.declared(new TypeKey("demo", "Other"));
 

@@ -175,7 +175,7 @@ class CompileConstructionInInvariantTest {
         assertInstanceOf(InvariantMessage.TheClauseReachesThatConstruction.class,
                 e.diagnostic().secondary().get(0).said());
 
-        Region marked = e.diagnostic().secondary().get(0).place().pointsAt().orElseThrow();
+        Region marked = ((souther.compiler.diag.DiagnosticPlace.InSource) e.diagnostic().secondary().get(0).place()).region();
         assertEquals(5, marked.start().line());
         assertEquals("invariant ok = atLeastZero(value)",
                 source.split("\n", -1)[marked.start().line() - 1]

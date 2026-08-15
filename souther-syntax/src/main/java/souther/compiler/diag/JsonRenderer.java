@@ -72,18 +72,17 @@ public final class JsonRenderer implements DiagnosticRenderer {
                 s.put("values", labelled);
                 secs.add(s);
             }
-            for (LabeledRegion label : view.unquotable()) {
-                DiagnosticPlace.Unavailable place = (DiagnosticPlace.Unavailable) label.place();
+            for (DiagnosticView.Unquotable unquotable : view.unquotable()) {
                 Map<String, Object> s = new LinkedHashMap<>();
                 s.put("place", "unavailable");
                 // Where the code is, under the field the other arm writes it under inside its
                 // region. One vocabulary: a consumer that has learned to read a caret standing in
                 // for code elsewhere reads this without learning a second one.
                 s.put("writtenAt", new LinkedHashMap<String, String>(
-                        Citation.outOfSightFields(place.provenance())));
-                s.put("label", DiagnosticRenderer.saidAbout(label, place, locale));
+                        Citation.outOfSightFields(unquotable.place().provenance())));
+                s.put("label", DiagnosticRenderer.saidAbout(unquotable, locale));
                 Map<String, Object> labelled = new LinkedHashMap<>();
-                MessageValues.of(label.said()).forEach((name, value) ->
+                MessageValues.of(unquotable.said()).forEach((name, value) ->
                         labelled.put(name, Messages.text(value, locale)));
                 s.put("values", labelled);
                 secs.add(s);

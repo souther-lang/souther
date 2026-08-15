@@ -1932,9 +1932,8 @@ public final class Analyzer {
         // about code somewhere else, and an entry that borrowed them would show them as the note on
         // a location they say nothing about.
         String aboutTheDiagnostic = message;
-        for (LabeledRegion label : view.unquotable()) {
-            message = message + " " + DiagnosticRenderer.saidAbout(label,
-                    (DiagnosticPlace.Unavailable) label.place(), EDITOR_LANGUAGE);
+        for (DiagnosticView.Unquotable said : view.unquotable()) {
+            message = message + " " + DiagnosticRenderer.saidAbout(said, EDITOR_LANGUAGE);
         }
         for (Spot other : view.others()) {
             // A spot naming no source can only be the primary now, and the primary's source is

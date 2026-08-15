@@ -123,7 +123,7 @@ public final class Diagnostic {
      * several drops the report for having nowhere to file it. Both are worse than saying where the
      * code is in words, which is what this does — {@code where} is where this compile met the
      * declaration, and the coordinate it is given says it stands in for code written in
-     * {@code declaration} ({@link Citation}).
+     * {@code provenance} ({@link Citation}).
      *
      * <p>The one way to move a caret. Everything else about the finding is what it was, so the rule
      * it reports and the values it says it about do not change with how far away the code turned out

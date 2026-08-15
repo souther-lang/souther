@@ -43,7 +43,7 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
     }
 
     /**
-     * The code is written in {@link #declaration()}, which this compile has no source for.
+     * The code is written where {@link #provenance()} says, which this compile has no source for.
      * {@link #reachedFrom()} is where this compile met it — where to send a reader, and not where the
      * code is.
      */

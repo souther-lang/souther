@@ -73,14 +73,24 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
             throw new NotOneClause("clause " + a.id + " is named " + a.name.orElse(null)
                     + " in one reading and " + b.name.orElse(null) + " in another");
         }
-        // What two readings may differ in is whether this compile can point at the clause, which
-        // is knowledge about the compile. Anything else — two sources, two modules — is the model
-        // saying the one clause is written in two places. Asked of both arms: while a reading that
-        // could not point was an absent value the two of them were equal by construction, and they
-        // stopped being equal the day the answer started carrying where the code came from.
+        // What two readings may differ in is whether this compile can point at the clause, and two
+        // that can must point at the same place or the model says one clause is written in two.
+        //
+        // Two that cannot are not compared, and the reason is the associativity above rather than a
+        // tolerance. A reading that can point absorbs one that cannot, taking its evidence with it,
+        // so a rule that refused a disagreement between two unpointable readings would find it or
+        // not depending on which pair the walk merged first: with a pointable K and unpointable A
+        // and B, `merge(merge(K, A), B)` answers K and `merge(K, merge(A, B))` throws. An operation
+        // whose refusals depend on grouping is the order-dependence this exists to remove, said
+        // about a worse thing than the answer.
+        //
+        // Nothing is lost by not asking. Where the clause is written follows from the declaration
+        // the id names, and the ids were held against each other above; what an unpointable reading
+        // carries beyond that is the name that reading reached the code by, which is a fact about
+        // the reading and not about the clause.
         boolean aPoints = a.at instanceof DiagnosticPlace.InSource;
         boolean bPoints = b.at instanceof DiagnosticPlace.InSource;
-        if (aPoints == bPoints && !a.at.equals(b.at)) {
+        if (aPoints && bPoints && !a.at.equals(b.at)) {
             throw new NotOneClause("clause " + a.id + " is written at " + a.at
                     + " in one reading and at " + b.at + " in another");
         }

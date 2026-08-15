@@ -59,7 +59,7 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
 
         assertEquals(new SourceProvenance.APublishedModule("lib.rule"),
                 assertInstanceOf(DiagnosticPlace.Unavailable.class, place).provenance());
-        assertTrue(place.pointsAt().isEmpty(), "and there is nowhere to send a reader");
+        assertTrue(!(place instanceof souther.compiler.diag.DiagnosticPlace.InSource), "and there is nowhere to send a reader");
     }
 
     /**

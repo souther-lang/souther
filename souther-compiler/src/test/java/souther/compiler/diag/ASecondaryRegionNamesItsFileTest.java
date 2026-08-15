@@ -164,8 +164,8 @@ class ASecondaryRegionNamesItsFileTest {
         DiagnosticView view = DiagnosticView.of(withSecondary("rows"), "rows", "rows");
 
         assertEquals(List.of("rows"), view.others().stream().map(Spot::sourceId).toList());
-        assertEquals("rows",
-                withSecondary("rows").secondary().get(0).place().pointsAt().orElseThrow()
+        assertEquals("rows", ((DiagnosticPlace.InSource)
+                        withSecondary("rows").secondary().get(0).place()).region()
                         .start().sourceId());
     }
 
@@ -275,7 +275,8 @@ class ASecondaryRegionNamesItsFileTest {
         assertEquals(new DiagnosticPlace.Unavailable(
                         new SourceProvenance.APublishedModule("lib.rule")),
                 label.place());
-        assertTrue(label.place().pointsAt().isEmpty(), "there is nowhere to send a reader");
+        assertFalse(label.place() instanceof DiagnosticPlace.InSource,
+                "there is nowhere to send a reader");
     }
 
     private static int count(String text, String part) {

@@ -192,7 +192,7 @@ class AWarningAboutAClauseSendsAReaderToItTest {
         LabeledRegion one = warnings.get(0).secondary().get(0);
         assertEquals(warnings.get(0).pos().sourceId(), "1",
                 "the construction is in the second source");
-        assertEquals("0", one.place().pointsAt().orElseThrow().start().sourceId(),
+        assertEquals("0", ((souther.compiler.diag.DiagnosticPlace.InSource) one.place()).region().start().sourceId(),
                 "and the clause is in the first, which the label says rather than leaving the"
                         + " renderer to read the declaration's line out of the wrong file");
     }
@@ -273,7 +273,8 @@ class AWarningAboutAClauseSendsAReaderToItTest {
 
     /** The lines the secondary regions point at, in the order they were written. */
     private static List<Integer> lines(Diagnostic d) {
-        return d.secondary().stream().map(l -> l.place().pointsAt()).flatMap(java.util.Optional::stream)
+        return d.secondary().stream().map(l -> l.place()).filter(pl -> pl instanceof souther.compiler.diag.DiagnosticPlace.InSource)
+                .map(pl -> ((souther.compiler.diag.DiagnosticPlace.InSource) pl).region())
                 .map(Region::start).map(pos -> pos.line()).toList();
     }
 

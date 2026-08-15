@@ -82,7 +82,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
         DiagnosticPlace.Unavailable place =
                 assertInstanceOf(DiagnosticPlace.Unavailable.class, label.place());
         assertEquals(new SourceProvenance.APublishedModule("lib.rule"), place.provenance());
-        assertTrue(label.place().pointsAt().isEmpty(),
+        assertFalse(label.place() instanceof DiagnosticPlace.InSource,
                 "there is no line of the caller's file this belongs on");
     }
 
@@ -109,7 +109,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
         String out = rendered(inOneCompile(), IN_ONE_COMPILE);
 
         assertInstanceOf(DiagnosticPlace.InSource.class, label.place());
-        assertEquals(4, label.place().pointsAt().orElseThrow().start().line());
+        assertEquals(4, ((souther.compiler.diag.DiagnosticPlace.InSource) label.place()).region().start().line());
         assertTrue(out.contains("invariant atLeastOne = value >= 1"),
                 () -> "the clause is quoted: " + out);
     }

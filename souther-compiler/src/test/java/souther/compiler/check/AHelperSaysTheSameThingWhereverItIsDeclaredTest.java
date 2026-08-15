@@ -106,8 +106,8 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertInstanceOf(InvariantMessage.TheClauseReachesThatConstruction.class, own.said());
         assertInstanceOf(InvariantMessage.TheClauseReachesThatConstruction.class, across.said());
-        assertEquals("invariant ok = atLeastZero(value)", quoted(ONE_MODULE, own.place().pointsAt().orElseThrow()));
-        assertEquals("invariant ok = atLeastZero(value)", quoted(CALLING, across.place().pointsAt().orElseThrow()));
+        assertEquals("invariant ok = atLeastZero(value)", quoted(ONE_MODULE, ((souther.compiler.diag.DiagnosticPlace.InSource) own.place()).region()));
+        assertEquals("invariant ok = atLeastZero(value)", quoted(CALLING, ((souther.compiler.diag.DiagnosticPlace.InSource) across.place()).region()));
     }
 
     /**

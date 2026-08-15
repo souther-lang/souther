@@ -124,11 +124,11 @@ public interface DiagnosticRenderer {
      * and there is no place under this one — a label about a clause of a published module points at
      * nothing, so explaining a caret would be explaining something the reader cannot see.
      */
-    static String saidAbout(LabeledRegion label, DiagnosticPlace.Unavailable place, Locale locale) {
-        String said = Messages.render(label.said(), locale);
+    static String saidAbout(DiagnosticView.Unquotable unquotable, Locale locale) {
+        String said = Messages.render(unquotable.said(), locale);
         String about = Messages.render(
                 new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
-                        place.provenance().reachedBy()), locale);
+                        unquotable.place().provenance().reachedBy()), locale);
         return said.isEmpty() ? about : said + " " + about;
     }
 }

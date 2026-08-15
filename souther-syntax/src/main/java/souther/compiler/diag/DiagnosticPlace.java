@@ -20,24 +20,14 @@ import java.util.Objects;
  *
  * <p>{@link Unavailable} is not the absence of a place. It carries where the code came from, which
  * is what a reader is told instead of being pointed somewhere — and is the fact a drop threw away.
+ *
+ * <p>No accessor spans the two arms. One answering "the region, if there is one" would let a reader
+ * write {@code place.pointsAt().flatMap(Optional::stream)} and never see the other case — which is
+ * {@code CitableRegion.of} again, under a name that reads like a convenience. {@link Citation} says
+ * the same of itself and for the same reason: a reader that wants the region says which case it is
+ * in first, and having said so has seen that the other exists.
  */
 public sealed interface DiagnosticPlace {
-
-    /**
-     * The stretch a reader is sent to, and empty where there is nothing to send one to.
-     *
-     * <p>A projection over the two arms and not a second answer: a caller reading this has said
-     * which case it is in by the time it has a region in its hands, and which source that region is
-     * in is part of the region. It is here rather than on {@link LabeledRegion} so that holding a
-     * label is not the same as holding a place — a label says what is wrong, and where that is is
-     * this.
-     */
-    default java.util.Optional<Region> pointsAt() {
-        return switch (this) {
-            case InSource in -> java.util.Optional.of(in.region());
-            case Unavailable _ -> java.util.Optional.empty();
-        };
-    }
 
     /**
      * A stretch of source a reader can be sent to.

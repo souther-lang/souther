@@ -94,7 +94,8 @@ class WhereADiagnosticIsSaidTest {
             return true;
         }
         return found.report().diagnostic().secondary().stream()
-                .anyMatch(label -> label.place().pointsAt().filter(r -> id.equals(r.start().sourceId())).isPresent());
+                .anyMatch(label -> label.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
+                        && id.equals(in.region().start().sourceId()));
     }
 
     // --- one problem, one report; two problems, two ----------------------------------------------
