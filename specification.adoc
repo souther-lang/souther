@@ -1526,6 +1526,72 @@ The field the closure copied need not be the one the clause names: when the clos
 
 This is bounded to a field *copied*. A field the closure computes from others — `+code = String.concat([r.sku, r.name])+` — is not this: two rows that differ can land on one value, and nothing about the result follows.
 
+[#invariant-discharge-guarantees]
+==== What an operation guarantees of what it answers
+
+<<invariant-discharge-preservation>> says what carries across an operation from what it was built from. An operation also says something on its own: `+Int.clamp(0, 100, x)+` is between 0 and 100 whatever `+x+` is, and a construction standing over it owes nothing a guard would have to restate. What each operation guarantees is stated here, in the same way and for the same reason: an author predicts which constructions are judged safe by reading it.
+
+A guarantee takes one of four forms.
+
+*A bound on the result.* It holds wherever the call is written, and is read into the clause as it stands.
+
+[cols="2,3"]
+|===
+| the operation | what holds of its result
+
+| `+Int.abs+`, `+Decimal.abs+` | not negative
+| `+Int.floorMod(x, k)+` | not negative, and below `+k+` — both only where `+k+` reads as a constant above zero
+| `+Decimal.toInt(mode, d)+` | within one of `+d+`, whichever mode it is handed
+|===
+
+Neither end is known without the divisor: `+Int.floorMod+` takes the sign of its divisor, so a divisor that could be negative puts the result the other side of zero — `+Int.floorMod(1, 0 - 3)+` is `+-2+` — and one the check cannot read says nothing about either end. A name given a constant is that constant, so `+let k = 100+` and a written `+100+` are one divisor. A divisor that is above zero for some other reason — a parameter whose type says so — is not read here: what an operation guarantees holds wherever it is called, and that one holds where the caller happens to have such a value.
+
+*One of the values it was given.* What such an operation answers depends on what it was given, so it is stated as the cases its definition is written in, and a clause holds of the result when it holds in every case.
+
+[cols="2,3"]
+|===
+| the operation | the cases
+
+| `+Int.min(a, b)+`, `+Decimal.min+` | `+a+` where `+a < b+`; `+b+` otherwise
+| `+Int.max(a, b)+`, `+Decimal.max+` | `+a+` where `+a > b+`; `+b+` otherwise
+| `+Int.clamp(lo, hi, n)+`, `+Decimal.clamp+` | `+lo+` where `+n < lo+`; `+hi+` where `+n >= lo+` and `+n > hi+`; `+n+` otherwise
+|===
+
+So a smaller of two non-negative numbers is non-negative, and a value clamped to `+0+` and `+100+` is a percentage. `+clamp+` does not ask that `+lo+` be below `+hi+`: written the other way round it answers `+lo+` for a low `+n+` and `+hi+` for a high one, and a clause that only the ordering would establish is not discharged.
+
+[,souther]
+----
+data Pct = Int
+    invariant value >= 0 && value <= 100
+
+behavior score : (raw: Int) -> Pct
+let score (raw) = Pct(Int.clamp(0, 100, raw)) // discharged: every case is inside both ends
+----
+
+A case is reached where its condition, the equality saying the call answered that argument, and what the path already establishes can hold at once. What the path knows can put a case out of reach: a value the guards put above four and below six is neither below zero nor above ten, so `+Int.clamp(0, 10, n)+` answers `+n+` and the clause is read there and nowhere else.
+
+A clause reads one such operation. Where it names two — `+Int.min(a, b) + Int.min(c, d) >= 0+` — the cases are not multiplied out, and the clause is left to the run-time check however much is known of the four arguments.
+
+Over the cases that are reached, the clause is established where every one of them establishes it and refused where every one of them refuses it — `+AboveTen(Int.min(0, x))+` is neither of two numbers above ten, and is reported as a violation the values decide. Where no case is reached at all the guards cannot all hold, and this says nothing: a value the program never builds establishes nothing, and what a guard said about the call itself is what answers there.
+
+*A shift stated through a measure.* An operation that moves a value by an amount says how far through the operation that counts two such values apart, which is what an invariant over a pair of them is written in.
+
+[cols="2,3"]
+|===
+| the operation | what holds
+
+| `+Date.addDays(n, d)+` | `+Date.daysBetween(d, result)+` is `+n+`
+| `+DateTime.addMinutes(n, dt)+` | `+DateTime.minutesBetween(dt, result)+` is `+n+`
+| `+DateTime.addHours(n, dt)+` | `+DateTime.minutesBetween(dt, result)+` is `+60 * n+`
+| `+DateTime.addDays(n, dt)+` | `+DateTime.minutesBetween(dt, result)+` is `+1440 * n+`
+|===
+
+`+Date.addMonths+` and `+Date.addYears+` state nothing: months and years hold different numbers of days, so neither moves a date by a count `+Date.daysBetween+` can name.
+
+*A value it was already given.* `+Decimal.fromInt(n)+` answers the number `+n+` is, so a clause about the call and a guard about `+n+` are about one value rather than two.
+
+An operation not named here guarantees nothing that can be relied on, and a clause over what it answered is left to the run-time check. What is known of the arguments at one call is a different question: it is what the path establishes, and it is read where the clause is.
+
 [#invariant-discharge-quantified]
 ==== A relation over every element, read at the element
 

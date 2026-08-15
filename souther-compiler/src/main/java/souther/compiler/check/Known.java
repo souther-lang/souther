@@ -65,6 +65,19 @@ record Known(NumericDomain<Term> numbers, PredicateFacts facts, List<Quantified>
     }
 
     /**
+     * This, where the conditions on the path cannot all hold, so nothing here is reached.
+     *
+     * <p>Said as a contradiction in the numbers, which is how the domain already records that it
+     * holds nothing. The reading that ignores the path is left as it was: it is the guards that
+     * cannot all hold, not the values that fail, and a construction under them is one the program
+     * never builds rather than one it builds wrongly.
+     */
+    Known reachingNothing() {
+        return taking(LinearForm.constant(java.math.BigDecimal.ONE), Rel.LE, Held.ON_THE_PATH,
+                Map.of());
+    }
+
+    /**
      * This, with each of {@code terms} recorded as one an assumption on this path named. It is
      * recorded where the assumption is made rather than searched for afterwards: what a guard
      * spoke about is known exactly then, and reading it back out of a domain would mean matching

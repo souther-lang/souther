@@ -8,6 +8,7 @@ import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.check.DischargeRules.Shape;
 import souther.compiler.check.DischargeRules.Source;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
@@ -22,6 +23,7 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -161,9 +163,87 @@ final class Predicates {
         }
     }
 
+    /**
+     * One case of a clause read over an operation that answers one of the values it was given: the
+     * clause with that value standing where the call did, and what holds of the arguments there.
+     *
+     * @param kinds how the values of every atom either of them names are spaced, so that a case can
+     *              be taken into a domain without asking anything further of the caller
+     */
+    record Case(Constraint numeric, List<Constraint> given, Map<Term, Granularity> kinds) {
+
+        /** {@code d} with this case's conditions on the arguments taken as holding. */
+        private NumericDomain<Term> in(NumericDomain<Term> d) {
+            NumericDomain<Term> out = d;
+            for (Constraint one : given) {
+                out = out.assume(one.form(), one.rel(), kinds);
+            }
+            return out;
+        }
+    }
+
+    /**
+     * A clause read as the cases the operation standing under it is defined in.
+     *
+     * <p>What a case holds is its condition on the arguments and the equality saying the call
+     * answered that argument, and it is reached where those and what is known here can hold at once.
+     * The equality is what ties the two readings of one value together: without it a guard written
+     * about the call would stand outside every case, and this would answer about a value the rest of
+     * the check is talking about separately.
+     *
+     * <p>So, over the cases that are reached: all of them proving the clause is the clause
+     * established, all of them refuting it is the clause refused, and anything else is unsettled.
+     * The cases are exhaustive ({@link DischargeRules.Choices}), which is what makes the first two
+     * statements about the result rather than about a case of it.
+     *
+     * <p>No case reached is not the clause established. It says the guards cannot all hold, and a
+     * value the program never builds establishes nothing — while the reading that takes the call as
+     * an unknown still has whatever a guard said about it, and answers there. Calling it vacuously
+     * proven would have this establishing a clause that reading refuses, which is the check
+     * disagreeing with itself about one value rather than an answer. The same holds when the cases
+     * come to be multiplied out.
+     *
+     * <p>One operation to a clause. Where a clause names two of them the cases multiply, and what
+     * that costs is a decision this does not have to make yet — such a clause is read as it stands,
+     * which proves less and states nothing false.
+     */
+    record Piecewise(List<Case> cases) {
+
+        boolean entailedBy(NumericDomain<Term> d) {
+            boolean reached = false;
+            for (Case one : cases) {
+                NumericDomain<Term> here = one.in(d);
+                if (here.isBottom()) {
+                    continue;
+                }
+                if (!here.entails(one.numeric().form(), one.numeric().rel())) {
+                    return false;
+                }
+                reached = true;
+            }
+            return reached;
+        }
+
+        boolean refutedBy(NumericDomain<Term> d) {
+            boolean reached = false;
+            for (Case one : cases) {
+                NumericDomain<Term> here = one.in(d);
+                if (here.isBottom()) {
+                    continue;
+                }
+                if (!here.refutes(one.numeric().form(), one.numeric().rel())) {
+                    return false;
+                }
+                reached = true;
+            }
+            return reached;
+        }
+    }
+
     /** A clause that cannot hold, said in the language the domain reads: {@code -1 >= 0}. */
     static final Clause VIOLATED = new Clause(
-            new Constraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE), null, List.of());
+            new Constraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE), null, List.of(),
+            null);
 
     /**
      * One clause of an invariant, and the two ways it can come out: a relation for the domain to
@@ -171,16 +251,36 @@ final class Predicates {
      * present either one discharging the clause is enough — a guard is written one way and a clause
      * another, and which of the two routes carries it is not the author's concern.
      */
-    record Clause(Constraint numeric, Fact fact, List<Constraint> known) {
+    record Clause(Constraint numeric, Fact fact, List<Constraint> known, Piecewise piecewise) {
 
         boolean dischargedBy(NumericDomain<Term> d, PredicateFacts facts) {
             return numeric != null && d.entails(numeric.form(), numeric.rel())
-                    || fact != null && fact.entailedBy(facts);
+                    || fact != null && fact.entailedBy(facts)
+                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.entailedBy(d);
         }
 
         boolean refutedBy(NumericDomain<Term> d, PredicateFacts facts) {
             return numeric != null && d.refutes(numeric.form(), numeric.rel())
-                    || fact != null && fact.refutedBy(facts);
+                    || fact != null && fact.refutedBy(facts)
+                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.refutedBy(d);
+        }
+
+        /**
+         * Whether the clause as written already came out one way or the other.
+         *
+         * <p>The cases are asked only where it did not. Both readings are sound, so they can differ
+         * only where the path cannot be taken — the guards contradict, and each is answering about a
+         * value the program never builds. Where that is visible in the guards it is said there
+         * ({@link #noCaseSatisfies}) and neither reading is reached; where it is not, this is what
+         * keeps one clause from coming out established and refused at once, which is a check
+         * contradicting itself rather than an answer. What the cases are for is a clause the reading
+         * that takes the call as an unknown cannot settle, and that is untouched.
+         */
+        private boolean decidedAsWritten(NumericDomain<Term> d, PredicateFacts facts) {
+            return numeric != null
+                    && (d.entails(numeric.form(), numeric.rel())
+                            || d.refutes(numeric.form(), numeric.rel()))
+                    || fact != null && (fact.entailedBy(facts) || fact.refutedBy(facts));
         }
     }
 
@@ -274,12 +374,17 @@ final class Predicates {
             }
         }
         Constraint numeric = null;
+        Piecewise piecewise = null;
         if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
             Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
             LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at, k);
             LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at, k);
             if (la != null && ra != null) {
                 numeric = new Constraint(la.minus(ra), eff);
+                // The same clause read as the cases of whatever chooses inside it. Both readings are
+                // kept: a guard may name the call itself, which the clause as it stands is what
+                // settles, and reading it case by case never takes that away.
+                piecewise = piecewiseOf(numeric, inv, at, k);
             }
         }
         Polar polar = polar(inv, positive);
@@ -295,7 +400,8 @@ final class Predicates {
         }
         List<Constraint> known = new ArrayList<>();
         sizeFacts(inv, at, known);
-        return Owed.of(new Clause(numeric, fact, known));
+        resultFacts(inv, at, k, known);
+        return Owed.of(new Clause(numeric, fact, known, piecewise));
     }
 
     /** Whether {@code inv} is decided outright: the clause, with the construction's own values
@@ -332,13 +438,24 @@ final class Predicates {
             return assumeCond(under, k, at, !positive);
         }
         Known out = k;
-        // What holds of the sizes the condition names, whichever way the condition itself is read.
+        // What holds of the sizes the condition names, and of what the operations in it answer,
+        // whichever way the condition itself is read.
         List<Constraint> known = new ArrayList<>();
         sizeFacts(cond, at, known);
+        resultFacts(cond, at, k, known);
         for (Constraint c : known) {
             // A size is never negative whether or not the condition holds, so this holds of the value
             // and not of the path — the condition is only where the container got named.
             out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
+        }
+        // A condition no case of what it is written over can satisfy is one this branch is never
+        // entered under, and a value the program never builds is not one to report about. Asked of
+        // everything the condition itself established and not only of what held on the way in: a
+        // size and what an operation answers hold of the value however the condition comes out, and
+        // a case read without them is one this would call reachable where the construction below,
+        // which is handed the same facts, would not.
+        if (noCaseSatisfies(cond, out, at, positive)) {
+            return out.reachingNothing();
         }
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
@@ -478,6 +595,174 @@ final class Predicates {
         for (Core arg : call.args()) {
             sizeFacts(arg, at, out);
         }
+    }
+
+    /**
+     * What is known of the result of every operation an expression names, whatever its arguments are:
+     * an absolute value is not negative, a remainder by a written divisor is below it.
+     *
+     * <p>The sibling of {@link #sizeFacts}, and read in both the places that one is: what an
+     * operation guarantees holds where a clause is read against the call and where a condition names
+     * it alike. A bound whose rule asks something of the arguments is stated only where the arguments
+     * answer, and what they are read as is this reading's answer — a name given a constant is that
+     * constant, here as everywhere.
+     */
+    void resultFacts(Core e, Denotations at, Known k, List<Constraint> out) {
+        // A name is what it was given, as in `sizeFacts`: an operation's guarantee does not depend on
+        // whether its call was written where it is read or bound first.
+        if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
+            resultFacts(at.valueOf(r.binding()), at, k, out);
+            return;
+        }
+        if (!(e instanceof Core.PreservedCall call)) {
+            Core.forEachChild(e, child -> resultFacts(child, at, k, out));
+            return;
+        }
+        Term result = terms.atomOf(call, at);
+        if (result != null) {
+            for (DischargeRules.ResultBound bound
+                    : DischargeRules.boundsOn(call, arg -> constantOf(arg, at, k))) {
+                LinearForm<Term> against = bound.against() == null
+                        ? LinearForm.constant(bound.offset())
+                        : addTo(terms.affineOf(bound.against().of(call), at, k), bound.offset());
+                if (against != null) {
+                    out.add(new Constraint(LinearForm.atom(result).minus(against), bound.rel()));
+                }
+            }
+        }
+        shiftFact(call, at, k, out);
+        for (Core arg : call.args()) {
+            resultFacts(arg, at, k, out);
+        }
+    }
+
+    /**
+     * Whether {@code cond}, asserted with polarity {@code positive}, fails in every case an
+     * operation inside it is defined in — so the branch it guards is not entered.
+     *
+     * <p>The same reading the construction below does, done where the condition is taken instead.
+     * Without it what an operation answers is read at one of the two and not the other, and a path
+     * the cases show cannot be taken is walked as though it could: the construction under it is then
+     * reported against guards that cannot all hold, which is a diagnostic about a value the program
+     * never builds.
+     */
+    private boolean noCaseSatisfies(Core cond, Known k, Denotations at, boolean positive) {
+        if (!(cond instanceof Core.Binary b) || relOf(b.op()) == null) {
+            return false;
+        }
+        Rel stated = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
+        LinearForm<Term> la = stated == null ? null : terms.affineOf(b.left(), at, k);
+        LinearForm<Term> ra = stated == null ? null : terms.affineOf(b.right(), at, k);
+        if (la == null || ra == null) {
+            return false;
+        }
+        Piecewise cases = piecewiseOf(new Constraint(la.minus(ra), stated), cond, at, k);
+        return cases != null && cases.refutedBy(k.numbers());
+    }
+
+    /**
+     * {@code owed} read as the cases of the one operation inside it that answers a value it was
+     * given, or null where there is no such operation, where there is more than one, or where a case
+     * could not be read.
+     *
+     * <p>The substitution is made in the form and not in the expression. What the clause reads may be
+     * the call as written or a name that was given it, and both arrive here as the one atom the call
+     * keys as — so replacing the atom answers both, where rewriting the expression would answer the
+     * first and leave the second saying nothing.
+     */
+    private Piecewise piecewiseOf(Constraint owed, Core inv, Denotations at, Known k) {
+        Map<Term, Core.PreservedCall> choosing = new LinkedHashMap<>();
+        chosenCalls(inv, at, choosing);
+        choosing.keySet().retainAll(owed.form().coefs().keySet());
+        if (choosing.size() != 1) {
+            return null;
+        }
+        Term atom = choosing.keySet().iterator().next();
+        Core.PreservedCall call = choosing.get(atom);
+        BigDecimal coefficient = owed.form().coefs().get(atom);
+        List<Case> cases = new ArrayList<>();
+        for (DischargeRules.Choice one : DischargeRules.chosenBy(call).cases()) {
+            LinearForm<Term> answered = terms.affineOf(one.answers().of(call), at, k);
+            if (answered == null) {
+                return null;
+            }
+            LinearForm<Term> instead = owed.form()
+                    .minus(LinearForm.atom(atom).times(coefficient))
+                    .plus(answered.times(coefficient));
+            List<Constraint> given = new ArrayList<>(one.given().size() + 1);
+            Map<Term, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
+            // What the call answers here, said of the call itself: in this case the two are one
+            // value. Without it a guard written about the call would stand outside the cases, and a
+            // clause could come out established by these and refused by that.
+            LinearForm<Term> answeredHere = LinearForm.atom(atom).minus(answered);
+            given.add(new Constraint(answeredHere, Rel.EQ));
+            kinds.putAll(terms.kindsOf(answeredHere));
+            for (DischargeRules.ArgumentsStand stands : one.given()) {
+                LinearForm<Term> left = terms.affineOf(stands.left().of(call), at, k);
+                LinearForm<Term> right = terms.affineOf(stands.right().of(call), at, k);
+                if (left == null || right == null) {
+                    return null;
+                }
+                LinearForm<Term> between = left.minus(right);
+                given.add(new Constraint(between, stands.rel()));
+                kinds.putAll(terms.kindsOf(between));
+            }
+            cases.add(new Case(new Constraint(instead, owed.rel()), List.copyOf(given),
+                    Map.copyOf(kinds)));
+        }
+        return new Piecewise(List.copyOf(cases));
+    }
+
+    /** Every call inside {@code e} that answers one of the values it was given, by the atom it keys
+     * as. A name is what it was given, as everywhere else a value is read. */
+    private void chosenCalls(Core e, Denotations at, Map<Term, Core.PreservedCall> out) {
+        if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
+            chosenCalls(at.valueOf(r.binding()), at, out);
+            return;
+        }
+        if (e instanceof Core.PreservedCall call && DischargeRules.chosenBy(call) != null) {
+            Term atom = terms.atomOf(call, at);
+            if (atom != null) {
+                out.put(atom, call);
+            }
+        }
+        Core.forEachChild(e, child -> chosenCalls(child, at, out));
+    }
+
+    /**
+     * What {@code call} states through the measure that counts what it shifted and what it answered
+     * apart, where it is a shift this has a rule about.
+     *
+     * <p>The measure over the two values is the atom a clause written in that measure builds, so the
+     * fact and the clause meet at one term. Where either value is named by nothing there is no such
+     * atom, and nothing is stated.
+     */
+    private void shiftFact(Core.PreservedCall call, Denotations at, Known k, List<Constraint> out) {
+        DischargeRules.Shift shift = DischargeRules.shiftBy(call);
+        if (shift == null) {
+            return;
+        }
+        Term from = terms.bodyKey(shift.of().of(call), at);
+        Term to = terms.bodyKey(call, at);
+        LinearForm<Term> amount = terms.affineOf(shift.amount().of(call), at, k);
+        if (from == null || to == null || amount == null) {
+            return;
+        }
+        out.add(new Constraint(
+                LinearForm.atom(terms.measureKeyOf(shift.measure(), from, to))
+                        .minus(amount.times(shift.per())),
+                Rel.EQ));
+    }
+
+    /** {@code form} with {@code offset} added, or null where the form could not be read. */
+    private static LinearForm<Term> addTo(LinearForm<Term> form, BigDecimal offset) {
+        return form == null ? null : form.plus(LinearForm.constant(offset));
+    }
+
+    /** The constant {@code e} reads as, or null where it reads as none. */
+    private BigDecimal constantOf(Core e, Denotations at, Known k) {
+        LinearForm<Term> form = terms.affineOf(e, at, k);
+        return form == null || !form.coefs().isEmpty() ? null : form.constant();
     }
 
     /** How the size of a container relates to the size of what it was built from, down the chain.

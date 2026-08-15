@@ -242,6 +242,120 @@ enum Question {
         }
     },
 
+    /**
+     * What holds of the number it answers wherever it is called ({@link DischargeRules#boundsOn}).
+     * Asked of an operation answering a number from a number: a bound is stated against the arguments,
+     * so an operation given none has nothing for a row to bound its result against.
+     */
+    BOUNDS("what bounds the number it answers") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return isANumber(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber);
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.boundedOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.boundedOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.BOUNDS_NOTHING;
+        }
+    },
+
+    /**
+     * What it states through the measure that counts what it shifted and what it answered apart
+     * ({@link DischargeRules#shiftBy}). Asked of an operation answering a value of the kind one of
+     * its arguments is, given a number — which is the shape moving a value by an amount has.
+     */
+    MEASURE("what it states through the measure counting the two apart") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return signature.result() != null && !isANumber(signature.result())
+                    && signature.params().contains(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber)
+                    && isCounted(signature.result());
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.shiftingOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.shiftingOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.SHIFTS_BY_NOTHING_MEASURABLE;
+        }
+    },
+
+    /**
+     * Whether it answers one of the values it was given, and in which cases
+     * ({@link DischargeRules#chosenBy}). Asked of an operation answering a number from a number: what
+     * such an operation answers may be one of its arguments, decided by the arguments.
+     */
+    CHOICE("whether it answers one of its arguments, and in which cases") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return isANumber(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber);
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.choosingOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.choosingOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.CHOOSES_NOTHING;
+        }
+    },
+
+    /**
+     * Whether the number it answers is a number it was given ({@link DischargeRules#answersItsArgument}).
+     * Asked of an operation answering a number from a number, which is the shape a value re-expressed
+     * has — the result may be one of the arguments read again rather than a number computed from them.
+     */
+    FORM("whether the number it answers is one it was given") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return isANumber(signature.result())
+                    && signature.params().stream().anyMatch(Question::isANumber);
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.formOperations().contains(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.formOperations();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.ANSWERS_NO_ARGUMENT_OF_ITS_OWN;
+        }
+    },
+
     /** Which operator it is the function form of ({@link DischargeRules#operator}). Asked of an
      * operation over two numbers answering a number of the same kind. */
     OPERATOR("which operator it computes") {
@@ -315,6 +429,30 @@ enum Question {
      * question as what puts an operation in range of one. */
     static boolean holdsElements(Type t) {
         return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
+    }
+
+    /**
+     * Whether the library counts two values of {@code t} apart as a number.
+     *
+     * <p>What makes moving a value by an amount a question with an answer. A list shortened by three
+     * and a string padded to a width are shifts as much as a date a day on is, and neither says
+     * anything <em>through a measure</em>, because the library has none that counts two lists or two
+     * strings apart — a size counts one of them. So the range is read off the declarations, and the
+     * day the library gains such a measure the operations of that kind come into range and are asked.
+     */
+    private static boolean isCounted(Type t) {
+        return Prelude.entries().values().stream().anyMatch(entry -> {
+            List<Type> counted = entry.signature().params();
+            return isANumber(entry.signature().result()) && counted.size() == 2
+                    && counted.get(0).equals(t) && counted.get(1).equals(t);
+        });
+    }
+
+    /** Whether {@code t} is one of the kinds of number the domain relates arithmetically. Read where
+     * the numeric rules are bound as well: what such a rule may be written about is the same question
+     * as what puts an operation in range of one. */
+    static boolean isANumber(Type t) {
+        return t == Type.Prim.INT || t == Type.Prim.DECIMAL;
     }
 
     /** Whether {@code t} is something the check can name the size of — a container, or a string. */

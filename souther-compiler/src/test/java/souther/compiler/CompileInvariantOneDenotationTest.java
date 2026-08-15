@@ -131,11 +131,16 @@ class CompileInvariantOneDenotationTest {
      * <p>Being able to point at a value and knowing something about it are two things. The check
      * names this call — the two writings of it are one value — and names nothing that settles
      * {@code value >= 0} of it, which is a clause left standing rather than a clause never asked.
+     *
+     * <p>The witness is a product, whose two factors are values and not a factor and a count: that
+     * is outside the arithmetic the domain derives in, so the product is one unknown. A remainder
+     * was the witness until the check gained a rule about what {@code Int.floorMod} answers — which
+     * did not make this any less true, only made that call one the check does say something about.
      */
     @Test
     void aCallNothingHasSaidAnythingAboutIsOwedItsClause() {
         assertEquals(1, warnings(Compiler.compileWithWarnings(
-                        EACHES.formatted("Eaches(Int.floorMod(eaches.value, pack.value))"))),
+                        EACHES.formatted("Eaches(Int.multiply(eaches.value, pack.value))"))),
                 "the call is a value the clause is read against, and nothing here discharges it");
     }
 

@@ -2,9 +2,12 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,7 +18,8 @@ import java.util.function.Predicate;
 
 /**
  * What the language's own operations do to the properties the invariant-discharge check tracks
- * (spec §invariant-discharge-preservation).
+ * (spec §invariant-discharge-preservation), and what each guarantees of what it answers
+ * (spec §invariant-discharge-guarantees).
  *
  * <p>These are the tables that decide how much of a model the language tracks rather than leaves to a
  * run-time check, and each is stated per operation because that is the level an author writes at. It
@@ -341,6 +345,317 @@ final class DischargeRules {
     static final Set<ValueName> NOT_A_SIZE = Set.of();
 
     /**
+     * What has to hold of the arguments before a bound on the result does.
+     *
+     * <p>Of the arguments and of nothing else. A condition the path establishes is what the arguments
+     * are known to be at one call, and a rule resting on one would hold where a guard was written and
+     * not where the operation was — which is a statement about the program rather than about the
+     * operation.
+     */
+    sealed interface Provided {
+
+        /** Whether {@code call} is one this rule holds at. */
+        boolean holdsAt(Core.PreservedCall call, java.util.function.Function<Core, BigDecimal> folded);
+
+        /** Nothing: the bound is what the operation does, whatever it is given. */
+        record Always() implements Provided {
+            @Override
+            public boolean holdsAt(Core.PreservedCall call,
+                                   java.util.function.Function<Core, BigDecimal> folded) {
+                return true;
+            }
+        }
+
+        /**
+         * An argument that reads as a constant above zero.
+         *
+         * <p>Constant, and not written as one. What a name was given is what the name is, here as
+         * everywhere else the check reads a value ({@link Terms#affineOf}), so {@code floorMod(x, k)}
+         * under {@code let k = 100} is the same call as {@code floorMod(x, 100)} — one spelling of a
+         * value the check has already read. Requiring the digits at the call would make a rule the
+         * author cannot predict from what the value is, only from where it was written.
+         */
+        record ConstantAboveZero(Reads argument) implements Provided {
+            @Override
+            public boolean holdsAt(Core.PreservedCall call,
+                                   java.util.function.Function<Core, BigDecimal> folded) {
+                BigDecimal at = folded.apply(argument.of(call));
+                return at != null && at.signum() > 0;
+            }
+        }
+    }
+
+    /**
+     * One bound an operation's result has, as the domain holds bounds: the result against a constant,
+     * or the result against one argument and a constant.
+     *
+     * <p>The shape is the domain's ({@link NumericDomain}) and is what a row may say. A rule of
+     * another shape — a result between two arguments, a result no greater than a sum — is one the
+     * domain would take in and derive nothing from, so it is not writable here rather than written
+     * and silently dropped.
+     *
+     * @param against  the argument the result is bounded against, or null where the bound is a
+     *                 constant one
+     * @param offset   added to that argument, or the constant itself where there is no argument
+     * @param rel      how the result stands to it
+     * @param provided what has to hold of the arguments for this to be the operation's answer
+     */
+    record ResultBound(Reads against, BigDecimal offset, Rel rel, Provided provided) {}
+
+    /** {@code result rel n}. */
+    private static ResultBound resultIs(Rel rel, long n) {
+        return new ResultBound(null, BigDecimal.valueOf(n), rel, new Provided.Always());
+    }
+
+    /** The same, where the operation answers that only under a condition on its arguments. */
+    private static ResultBound resultIs(Rel rel, long n, Provided provided) {
+        return new ResultBound(null, BigDecimal.valueOf(n), rel, provided);
+    }
+
+    /** {@code result rel argument + offset}. */
+    private static ResultBound resultIs(Rel rel, Reads argument, long offset, Provided provided) {
+        return new ResultBound(argument, BigDecimal.valueOf(offset), rel, provided);
+    }
+
+    /**
+     * What holds of an operation's result wherever the call is written.
+     *
+     * <p>Each row is a fact about the operation, so it is stated at every call and not only where
+     * something was guarded: {@code Int.abs(x)} is not negative whatever {@code x} is. That is the
+     * same kind of statement {@link Predicates#sizeFacts} already makes of every size call it walks
+     * past, and it is read the same way — asserted into the domain where a clause is read and where a
+     * condition is assumed alike.
+     *
+     * <p>{@code Int.floorMod} states both its ends only where the divisor reads as a constant above
+     * zero, and neither of them otherwise. The result takes the sign of the divisor — {@code
+     * floorMod(1, -3)} is {@code -2} — so a divisor that could be negative puts it the other side of
+     * zero, and the lower end is as much the divisor's to decide as the upper one. A divisor the
+     * check cannot read bounds it nowhere. Its {@code 0} is not a case at all: the operation aborts.
+     *
+     * <p>{@code Decimal.toInt} is within one of what it rounds, whichever mode it is handed. What a
+     * single mode does more narrowly — {@code HALF_UP} rounds to within a half — is a second rule and
+     * is not stated here, since the mode is an argument this reads nothing of.
+     */
+    private static final Map<ValueName, List<ResultBound>> BOUNDS_ON_THE_RESULT = Map.of(
+            op("Int", "abs"), List.of(resultIs(Rel.GE, 0)),
+            op("Decimal", "abs"), List.of(resultIs(Rel.GE, 0)),
+            op("Int", "floorMod"), List.of(
+                    resultIs(Rel.GE, 0, new Provided.ConstantAboveZero(at(1))),
+                    resultIs(Rel.LT, at(1), 0, new Provided.ConstantAboveZero(at(1)))),
+            op("Decimal", "toInt"), List.of(
+                    resultIs(Rel.GT, at(1), -1, new Provided.Always()),
+                    resultIs(Rel.LT, at(1), 1, new Provided.Always())));
+
+    /**
+     * The operations answering a number this bounds nothing of, in two groups.
+     *
+     * <p>Their result is not bounded by their arguments at all. The arithmetic and its function forms
+     * answer a number that may be anywhere, and what relates it to the operands is that it <em>is</em>
+     * the operands' arithmetic, which a term already reads ({@link #OPERATOR_CALLS}). A comparison
+     * answers a sign, and what that sign says is the order it decides ({@link #ORDERS}) rather than a
+     * range it lies in.
+     *
+     * <p>Their result is one of the arguments, decided by the arguments. A bound on such a result is
+     * what {@link #CHOOSES} derives from the case it is in — stating it here as well would be one
+     * operation answering to two tables, and the two would come apart the day the library changes
+     * which argument it answers.
+     *
+     * <p>{@code Decimal.round} answers a value at another scale, which is a bound of a shape a row
+     * cannot state: how far it moved depends on the scale it was handed. {@code Decimal.fromInt}
+     * answers the number it was given, which {@link #ANSWERS_ITS_ARGUMENT} states as the stronger
+     * thing it is — the two values are one, not one within reach of the other.
+     */
+    static final Set<ValueName> BOUNDS_NOTHING = Set.of(
+            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+            op("Int", "compare"), op("Decimal", "compare"),
+            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
+            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"),
+            op("Decimal", "fromInt"), op("Decimal", "round"));
+
+    /**
+     * How far an operation moved the value it was given, stated through the measure that counts two
+     * such values apart: {@code measure(of, result) == per · amount}.
+     *
+     * <p>The statement a shift makes is not a bound on what it answers — a date is not a number — so
+     * it is written in the one language the check has about such values, which is the number a
+     * measure answers of two of them. That number is what an invariant over a pair of dates is
+     * written in as well, so the rule and the clause meet without either being rewritten.
+     *
+     * @param measure the library's operation counting the two apart, in the order {@code (of, result)}
+     * @param of      the argument the result was shifted from
+     * @param amount  the argument saying by how much
+     * @param per     how many of what the measure counts one of {@code amount} is
+     */
+    record Shift(ValueName.Stdlib measure, Reads of, Reads amount, BigDecimal per) {}
+
+    private static Shift shifts(String module, String measure, Reads of, Reads amount, long per) {
+        return new Shift(new ValueName.Stdlib(module, measure), of, amount,
+                BigDecimal.valueOf(per));
+    }
+
+    /**
+     * The operations that move a value by an amount, each with what it did stated through a measure.
+     *
+     * <p>Every one of them works on a local value, where a day is a day and an hour is sixty
+     * minutes ({@code Temporals}), so what each states is exact rather than usually true.
+     *
+     * <p>{@code Date.addMonths} and {@code Date.addYears} are not here and are not oversights: months
+     * and years hold different numbers of days, so neither states a count of the one measure a pair
+     * of dates has. What a path knows of such a shift — that a later month is not earlier — is
+     * something else, and follows from what is known of the arguments rather than from the operation.
+     */
+    private static final Map<ValueName, Shift> SHIFTS = Map.of(
+            op("Date", "addDays"), shifts("Date", "daysBetween", at(1), at(0), 1),
+            op("DateTime", "addMinutes"), shifts("DateTime", "minutesBetween", at(1), at(0), 1),
+            op("DateTime", "addHours"), shifts("DateTime", "minutesBetween", at(1), at(0), 60),
+            op("DateTime", "addDays"), shifts("DateTime", "minutesBetween", at(1), at(0), 1440));
+
+    /** The operations that move a value by an amount the measures this has cannot count. A month and
+     * a year are not a fixed number of days, so a date shifted by either stands at a distance no rule
+     * here can write. */
+    static final Set<ValueName> SHIFTS_BY_NOTHING_MEASURABLE = Set.of(
+            op("Date", "addMonths"), op("Date", "addYears"));
+
+    /** A relation between two arguments: {@code left rel right}. What a case of a piecewise
+     * definition is reached under, written in the arguments the operation was given and in nothing
+     * else. */
+    record ArgumentsStand(Reads left, Rel rel, Reads right) {}
+
+    private static ArgumentsStand where(Reads left, Rel rel, Reads right) {
+        return new ArgumentsStand(left, rel, right);
+    }
+
+    /** One case of an operation's definition: the argument it answers there, and what holds of the
+     * arguments where it does. */
+    record Choice(Reads answers, List<ArgumentsStand> given) {}
+
+    private static Choice answers(Reads argument, ArgumentsStand... given) {
+        return new Choice(argument, List.of(given));
+    }
+
+    /**
+     * An operation's definition, as the cases it is written in.
+     *
+     * <p>The list is exhaustive: the conditions of its cases cover everything the operation can be
+     * given, so what holds in every case holds of the result. That is the whole of what makes a
+     * reading of these sound, and it is a claim about the list rather than about any row in it — a
+     * case left out does not make the others wrong, it makes a clause provable that the values can
+     * fail. So the cases are written as the library writes them, in the order it writes them, and
+     * each is held to a program that reaches it.
+     */
+    record Choices(List<Choice> cases) {}
+
+    private static Choices choices(Choice... cases) {
+        return new Choices(List.of(cases));
+    }
+
+    /**
+     * The operations that answer one of the values they were given, as the cases they are defined in.
+     *
+     * <p>Each is the library's own definition read back: {@code min(a, b)} is {@code a} where
+     * {@code a < b} and {@code b} otherwise, and {@code clamp(lo, hi, n)} is written as a chain of
+     * two conditions, so the second and third cases carry the denial of what stands before them.
+     * Carrying it is not tidiness — {@code clamp} does not ask that {@code lo} be below {@code hi},
+     * and where it is not, the case that answers {@code hi} is reached with {@code n} above
+     * {@code lo}. A rule that said the result is between the two would prove a clause the values
+     * fail.
+     *
+     * <p>Stated here rather than as bounds on the result ({@link #BOUNDS_ON_THE_RESULT}) because
+     * what these answer depends on the arguments, and a bound that does not may not be written for
+     * them. The bounds a case gives — a smaller of two is no greater than either — follow from the
+     * case and are derived where a clause is read, so they are not a second table to keep in step
+     * with this one.
+     */
+    private static final Map<ValueName, Choices> CHOOSES = Map.of(
+            op("Int", "min"), choices(
+                    answers(at(0), where(at(0), Rel.LT, at(1))),
+                    answers(at(1), where(at(0), Rel.GE, at(1)))),
+            op("Decimal", "min"), choices(
+                    answers(at(0), where(at(0), Rel.LT, at(1))),
+                    answers(at(1), where(at(0), Rel.GE, at(1)))),
+            op("Int", "max"), choices(
+                    answers(at(0), where(at(0), Rel.GT, at(1))),
+                    answers(at(1), where(at(0), Rel.LE, at(1)))),
+            op("Decimal", "max"), choices(
+                    answers(at(0), where(at(0), Rel.GT, at(1))),
+                    answers(at(1), where(at(0), Rel.LE, at(1)))),
+            op("Int", "clamp"), choices(
+                    answers(at(0), where(at(2), Rel.LT, at(0))),
+                    answers(at(1), where(at(2), Rel.GE, at(0)), where(at(2), Rel.GT, at(1))),
+                    answers(at(2), where(at(2), Rel.GE, at(0)), where(at(2), Rel.LE, at(1)))),
+            op("Decimal", "clamp"), choices(
+                    answers(at(0), where(at(2), Rel.LT, at(0))),
+                    answers(at(1), where(at(2), Rel.GE, at(0)), where(at(2), Rel.GT, at(1))),
+                    answers(at(2), where(at(2), Rel.GE, at(0)), where(at(2), Rel.LE, at(1)))));
+
+    /**
+     * The operations answering a number that answer none of their arguments back, in three groups.
+     *
+     * <p>They compute a new number. The arithmetic and its function forms are this: what
+     * {@code a + b} answers is neither {@code a} nor {@code b}, whatever they are.
+     *
+     * <p>They answer something about the arguments. {@code compare} answers a sign, {@code floorMod}
+     * a remainder, {@code abs} a distance, {@code toInt} the whole number a value rounds to, and
+     * {@code round} a value at another scale — none of which is one of the values handed in, though
+     * each of the last four is one where the argument already had that shape. That the answer
+     * <em>can</em> be an argument is not what this asks: a case is one the operation is defined by,
+     * and reading a coincidence as a case would state a condition the definition does not have.
+     *
+     * <p>{@code Decimal.fromInt} answers the number it was given in another type, which
+     * {@link #ANSWERS_ITS_ARGUMENT} states unconditionally. A case would put a condition on a
+     * statement that has none.
+     */
+    static final Set<ValueName> CHOOSES_NOTHING = Set.of(
+            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+            op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
+            op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
+            op("Decimal", "fromInt"));
+
+    /**
+     * The operations whose result is the number an argument already is, and which argument that is.
+     *
+     * <p>Such a call is read into the form its argument has rather than given an atom of its own, so
+     * a guard about the argument settles a clause about the call. {@code Decimal.fromInt(n)} is the
+     * one the library has: every {@code Int} is a {@code Decimal} exactly, and the widening states
+     * nothing of its own.
+     *
+     * <p>Not a choice among arguments ({@link #CHOOSES}). What a choice answers is one of two values,
+     * decided by the arguments, and which one it is has to be reasoned about case by case; this
+     * answers one value unconditionally, in another type. Reading the second as a choice with one
+     * candidate would put every value-preserving conversion under a table about selection, and the
+     * two stop being one question the moment the library gains a conversion that is not a widening.
+     */
+    private static final Map<ValueName, Reads> ANSWERS_ITS_ARGUMENT =
+            Map.of(op("Decimal", "fromInt"), at(0));
+
+    /**
+     * The operations answering a number from a number that answer none of them back, in three groups.
+     *
+     * <p>They compute a new number from their operands. The arithmetic and its function forms are
+     * this, and what they answer is already read as arithmetic over the operands themselves
+     * ({@link #OPERATOR_CALLS}) rather than as one of them.
+     *
+     * <p>They answer something about the arguments rather than one of them: {@code compare} a sign,
+     * {@code floorMod} a remainder, {@code abs} a distance with the sign dropped, {@code toInt} the
+     * whole number a value rounds to, {@code round} a value at another scale. What such a result is
+     * bounded by is {@link #BOUNDS_ON_THE_RESULT}, which is a different statement from being a value
+     * that was already there.
+     *
+     * <p>They answer one of their arguments, and which one depends on the arguments. That is
+     * {@link #CHOOSES}, and a rule that dropped the condition would say {@code Int.min(a, b)} is
+     * {@code a}.
+     */
+    static final Set<ValueName> ANSWERS_NO_ARGUMENT_OF_ITS_OWN = Set.of(
+            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+            op("Decimal", "add"), op("Decimal", "subtract"), op("Decimal", "multiply"),
+            op("Int", "compare"), op("Decimal", "compare"), op("Int", "floorMod"),
+            op("Int", "abs"), op("Decimal", "abs"), op("Decimal", "toInt"), op("Decimal", "round"),
+            op("Int", "min"), op("Int", "max"), op("Int", "clamp"),
+            op("Decimal", "min"), op("Decimal", "max"), op("Decimal", "clamp"));
+
+    /**
      * The library's function forms of the arithmetic operators, and the operator each one is. They
      * reach the same kernel in the same argument order — {@code Int.add} is {@code IntMath.addExact},
      * which is what {@code +} emits — so the two spellings compute one value and are read as one term.
@@ -497,6 +812,107 @@ final class DischargeRules {
         return ORDERS.keySet();
     }
 
+    static Set<ValueName> formOperations() {
+        return Bound.FORMS.keySet();
+    }
+
+    /** Those of them the read-through table has, by name, for the test that holds each to a
+     * construction it discharges. */
+    static Set<String> formNames() {
+        Set<String> names = new LinkedHashSet<>();
+        formOperations().forEach(operation -> names.add(operation.toString()));
+        return names;
+    }
+
+    static Set<ValueName> boundedOperations() {
+        return Bound.BOUNDS.keySet();
+    }
+
+    static Set<ValueName> choosingOperations() {
+        return Bound.CHOICES.keySet();
+    }
+
+    /** Those of them the choosing table has, by name, for the test that holds each case to a
+     * program that reaches it. */
+    static Set<String> choosingNames() {
+        Set<String> names = new LinkedHashSet<>();
+        choosingOperations().forEach(operation -> names.add(operation.toString()));
+        return names;
+    }
+
+    static Set<ValueName> shiftingOperations() {
+        return Bound.MEASURED.keySet();
+    }
+
+    /** Those of them the shifting table has, by name, for the test that holds each to a construction
+     * it discharges. */
+    static Set<String> shiftingNames() {
+        Set<String> names = new LinkedHashSet<>();
+        shiftingOperations().forEach(operation -> names.add(operation.toString()));
+        return names;
+    }
+
+    /** What {@code e} states through a measure, or null where it is not a shift this has a rule
+     * about. */
+    static Shift shiftBy(Core e) {
+        return e instanceof Core.PreservedCall call ? Bound.MEASURED.get(call.operation()) : null;
+    }
+
+    /** The cases {@code e} is defined in, or null where it is not a call to an operation that
+     * answers one of the values it was given. */
+    static Choices chosenBy(Core e) {
+        return e instanceof Core.PreservedCall call ? Bound.CHOICES.get(call.operation()) : null;
+    }
+
+    /**
+     * The bounding table's rows, by the name of the operation each is about — one entry per row, so
+     * an operation bounded at both ends appears twice.
+     *
+     * <p>For the test that holds each row to a construction it discharges. By row and not by
+     * operation: one program needs one of an operation's rows, so a set of names would be satisfied
+     * by a rule that had been written for one end and never fired for the other.
+     */
+    static List<String> boundedRows() {
+        List<String> rows = new ArrayList<>();
+        Bound.BOUNDS.forEach((operation, bounds) ->
+                bounds.forEach(bound -> rows.add(operation.toString())));
+        return rows;
+    }
+
+    /**
+     * The bounds {@code call}'s result has here: the operation's rows, less those whose condition on
+     * the arguments this call does not meet.
+     *
+     * @param constant what an argument reads as, or null where it reads as no constant. Asked of the
+     *                 caller because what a value is read as is the reading's answer and not a
+     *                 property of the syntax at the call.
+     */
+    static List<ResultBound> boundsOn(Core.PreservedCall call,
+                                      Function<Core, BigDecimal> constant) {
+        List<ResultBound> rows = Bound.BOUNDS.get(call.operation());
+        if (rows == null) {
+            return List.of();
+        }
+        List<ResultBound> holding = new ArrayList<>(rows.size());
+        for (ResultBound row : rows) {
+            if (row.provided().holdsAt(call, constant)) {
+                holding.add(row);
+            }
+        }
+        return holding;
+    }
+
+    /** The argument whose number {@code e} answers, or null where it is not a call this reads as one
+     * of its arguments. The value itself and not a term for it: what it is read as is the form the
+     * argument already has, which is the caller's to build. */
+    static Core answersItsArgument(Core e) {
+        if (!(e instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        Reads reads = Bound.FORMS.get(call.operation());
+        return reads == null ? null : reads.of(call);
+    }
+
     /** Those of them the building table has, by name, for the test that holds each to a construction
      * it discharges. */
     static Set<String> builtNames() {
@@ -518,6 +934,9 @@ final class DischargeRules {
      * declaration is wrong whether or not a program calls it, and finding out when one does is the
      * same silence deferred.
      *
+     * <p>A numeric rule names no part of what an operation hands a closure, since such an operation
+     * hands none, so it is bound with no derived position for a written one to be held against.
+     *
      * <p>Read on the first ask and not before, as {@link Combinators} and {@link Preserved} are: what
      * this requires of the library is required of a check that reads these rules, and a checker that
      * reads none must not be held to it.
@@ -536,6 +955,77 @@ final class DischargeRules {
         private static final Map<ValueName, List<Reads>> LOWER_BOUNDS =
                 bindEach(NO_SMALLER_THAN, CONTAINER, Question::holdsElements,
                         "a container the result is no smaller than");
+        private static final Map<ValueName, Reads> FORMS =
+                bind(ANSWERS_ITS_ARGUMENT, Function.identity(), null, Question::isANumber,
+                        "the argument whose number the result is");
+        private static final Map<ValueName, List<ResultBound>> BOUNDS =
+                bindBounds(BOUNDS_ON_THE_RESULT);
+        private static final Map<ValueName, Choices> CHOICES = bindChoices(CHOOSES);
+        private static final Map<ValueName, Shift> MEASURED = bindShifts(SHIFTS);
+    }
+
+    /**
+     * As {@link #bind}, for a rule stating a shift through a measure: the amount is a number, the
+     * value shifted is of the type the measure counts, and the measure counts two of what the
+     * operation answers. A rule pairing an operation with a measure of something else would state a
+     * relation between two values that have none.
+     */
+    private static Map<ValueName, Shift> bindShifts(Map<ValueName, Shift> rules) {
+        rules.forEach((operation, shift) -> {
+            bind(Map.of(operation, shift.amount()), Function.identity(), null, Question::isANumber,
+                    "the amount a shift moves by");
+            Prelude.PreludeEntry counts = Prelude.entry(shift.measure().qualified());
+            if (counts == null) {
+                throw new IllegalStateException("the rule about " + operation + " counts through "
+                        + shift.measure().qualified() + ", which the library does not declare");
+            }
+            Prelude.PreludeEntry shifted = Prelude.entry(((ValueName.Stdlib) operation).qualified());
+            List<Type> counted = counts.signature().params();
+            if (counted.size() != 2 || !Question.isANumber(counts.signature().result())
+                    || !counted.get(0).equals(shifted.signature().result())
+                    || !counted.get(1).equals(shifted.signature().result())) {
+                throw new IllegalStateException(shift.measure().qualified()
+                        + " does not count two of what " + operation + " answers apart as a number");
+            }
+            bind(Map.of(operation, shift.of()), Function.identity(), null,
+                    t -> t.equals(shifted.signature().result()),
+                    "the value a shift moves from");
+        });
+        return rules;
+    }
+
+    /** As {@link #bind}, for the arguments a case names: the one it answers, and the two sides of
+     * each condition it is reached under. */
+    private static Map<ValueName, Choices> bindChoices(Map<ValueName, Choices> rules) {
+        rules.forEach((operation, choices) -> choices.cases().forEach(choice -> {
+            List<Reads> named = new ArrayList<>();
+            named.add(choice.answers());
+            choice.given().forEach(stands -> {
+                named.add(stands.left());
+                named.add(stands.right());
+            });
+            named.forEach(one -> bind(Map.of(operation, one), Function.identity(), null,
+                    Question::isANumber, "an argument a case of the definition names"));
+        }));
+        return rules;
+    }
+
+    /** As {@link #bind}, for the arguments a bound names: the one the result is bounded against, and
+     * the one a condition on the rule reads. Each is a separate claim about a separate argument. */
+    private static Map<ValueName, List<ResultBound>> bindBounds(
+            Map<ValueName, List<ResultBound>> rules) {
+        rules.forEach((operation, bounds) -> bounds.forEach(bound -> {
+            List<Reads> named = new ArrayList<>();
+            if (bound.against() != null) {
+                named.add(bound.against());
+            }
+            if (bound.provided() instanceof Provided.ConstantAboveZero constant) {
+                named.add(constant.argument());
+            }
+            named.forEach(one -> bind(Map.of(operation, one), Function.identity(), null,
+                    Question::isANumber, "an argument a bound on the result names"));
+        }));
+        return rules;
     }
 
     /** As {@link #bind}, for a rule that names more than one argument: each is held to the
@@ -580,7 +1070,7 @@ final class DischargeRules {
                 throw new IllegalStateException("argument " + (position + 1) + " of "
                         + library.qualified() + " is not " + what);
             }
-            if (at instanceof Reads.At && Combinators.of(operation) != null
+            if (at instanceof Reads.At && derived != null && Combinators.of(operation) != null
                     && derived.positionIn(operation) == position) {
                 throw new IllegalStateException("the rule about " + what + " for "
                         + library.qualified()
