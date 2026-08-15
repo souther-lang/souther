@@ -236,8 +236,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
             Map<String, souther.compiler.partition.GuardReachability> out = new LinkedHashMap<>();
@@ -356,8 +355,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), producing);
+                    souther.compiler.coverage.CoverageSites.of(producing);
             Map<String, Effective> reachableArms = db.ask(new Reached(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -406,7 +404,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             // What every line this module's rules drew came to, asked once and read here. Measuring a
@@ -476,8 +474,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
@@ -1062,8 +1059,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();

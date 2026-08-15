@@ -4,7 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.SourceRef;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
 
@@ -221,8 +220,8 @@ public final class CoverageSites {
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
-    public static Plan of(String sourceId, Map<String, Core> behaviorBodies) {
-        Walk walk = new Walk(sourceId);
+    public static Plan of(Map<String, Core> behaviorBodies) {
+        Walk walk = new Walk();
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
@@ -232,7 +231,6 @@ public final class CoverageSites {
 
     private static final class Walk {
 
-        private final String sourceId;
         private final List<Site> sites = new ArrayList<>();
         private final List<GuardRef> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
@@ -241,8 +239,7 @@ public final class CoverageSites {
         private String behavior;
         private int ordinal;
 
-        Walk(String sourceId) {
-            this.sourceId = sourceId;
+        Walk() {
         }
 
         void behavior(String name, Core body) {
@@ -298,10 +295,10 @@ public final class CoverageSites {
          */
         private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part) {
             int index = sites.size();
-            // Of the node's own coordinate. The walk's `sourceId` is the module being
-            // measured, and an arm of a helper another module of this compile wrote is in
-            // that module's file — pairing the two wrote one source's identity beside the
-            // other's line and column.
+            // Of the node's own coordinate. This walk is over one module and an arm of a
+            // helper another module of this compile wrote is in that module's file, so a
+            // source carried here beside the position would be the wrong half of two
+            // answers about one place. The walk holds none for that reason.
             sites.add(new Site(behavior, kind, label, Citation.of(owner.pos()),
                     index, ordinal++, new Obligation(behavior, origin, part)));
             return index;

@@ -160,7 +160,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         assertNotNull(checked, "the model under test compiles: " + guard);
 
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         Core body = checked.behaviorBodies().get("f");
         GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);

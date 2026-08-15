@@ -15,7 +15,7 @@ import java.util.SequencedMap;
  * diagnostic is read from, and one renderer out of four said what the coordinate stood for.
  *
  * <p>So the two are separate values. {@link SourcePos} is where this compile placed a node, and every
- * pass reads it freely. This is the other one, and it is what a report holds: a {@link Site}, a
+ * pass reads it freely. This is the other one, and it is what a report holds: a coverage site, a
  * finding, a reason carries this rather than a coordinate, so a surface written later is handed the
  * answer rather than the raw place.
  *

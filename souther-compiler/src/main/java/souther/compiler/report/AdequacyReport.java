@@ -881,7 +881,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
                 signature(b, behavior.signature());
-                partition(b, behavior.partition(), module.declaredIn(), sources);
+                partition(b, behavior.partition(), sources);
                 branch(b, behavior.branch(), sources);
             }
         }
@@ -950,7 +950,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     private static void partition(ObjectNode behavior, PartitionEvidence partition,
-                                  String declaredIn, DocumentSources sources) {
+                                  DocumentSources sources) {
         if (partition == null) {
             return;
         }
@@ -984,11 +984,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (BoundaryAssessment boundary : partition.boundaries()) {
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
-            // The identity and not a name. This document says what it is about with the
-            // ids the caller handed its sources over as, and `sources` explains each one;
-            // a display name written here would be a file nothing in the document maps
-            // back, and would make what is emitted depend on who is reading.
-            b.put("origin", boundary.origin(sources::written, declaredIn));
+            // The identity, and never left out. This document says what it is about with the
+            // ids the caller handed its sources over as, and `sources` explains each one; a
+            // display name written here would be a file nothing in the document maps back.
+            //
+            // No section to leave it out against, either. A person reads a line under a heading
+            // that names the module and takes the file from there; a document has no heading, so
+            // a place written without its source is a line and a column belonging to nothing —
+            // and where a boundary is the only place a report points at, the `sources` table has
+            // no other entry to guess from.
+            b.put("origin", boundary.origin(sources::written, null));
             b.put("side", word(boundary.side()));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count

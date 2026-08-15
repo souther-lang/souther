@@ -252,25 +252,42 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     /**
      * What a document says a guard's place is, it says with an identity the document explains.
      *
-     * <p>The report a person reads names files, because what to call one is a fact about the set in
-     * front of a reader. This document says what it is about with the ids the caller handed its
-     * sources over as, and its `sources` table explains each — so a name written into a field here
-     * would be a file nothing in the document maps back, and would make what is emitted depend on
-     * who is reading it.
+     * <p>The report a person reads leaves the file out where the section already names it — a heading
+     * says which module, and a reader takes it from there. A document has no heading. So a place
+     * written without its source is a line and a column belonging to nothing, and where a boundary is
+     * the only place a report points at there is no other entry in `sources` to guess from.
+     *
+     * <p>All three states, because the one that was wrong is the ordinary one. Held against
+     * another-source alone, a document that wrote the identity only when the file differed passed.
      */
     @Test
     void theDocumentSaysAGuardsPlaceWithAnIdentityItExplains() {
-        Elsewhere said = fromAnotherSource();
-
-        assertFalse(said.jsonOrigins().isEmpty(), "the comparison drew lines");
-        for (String origin : said.jsonOrigins()) {
+        for (String model : List.of(OUT_OF_SIGHT, IN_SIGHT)) {
+            Said said = saidAbout(model);
+            assertFalse(said.boundaryOrigins().isEmpty(), () -> "lines were drawn: " + model);
+            for (String origin : said.boundaryOrigins()) {
+                explained(origin, said.document().get("sources"));
+            }
+        }
+        Elsewhere elsewhere = fromAnotherSource();
+        assertFalse(elsewhere.jsonOrigins().isEmpty(), "the comparison drew lines");
+        for (String origin : elsewhere.jsonOrigins()) {
             assertFalse(origin.contains("up.sou"),
                     () -> "a document says an identity, not what a reader calls it: " + origin);
-            String id = origin.substring(origin.indexOf('@') + 1, origin.lastIndexOf(':',
-                    origin.lastIndexOf(':') - 1));
-            assertEquals("up.sou", said.sources().get(id).asString(),
-                    () -> "and the table explains it: " + origin);
+            explained(origin, elsewhere.sources());
         }
+    }
+
+    /** The place at the end of an origin, and the table entry that says which source it is in. */
+    private static void explained(String origin, JsonNode sources) {
+        String[] parts = origin.split(":");
+        assertTrue(parts.length >= 3,
+                () -> "a place a document writes names its source: " + origin);
+        String id = parts[parts.length - 3];
+        id = id.substring(id.lastIndexOf(' ') + 1);
+        id = id.substring(id.lastIndexOf('@') + 1);
+        assertNotNull(sources.get(id),
+                () -> "`sources` explains every identity the document writes: " + origin);
     }
 
     /**

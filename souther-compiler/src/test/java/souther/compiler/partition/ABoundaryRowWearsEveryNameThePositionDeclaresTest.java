@@ -90,7 +90,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
 
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         Core body = checked.behaviorBodies().get(spec.name());
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of(spec.name(), body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
