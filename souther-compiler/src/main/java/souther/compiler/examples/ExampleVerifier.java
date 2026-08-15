@@ -453,24 +453,28 @@ public final class ExampleVerifier {
     /**
      * What a row's evaluation reached and saw.
      *
-     * <p>{@link #stage} is written by the row's worker and read by the caller when the row runs out of
-     * time — the one field read across that boundary, so it is the one field that is volatile. Whether
-     * the row stopped in a fixture's helper or inside the behavior is exactly that difference, and a
-     * timeout that cannot say which reports the same thing for two different problems.
+     * <p>{@link #reached} is written by the row's worker and read by the caller when the row runs out
+     * of time — the one field read across that boundary, so it is the one field that is volatile.
+     * Whether the row stopped in a fixture's helper or inside the behavior is exactly that difference,
+     * and a timeout that cannot say which reports the same thing for two different problems.
      *
      * <p>Everything else is written by the worker and read only after it has finished, which the future
      * establishes: a row that does not finish has its state dropped rather than read.
      */
-    private static final class RowState {
-        private volatile Stage stage = Stage.NONE;
+    static final class RowState {
         /**
-         * What applied the behavior, as whatever applied it said. Null until the row entered one.
+         * How far the row got and what entered the behavior, as one value.
          *
-         * <p>Volatile for the same reason {@link #stage} is, and written before it: a row given up on
-         * has both read from the other thread, and reading a stage that says the behavior was entered
-         * has to mean the answer to what entered it is there to read.
+         * <p>One field because they are one fact, and because a row takes back having entered one: an
+         * answerer that comes back saying it never got in retracts what was published for it, and two
+         * fields let a reader take the stage from before that and the answer from after. What it would
+         * then hold is a row that says a behavior was entered with nothing that entered it, which is a
+         * state no evaluation produces and which {@link RowOutcome} refuses to be built from.
+         *
+         * <p>Written only by the row's own worker, so reading it to write the next one is not a race
+         * with another writer.
          */
-        private volatile Applied applied;
+        volatile Reached reached = new Reached(Stage.NONE, null);
         private Disposition disposition = Disposition.FAILED;
         private FailurePhase failurePhase = FailurePhase.NONE;
         private TypeSymbol expectedArm;
@@ -497,26 +501,44 @@ public final class ExampleVerifier {
             this.failurePhase = phase;
         }
 
+        /** Records how far the row has got, keeping whatever entered the behavior. */
+        void got(Stage next) {
+            reached = reached.at(next);
+        }
+
+        /** Records that the behavior was entered, and what entered it. */
+        void entered(Applied applied) {
+            reached = new Reached(Stage.INVOKED, applied);
+        }
+
         /**
-         * How far the row had got and what had entered the behavior, read together.
+         * Takes back the row having entered the behavior.
          *
-         * <p>One fact and one reading of it. Read as two, a row given up on can have its stage taken
-         * before the worker moved and what applied it taken after, and the pair recorded is then a
-         * row that never happened. The stage is read first, which is what makes the answer beside it
-         * visible: both are volatile and the one that says a behavior was entered is written last.
+         * <p>What was published for it goes with it: everything at {@link Stage#INVOKED} says what
+         * applied it, and a row whose answerer came back saying it never got in applied nothing.
          */
-        Reached reached() {
-            Stage at = stage;
-            return new Reached(at, at.reached(Stage.INVOKED) ? applied : null);
+        void neverEntered() {
+            reached = new Reached(Stage.FIXTURES_VALIDATED, null);
         }
     }
 
-    /** How far a row's evaluation got, and what had entered the behavior if anything had. */
-    private record Reached(Stage stage, Applied applied) {}
+    /**
+     * How far a row's evaluation got, and what had entered the behavior if anything had.
+     *
+     * <p>The two together, because a reader of a row still running is entitled to a pair that some
+     * moment of the evaluation actually held. Null where nothing entered.
+     */
+    record Reached(Stage stage, Applied applied) {
+
+        /** The same, having got as far as {@code next}. */
+        Reached at(Stage next) {
+            return new Reached(next, applied);
+        }
+    }
 
     /** What the row turned out to be, from the state its worker left. */
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
-        Reached reached = state.reached();
+        Reached reached = state.reached;
         return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.identity(),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
                 state.resultArm, state.inputCases, state.inputs,
@@ -563,7 +585,7 @@ public final class ExampleVerifier {
                 // far it got is the difference between a fixture's helper that will not stop and a
                 // behavior that will not stop, which is what the author has to know, and what entered
                 // the behavior comes with it because the two are one reading.
-                Reached reached = evaluation.state.reached();
+                Reached reached = evaluation.state.reached;
                 abandon.run();
                 // Not E1910. What did not come back was not shown to go round more than an example
                 // may — it was not counted at all, which is what an evaluation reaching code this
@@ -757,7 +779,7 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.EXPECTED_FIXTURE);
             return;
         }
-        state.stage = Stage.FIXTURES_VALIDATED;
+        state.got(Stage.FIXTURES_VALIDATED);
         if (target.pending()) {
             // Everything a row can be held to without a body has been: its arity, its inputs against
             // their types and invariants, and its expectation against the output's cases. What is left
@@ -785,10 +807,9 @@ public final class ExampleVerifier {
             return;
         }
         Object result;
-        // What entered it before that it entered, so a row given up on cannot be read as having
-        // entered a behavior with nothing saying what did.
-        state.applied = applying.applied();
-        state.stage = Stage.INVOKED;
+        // What entered it and that it entered, published as one: a row given up on is read from
+        // another thread, and half of this pair is a row that never happened.
+        state.entered(applying.applied());
         try {
             result = applying.to(handed(fixtures, target, args, ins));
         } catch (InvocationFailure f) {
@@ -799,7 +820,7 @@ public final class ExampleVerifier {
             // aborting, which is what it was told while this and the applied code failing arrived as
             // one throw — saying it differently is a change to what a row is told, and a different
             // thing from where the two are told apart.
-            neverEntered(state);
+            state.neverEntered();
             aborted(fixtures, row, asserted, String.valueOf(e.getMessage()), out, state);
             return;
         } catch (FixtureException fe) {
@@ -808,7 +829,7 @@ public final class ExampleVerifier {
             // no diagnostic is said about a model that may be right. Which is as far as this goes:
             // no answerer a compile has crosses, so what more to say about such a row is settled by
             // whatever first supplies one that does.
-            neverEntered(state);
+            state.neverEntered();
             state.incomplete(FailurePhase.INFRASTRUCTURE);
             return;
         }
@@ -816,7 +837,7 @@ public final class ExampleVerifier {
         // The case the run answered with is the one the value is. Its class names the module that
         // declares it, and what this module means by that class's spelling is a different question.
         state.resultArm = fixtures.typeOf(result);
-        state.stage = Stage.COMPARED;
+        state.got(Stage.COMPARED);
         TypeSymbol arm = fixtures.caseOnly(row.expected());
         if (arm != null) {
             // A bare case name asserts the arm and nothing under it, so there is no value to compare.
@@ -1075,22 +1096,6 @@ public final class ExampleVerifier {
             over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
         }
         return over;
-    }
-
-    /**
-     * Takes back the row having entered the behavior.
-     *
-     * <p>A row is marked as having entered before the answerer is asked, because that is the one
-     * thing a reader of a row that never comes back needs and it can only be published beforehand.
-     * Where the answerer comes back saying it never got in, that mark is wrong: everything at
-     * {@link Stage#INVOKED} says what applied it ({@link Run#applied()}), and nothing applied this.
-     *
-     * <p>Safe to write here and nowhere else. The reader across the thread boundary is the one that
-     * reads a row still running, and a row that reached this came back.
-     */
-    private static void neverEntered(RowState state) {
-        state.stage = Stage.FIXTURES_VALIDATED;
-        state.applied = null;
     }
 
     /**
