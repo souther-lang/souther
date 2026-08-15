@@ -153,6 +153,39 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
     }
 
     /**
+     * The compile's own answerer, asked about a behavior it emitted and whose class is not there.
+     *
+     * <p>It says {@link Answerer.Answer.Something} — the manifest is what it reads, and the manifest
+     * says this compile implemented the behavior. What the class not being there is comes out where
+     * the behavior is applied, as {@link ImplementationNotReached}.
+     *
+     * <p>The one that holds the production answerer to it. Reading the loader here instead would be
+     * the cheaper way to write {@link GeneratedImplementation#of} and would answer this case with
+     * "nothing applies it", turning every implementation this compiler failed to reach into a row
+     * waiting for a {@code let}.
+     */
+    @Test
+    void theCompilesOwnAnswererSaysSomethingForWhatItEmittedEvenWithNoClassToLoad() {
+        GeneratedImplementations manifest =
+                new GeneratedImplementations("example.applying", Set.of("double"));
+        MemoryClassLoader empty =
+                new MemoryClassLoader(Map.of(), ExampleVerifier.class.getClassLoader());
+
+        Answerer answerer = Answering.generatedHere().over(manifest, empty);
+
+        Answerer.Answer answer = answerer.of("double");
+        Answerer.Answer.Something something = assertInstanceOf(Answerer.Answer.Something.class,
+                answer, "the manifest says this compile implemented it, so something applies it");
+        ImplementationNotReached notReached = assertThrows(ImplementationNotReached.class,
+                () -> something.applying(List.of()).to(List.of()),
+                "and the class not being there is said where the behavior is applied");
+        assertTrue(notReached.getMessage().contains("Double"),
+                "naming what could not be reached: " + notReached.getMessage());
+        assertInstanceOf(Answerer.Answer.Nothing.class, answerer.of("doubleFromOutside"),
+                "and what it did not emit is what it has nothing for");
+    }
+
+    /**
      * A run over one module's rows, handed another module's artifact.
      *
      * <p>Refused where both are in hand. The manifest is what says which module's implementations an
