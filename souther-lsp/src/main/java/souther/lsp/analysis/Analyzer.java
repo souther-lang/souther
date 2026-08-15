@@ -1937,7 +1937,12 @@ public final class Analyzer {
                     (DiagnosticPlace.Unavailable) label.place(), EDITOR_LANGUAGE);
         }
         for (Spot other : view.others()) {
-            String uri = uriOf.apply(other.sourceId());
+            // A spot naming no source can only be the primary now, and the primary's source is
+            // told rather than read off its region (`Spot.primary`) — a compile of one source names
+            // none, and the file this marker is being put in is that one. What used to reach here
+            // as well was a label, which is the defect: a label says where it is and no longer takes
+            // its file from where it is shown.
+            String uri = other.sourceId() == null ? publishedUri : uriOf.apply(other.sourceId());
             LineIndex lines = linesOf.apply(other.sourceId());
             if (uri == null || lines == null || other.region() == null) {
                 continue;   // nothing the editor could open, so nothing to link to
