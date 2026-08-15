@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.FindingRegion;
 import souther.compiler.diag.msg.Message;
 
 /**
@@ -41,5 +42,18 @@ public record LabeledRegion(Region region, String sourceId, Message said) {
     /** The source this region is in, inheriting {@code diagnosticSourceId} when it names none. */
     public String sourceIdOr(String diagnosticSourceId) {
         return sourceId == null ? diagnosticSourceId : sourceId;
+    }
+
+    /**
+     * Whether the diagnostic finds this region wrong too, rather than showing it so that a reader
+     * can see why the primary is — which is what the label says ({@link FindingRegion}), and is read
+     * off nothing else.
+     *
+     * <p>What reads it is the decision about which files a report is said in. A report is said
+     * wherever it is written, so an author editing any of those files is told; the rule a subject
+     * was judged against is not one of those files, however necessary reading it is.
+     */
+    public boolean belongsToFinding() {
+        return said instanceof FindingRegion;
     }
 }

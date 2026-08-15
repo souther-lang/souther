@@ -110,9 +110,10 @@ public sealed interface InvariantMessage extends Message {
     @Code(DiagnosticCode.E1105)
     record TheNamedClauseConstructsAData(String data, String constructs, String clause) implements InvariantMessage, Reported {}
 
-    record TheClauseReachesThatConstruction(String clause) implements InvariantMessage, Supporting {}
+    record TheClauseReachesThatConstruction(String clause)
+            implements InvariantMessage, FindingRegion {}
 
-    record ThisClauseReachesThatConstruction() implements InvariantMessage, Supporting {}
+    record ThisClauseReachesThatConstruction() implements InvariantMessage, FindingRegion {}
 
     @Code(DiagnosticCode.E1103)
     record TwoClausesShareOneName(String clause, String data) implements InvariantMessage, Reported {}

@@ -719,11 +719,11 @@ public final class Output {
             List<Report> reports = new ArrayList<>();
             for (souther.compiler.examples.ExampleStatements.Disagreement d : read.disagreements()) {
                 reports.add(Report.saidAt(said(d),
-                        Report.Delivery.atEveryRegionOf(d.recorded().sourceId())));
+                        Report.Delivery.at(d.recorded().sourceId())));
             }
             for (souther.compiler.examples.ExampleStatements.UnreadFake f : read.unread()) {
                 reports.add(Report.saidAt(unread(f),
-                        Report.Delivery.atEveryRegionOf(f.at().sourceId())));
+                        Report.Delivery.at(f.at().sourceId())));
             }
             return Answer.of(true, reports);
         }
