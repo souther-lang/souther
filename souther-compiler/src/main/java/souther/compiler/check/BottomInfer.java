@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -127,14 +126,19 @@ public final class BottomInfer {
      *       accumulator whose type is the fold's result. A higher-order function that merely takes a
      *       closure and an empty collection ({@code List.map}/{@code filter} over {@code []}) does not
      *       match, so its step failure is not relabelled as a fold-seed error; and</li>
-     *   <li>the seed's source position differs from the call's. A combinator inlined onto its call
-     *       site (e.g. {@code List.map}'s internal {@code []} accumulator, which desugars to a
-     *       {@code List.foldFrom}) carries the call's own position; the caller never wrote an empty
-     *       seed there, so it is excluded.</li>
+     *   <li>the seed is written where it stands. A combinator whose body this compile cannot show
+     *       (e.g. {@code List.map}'s internal {@code []} accumulator, which desugars to a
+     *       {@code List.foldFrom}) is copied onto the call, and its seed stands in for a line of
+     *       {@code souther.list}; the caller never wrote an empty seed there, so it is excluded.</li>
      * </ul>
+     *
+     * <p>Asked of the seed rather than worked out from its coordinate. Comparing the seed's position
+     * with the call's answered this by the fact that a copy is given the call's own — which was true
+     * and was a coincidence: it is the same inference from a coordinate that had a helper of another
+     * module reported at its caller, and it says nothing about a seed written where the copy came
+     * from. The position says which it is now, so it is read.
      */
-    static int untypedEmptySeed(List<Hir.Expr> args, Type.FnOf fn, Map<String, Type> bind,
-                                        SourcePos callPos) {
+    static int untypedEmptySeed(List<Hir.Expr> args, Type.FnOf fn, Map<String, Type> bind) {
         int seed = 1;
         if (fn.params().size() <= seed || args.size() <= seed) {
             return -1;
@@ -144,7 +148,7 @@ public final class BottomInfer {
                 && fn.params().get(seed).equals(fn.result());
         if (foldShaped
                 && isEmptyCollectionLiteral(args.get(seed))
-                && !args.get(seed).pos().equals(callPos)
+                && !args.get(seed).pos().isOutOfSight()
                 && Type.mentions(TypeOps.substitute(fn.params().get(seed), bind), BottomInfer::isBottom)) {
             return seed;
         }

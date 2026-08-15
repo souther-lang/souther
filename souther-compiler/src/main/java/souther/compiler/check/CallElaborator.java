@@ -450,7 +450,7 @@ public final class CallElaborator {
                 }
             }
         } catch (CompileException stepError) {
-            int seed = BottomInfer.untypedEmptySeed(args, signature, bind, call.pos());
+            int seed = BottomInfer.untypedEmptySeed(args, signature, bind);
             if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
                 throw stepError;
             }
