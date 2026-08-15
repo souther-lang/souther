@@ -148,6 +148,100 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 "a compile that emitted nothing said nothing about why");
     }
 
+    /**
+     * Every error reaches a file. What the command line stops for and what an editor marks are the
+     * same set, and a report that reached neither is one the author is never told about — the
+     * walk over the path is one question about the whole compilation and names no module of its
+     * own, so what it finds has to say where it is said.
+     *
+     * <p>Measured on the reports rather than on the classes. A compile that emits nothing and says
+     * nothing is what this looked like, but which of those is the defect is the second one: what a
+     * build produces is its own question, and one that legitimately produces no classes would make
+     * the first reading say this had been fixed.
+     */
+    @Test
+    void noErrorIsLeftWithNowhereToBeSaid() {
+        Compilation compilation = reading("""
+                module app.uses
+                import lib.held ( Held )
+
+                data Page = { held: Held }
+                """, held());
+
+        List<String> unreachable = new ArrayList<>();
+        for (Db.Found found : compilation.reports()) {
+            if (found.report().isError() && compilation.publishSourceIdsOf(found).isEmpty()) {
+                unreachable.add(found.report().diagnostic().code() + " about " + found.module());
+            }
+        }
+        assertEquals(List.of(), unreachable, "an error the author is never shown");
+    }
+
+    /**
+     * A dependency two files import is reached by both, and both authors are told.
+     *
+     * <p>Neither import is the premise the other is measured by, and neither author has anything
+     * different to do about it. Marking one of them leaves the other looking at a file that is fine
+     * while the build fails — and which of the two it would be is the order the sources happened to
+     * arrive in.
+     */
+    @Test
+    void everySourceThatReachesItIsTold() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.a exposing ( A )
+                import lib.held ( Held )
+
+                data A = { held: Held }
+                """, """
+                module app.b exposing ( B )
+                import lib.held ( Held )
+
+                data B = { held: Held }
+                """), held()::get);
+        compilation.answerEverything();
+
+        Map<String, List<Located>> byId = compilation.diagnostics();
+        assertFalse(byId.get("0").isEmpty(), "the source that was reached first");
+        assertFalse(byId.get("1").isEmpty(), "the one that reaches it just as much");
+    }
+
+    /**
+     * Two findings that differed only in where they were written are said once.
+     *
+     * <p>Reading a report for where it may be said is what makes them one. Their coordinates are in
+     * a text nobody holds and are what told them apart; said at the place the module was reached
+     * from, they are one sentence at one caret, and an author shown it twice has nothing to tell
+     * them apart by either.
+     */
+    @Test
+    void twoFindingsInOnePublishedModuleAreSaidOnce() {
+        Map<String, byte[]> withDeep = Compiler.compile("""
+                module lib.deep exposing ( Deep )
+                data Deep = String
+                """);
+        Map<String, byte[]> twice = built("""
+                module lib.twice exposing ( Twice )
+                data Twice = { a: lib.deep.Deep, b: lib.deep.Deep }
+                """, withDeep);
+        // the dependency is rebuilt without the type, so both field types fail to resolve
+        Map<String, byte[]> withoutDeep = Compiler.compile("""
+                module lib.deep exposing ( Other )
+                data Other = String
+                """);
+
+        Compilation compilation = reading("""
+                module app.uses
+                import lib.twice ( Twice )
+
+                data Page = { twice: Twice }
+                """, and(withoutDeep, twice));
+
+        assertEquals(2, compilation.db().allReports().size(),
+                "two findings, at the two places the module writes the name");
+        assertEquals(1, compilation.diagnostics().get("0").size(),
+                "one thing to be told, said once");
+    }
+
     /** Where the report about {@code module} is said. */
     private static SourcePos whereTheReportAboutIsSaid(Compilation compilation, String module) {
         List<SourcePos> said = new ArrayList<>();

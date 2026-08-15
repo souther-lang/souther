@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.FindingRegion;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.MessageCodes;
@@ -126,21 +127,63 @@ public final class Diagnostic {
      *
      * <p>The one way to move a caret. Everything else about the finding is what it was, so the rule
      * it reports and the values it says it about do not change with how far away the code turned out
-     * to be. A second region is kept only where it too is somewhere a reader can be sent: a label is
-     * a sentence about the place it points at, and one pointing into the same unheld text says it of
-     * a line the author did not write.
+     * to be.
+     *
+     * <p>Every place, not the first. Two files may reach one declaration, and the problem is not
+     * readable from either of them alone — neither import is the premise the other is measured by,
+     * and an author editing the second is looking at a file that is fine while the build fails. So
+     * the rest are labelled {@code alsoHere}, which says they are part of what is found wrong
+     * ({@link souther.compiler.diag.msg.FindingRegion}) and is what puts the report in front of each
+     * of those authors.
+     *
+     * @throws IllegalArgumentException where {@code where} is empty. There is no such thing as
+     *         reaching code from nowhere: a caller with no place to send a reader has a report to
+     *         leave as it is, not one to move
      */
-    public Diagnostic reachedFrom(SourcePos where, String declaration) {
-        SourcePos stands = where.standingInFor(WrittenAt.outOfSight(declaration));
+    public <M extends Message & FindingRegion> Diagnostic reachedFrom(List<SourcePos> where,
+                                                                     String declaration,
+                                                                     M alsoHere) {
+        if (where.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "code out of sight is reached from somewhere or the report stays where it is");
+        }
+        WrittenAt out = WrittenAt.outOfSight(declaration);
+        List<LabeledRegion> also = new ArrayList<>(citableSecondary());
+        for (SourcePos other : where.subList(1, where.size())) {
+            also.add(new LabeledRegion(Region.point(other.standingInFor(out)), null, alsoHere));
+        }
+        return new Diagnostic(severity, code,
+                Region.point(where.get(0).standingInFor(out)), List.copyOf(also),
+                literalMessage, diff, notes, suggestion, said);
+    }
+
+    /**
+     * The same finding with any second region a reader cannot be sent to left off.
+     *
+     * <p>A label is a sentence about the place it points at, so one read from text this compile has
+     * no file for says it of whatever sits at those numbers in the file the report is filed under —
+     * a line the author did write and that the label says nothing about. It is the defect
+     * {@link #reachedFrom} moves a caret for, one region over, and it reaches a report whose own
+     * caret is fine: a body spliced in from out of sight is given the call site, and a label built
+     * over the body it came from is not.
+     */
+    public Diagnostic saidOnlyWhereAReaderCanBeSent() {
+        List<LabeledRegion> kept = citableSecondary();
+        return kept.size() == secondary.size() ? this
+                : new Diagnostic(severity, code, region, List.copyOf(kept), literalMessage, diff,
+                        notes, suggestion, said);
+    }
+
+    /** The second regions read from a source, which are the ones a reader can be shown. */
+    private List<LabeledRegion> citableSecondary() {
         List<LabeledRegion> kept = new ArrayList<>();
         for (LabeledRegion label : secondary) {
-            if (label.region() != null && label.region().start() != null
-                    && label.region().start().sourceId() != null) {
+            if (label.region() == null || label.region().start() == null
+                    || label.region().start().sourceId() != null) {
                 kept.add(label);
             }
         }
-        return new Diagnostic(severity, code, Region.point(stands), List.copyOf(kept),
-                literalMessage, diff, notes, suggestion, said);
+        return kept;
     }
 
     /**

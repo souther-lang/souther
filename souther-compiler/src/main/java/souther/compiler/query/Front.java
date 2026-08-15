@@ -347,12 +347,17 @@ public final class Front {
          * second place to remember to fill, and the one that was not filled is what left an
          * invariant's bare names denoting nothing.
          *
-         * @param reachedFrom the nearest place in a source of this compilation on the way to this
-         *        module: the import line that names it, or the one naming whichever module off the
-         *        path led here. Null only where nothing this compile can quote reached it.
+         * @param reachedFrom every nearest place in a source of this compilation on the way to
+         *        this module: each {@code import} line that names it, or that names whichever
+         *        module off the path led here. Every one of them and not the first, because a
+         *        dependency two files import is reached by both and a report about it is one an
+         *        author editing either has to be told — an editor marking one file leaves the other
+         *        looking clean while the build fails. Empty only where nothing this compile can
+         *        quote reached it.
          */
         public record OnThePath(Ast.Module module, Set<String> injectedBehaviors,
-                                Map<String, ValueName.Stdlib> libraryNames, SourcePos reachedFrom) {}
+                                Map<String, ValueName.Stdlib> libraryNames,
+                                List<SourcePos> reachedFrom) {}
 
         public record Of(Map<String, OnThePath> modules) {}
 
@@ -374,12 +379,12 @@ public final class Front {
             // Where a source of this compile named each of them. A module reached only through
             // another off the path inherits that one's place: the import line naming the dependency
             // is the nearest thing a reader here holds, and there is no line naming the rest.
-            Map<String, SourcePos> reachedFrom = new LinkedHashMap<>();
+            Map<String, List<SourcePos>> reachedFrom = new LinkedHashMap<>();
             for (String declared : layout.idOfModule().keySet()) {
                 Ast.Module m = db.ask(new Exposed(declared)).value();
                 if (m != null) {
                     reaches(m).forEach((reach, where) -> {
-                        reachedFrom.putIfAbsent(reach, where);
+                        alsoReachedFrom(reachedFrom, reach, where == null ? List.of() : List.of(where));
                         pending.add(reach);
                     });
                 }
@@ -394,8 +399,17 @@ public final class Front {
                 PublishedModule published = PublishedModule.read(name, classes);
                 if (published == null) {
                     if (neededBy.containsKey(name) && !Prelude.isQualifier(name)) {
-                        reports.add(Report.of(Diagnostic.say(new ModuleMessage.AModuleItNeedsIsNotOnThePath(name, neededBy.get(name)))
-                                .hint(new ModuleMessage.AddItToThisProjectsDependencies(name)).build()));
+                        // Said where the module that needs it was reached from, the same as anything
+                        // else found about a module off the path. This walk is one question about
+                        // the whole compilation, so it cannot name the module each of its reports is
+                        // about the way a question about one module does — it says so itself
+                        // instead, and a report that said neither reached no file at all.
+                        List<SourcePos> here = reachedFrom.getOrDefault(name, List.of());
+                        reports.add(Report.of(here.isEmpty()
+                                ? needs(name, neededBy.get(name))
+                                : needs(name, neededBy.get(name)).reachedFrom(here,
+                                        neededBy.get(name),
+                                        new ModuleMessage.ItIsReachedFromHereToo())));
                     }
                     continue;   // written in a source being compiled: still that import's own error
                 }
@@ -406,14 +420,12 @@ public final class Front {
                     continue;
                 }
                 Exposing.Checked checked = Exposing.check(published.module());
-                SourcePos here = reachedFrom.get(name);
+                List<SourcePos> here = reachedFrom.getOrDefault(name, List.of());
                 found.put(name, new OnThePath(checked.module(), published.injectedBehaviors(),
                         checked.exposed(), here));
                 for (String reach : reaches(checked.module()).keySet()) {
                     neededBy.putIfAbsent(reach, name);
-                    if (here != null) {
-                        reachedFrom.putIfAbsent(reach, here);
-                    }
+                    alsoReachedFrom(reachedFrom, reach, here);
                     pending.add(reach);
                 }
             }
@@ -504,6 +516,35 @@ public final class Front {
             return onThePath == null ? Answer.absent()
                     : Answer.of(Ordered.map(onThePath.libraryNames()));
         }
+    }
+
+    /**
+     * {@code where} added to the places a source of this compilation reaches {@code module} from,
+     * each place once.
+     *
+     * <p>A module reached through another off the path inherits that one's places: there is no line
+     * naming it anywhere a reader here can look, and the lines naming the dependency that led there
+     * are the nearest there are. Reached again by a different route, it keeps both — the two routes
+     * are two files whose authors each wrote an import that arrives at it.
+     */
+    private static void alsoReachedFrom(Map<String, List<SourcePos>> reachedFrom, String module,
+                                        List<SourcePos> where) {
+        if (where.isEmpty()) {
+            return;
+        }
+        List<SourcePos> places = reachedFrom.computeIfAbsent(module, k -> new ArrayList<>());
+        for (SourcePos one : where) {
+            if (!places.contains(one)) {
+                places.add(one);
+            }
+        }
+    }
+
+    /** A module off the path needing one that is not there. */
+    private static Diagnostic needs(String needed, String module) {
+        return Diagnostic.say(new ModuleMessage.AModuleItNeedsIsNotOnThePath(needed, module))
+                .hint(new ModuleMessage.AddItToThisProjectsDependencies(needed))
+                .build();
     }
 
     /** What the path carries for {@code name}, or null when no module of that name came off it. */

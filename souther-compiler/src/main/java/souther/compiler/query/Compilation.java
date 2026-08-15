@@ -6,6 +6,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -260,7 +261,9 @@ public final class Compilation {
     /**
      * Answers everything there is to answer about these sources — the classes, the constant
      * constructions, the examples — without deciding anything about what was found. A caller that
-     * wants every problem at once asks for this and then reads {@link Db#allReports()}.
+     * wants every problem at once asks for this and then reads {@link #reports()}, or one of the
+     * readings of it: {@link #failure()}, {@link #errors()}, {@link #warnings()},
+     * {@link #diagnostics()}.
      */
     public void answerEverything() {
         structuralReports();
@@ -495,12 +498,23 @@ public final class Compilation {
      * ({@link Diagnostic#reachedFrom}).
      */
     public List<Db.Found> reports() {
-        List<Db.Found> reports = new ArrayList<>();
+        // Read again for repeats, because reading for where a reader can be sent is what makes two
+        // of them. Coordinates in a module's own reassembled text tell apart two findings this
+        // compilation collected separately; said at the place that module was reached from, both
+        // are one sentence at one caret, and an author shown it twice has nothing to tell them
+        // apart by either.
+        Map<Repeat, Db.Found> reports = new LinkedHashMap<>();
         for (Db.Found found : db.allReports()) {
-            reports.add(citable(found));
+            Db.Found said = citable(found);
+            reports.putIfAbsent(new Repeat(said.module(), locatedSourceIdOf(said),
+                    said.report().problem()), said);
         }
-        return reports;
+        return new ArrayList<>(reports.values());
     }
+
+    /** One thing said once: what {@link Db#allReports()} tells apart before a report is read for
+     *  where it may be said, asked again of what that reading left. */
+    private record Repeat(String module, String sourceId, Diagnostic.Identity problem) {}
 
     /**
      * {@code found} where a reader can be sent to it — itself, for the reports whose coordinate was
@@ -516,17 +530,33 @@ public final class Compilation {
      * defect twice.
      */
     private Db.Found citable(Db.Found found) {
-        SourcePos at = found.report().diagnostic().pos();
-        if (at == null || at.sourceId() != null || found.module() == null) {
-            return found;
+        Diagnostic said = found.report().diagnostic();
+        Diagnostic sendable = reachable(said, found.module());
+        return sendable == said ? found
+                : new Db.Found(found.module(), found.sourceId(),
+                        Report.saidAt(sendable, found.report().delivery()));
+    }
+
+    /**
+     * {@code said} where a reader can be sent to every place it points at.
+     *
+     * <p>Its caret first, where that was read from a text this compile has no file for. Then its
+     * second regions, whatever its caret turned out to be: a body spliced in from out of sight is
+     * given the call site, so a report about one has a caret a reader can be sent to and may still
+     * carry a label built over the body it was copied from — pointed at a file that does not have
+     * it, which is the same defect a region over.
+     */
+    private Diagnostic reachable(Diagnostic said, String module) {
+        SourcePos at = said.pos();
+        if (at == null || at.sourceId() != null || module == null) {
+            return said.saidOnlyWhereAReaderCanBeSent();
         }
-        Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
-        if (onThePath == null || onThePath.reachedFrom() == null) {
-            return found;
+        Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
+        if (onThePath == null || onThePath.reachedFrom().isEmpty()) {
+            return said.saidOnlyWhereAReaderCanBeSent();
         }
-        return new Db.Found(found.module(), found.sourceId(), Report.saidAt(
-                found.report().diagnostic().reachedFrom(onThePath.reachedFrom(), found.module()),
-                found.report().delivery()));
+        return said.reachedFrom(onThePath.reachedFrom(), module,
+                new ModuleMessage.ItIsReachedFromHereToo());
     }
 
     /** The one failure these sources have, or null when they have none. */
