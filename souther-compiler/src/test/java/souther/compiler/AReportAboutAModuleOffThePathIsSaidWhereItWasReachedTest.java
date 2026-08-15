@@ -13,13 +13,16 @@ import souther.compiler.query.Db;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A module read off the class path is read from text this compile put back together out of what the
@@ -331,16 +334,53 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """), and(left, right)::get);
         compilation.answerEverything();
 
+        Set<String> saidAbout = new LinkedHashSet<>();
         for (Db.Found found : compilation.reports()) {
             SourcePos at = found.report().diagnostic().pos();
             if (at == null || !at.isOutOfSight()) {
                 continue;
             }
             String stands = ((Citation.OutOfSight) Citation.of(at)).declaration();
-            String reachedIn = at.sourceId();
-            assertEquals("lib.left".equals(stands) ? "0" : "1", reachedIn,
+            saidAbout.add(stands);
+            // Every file it is said in, and not only the one the caret is in: a second place is
+            // said as a labelled region, and claiming a file that never reaches this module is
+            // exactly what putting both imports on one report would do.
+            assertEquals(List.of("lib.left".equals(stands) ? "0" : "1"),
+                    compilation.publishSourceIdsOf(found),
                     "`" + stands + "` is not reached from the other file at all");
         }
+        assertEquals(Set.of("lib.left", "lib.right"), saidAbout,
+                "each of them needs it, and each of them is a thing to be told");
+    }
+
+    /**
+     * A module on the path that took a name no module may take is refused, and the refusal is said
+     * where the module was reached from.
+     *
+     * <p>The other thing this walk finds on its own. It is refused rather than read, so it has no
+     * declarations for anything else to trip over and nothing later says it again — which is what
+     * left it as the one report here still carrying a coordinate in a file nobody holds.
+     */
+    @Test
+    void aModuleOnThePathThatTookAReservedNameIsRefusedWhereItWasReached() {
+        Compilation core = Compilation.ofCoreSource("""
+                module souther.taken exposing ( X )
+                data X = Int
+                """);
+        core.answerEverything();
+
+        Compilation compilation = reading("""
+                module app.uses
+                import souther.taken ( X )
+
+                data A = { x: X }
+                """, core.classes());
+
+        List<Located> onTheSource = compilation.diagnostics().get("0");
+        assertNotNull(onTheSource);
+        assertTrue(onTheSource.stream().anyMatch(said ->
+                        "E1502".equals(said.diagnostic().code())),
+                "the refusal reached no file at all: " + onTheSource);
     }
 
     /**

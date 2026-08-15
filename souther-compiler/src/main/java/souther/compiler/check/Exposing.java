@@ -7,8 +7,10 @@ import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,7 +58,19 @@ public final class Exposing {
      * {@code let}.
      */
     public record Checked(Ast.Module module, Map<String, ValueName.Stdlib> exposed,
-                          List<Diagnostic> conflicts) {}
+                          List<Diagnostic> conflicts) {
+
+        /**
+         * Copied, because this is an answer a compilation remembers and an answer it remembers is a
+         * value. What decides whether the work that read one has to be done again is whether the new
+         * answer equals the old, so a caller able to reach into a remembered one could change what
+         * every reader of it sees without anything being asked again.
+         */
+        public Checked {
+            exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
+            conflicts = List.copyOf(conflicts);
+        }
+    }
 
     /**
      * {@code module} read for its library imports: checked, dropped, and what they brought in.

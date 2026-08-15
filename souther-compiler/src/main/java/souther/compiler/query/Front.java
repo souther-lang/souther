@@ -357,7 +357,16 @@ public final class Front {
          */
         public record OnThePath(Ast.Module module, Set<String> injectedBehaviors,
                                 Map<String, ValueName.Stdlib> libraryNames,
-                                List<SourcePos> reachedFrom) {}
+                                List<SourcePos> reachedFrom) {
+
+            /** Copied, for the reason {@link Exposing.Checked} is: this is remembered, and what is
+             *  remembered is a value. */
+            public OnThePath {
+                injectedBehaviors = Ordered.set(injectedBehaviors);
+                libraryNames = Ordered.map(libraryNames);
+                reachedFrom = List.copyOf(reachedFrom);
+            }
+        }
 
         public record Of(Map<String, OnThePath> modules) {}
 
@@ -381,6 +390,9 @@ public final class Front {
             // module off the path reaches in turn.
             Map<String, List<SourcePos>> named = new LinkedHashMap<>();
             Map<String, List<String>> edges = new LinkedHashMap<>();
+            // The ones this compilation will not have, whatever the path holds: a module that took a
+            // name no module may take. On the path and refused, which is not the same as absent.
+            Map<String, Diagnostic> refused = new LinkedHashMap<>();
             Deque<String> pending = new ArrayDeque<>();
             for (String declared : layout.idOfModule().keySet()) {
                 Ast.Module m = db.ask(new Exposed(declared)).value();
@@ -403,10 +415,13 @@ public final class Front {
                 if (published == null) {
                     continue;   // absent; which of its importers minds is worked out below
                 }
-                Report reserved = reservedNamespace(published.module().name(),
+                Diagnostic reserved = reservedNamespaceTaken(published.module().name(),
                         published.module().pos());
                 if (reserved != null) {
-                    reports.add(reserved);
+                    // Refused, and said once the graph is known — like anything else found about a
+                    // module off the path, and for the same reason: this is the only producer here
+                    // whose report was left where the module wrote it, which is a file nobody holds.
+                    refused.put(name, reserved);
                     continue;
                 }
                 Exposing.Checked checked = Exposing.check(published.module());
@@ -426,10 +441,19 @@ public final class Front {
             // things to be told: they are missing from two places, an author reaching one of them
             // has not reached the other, and a report saying the first while pointing at an import
             // that arrives at the second says where the code is and is wrong about it.
+            for (Map.Entry<String, Diagnostic> taken : refused.entrySet()) {
+                List<SourcePos> here = reachedFrom.getOrDefault(taken.getKey(), List.of());
+                reports.add(Report.of(here.isEmpty() ? taken.getValue()
+                        : taken.getValue().reachedFrom(here, taken.getKey(),
+                                new ModuleMessage.ItIsReachedFromHereToo())));
+            }
             for (Map.Entry<String, List<String>> reaching : edges.entrySet()) {
                 List<SourcePos> here = reachedFrom.getOrDefault(reaching.getKey(), List.of());
                 for (String needed : reaching.getValue()) {
-                    if (read.containsKey(needed) || layout.idOfModule().containsKey(needed)
+                    // Refused is not absent: a module that took a name no module may take is on the
+                    // path, and has been told so.
+                    if (read.containsKey(needed) || refused.containsKey(needed)
+                            || layout.idOfModule().containsKey(needed)
                             || Prelude.isQualifier(needed)) {
                         continue;
                     }
@@ -986,16 +1010,30 @@ public final class Front {
     /** A module in the reserved namespace, or one named like a standard-library qualifier — or null
      * when the name is the module's to take. */
     static Report reservedNamespace(String name, SourcePos pos) {
+        Diagnostic said = reservedNamespaceTaken(name, pos);
+        return said == null ? null : Report.raised(said);
+    }
+
+    /**
+     * The same, as the diagnostic rather than the report — for a reader that has to say it somewhere
+     * other than where it was found.
+     *
+     * <p>A module off the class path is written where this compile has no file, so what it is told
+     * about is settled here and where it is said is settled once the graph is known. Read as a
+     * report it would carry the English it would have been thrown with, coordinate and all, which is
+     * the wrong text the moment the caret moves.
+     */
+    static Diagnostic reservedNamespaceTaken(String name, SourcePos pos) {
         if (name.equals(RESERVED) || name.startsWith(RESERVED + ".")) {
-            return Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsInTheReservedNamespace(name))
-                            .at(pos).build());
+            return Diagnostic.say(new ModuleMessage.TheModuleIsInTheReservedNamespace(name))
+                    .at(pos).build();
         }
         // The short qualifiers are how the standard library is reached (`List.map`, `import
         // String`); a user module by one of these names would shadow the library and could not be
         // imported.
         if (Prelude.isQualifier(name)) {
-            return Report.raised(Diagnostic.say(new ModuleMessage.TheModuleTakesTheStandardLibraryQualifier(name))
-                            .at(pos).build());
+            return Diagnostic.say(new ModuleMessage.TheModuleTakesTheStandardLibraryQualifier(name))
+                    .at(pos).build();
         }
         return null;
     }
