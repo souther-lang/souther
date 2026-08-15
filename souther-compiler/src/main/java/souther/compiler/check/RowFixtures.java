@@ -40,14 +40,15 @@ public final class RowFixtures {
     }
 
     /**
-     * Whether nothing is computed for an operand: a bare type name states which case it is and
-     * nothing under it, so there is no value to compute and no method to emit.
+     * Whether nothing is computed for an operand: an expectation written as a bare type name states
+     * which arm the behavior answered with and nothing under it, so there is no value to compute
+     * and no method to emit.
      *
-     * <p>Every position and not only an expectation. Measured: reading the same spelling at a
-     * supplied position as a value it computes leaves a `+with dep = Missing+` — a record's name,
-     * standing for no value — accepted in silence, where the reading that builds a stand-in says
-     * what is wrong with it. What a bare name may stand for at a supplied position is its own
-     * question, and it is not this change's.
+     * <p>An expectation and nowhere else. Everywhere a row supplies a value, a bare name is a value
+     * like any other and is compiled as one: a unit data is constructed by being named, and a name
+     * that stands for no value — a record's, a sum's — is refused where it is written, which is
+     * what the language says of it in a body. Read at every position instead, a supplied bare name
+     * was the one operand left to a reading of its own.
      */
     static boolean computesNothing(Placed placed) {
         return placed.position() instanceof RowPosition.Asserts
