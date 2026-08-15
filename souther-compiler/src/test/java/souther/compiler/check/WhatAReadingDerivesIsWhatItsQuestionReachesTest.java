@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * What a construction's reading derives about the arithmetic the domain cannot carry, and what it
@@ -72,9 +71,15 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
      */
     @Test
     void whatOneConstructionDerivesDoesNotGrowWithArithmeticItIsNotAbout() {
+        Set<String> theProduct = Set.of("(demo.total.0 MUL demo.total.1)");
         List<Set<String>> none = derivedWhileCompiling(behaviorWith(0));
 
-        assertFalse(none.isEmpty(), "the construction is over a product, so something was derived");
+        // Said as what was derived and not as how much. Asked only whether the readings agree with
+        // each other, a reading that derived nothing at all would agree with itself at every count
+        // and this would come out green while saying that no work grew — which is true of a check
+        // that does no work, and is not what this is for.
+        assertEquals(List.of(theProduct, theProduct), none,
+                "each of the construction's two readings derived the product it is over");
         assertEquals(none, derivedWhileCompiling(behaviorWith(10)));
         assertEquals(none, derivedWhileCompiling(behaviorWith(100)));
     }
@@ -97,22 +102,27 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
     }
 
     /**
-     * A bound derived for one recipe is an answer of the reading and not a premise the next recipe is
-     * derived from.
+     * A bound derived for one recipe reaches another only where the recipe graph names it, and not
+     * through a relation the domain holds between the two.
+     *
+     * <p>Not the graph's own edges, which do carry: a recipe's operands are derived and read where
+     * its form is read, which is what
+     * {@link AProductIsHeldToWhatThePathKnowsOfItsFactorsTest#aQuotientOverAProductReadsWhatTheProductWasDerivedTo}
+     * holds of {@code a * b / 100}. What is asked here is the sideways route.
      *
      * <p>{@code q == a * b} relates {@code q} to the product through a difference, and
      * {@code NonNeg(q)} is discharged by it — the product's derived bound reaches {@code q} through
-     * that difference once it is in. {@code q * c} is a second recipe over {@code q}, and it is
-     * derived against the domain the reading was given, in which {@code q} is bounded by nothing. So
-     * the clause stands.
+     * that difference once the results are taken in. {@code q * c} is a second recipe over
+     * {@code q}, and it is derived against the domain the reading was given, in which {@code q} is
+     * bounded by nothing. So that clause stands.
      *
-     * <p>Held to because it is what makes one pass enough. Were a derived bound readable by another
-     * derivation, the answers would depend on the order the recipes were walked in, and deriving from
-     * a fixed set of roots would be short of what deriving everything reaches. The control below is
-     * the same construction with {@code q} bounded by a guard instead, which is the one difference.
+     * <p>Held to because it is what makes one pass enough. Were what a reading derived readable by
+     * the next derivation, the answers would depend on the order the recipes were walked in and a
+     * fixed set of roots would be short of what walking everything reaches. The control below is the
+     * same second recipe over a {@code q} a guard bounds outright, which is the one difference.
      */
     @Test
-    void aBoundDerivedForOneRecipeIsNotReadWhenAnotherIsDerived() {
+    void aDerivedBoundDoesNotReachAnotherRecipeThroughADomainRelation() {
         assertEquals(List.of(), warningsOf(TYPES + """
                 behavior f : (a: Int, b: Int, q: Int) -> NonNeg | Bad constructs NonNeg, Bad
                 let f (a, b, q) = {
@@ -154,6 +164,64 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
                     guard q >= 0
                         else Bad
                     NonNeg(q * c)
+                }
+                """));
+    }
+
+    /**
+     * A derived bound reaches a clause through a relation the domain kept as written.
+     *
+     * <p>The second of the two routes out of a form's own atoms that
+     * {@link souther.compiler.numeric.NumericDomain#atomsSpokenOf} names. {@code q <= a * b + z} is
+     * three atoms, which is neither an interval nor a difference, so it is kept as written and
+     * proves things as a premise: the goal {@code q <= 0} leaves the residual {@code a * b + z},
+     * and the product's derived upper end together with {@code z}'s own puts that at or below zero.
+     *
+     * <p>The other route is a difference, and
+     * {@link AProductIsBoundedByWhatThePathBoundsItsFactorsToTest#aClauseReachesAProductThroughAGuardThatEquatesTheTwo}
+     * is that one. Both are here because the roots a reading derives from are what the domain says
+     * anything about, and a reading of that narrowed to the atoms it holds bounds and differences on
+     * would answer the same for every witness but this.
+     *
+     * <p>The control is the same relation with nothing bounding the factors, where the residual is
+     * unbounded above and the clause stands — so what carries the first is the derivation and not
+     * the shape of the guard.
+     */
+    @Test
+    void aDerivedBoundReachesAClauseThroughARelationKeptAsWritten() {
+        assertEquals(List.of(), warningsOf("""
+                module demo
+                data NonPos = Int
+                    invariant value <= 0
+                data Bad
+                behavior f : (a: Int, b: Int, z: Int, q: Int) -> NonPos | Bad
+                    constructs NonPos, Bad
+                let f (a, b, z, q) = {
+                    guard a >= 0
+                        else Bad
+                    guard b <= 0
+                        else Bad
+                    guard z <= 0
+                        else Bad
+                    guard q <= a * b + z
+                        else Bad
+                    NonPos(q)
+                }
+                """));
+
+        assertEquals(List.of("E2011"), warningsOf("""
+                module demo
+                data NonPos = Int
+                    invariant value <= 0
+                data Bad
+                behavior f : (a: Int, b: Int, z: Int, q: Int) -> NonPos | Bad
+                    constructs NonPos, Bad
+                let f (a, b, z, q) = {
+                    guard z <= 0
+                        else Bad
+                    guard q <= a * b + z
+                        else Bad
+                    NonPos(q)
                 }
                 """));
     }

@@ -64,12 +64,16 @@ final class DerivedBounds {
      * outside both sets is one no question asked of this domain can reach
      * ({@link NumericDomain#atomsSpokenOf}).
      *
-     * <p>One pass, and not because the roots happen not to grow. Every derivation reads {@code
-     * base} — {@link #derive} is handed it at every level — so what is derived for an atom is a
-     * function of {@code base} and the recipes alone. A bound derived here is an answer of this
-     * reading and never a premise another recipe is derived from, which is the interval reasoning
-     * that tightens under its own answers that this declines to be. So the recipes reachable from
-     * the roots are all of them, whatever order they are walked in.
+     * <p>One pass, and not because the roots happen not to grow. The recipe graph's own edges do
+     * carry: a recipe's operands are derived first and read where its form is read, which is how
+     * {@code a * b / 100} reads what the product was derived to. What does not happen is the other
+     * direction — the reading is never rebuilt from what was derived and the recipes put through
+     * again against it. Every derivation is handed {@code base} ({@link #derive} at every level), so
+     * what is derived for an atom is a function of {@code base} and the recipe graph alone: an
+     * evaluation over a graph with no way back to where it started, in whatever order the roots are
+     * walked, with no fixed point to reach. A derived bound reaches another recipe only where the
+     * graph names it, and never through a relation this domain holds between the two — which is the
+     * interval reasoning that tightens under its own answers that this declines to be.
      */
     static NumericDomain<Term> refine(NumericDomain<Term> base, Terms terms, Set<Term> asked) {
         Map<Term, Derivation> recipes = terms.derivations();
@@ -197,6 +201,11 @@ final class DerivedBounds {
      * an atom out of itself, which is the check disagreeing with itself about which value an atom is
      * — so it is refused rather than swallowed, for the reason
      * {@link TheCheckDisagreesWithItself} gives.
+     *
+     * <p>Asked of what a reading walks, and so of the recipes its question reaches rather than of
+     * every recipe the naming recorded. A cycle among recipes no reading reaches goes unremarked,
+     * which is a narrowing of where an assertion about this check's own naming can fire and not of
+     * what any program is told: what such a recipe would have derived is read by nothing.
      */
     static final class AnAtomComputedFromItself extends TheCheckDisagreesWithItself {
 
