@@ -234,6 +234,33 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
+     * A clause naming a value a guard equated with a product is discharged through that guard,
+     * though the clause names no product at all.
+     *
+     * <p>What is derived about the product reaches {@code total} through the domain's own relation
+     * between the two, which is what makes the derivations a reading of the whole domain rather
+     * than of the clause. Left to the atoms a clause names, this construction is owed a guard that
+     * is already written — so what this holds is not today's answer alone but what a narrower
+     * reading would have to keep answering.
+     */
+    @Test
+    void aClauseReachesAProductThroughAGuardThatEquatesTheTwo() {
+        assertEquals(List.of(), warningsOf(TYPES + """
+                behavior total : (a: Int, b: Int, total: Int) -> NonNeg | Bad
+                    constructs NonNeg, Bad
+                let total (a, b, total) = {
+                    guard a >= 0
+                        else Bad
+                    guard b >= 0
+                        else Bad
+                    guard total == a * b
+                        else Bad
+                    NonNeg(total)
+                }
+                """));
+    }
+
+    /**
      * A factor that can be zero is a product that can be zero, and a clause the zero satisfies is
      * not one the product fails.
      *
