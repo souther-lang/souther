@@ -33,11 +33,6 @@ final class GeneratedImplementation implements Answerer {
         this.loader = loader;
     }
 
-    @Override
-    public Applied applied() {
-        return new Applied.GeneratedHere();
-    }
-
     /**
      * The stand-ins made into what the injecting constructor takes, in the order it takes them.
      *
@@ -50,7 +45,18 @@ final class GeneratedImplementation implements Answerer {
         for (int i = 0; i < standins.size(); i++) {
             instances[i] = instanceOf(standins.get(i));
         }
-        return arguments -> apply(behavior, instances, arguments);
+        return new Applying() {
+
+            @Override
+            public Applied applied() {
+                return new Applied.GeneratedHere();
+            }
+
+            @Override
+            public Object to(List<Handed> arguments) {
+                return apply(behavior, instances, arguments);
+            }
+        };
     }
 
     /**

@@ -18,6 +18,11 @@ import java.util.List;
  * constructed with the row's stand-ins and applied through the loader the run built. An implementation
  * supplied from outside a compile is the second, and it brings its own classes.
  *
+ * <p>Asked per behavior, and what it answers with says of itself what applied the row
+ * ({@link Applying#applied}). A module declares behaviors with a body and behaviors without one, and
+ * only the second can have an implementation supplied for it — so which of them applies is settled
+ * one behavior at a time, and an answerer that resolves between them has an answer for each.
+ *
  * <p>Nothing here reports anything. A diagnostic is a statement about a row and this is not about a
  * row, so what an answerer cannot do it raises and the row says what that means. Three things can go
  * wrong and they are three because what they say is not the same: {@link StandinNotBuilt} is a
@@ -26,16 +31,6 @@ import java.util.List;
  * the last is about the model.
  */
 public interface Answerer {
-
-    /**
-     * What a row's outcome records as having applied the behavior.
-     *
-     * <p>One answer for the whole of this answerer, the same for every row it runs. Something that
-     * chooses between several answerers per row — one that routes, one that falls back to another —
-     * does not have one answer here, and for such a thing the question belongs to the application
-     * rather than to the answerer and moves to {@link Applying}.
-     */
-    Applied applied();
 
     /**
      * What will apply {@code behavior} for this row, with {@code standins} answering for what it
@@ -54,6 +49,20 @@ public interface Answerer {
 
     /** A behavior, in the environment one row gives it. */
     interface Applying {
+
+        /**
+         * What a row's outcome records as having applied the behavior.
+         *
+         * <p>Here and not on the answerer, because which of several things applies a behavior is
+         * settled per behavior and not per compile. An answerer that resolves between what a compile
+         * generated and an implementation supplied from outside has both in one evaluation — a module
+         * declares behaviors of both kinds — and asked once for the whole of itself it could only
+         * name one of them.
+         *
+         * <p>Read where the row entered the behavior and nowhere else. A row that could not be given
+         * an environment never reached this, and one that never entered says nothing applied it.
+         */
+        Applied applied();
 
         /**
          * Applies it to {@code arguments} and answers with what it answered.

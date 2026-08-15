@@ -13,11 +13,15 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -66,7 +70,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     /** The row states a stand-in, and it could not be made. Nothing was applied. */
     @Test
     void aStandinThatCouldNotBeMadeStopsTheRowBeforeItEntersTheBehavior() {
-        ExampleVerifier.Observations observed = evaluated(new Refusing());
+        ExampleVerifier.Observations observed = evaluated(REFUSING);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(),
@@ -88,7 +92,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     /** The stand-in was made, and the behavior it was made for failed. The row entered it. */
     @Test
     void aFailureFromTheBehaviorStopsTheRowInsideIt() {
-        ExampleVerifier.Observations observed = evaluated(new Failing());
+        ExampleVerifier.Observations observed = evaluated(FAILING);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.INVOKED, row.stage(), "the behavior was entered");
@@ -107,7 +111,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
      */
     @Test
     void anImplementationThatCouldNotBeReachedLeavesTheRowHavingAppliedNothing() {
-        ExampleVerifier.Observations observed = evaluated(new Unreachable());
+        ExampleVerifier.Observations observed = evaluated(UNREACHABLE);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(), "it never got in");
@@ -123,14 +127,15 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     /**
      * The row could not be put in the form the answerer reads, so it is undecided.
      *
-     * <p>What {@link Handed#neutral} raises, let out by the answerer as the contract says. Nothing
-     * about the row was established, so no diagnostic is said about a model that may be right — and
-     * it does not take the module's evaluation down with it, which is what it did while nothing
-     * caught it.
+     * <p>What is held is what the row makes of a crossing that failed, not the path that produces
+     * one: a row's input is built by this compile's own decoders and is always readable back, so
+     * nothing here can make {@link Handed#neutral} fail for real. Nothing about the row was
+     * established, so no diagnostic is said about a model that may be right — and it does not take
+     * the module's evaluation down with it, which is what it did while nothing caught it.
      */
     @Test
     void aRowThatCouldNotBeHandedOverIsUndecidedRatherThanFailed() {
-        ExampleVerifier.Observations observed = evaluated(new Uncrossable());
+        ExampleVerifier.Observations observed = evaluated(UNCROSSABLE);
 
         RowOutcome row = only(observed);
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(), "it was never handed over");
@@ -144,76 +149,110 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 "the row is reported as one that could not be decided");
     }
 
-    /** A stand-in the answerer will not make. What it could not make is the whole of what it says. */
-    private static final class Refusing implements Answerer {
+    /**
+     * Two behaviors of one module, and what applied them recorded one each.
+     *
+     * <p>What applies a behavior is settled per behavior — a module declares one with a body and one
+     * with none, and only the second can have an implementation supplied for it — so an answerer that
+     * resolves between them has more than one answer to what applied a row. Asked once for the whole
+     * of itself, it could name only one of the two and every row would carry that one.
+     */
+    @Test
+    void whatAppliedARowIsTheBehaviorsAnswerAndNotTheAnswerersOne() {
+        Map<String, Applied> perBehavior = new LinkedHashMap<>();
+        Answerer resolving = (behavior, standins) -> {
+            Applied its = perBehavior.computeIfAbsent(behavior, _ -> new Applied.GeneratedHere());
+            return new Answerer.Applying() {
 
-        @Override
-        public Applied applied() {
-            return new Applied.GeneratedHere();
-        }
+                @Override
+                public Applied applied() {
+                    return its;
+                }
 
-        @Override
-        public Applying applying(String behavior, List<DependencyStandin> standins) {
-            assertEquals(1, standins.size(), "the row does state a stand-in");
-            throw new StandinNotBuilt(standins.get(0).dependency(),
-                    "its base subclass could not be built: (said by the test)");
+                @Override
+                public Object to(List<Handed> arguments) {
+                    throw new InvocationFailure(new IllegalStateException("stopped by the test"));
+                }
+            };
+        };
+
+        List<RowOutcome> rows = evaluated(TWO_BEHAVIORS, resolving).rows();
+
+        assertEquals(2, rows.size());
+        assertEquals(2, perBehavior.size(), "the answerer was asked once per behavior");
+        for (RowOutcome row : rows) {
+            assertSame(perBehavior.get(row.target()), row.run().applied(),
+                    "each row records the answer for the behavior it is about");
         }
+        assertNotSame(rows.get(0).run().applied(), rows.get(1).run().applied(),
+                "so two behaviors of one module do not carry one answer between them");
     }
+
+    private static final String TWO_BEHAVIORS = """
+            module example.twobehaviors
+
+            data Amount = Int
+
+            behavior double : (a: Amount) -> Amount
+                constructs Amount
+
+            let double (a) = Amount(a.value * 2)
+
+            behavior treble : (a: Amount) -> Amount
+                constructs Amount
+
+            let treble (a) = Amount(a.value * 3)
+
+            example double
+              | "twice" : (Amount(1)) -> Amount(2)
+
+            example treble
+              | "thrice" : (Amount(1)) -> Amount(3)
+            """;
+
+    /** A stand-in the answerer will not make. What it could not make is the whole of what it says. */
+    private static final Answerer REFUSING = (behavior, standins) -> {
+        assertEquals(1, standins.size(), "the row does state a stand-in");
+        throw new StandinNotBuilt(standins.get(0).dependency(),
+                "its base subclass could not be built: (said by the test)");
+    };
 
     /** A behavior that stops itself. Read the way the applied code stopping itself is always read. */
-    private static final class Failing implements Answerer {
-
-        @Override
-        public Applied applied() {
-            return new Applied.GeneratedHere();
-        }
-
-        @Override
-        public Applying applying(String behavior, List<DependencyStandin> standins) {
-            return _ -> {
-                throw new InvocationFailure(new IllegalStateException("it stopped itself"));
-            };
-        }
-    }
+    private static final Answerer FAILING = (behavior, standins) -> applying(_ -> {
+        throw new InvocationFailure(new IllegalStateException("it stopped itself"));
+    });
 
     /** An answerer whose implementation is not where it looked. */
-    private static final class Unreachable implements Answerer {
-
-        @Override
-        public Applied applied() {
-            return new Applied.GeneratedHere();
-        }
-
-        @Override
-        public Applying applying(String behavior, List<DependencyStandin> standins) {
-            return _ -> {
-                throw new ImplementationNotReached("no class of that name (said by the test)",
-                        new ClassNotFoundException(behavior));
-            };
-        }
-    }
+    private static final Answerer UNREACHABLE = (behavior, standins) -> applying(_ -> {
+        throw new ImplementationNotReached("no class of that name (said by the test)",
+                new ClassNotFoundException(behavior));
+    });
 
     /**
-     * An answerer that reads a value it cannot put in its own form.
+     * An answerer that cannot put a value in the form it reads.
      *
      * <p>Raises what {@link Handed#neutral} raises rather than reading one, because a row's input is
-     * built by this compile's decoders and always readable back. What is being held is what the row
-     * does with it, which is the same whichever of the two produced it.
+     * built by this compile's own decoders and is always readable back. What is held is what the row
+     * makes of a crossing that failed, which is the same whichever of the two raised it.
      */
-    private static final class Uncrossable implements Answerer {
+    private static final Answerer UNCROSSABLE = (behavior, standins) -> applying(_ -> {
+        throw new FixtureException("`x` is a Nothing, which is not a type this example can read");
+    });
 
-        @Override
-        public Applied applied() {
-            return new Applied.GeneratedHere();
-        }
+    /** An application that says this compile's classes entered the behavior, and runs {@code body}. */
+    private static Answerer.Applying applying(Function<List<Handed>, Object> body) {
+        return new Answerer.Applying() {
 
-        @Override
-        public Applying applying(String behavior, List<DependencyStandin> standins) {
-            return _ -> {
-                throw new FixtureException("`x` is a Nothing, which is not a type this example"
-                        + " can read");
-            };
-        }
+            @Override
+            public Applied applied() {
+                return new Applied.GeneratedHere();
+            }
+
+            @Override
+            public Object to(List<Handed> arguments) {
+                return body.apply(arguments);
+            }
+        };
     }
 
     private static RowOutcome only(ExampleVerifier.Observations observed) {
@@ -223,7 +262,11 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
 
     /** The row, evaluated the way the query asks it, against an answerer the test chooses. */
     private static ExampleVerifier.Observations evaluated(Answerer answerer) {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
+        return evaluated(MODEL, answerer);
+    }
+
+    private static ExampleVerifier.Observations evaluated(String model, Answerer answerer) {
+        Compilation c = Compilation.ofSource(model, "Main");
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
         Map<String, byte[]> classes = c.db()

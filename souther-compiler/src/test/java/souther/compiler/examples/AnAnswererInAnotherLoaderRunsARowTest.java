@@ -138,21 +138,25 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         }
 
         @Override
-        public Applied applied() {
-            return itsOwn;
-        }
-
-        @Override
         public Applying applying(String behavior, List<DependencyStandin> standins) {
             assertEquals(List.of(), standins, "an example of a `let` body depends on nothing");
-            return arguments -> {
-                applied = true;
-                Object[] args = new Object[arguments.size()];
-                for (int i = 0; i < args.length; i++) {
-                    args[i] = decodedHere(arguments.get(i).neutral());
+            return new Applying() {
+
+                @Override
+                public Applied applied() {
+                    return itsOwn;
                 }
-                answer = applyHere(behavior, args);
-                return answer;
+
+                @Override
+                public Object to(List<Handed> arguments) {
+                    applied = true;
+                    Object[] args = new Object[arguments.size()];
+                    for (int i = 0; i < args.length; i++) {
+                        args[i] = decodedHere(arguments.get(i).neutral());
+                    }
+                    answer = applyHere(behavior, args);
+                    return answer;
+                }
             };
         }
 

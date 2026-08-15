@@ -463,6 +463,14 @@ public final class ExampleVerifier {
      */
     private static final class RowState {
         private volatile Stage stage = Stage.NONE;
+        /**
+         * What applied the behavior, as whatever applied it said. Null until the row entered one.
+         *
+         * <p>Volatile for the same reason {@link #stage} is, and written before it: a row given up on
+         * has both read from the other thread, and reading a stage that says the behavior was entered
+         * has to mean the answer to what entered it is there to read.
+         */
+        private volatile Applied applied;
         private Disposition disposition = Disposition.FAILED;
         private FailurePhase failurePhase = FailurePhase.NONE;
         private TypeSymbol expectedArm;
@@ -488,28 +496,46 @@ public final class ExampleVerifier {
             this.disposition = Disposition.INCOMPLETE;
             this.failurePhase = phase;
         }
+
+        /**
+         * How far the row had got and what had entered the behavior, read together.
+         *
+         * <p>One fact and one reading of it. Read as two, a row given up on can have its stage taken
+         * before the worker moved and what applied it taken after, and the pair recorded is then a
+         * row that never happened. The stage is read first, which is what makes the answer beside it
+         * visible: both are volatile and the one that says a behavior was entered is written last.
+         */
+        Reached reached() {
+            Stage at = stage;
+            return new Reached(at, at.reached(Stage.INVOKED) ? applied : null);
+        }
     }
+
+    /** How far a row's evaluation got, and what had entered the behavior if anything had. */
+    private record Reached(Stage stage, Applied applied) {}
 
     /** What the row turned out to be, from the state its worker left. */
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
+        Reached reached = state.reached();
         return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.identity(),
-                state.stage, state.disposition, state.failurePhase, state.expectedArm, state.resultArm,
-                state.inputCases, state.inputs,
-                ran(state.stage, new Counting.Read(state.stepsSpent, state.hits)));
+                reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
+                state.resultArm, state.inputCases, state.inputs,
+                ran(reached, new Counting.Read(state.stepsSpent, state.hits)));
     }
 
     /**
      * What became of the row's evaluation: what applied the behavior, and what this compile counted.
      *
-     * <p>The first is the answerer's own answer, taken where the row got as far as applying anything.
-     * Read off the stage rather than restated, so a row that never entered a behavior cannot record
-     * something as having applied it. The second is taken whatever the row reached, because the
-     * counting starts with the evaluation and a fixture applies the helpers it names before the
-     * behavior is reached.
+     * <p>The first is what the row entered said of itself, taken where the row entered anything. Read
+     * off the stage rather than restated, so a row that never entered a behavior cannot record
+     * something as having applied it — and asked of what was entered rather than of the answerer,
+     * because which of several things applies a behavior is settled per behavior. The second is taken
+     * whatever the row reached, because the counting starts with the evaluation and a fixture applies
+     * the helpers it names before the behavior is reached.
      */
-    private Run ran(Stage reached, Counting counting) {
-        return new Run(reached.reached(Stage.INVOKED)
-                ? answerer.applied() : new Applied.Nothing(), counting);
+    private static Run ran(Reached reached, Counting counting) {
+        return new Run(reached.applied() == null ? new Applied.Nothing() : reached.applied(),
+                counting);
     }
 
     /**
@@ -533,10 +559,11 @@ public final class ExampleVerifier {
                 // which may let it leave the helper it is in, and then the reason would depend on
                 // which thread got there first.
                 String helper = evaluation.helper();
-                // Only the stage, which the worker publishes: the rest of its state is still being
-                // written. How far it got is the difference between a fixture's helper that will not
-                // stop and a behavior that will not stop, which is what the author has to know.
-                Stage reached = evaluation.state.stage;
+                // Only what the worker publishes: the rest of its state is still being written. How
+                // far it got is the difference between a fixture's helper that will not stop and a
+                // behavior that will not stop, which is what the author has to know, and what entered
+                // the behavior comes with it because the two are one reading.
+                Reached reached = evaluation.state.reached();
                 abandon.run();
                 // Not E1910. What did not come back was not shown to go round more than an example
                 // may — it was not counted at all, which is what an evaluation reaching code this
@@ -555,8 +582,9 @@ public final class ExampleVerifier {
                 // what the row says — not zero, which is what a row that passed no counted point
                 // says.
                 rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
-                        row.identity(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
-                        null, null, List.of(), List.of(), ran(reached, new Counting.Unread())));
+                        row.identity(), reached.stage(), Disposition.INCOMPLETE,
+                        FailurePhase.TIMEOUT, null, null, List.of(), List.of(),
+                        ran(reached, new Counting.Unread())));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The evaluated code stopped itself, having gone through more than it was allowed.
@@ -757,6 +785,9 @@ public final class ExampleVerifier {
             return;
         }
         Object result;
+        // What entered it before that it entered, so a row given up on cannot be read as having
+        // entered a behavior with nothing saying what did.
+        state.applied = applying.applied();
         state.stage = Stage.INVOKED;
         try {
             result = applying.to(handed(fixtures, target, args, ins));
@@ -1059,6 +1090,7 @@ public final class ExampleVerifier {
      */
     private static void neverEntered(RowState state) {
         state.stage = Stage.FIXTURES_VALIDATED;
+        state.applied = null;
     }
 
     /**
