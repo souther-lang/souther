@@ -280,7 +280,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
                 MeasurementStatus.COMPLETE,
-                List.of(new AdequacyReport.ModuleReport("example.wide", MeasurementStatus.COMPLETE,
+                List.of(new AdequacyReport.ModuleReport("example.wide", "wide.sou", MeasurementStatus.COMPLETE,
                         List.of(), List.of(behavior))))
                 .adequacy();
     }

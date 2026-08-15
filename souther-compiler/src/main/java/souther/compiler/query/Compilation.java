@@ -570,6 +570,12 @@ public final class Compilation {
      * <p>Always answered, whatever the compile tells a caller about its sources. What a source is
      * called here is how a report is filed and how its regions are quoted; what a caller is told is
      * {@link #sourceIdOf(Db.Found)}, and the two are not the same question.
+     *
+     * <p>Which module the report is a failure of is a third question and not this one. A report
+     * points into another module wherever the code it is about was written there — an invariant of
+     * this module reaching a construction in a helper another module declares — and the caret stays
+     * on that code, because that is what the report is about. Where it is said is
+     * {@link #publishSourceIdsOf(Db.Found)}.
      */
     private String locatedSourceIdOf(Db.Found found) {
         String claimed = found.claimedSourceId();
@@ -577,6 +583,18 @@ public final class Compilation {
             return claimed;
         }
         return found.module() == null ? null : sourceIdOf(found.module());
+    }
+
+    /**
+     * Whether {@code found}'s caret is in a file of some module other than the one it was found
+     * about.
+     *
+     * <p>Answered only where both are known, so this is yes when the compile can say the file is
+     * another module's, and never because it could not say whose it is.
+     */
+    private boolean pointsIntoAnotherModule(Db.Found found) {
+        String owner = moduleOf(locatedSourceIdOf(found));
+        return found.module() != null && owner != null && !owner.equals(found.module());
     }
 
     /**
@@ -594,6 +612,14 @@ public final class Compilation {
      *
      * <p>Read off the regions rather than off a list of files, so every entry is somewhere the
      * report has something to show.
+     *
+     * <p>A caret in another module's file is the second case whether or not the site that found it
+     * said so. A rule of this module is broken by code written in another — an invariant here
+     * reaching a construction in a helper declared there — and the caret belongs on that code, which
+     * is what has to change. Said only there, the module whose rule it is would be told nothing: its
+     * author would have a compile that fails and a clean file in front of them. Said only here, the
+     * author would be sent to a call that constructs nothing. It is written in two files, so it is
+     * said in both, which is what this already does for a report that asks.
      */
     public List<String> publishSourceIdsOf(Db.Found found) {
         String primary = locatedSourceIdOf(found);
@@ -601,7 +627,7 @@ public final class Compilation {
         if (primary != null) {
             saidAt.add(primary);
         }
-        if (found.report().delivery().saidAtEveryRegion()) {
+        if (found.report().delivery().saidAtEveryRegion() || pointsIntoAnotherModule(found)) {
             for (LabeledRegion label : found.report().diagnostic().secondary()) {
                 String where = label.sourceIdOr(primary);
                 if (where != null && !saidAt.contains(where)) {

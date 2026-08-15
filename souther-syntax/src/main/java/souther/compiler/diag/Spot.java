@@ -13,7 +13,15 @@ import souther.compiler.diag.msg.Message;
  */
 public record Spot(String sourceId, Region region, Message said) {
 
-    /** The primary region of {@code d}, in {@code sourceId}. */
+    /**
+     * The primary region of {@code d}, in {@code sourceId}.
+     *
+     * <p>Told rather than read off the region, although the region carries a source of its own. What
+     * a caller is quoting from is the caller's answer: a compile of one file hides source ids
+     * altogether and names none, and a view built on the region's would be about a file that caller
+     * never speaks of. Whoever hands this a name is the one holding the files, and what it has to
+     * hand over is where the primary region is — which is what {@code Located} carries.
+     */
     public static Spot primary(Diagnostic d, String sourceId) {
         return new Spot(sourceId, d.region(), null);
     }

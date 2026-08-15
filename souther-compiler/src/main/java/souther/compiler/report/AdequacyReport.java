@@ -3,6 +3,7 @@ package souther.compiler.report;
 import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
@@ -72,7 +73,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         UNDETERMINED
     }
 
-    public record ModuleReport(String module, MeasurementStatus status,
+    public record ModuleReport(String module, String declaredIn, MeasurementStatus status,
                                List<Incompleteness> incompleteness, List<BehaviorReport> behaviors) {
         public ModuleReport {
             incompleteness = List.copyOf(incompleteness);
@@ -232,7 +233,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (BehaviorReport behavior : behaviors) {
             status = status.and(behavior.status());
         }
-        return new ModuleReport(name, status, incompleteness, behaviors);
+        return new ModuleReport(name, compilation.sourceIdOf(name), status, incompleteness,
+                behaviors);
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -263,7 +265,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BehaviorReport shownBehavior : behaviors) {
                 status = status.and(shownBehavior.status());
             }
-            kept.add(new ModuleReport(m.module(), status, gaps, behaviors));
+            kept.add(new ModuleReport(m.module(), m.declaredIn(), status, gaps, behaviors));
             overall = overall.and(status);
         }
         return new AdequacyReport(schemaVersion, compilerVersion, askedLevel, overall,
@@ -413,7 +415,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
                 partition(out, behavior);
-                branch(out, behavior);
+                branch(out, behavior, module.declaredIn(), names);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -655,7 +657,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * arms and says nothing about their combinations, and a report that said "paths covered" would
      * invite an author to stop looking exactly where there is more to find.
      */
-    private static void branch(StringBuilder out, BehaviorReport behavior) {
+    private static void branch(StringBuilder out, BehaviorReport behavior,
+                               String declaredIn, SourceNameResolver names) {
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null) {
             return;
@@ -682,17 +685,35 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         boolean decided = branch.status() == MeasurementStatus.COMPLETE;
         out.append(String.format("    branch      %d/%d%s%n", branch.coveredObligations(),
                 branch.obligations(), decided ? "" : "   (undecided: a row was not read)"));
-        // The position alone: an arm is part of a body, and a body is written in the module's own
-        // source, which the section this is under already names. Only a row can be somewhere else.
-        // Named only where every row was read: an arm a row that never finished might have gone
-        // through is undecided, and calling it unreached sends the author after a row that exists.
+        // The position alone where the arm is in the module's own source, which the section this is
+        // under already names. It is not always: a body is spliced into whatever calls it, so an arm
+        // written in a helper another module declares is in that module's file, and there the file is
+        // named with it. Named only where every row was read: an arm a row that never finished might
+        // have gone through is undecided, and calling it unreached sends the author after a row that
+        // exists.
         if (!decided) {
             return;
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.ARM_UNREACHED)) {
             out.append(String.format("      · no row goes through `%s` (%s)%n",
-                    f.args().get(0), f.at()));
+                    f.args().get(0), where(f.at(), declaredIn, names)));
         }
+    }
+
+    /**
+     * Where a site is, as this report writes it: the position on its own where it is in the source
+     * the section is about, and the file with it where it is not.
+     *
+     * <p>A line and a column are a place only beside a file. They read as one here because the
+     * section names the module and nearly everything it reports is written there — and a coordinate
+     * from another file, printed the same way, points at whatever happens to sit at those numbers in
+     * the one the reader has in mind.
+     */
+    private static String where(SourcePos at, String declaredIn, SourceNameResolver names) {
+        if (at == null || at.sourceId() == null || at.sourceId().equals(declaredIn)) {
+            return String.valueOf(at);
+        }
+        return names.nameOf(at.sourceId()) + ":" + at;
     }
 
     /**

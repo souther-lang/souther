@@ -1,8 +1,18 @@
 package souther.compiler.diag;
 
+import java.util.Objects;
+
 /**
- * A place in a source: a 1-based line and column, and the source they were read from. Every AST node
- * and token carries one so that compile errors can point at the source (spec §non-functional).
+ * Where a node is placed in this compile, and whether that is where its code is written: a 1-based
+ * line and column, the source they were read from, and {@link WrittenAt}. Every AST node and token
+ * carries one so that compile errors can point at the source (spec §non-functional).
+ *
+ * <p>The coordinate is <b>where this compile places the node</b>, which is where the code is written
+ * for everything a source was read for and is not for a copy that could not keep its own positions.
+ * Reading the line as the line the code is on is right only where {@link #writtenAt()} says so, and
+ * a reader that wants the second question answered asks it rather than inferring it from the first:
+ * inferring it is what {@code BottomInfer} did, by comparing an argument's coordinate with its
+ * call's, and what {@code HelperInliner} did, by comparing the declaring module with its own.
  *
  * <p>A line and a column are enough while one file is being read and not enough afterwards. A
  * module's {@code example} rows, fake tables and values are written in the module's own source and
@@ -17,21 +27,61 @@ package souther.compiler.diag;
  * asking what is under a cursor — it compares the coordinates, which is what
  * {@code Names.spans} does.
  *
- * @param sourceId the source this was read from, or null for a position that was read from none: a
- *        node the compiler synthesized, or a module read off the module path, which is in no source
- *        of the compile that is reading it
+ * <p>{@link #writtenAt()} is the other half of the same question and the reason it is here rather
+ * than beside it: an expansion gives a copy the call site where it cannot give it its own positions,
+ * and after that the coordinate is a place in the caller's file which is not where the code is. That
+ * is a fact about this coordinate, so it travels with it — through every pass that rebuilds a node
+ * keeping its position, which is all of them.
+ *
+ * @param line the 1-based line this node is placed at
+ * @param column the 1-based column this node is placed at, in UTF-16 code units
+ * @param sourceId the source the coordinate is in, or null for a position that is in none: a node
+ *        the compiler synthesized, or a module read off the module path, which is in no source of
+ *        the compile that is reading it
+ * @param writtenAt whether the code this names is written at the coordinate, or the coordinate
+ *        stands in for code written out of sight ({@link WrittenAt})
  */
-public record SourcePos(int line, int column, String sourceId) {
+public record SourcePos(int line, int column, String sourceId, WrittenAt writtenAt) {
 
     public SourcePos {
         if (sourceId != null && sourceId.isBlank()) {
             throw new IllegalArgumentException("a source id names a source or is absent, never blank");
         }
+        Objects.requireNonNull(writtenAt, "a position says whether the code it names is written at it");
+    }
+
+    /** A place a source was read for, where the code it names is written. */
+    public SourcePos(int line, int column, String sourceId) {
+        this(line, column, sourceId, WrittenAt.HERE);
     }
 
     /** A position read from no source. */
     public SourcePos(int line, int column) {
-        this(line, column, null);
+        this(line, column, null, WrittenAt.HERE);
+    }
+
+    /**
+     * This coordinate, standing in for code written out of sight — what an expansion gives a copy it
+     * cannot give its own positions.
+     *
+     * <p>Set here and nowhere else that a source is read: a coordinate a parser made is where the
+     * code is, by construction, and one that says otherwise was made by a pass that put code
+     * somewhere it was not written.
+     */
+    public SourcePos standingInFor(WrittenAt out) {
+        return new SourcePos(line, column, sourceId, out);
+    }
+
+    /** The same place, {@code units} along the same line — the other end of a region of that width.
+     *  It stands in for whatever this stands in for: the two ends are one place. */
+    public SourcePos along(int units) {
+        return new SourcePos(line, column + units, sourceId, writtenAt);
+    }
+
+    /** Whether the code this names is written somewhere this compile cannot show, this coordinate
+     *  being where it was reached from instead. */
+    public boolean isOutOfSight() {
+        return writtenAt instanceof WrittenAt.OutOfSight;
     }
 
     @Override

@@ -198,8 +198,23 @@ public final class Diagnostic {
             return this;
         }
 
+        /**
+         * The place, over the {@code width} units of text it is about — and over none of them where
+         * the place only stands in for code written out of sight.
+         *
+         * <p>The width is measured on the text the report is about, and where that text is out of
+         * sight the coordinate is somewhere else: a call in the caller's file, whose own text is
+         * whatever length it happens to be. Underlining a construction's width from there covers
+         * however many characters of the call the two numbers happen to agree on — three columns
+         * sized for {@code Yen} landing on {@code atL}. A point claims what is true, which is that
+         * this is where the code was reached from.
+         */
         public Builder at(SourcePos pos, int width) {
-            this.region = pos == null ? null : Region.ofWidth(pos, width);
+            if (pos == null) {
+                this.region = null;
+            } else {
+                this.region = pos.isOutOfSight() ? Region.point(pos) : Region.ofWidth(pos, width);
+            }
             return this;
         }
 
