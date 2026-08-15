@@ -150,8 +150,14 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
                 "a copy is read against the caller's file and says which file that is");
     }
 
-    /** And the arm survives the splice: what kind of thing this compile is without does not change
-     *  with how a caller spells its way in. */
+    /**
+     * The splice replaces the name and nothing else.
+     *
+     * <p>Where the code is written does not change with how a caller spells its way in, and neither
+     * does what kind of thing this compile is without. Held as one string the refinement overwrites
+     * the module — {@code souther.int} becomes {@code Int.abs} — and finding the module again would
+     * mean splitting a spelling, which is provenance inferred from how a name is written.
+     */
     @Test
     void theSpliceRefinesTheNameAndKeepsWhatTheCodeCameFrom() {
         List<SourcePos> positions = new ArrayList<>();
@@ -166,7 +172,9 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         assertTrue(said.stream().allMatch(s -> s.contains("TheStandardLibrary")),
                 () -> "the library is still what the copy came from: " + said);
         assertTrue(said.stream().allMatch(s -> s.contains("Int.abs")),
-                () -> "under the name the call reaches it by, not the module the parse knew: " + said);
+                () -> "under the name the call reaches it by: " + said);
+        assertTrue(said.stream().allMatch(s -> s.contains("souther.int")),
+                () -> "and the module the parse knew is still there to be read: " + said);
     }
 
     // --- the fixtures ---------------------------------------------------------------------------

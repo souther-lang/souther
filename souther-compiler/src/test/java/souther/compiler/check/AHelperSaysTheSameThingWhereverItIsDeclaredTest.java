@@ -149,7 +149,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said(),
                 "the rule broken is the same rule");
-        assertEquals(WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up.atLeastZero")), one.pos().writtenAt());
+        assertEquals(WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up", "up.atLeastZero")), one.pos().writtenAt());
         assertEquals("down.sou", one.pos().sourceId(),
                 "the caret is in the file the reader is compiling, since there is no other");
     }

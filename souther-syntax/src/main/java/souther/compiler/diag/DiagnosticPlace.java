@@ -40,17 +40,41 @@ public sealed interface DiagnosticPlace {
     }
 
     /**
-     * A stretch of {@code source} a reader can be sent to.
+     * A stretch of source a reader can be sent to.
      *
      * <p>Both a place a source of this compile was read for and a copy of code from out of sight
      * that was given the caller's place to be read against. The two differ in what the coordinate
      * says about itself ({@link WrittenAt}), and not in whether there is somewhere to send a reader.
+     *
+     * <p>One component, and the source is read off it. A source held beside a region that carries
+     * one is two values for one fact with nothing keeping them the same — which is the shape this
+     * whole change is about, and it does not stop being that shape because the type is new. Held as
+     * a pair, {@code new InSource("A", Region.point(new SourcePos(1, 1, "B")))} would be a legal
+     * value, and the rule that they agree would be a habit of one factory rather than something the
+     * type says.
+     *
+     * <p>So what the factory checks, this checks. Reaching {@link #of} is how one of these is made
+     * and not the reason one of them is sound.
      */
-    record InSource(String source, Region region) implements DiagnosticPlace {
+    record InSource(Region region) implements DiagnosticPlace {
 
         public InSource {
-            Objects.requireNonNull(source, "a place a reader is sent to names its source");
-            Objects.requireNonNull(region, "a place a reader is sent to is a stretch of it");
+            if (region == null || region.start() == null || region.end() == null) {
+                throw new NotAPlace("a place a reader is sent to is a stretch of a source: "
+                        + region);
+            }
+            if (!Objects.equals(region.start().sourceId(), region.end().sourceId())) {
+                throw new NotOnePlace(region.start().sourceId(), region.end().sourceId());
+            }
+            if (region.start().sourceId() == null) {
+                throw new NotAPlace("a place a reader is sent to names the source it is in: "
+                        + region);
+            }
+        }
+
+        /** The source this is in, which is the source the region was read from. */
+        public String source() {
+            return region.start().sourceId();
         }
     }
 
@@ -92,7 +116,7 @@ public sealed interface DiagnosticPlace {
             throw new NotOnePlace(start.sourceId(), end.sourceId());
         }
         if (start.sourceId() != null) {
-            return new InSource(start.sourceId(), region);
+            return new InSource(region);
         }
         if (Citation.of(start) instanceof Citation.OutOfSight out) {
             return new Unavailable(out.provenance());

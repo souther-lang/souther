@@ -121,7 +121,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
         assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() == null).toList(),
                 "every coordinate the backend is built from names a source this compile has");
         assertTrue(positions.stream().anyMatch(p ->
-                        WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up.doubled")).equals(p.writtenAt())),
+                        WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up", "up.doubled")).equals(p.writtenAt())),
                 "the body came from a module read off the path, and the lowering did not forget");
     }
 

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -210,9 +211,27 @@ class ASecondaryRegionNamesItsFileTest {
         LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
                 new NameMessage.WriteItOnItsOwn("x"));
 
-        assertEquals(new DiagnosticPlace.InSource("fakes",
-                        Region.ofWidth(new SourcePos(3, 3, "fakes"), 4)),
+        assertEquals(new DiagnosticPlace.InSource(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4)),
                 label.place());
+        assertEquals("fakes",
+                assertInstanceOf(DiagnosticPlace.InSource.class, label.place()).source(),
+                "which it reads off the region rather than holding beside it");
+    }
+
+    /**
+     * And a place cannot be built claiming a source its region was not read from.
+     *
+     * <p>Held as a pair the two could disagree, and the rule that they do not would be a habit of
+     * whoever built one. It is the same defect as the one this whole area is about, and a new type
+     * is not an exemption from it — the source is one component's to answer.
+     */
+    @Test
+    void aPlaceCannotClaimASourceItsRegionWasNotReadFrom() {
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> new DiagnosticPlace.InSource(new Region(new SourcePos(3, 3, "rows"),
+                        new SourcePos(3, 7, "fakes"))));
+        assertThrows(DiagnosticPlace.NotAPlace.class,
+                () -> new DiagnosticPlace.InSource(Region.ofWidth(new SourcePos(3, 3), 4)));
     }
 
     /** And that survives being read: what the renderer resolves a source for is the label's own,
