@@ -45,7 +45,24 @@ record CitableRegion(Region region) {
         if (!Objects.equals(start, end)) {
             throw new NotOnePlace(start, end);
         }
-        return start == null ? Optional.empty() : Optional.of(new CitableRegion(region));
+        return canShow(region.start()) ? Optional.of(new CitableRegion(region)) : Optional.empty();
+    }
+
+    /**
+     * Whether this compile can show the reader the place {@code where} names.
+     *
+     * <p>The question this type is about, on its own, for the callers holding a point rather than a
+     * stretch — {@link HelperInliner} deciding whether a body it is copying may keep the positions it
+     * was written at. Both read it here: a compile that answered the same question two ways would
+     * quote one place and refuse to quote the other, which is how a helper of a module compiled
+     * alongside came to be treated as shipped source.
+     *
+     * <p>A position was read from a source of this compile or it was not, and the sources of a
+     * compile are exactly the ones it was handed: the standard library and a module read back off the
+     * module path are parsed from text that names no source, which is what says so.
+     */
+    static boolean canShow(SourcePos where) {
+        return where != null && where.sourceId() != null;
     }
 
     /**

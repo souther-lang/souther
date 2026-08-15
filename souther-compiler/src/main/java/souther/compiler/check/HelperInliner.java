@@ -15,6 +15,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.WrittenAt;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -1207,11 +1208,14 @@ public final class HelperInliner {
         // and nothing left afterwards says the two came from one application.
         Map<String, Type> applied = instantiation(helper, mine);
         Arguments arguments = bindArguments(rawCall, call, helper, args, applied, ours);
-        // a prelude helper's body is stamped with the call site, so errors inside it point at
-        // the user's call, not at the shipped source of souther.*
+        // A body this compile cannot show is copied with the call site stamped over it, so a report
+        // from inside it points at the user's call rather than at a line nobody holds — and the
+        // stamp says that is what it is doing, so nothing downstream reads the call as the place the
+        // code is written.
+        WrittenAt written = whereTheBodyIs(call, helper);
         Renaming renaming = new Renaming(arguments.subst(), new Copy(helper.writtenBody(), ours),
-                keepsItsPositions(call) ? null : call.pos(),
-                keepsItsPositions(call) ? null : call.region());
+                written instanceof WrittenAt.OutOfSight out ? call.pos().standingInFor(out) : null,
+                written instanceof WrittenAt.OutOfSight out ? standingIn(call.region(), out) : null);
         Hir.Expr body = inline(rename(helper.writtenBody(), renaming));   // expand nested helpers too
         List<Hir.Bound> bound = new ArrayList<>(arguments.bound());
         // A scoped lambda the body still names was passed rather than applied, so nothing
@@ -1917,22 +1921,40 @@ public final class HelperInliner {
     }
 
     /**
-     * Whether expanding this helper leaves the positions in its body alone. A module-own helper does:
-     * its body lies in the user's file, so it is already where a diagnostic should point. A lambda
-     * given to a fn parameter does too: it is the caller's own code, and a lambda written in a prelude
-     * body was stamped with the call site when that body was renamed, so either way its positions are
-     * the ones to report. Everything else is a prelude helper, whose body lies in the shipped source of
-     * {@code souther.*} and is stamped with the call site instead.
+     * Where the body this call expands is written, as far as this compile can show it: {@link
+     * WrittenAt#HERE} when the copy may keep the positions it was written at, and what it stands in
+     * for when it may not.
+     *
+     * <p>Asked of the one thing that decides it — whether this compile can show the reader the place
+     * those positions name ({@link CitableRegion#canShow}). It used to be asked of the module that
+     * declared the body, which is a different question that happened to have the same answer while
+     * the only body from elsewhere was the standard library's. A module of the same project answers
+     * them differently: its body is in a file the reader holds, and it was being treated as shipped
+     * source — reported at the call, with the caret sized for a construction three files away.
+     *
+     * <p>A lambda is not asked. It is not a declaration and has no source of its own: one the caller
+     * wrote is in the caller's file, and one written in a body from elsewhere was given the call site
+     * when that body was copied. Either way its positions are the ones already decided for the body
+     * holding it, and asking again would answer about the wrong thing.
      */
-    private boolean keepsItsPositions(Hir.Apply call) {
-        return switch (call.denotes()) {
-            // a lambda, wherever it came from: the caller wrote it, or a prelude body wrote it and
-            // was stamped with the call site when that body was renamed
-            case ValueName.Local _ -> true;
-            case ValueName.Helper helper -> helper.module().equals(table.module());
-            case ValueName.Stdlib _, ValueName.Behavior _, ValueName.OfType _,
-                    ValueName.Builtin _ -> false;
-        };
+    private WrittenAt whereTheBodyIs(Hir.Apply call, Hir.FnDef helper) {
+        if (call.denotes() instanceof ValueName.Local || CitableRegion.canShow(helper.pos())) {
+            return WrittenAt.HERE;
+        }
+        // Reached rather than declared: `List.map` is what a reader here writes and what a report
+        // about it should quote, and which module declares it is the other half, read off the
+        // declaration rather than split back out of the name.
+        return new WrittenAt.OutOfSight(call.reaches());
+    }
+
+    /** {@code call}'s own place, said to stand in for a body written out of sight — what a copy that
+     *  may not keep its own positions is given, ends and all, so no part of it claims to be written
+     *  where the rest of it only stands. */
+    private static Region standingIn(Region call, WrittenAt out) {
+        if (call == null || call.start() == null || call.end() == null) {
+            return call;
+        }
+        return new Region(call.start().standingInFor(out), call.end().standingInFor(out));
     }
 
     /**
