@@ -372,6 +372,12 @@ final class Terms {
      * and what that rounding does to an end is not something this reads. A divisor the path only
      * bounds away from zero is not read either — it is the sign and the magnitude of a written
      * number that the rule is about.
+     *
+     * <p>And only by a divisor an {@code Int} can hold. The arithmetic composed here is over
+     * numbers of any size, so a written form can reach one no {@code Int} is; the rule is about the
+     * operator, whose divisor is an {@code Int}. Asked for one as the other this threw, and a throw
+     * here is read as a limit of the analysis and swallowed — which left the construction reported
+     * as nothing at all rather than as a clause nothing here establishes.
      */
     private Derivation quotient(Core.Binary b, Denotations at) {
         if (granularityOf(b.type()) != Granularity.DISCRETE) {
@@ -383,10 +389,18 @@ final class Terms {
             return null;
         }
         BigDecimal written = divisor.constant();
-        if (written.signum() == 0 || written.stripTrailingZeros().scale() > 0) {
+        if (written.signum() == 0 || written.stripTrailingZeros().scale() > 0
+                || !isWholeNumberAnIntHolds(written)) {
             return null;
         }
-        return new Derivation.Quotient(numerator, written.longValueExact());
+        return new Derivation.Quotient(numerator, written.longValue());
+    }
+
+    /** Whether {@code written} is a number an {@code Int} is (spec §primitives), which is what the
+     * operator's divisor is. */
+    private static boolean isWholeNumberAnIntHolds(BigDecimal written) {
+        return written.compareTo(BigDecimal.valueOf(Long.MIN_VALUE)) >= 0
+                && written.compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) <= 0;
     }
 
     /**

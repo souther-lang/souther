@@ -1616,7 +1616,7 @@ let total (a, b) = {
 }
 ----
 
-*A quotient by a written divisor.* `+x / k+` over `+Int+` truncates toward zero (<<stdlib-int>>), which is monotone, so the quotient lies between the ends of `+x+` put through it — exchanged where `+k+` is negative. The divisor must be a whole number other than zero that the reading can read as a constant, which a name given one is (<<invariant-discharge-terms>>). A divisor the guards only bound away from zero is not read: what the rule is about is the sign and the magnitude of a number that is written.
+*A quotient by a written divisor.* `+x / k+` over `+Int+` truncates toward zero (<<stdlib-int>>), which is monotone, so the quotient lies between the ends of `+x+` put through it — exchanged where `+k+` is negative. The divisor must be a whole number other than zero that the reading can read as a constant, which a name given one is (<<invariant-discharge-terms>>), and one an `+Int+` holds — the arithmetic a constant is read through composes numbers of any size, and what the operator divides by is an `+Int+`. A divisor the guards only bound away from zero is not read: what the rule is about is the sign and the magnitude of a number that is written.
 
 `+/+` over `+Decimal+` is *not* read. It rounds half away from zero at a precision the run time sets (<<stdlib-decimal>>) rather than truncating, and where an end of the quotient lands under that rounding is not something the procedure states. A clause over one is left to the run-time check.
 

@@ -208,6 +208,29 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
+     * A divisor written as a number no {@code Int} holds is not one the rule reads, and the clause
+     * is owed as it is owed over any other value nothing is known of.
+     *
+     * <p>The walk composes the arithmetic of a written divisor over numbers of any size, and the
+     * rule is about a divisor an {@code Int} can be. Asking for the one as the other threw, and a
+     * throw here is taken as a limit of the analysis and swallowed — so the construction was
+     * reported as nothing at all, where the same construction over a divisor of 100 is an error.
+     * Declining the rule is what leaves the clause owed, which is what a value nothing is known of
+     * owes.
+     */
+    @Test
+    void aDivisorNoIntCanHoldIsNotOneTheRuleReads() {
+        assertEquals(List.of("E2011"), warningsOf(TYPES + """
+                behavior part : (x: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                let part (x) = {
+                    guard x >= 0
+                        else Bad
+                    NonNeg(x / (9223372036854775807 + 1))
+                }
+                """));
+    }
+
+    /**
      * {@code /} on {@code Decimal} rounds rather than truncating, and where an end lands under that
      * rounding is not something this states — so the quotient is read as nothing and the clause
      * stands.
