@@ -159,8 +159,13 @@ public final class ConstEval {
 
     /** Whether two folded values are the one value. A {@code Decimal} answers by amount and not by
      * how it was written, as it does everywhere else: {@code 1.0m} and {@code 1.00m} are one number,
-     * and a comparison folding the other way would decide at compile time what the run time denies. */
-    private static boolean equal(Object a, Object b) {
+     * and a comparison folding the other way would decide at compile time what the run time denies.
+     *
+     * <p>Not private, because whether two written numbers are one number is asked elsewhere too —
+     * holding two builds' declarations against each other asks it of every literal they state
+     * ({@code DeclarationAgreement}). Asked of this rather than answered again there: a second
+     * answer is the rule restated, and a restatement is what goes wrong the day the rule moves. */
+    public static boolean equal(Object a, Object b) {
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
             return x.compareTo(y) == 0;
         }
