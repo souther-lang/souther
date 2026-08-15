@@ -84,6 +84,30 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
         assertTrue(refused.getMessage().contains("other.sou"), refused.getMessage());
     }
 
+    /**
+     * And the same of the other half of where a coordinate is: a region running from a copy of one
+     * module to a copy of another is two places as much as one running between two files.
+     *
+     * <p>Read off the start alone the second end's answer goes unrecorded, and the region comes back
+     * as a report about the first with nothing anywhere saying otherwise. Measured before this was
+     * written: no region in the compiler's own corpus has ends that disagree about provenance.
+     */
+    @Test
+    void aRegionWhoseEndsCameFromTwoModulesIsNotOnePlaceEither() {
+        SourcePos fromA = new SourcePos(3, 5).standingInFor(
+                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.a")));
+        SourcePos fromB = new SourcePos(3, 20).standingInFor(
+                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.b")));
+
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(fromA, fromB)));
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, "model.sou"),
+                        new SourcePos(3, 20, "model.sou").standingInFor(
+                                WrittenAt.outOfSight(
+                                        new SourceProvenance.APublishedModule("lib.a"))))));
+    }
+
     /** The same either way round: one end knowing its source and the other not is the same broken
      *  region as two ends naming two. */
     @Test

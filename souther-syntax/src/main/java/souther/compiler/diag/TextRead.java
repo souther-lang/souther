@@ -13,14 +13,22 @@ import java.util.Objects;
  * knew it was reading a published module could still name a source and get "the code is here" for
  * free, which is the shape this closes.
  *
- * <p>Three ways to build one, because there are three kinds of text this compiler parses. There is
- * deliberately no way to say "reassembled, and here is its source id": a text put back together out
- * of what a module published is in no file, and a caller with a file for it is reading a file.
+ * <p>Three ways to build one, because there are three kinds of text this compiler parses, and they
+ * are the only three: a class with a private constructor rather than a record, so that the ways are
+ * the ways rather than a habit the factories happen to share. As a record it took any pair, and
+ * {@code new TextRead("app.sou", WrittenAt.outOfSight(…))} — a file of this compile whose code is
+ * written in a module off the path — was a value this class says does not exist. A vocabulary that
+ * a canonical constructor walks around is documentation, and this type is here to be a rule.
  */
-public record TextRead(String sourceId, WrittenAt writtenAt) {
+public final class TextRead {
 
-    public TextRead {
-        Objects.requireNonNull(writtenAt, "a parse says whether what it reads is where the code is");
+    private final String sourceId;
+    private final WrittenAt writtenAt;
+
+    private TextRead(String sourceId, WrittenAt writtenAt) {
+        this.sourceId = sourceId;
+        this.writtenAt = Objects.requireNonNull(writtenAt,
+                "a parse says whether what it reads is where the code is");
     }
 
     /** A file this compile holds, under the identity it holds it by. Its positions are where the
@@ -49,6 +57,10 @@ public record TextRead(String sourceId, WrittenAt writtenAt) {
      * they say so from the moment they are made. Everything downstream — a body spliced into a
      * caller, a clause a construction is judged against, a guard that drew a line — reads the answer
      * rather than working it out from the source being absent.
+     *
+     * <p>There is deliberately no way to say "reassembled, and here is its source id": a text put
+     * back together out of what a module published is in no file, and a caller with a file for it is
+     * reading a file.
      */
     public static TextRead whatAModulePublished(SourceProvenance provenance) {
         return new TextRead(null, WrittenAt.outOfSight(provenance));
@@ -57,5 +69,10 @@ public record TextRead(String sourceId, WrittenAt writtenAt) {
     /** The position of {@code line} and {@code column} in this text. */
     public SourcePos at(int line, int column) {
         return new SourcePos(line, column, sourceId, writtenAt);
+    }
+
+    @Override
+    public String toString() {
+        return "TextRead[" + (sourceId == null ? "unnamed" : sourceId) + " " + writtenAt + "]";
     }
 }

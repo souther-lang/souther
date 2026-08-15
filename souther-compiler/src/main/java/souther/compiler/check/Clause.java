@@ -73,12 +73,18 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
             throw new NotOneClause("clause " + a.id + " is named " + a.name.orElse(null)
                     + " in one reading and " + b.name.orElse(null) + " in another");
         }
-        if (a.at instanceof DiagnosticPlace.InSource && b.at instanceof DiagnosticPlace.InSource
-                && !a.at.equals(b.at)) {
+        // What two readings may differ in is whether this compile can point at the clause, which
+        // is knowledge about the compile. Anything else — two sources, two modules — is the model
+        // saying the one clause is written in two places. Asked of both arms: while a reading that
+        // could not point was an absent value the two of them were equal by construction, and they
+        // stopped being equal the day the answer started carrying where the code came from.
+        boolean aPoints = a.at instanceof DiagnosticPlace.InSource;
+        boolean bPoints = b.at instanceof DiagnosticPlace.InSource;
+        if (aPoints == bPoints && !a.at.equals(b.at)) {
             throw new NotOneClause("clause " + a.id + " is written at " + a.at
                     + " in one reading and at " + b.at + " in another");
         }
-        return a.at instanceof DiagnosticPlace.InSource ? a : b;
+        return aPoints ? a : b;
     }
 
     /**

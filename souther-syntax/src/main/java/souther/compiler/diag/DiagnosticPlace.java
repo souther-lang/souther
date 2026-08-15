@@ -59,13 +59,7 @@ public sealed interface DiagnosticPlace {
     record InSource(Region region) implements DiagnosticPlace {
 
         public InSource {
-            if (region == null || region.start() == null || region.end() == null) {
-                throw new NotAPlace("a place a reader is sent to is a stretch of a source: "
-                        + region);
-            }
-            if (!Objects.equals(region.start().sourceId(), region.end().sourceId())) {
-                throw new NotOnePlace(region.start().sourceId(), region.end().sourceId());
-            }
+            heldToOnePlace(region);
             if (region.start().sourceId() == null) {
                 throw new NotAPlace("a place a reader is sent to names the source it is in: "
                         + region);
@@ -104,17 +98,8 @@ public sealed interface DiagnosticPlace {
      * @throws NotOnePlace where the ends were read from two sources
      */
     static DiagnosticPlace of(Region region) {
-        if (region == null) {
-            throw new NotAPlace("a label is about a region and was given none");
-        }
+        heldToOnePlace(region);
         SourcePos start = region.start();
-        SourcePos end = region.end();
-        if (start == null || end == null) {
-            throw new NotAPlace("a region a label is about has two ends: " + region);
-        }
-        if (!Objects.equals(start.sourceId(), end.sourceId())) {
-            throw new NotOnePlace(start.sourceId(), end.sourceId());
-        }
         if (start.sourceId() != null) {
             return new InSource(region);
         }
@@ -146,6 +131,39 @@ public sealed interface DiagnosticPlace {
     }
 
     /**
+     * Refuses a region that is not one place before anything is asked of it.
+     *
+     * <p>Both components of where a coordinate is, and not just the file. A place has one source
+     * and one provenance, and a region whose ends disagree about either is a place that is two
+     * places — {@link SourcePos} says as much of its own identity, two coordinates differing in
+     * provenance being read differently by every surface. Read off the start alone, the second end's
+     * answer would go unrecorded: a region running from a copy of {@code A} to a copy of {@code B}
+     * would come back as a report about {@code A}, and nothing anywhere would say otherwise.
+     *
+     * <p>Held here rather than on {@link Region}, which is a pair of coordinates and is built by
+     * every pass; this is where a pair is asked to be a place. Measured before it was written: no
+     * region in the compiler's own corpus has ends that disagree about provenance.
+     */
+    private static void heldToOnePlace(Region region) {
+        if (region == null) {
+            throw new NotAPlace("a label is about a region and was given none");
+        }
+        SourcePos start = region.start();
+        SourcePos end = region.end();
+        if (start == null || end == null) {
+            throw new NotAPlace("a region a label is about has two ends: " + region);
+        }
+        if (!Objects.equals(start.sourceId(), end.sourceId())) {
+            throw new NotOnePlace("a region runs from " + start.sourceId() + " to "
+                    + end.sourceId() + ", which is not one place in one source");
+        }
+        if (!start.writtenAt().equals(end.writtenAt())) {
+            throw new NotOnePlace("a region runs from " + start.writtenAt() + " to "
+                    + end.writtenAt() + ", which is not one place written in one place");
+        }
+    }
+
+    /**
      * A region whose ends were read from two sources.
      *
      * <p>Its own type because a check that would see one swallows what it throws: an analysis that
@@ -162,9 +180,8 @@ public sealed interface DiagnosticPlace {
 
         private static final long serialVersionUID = 1L;
 
-        NotOnePlace(String start, String end) {
-            super("a region runs from " + start + " to " + end
-                    + ", which is not one place in one source");
+        NotOnePlace(String message) {
+            super(message);
         }
     }
 }
