@@ -3,7 +3,6 @@ package souther.compiler.meta;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Prelude;
-import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 
@@ -103,6 +102,13 @@ public final class DeclarationAgreement {
      * not read them, which is a compile failing when a module is being imported. Here it is one of
      * the things being asked about, so it is answered rather than raised — a run that let it out
      * would stop evaluating a module because one behavior's answer brought classes it could not read.
+     *
+     * <p>Every way of raising is the answer rather than a failure, which is why what is caught is
+     * as wide as it is. This compiler declining what a class says is one (a compile exception);
+     * the class file not being one this JVM reads is another — truncated bytes, a major version from
+     * a newer JDK, which the class-file reader raises as it sees fit. An answer brings its classes
+     * from wherever it was built, so both are ordinary things to meet here, and both mean the same:
+     * nothing about the two could be established.
      */
     private static Reading reading(String module, PublishedModule.Classes classes) {
         try {
@@ -110,7 +116,7 @@ public final class DeclarationAgreement {
             return published == null
                     ? new Reading(null, Agreement.Reason.NOTHING_PUBLISHED)
                     : new Reading(published, null);
-        } catch (CompileException _) {
+        } catch (RuntimeException _) {
             return new Reading(null, Agreement.Reason.NOT_READABLE_HERE);
         }
     }
@@ -151,8 +157,11 @@ public final class DeclarationAgreement {
         }
         // An import binds names, and a name bound to another module is another declaration under the
         // same spelling. The modules themselves are compared by following them; what is compared here
-        // is what each import brings into scope and under which qualifier.
-        if (!sameShape(bindings(ours.module()), bindings(theirs.module()))) {
+        // is what each import brings into scope and under which qualifier — of the names the
+        // declarations compared above are actually written with.
+        Set<String> written = namesWritten(compared(ours.module(), readThrough));
+        if (!sameShape(bindings(ours.module(), written),
+                bindings(theirs.module(), namesWritten(compared(theirs.module(), readThrough))))) {
             return new Agreement.Disagree(module, "import");
         }
         return new Agreement.Agree();
@@ -251,6 +260,15 @@ public final class DeclarationAgreement {
         return reached;
     }
 
+    /** Everything of {@code module} this comparison reads: its declarations, its behaviors'
+     *  signatures, and the helpers a declaration cannot be read without. */
+    private static List<Object> compared(Ast.Module module, Set<String> readThrough) {
+        List<Object> forms = new ArrayList<>(module.defs());
+        forms.addAll(module.behaviors());
+        forms.addAll(publishedHelpers(module, readThrough));
+        return forms;
+    }
+
     /** The published helpers of {@code module} that are among {@code readThrough}. */
     private static List<Ast.FnDef> publishedHelpers(Ast.Module module, Set<String> readThrough) {
         List<Ast.FnDef> kept = new ArrayList<>();
@@ -263,23 +281,101 @@ public final class DeclarationAgreement {
     }
 
     /**
-     * What each import brings into scope, by the module it brings it from.
+     * What each import brings into scope, by the module it brings it from — of the names something
+     * compared here is written with.
+     *
+     * <p>A module publishes more than a crossing is read through, and its import lines are what all
+     * of it needed. An import only an unread helper wanted is not part of what a declaration says
+     * any more than that helper is, and comparing it would report a build that changed nothing but
+     * the thing this just decided not to compare.
      *
      * <p>The names as a set, since an import list is which names it brings in and not the order they
      * are written in. By what each name is rather than how it was spelled, for the reason every other
      * name here is compared that way.
      */
-    private static Map<String, List<Object>> bindings(Ast.Module module) {
+    private static Map<String, List<Object>> bindings(Ast.Module module, Set<String> written) {
         Map<String, List<Object>> bound = new LinkedHashMap<>();
         for (Ast.Import imported : module.imports()) {
             Set<String> brought = new LinkedHashSet<>();
             for (Ast.ImportedName name : imported.importedNames()) {
-                brought.add(name.written().canonical());
+                if (written.contains(name.written().canonical())) {
+                    brought.add(name.written().canonical());
+                }
             }
-            bound.put(imported.module(),
-                    List.of(imported.alias() == null ? "" : imported.alias(), brought));
+            String alias = imported.alias() == null ? "" : imported.alias();
+            if (brought.isEmpty() && !reachedUnder(alias, written)
+                    && !reachedUnder(imported.module(), written)) {
+                continue;   // nothing compared here is written with anything this brings in
+            }
+            bound.put(imported.module(), List.of(alias, brought));
         }
         return bound;
+    }
+
+    /** Whether any name written here is qualified by {@code qualifier}. */
+    private static boolean reachedUnder(String qualifier, Set<String> written) {
+        if (qualifier.isEmpty()) {
+            return false;
+        }
+        for (String name : written) {
+            if (name.startsWith(qualifier + ".")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Every name written in the declarations being compared.
+     *
+     * <p>Over the same forms the comparison walks, so what an import is held to bringing in is
+     * exactly what those forms are written with. A name that appears only in something not compared
+     * is not here, which is the point.
+     */
+    private static Set<String> namesWritten(List<?> forms) {
+        Set<String> written = new LinkedHashSet<>();
+        for (Object form : forms) {
+            collectNames(form, written, new java.util.IdentityHashMap<>());
+        }
+        return written;
+    }
+
+    private static void collectNames(Object form, Set<String> into, Map<Object, Boolean> seen) {
+        if (form == null || ERASED.contains(form.getClass()) || seen.put(form, Boolean.TRUE) != null) {
+            return;
+        }
+        if (form instanceof WrittenName name) {
+            into.add(name.canonical());
+            return;
+        }
+        if (form instanceof Optional<?> maybe) {
+            collectNames(maybe.orElse(null), into, seen);
+            return;
+        }
+        if (form instanceof Iterable<?> many) {
+            for (Object one : many) {
+                collectNames(one, into, seen);
+            }
+            return;
+        }
+        if (form instanceof Map<?, ?> byKey) {
+            for (Map.Entry<?, ?> entry : byKey.entrySet()) {
+                collectNames(entry.getKey(), into, seen);
+                collectNames(entry.getValue(), into, seen);
+            }
+            return;
+        }
+        if (form instanceof String spelled) {
+            // A name a form holds as text — what a call is written as, what a type names.
+            into.add(spelled);
+            return;
+        }
+        if (!form.getClass().isRecord()) {
+            return;
+        }
+        for (RecordComponent part : form.getClass().getRecordComponents()) {
+            collectNames(read(part, form), into, seen);
+        }
     }
 
     /**
@@ -341,7 +437,27 @@ public final class DeclarationAgreement {
             if (!comparedAsAValue(ours.getClass())) {
                 throw new IllegalStateException(unclassified(ours.getClass()));
             }
+            // A number is compared by amount. Java's equality for one takes the scale it was written
+            // with into account, and the language does not: two invariants stating `1.0m` and
+            // `1.00m` admit the same values, and reporting that as a build that has moved would be
+            // this comparison deciding something the language denies.
+            if (ours instanceof java.math.BigDecimal mine
+                    && theirs instanceof java.math.BigDecimal yours) {
+                return mine.compareTo(yours) == 0;
+            }
             return ours.equals(theirs);
+        }
+        // Everything else a declaration is made of is a form of the grammar, and a form of the
+        // grammar is compared part by part. That is the safe default of the two: a form added to the
+        // language and compared when it need not have been reports a build that has not moved, which
+        // is a diagnostic someone reads and answers by erasing it here — where a form left out
+        // reports agreement that was never established, and nobody ever finds out.
+        //
+        // A record from outside the grammar is not one of those, and is where the decision has to be
+        // made rather than defaulted: what arrives that way carries how something was resolved or
+        // where it came from, and neither is what a declaration says.
+        if (!isAFormOfTheGrammar(ours.getClass())) {
+            throw new IllegalStateException(unclassified(ours.getClass()));
         }
         for (RecordComponent part : ours.getClass().getRecordComponents()) {
             if (!sameShape(read(part, ours), read(part, theirs))) {
@@ -360,7 +476,57 @@ public final class DeclarationAgreement {
      * declaration means has to be put here — which is a decision, made by whoever adds it, rather
      * than a silence.
      */
-    private static final Set<Class<?>> ERASED = Set.of(SourcePos.class, Region.class);
+    private static final Set<Class<?>> ERASED = Set.of(
+            SourcePos.class, Region.class,
+            // Where a construction was carried in from, and what a coverage point was numbered as.
+            // Both are records of how a declaration reached where it stands, kept for questions this
+            // compile answers about itself; neither is anything a value crossing is read by.
+            souther.compiler.types.ConstructionOrigin.class,
+            souther.compiler.types.CoverageOrigin.class,
+            // A binding's identity, which is its owner and the order it was reached in. Two builds
+            // number their bindings by walking them, so this says a declaration was read rather than
+            // saying anything the declaration says.
+            souther.compiler.types.BindingId.class);
+
+    /** Where the forms of the grammar are written. */
+    private static final String GRAMMAR = "souther.compiler.ast.";
+
+    /**
+     * The forms a declaration is made of that are not written in the grammar.
+     *
+     * <p>Each is part of what a declaration means rather than of how it got here: which kind of thing
+     * a name denotes ({@code ValueName} — a bare name meaning a standard-library function and one
+     * meaning a local are two declarations), what a binding belongs to, and what a map's keys are
+     * represented as at a boundary. They are named one by one because being outside the grammar is
+     * where the question has to be asked.
+     */
+    private static final Set<String> MEANT_OUTSIDE_THE_GRAMMAR = Set.of(
+            "souther.compiler.types.ValueName",
+            "souther.compiler.types.BindingOwner",
+            "souther.compiler.types.MapKeyRepresentation");
+
+    /**
+     * Whether {@code type} is a form a declaration is made of, compared part by part.
+     *
+     * <p>The grammar's own forms are, and so are the few named ones that are not written in it. A
+     * record from anywhere else is neither: it arrived with a declaration rather than being part of
+     * one, and what to do about it is a decision rather than a default.
+     */
+    static boolean isAFormOfTheGrammar(Class<?> type) {
+        if (!type.isRecord()) {
+            return false;
+        }
+        String name = type.getName();
+        if (name.startsWith(GRAMMAR)) {
+            return true;
+        }
+        for (String meant : MEANT_OUTSIDE_THE_GRAMMAR) {
+            if (name.equals(meant) || name.startsWith(meant + "$")) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /** Whether the comparison erases {@code type}. Asked by what holds this rule to covering every
      *  form a declaration can be made of, so that the two cannot come to disagree. */
@@ -379,9 +545,10 @@ public final class DeclarationAgreement {
     static boolean comparedAsAValue(Class<?> type) {
         return type == String.class || type == Boolean.class || type == Integer.class
                 || type == Long.class || type == Character.class || type == Double.class
-                // A number a declaration states — the bound of an invariant, a default. Compared as
-                // it was written, scale and all: two builds stating it differently have written two
-                // declarations, and which of them a value is admitted by is the question here.
+                // A number a declaration states — the bound of an invariant, a default. Which
+                // numbers it admits is what it says, and `1.0m` and `1.00m` are one number here as
+                // they are everywhere else in the language, so the two are compared by amount rather
+                // than by how they were written ({@code sameNumber}).
                 || type == java.math.BigDecimal.class
                 // Which declaration a name means, by the module and name that declare it rather than
                 // by the object standing for it. A field's type is this, and a field whose type is

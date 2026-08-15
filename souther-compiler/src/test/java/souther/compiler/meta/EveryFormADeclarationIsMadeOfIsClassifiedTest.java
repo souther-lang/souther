@@ -66,11 +66,15 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
     void andTheWalkWouldSeeAnUndecidedTypeIfThereWereOne() {
         assertFalse(decided(java.util.UUID.class),
                 "a type nothing here classifies is not passed over");
+        assertFalse(DeclarationAgreement.isAFormOfTheGrammar(
+                        souther.compiler.types.BindingId.class),
+                "a record from outside the grammar is not a form of a declaration by being one");
     }
 
     /** Whether {@code type} is one the comparison has an answer for. */
     private static boolean decided(Class<?> type) {
-        return type.isRecord() || erased(type) || DeclarationAgreement.comparedAsAValue(type);
+        return DeclarationAgreement.isAFormOfTheGrammar(type) || erased(type)
+                || DeclarationAgreement.comparedAsAValue(type);
     }
 
     /** Whether the comparison erases it — where something is written, and nothing else. */

@@ -283,7 +283,9 @@ public final class ExampleVerifier {
     private final Map<PublishedModule.Classes, Agreement> agreements = new IdentityHashMap<>();
     /** The behaviors an answer could not be established for have already been reported about. A
      * behavior's rows may be written in more than one block, and what is reported is about neither
-     * the block nor the row. */
+     * the block nor the row. It is per source, which is what a verifier is: a diagnostic is said
+     * where it can be quoted, and a reader of the other source would otherwise be shown rows that
+     * stopped with nothing saying why. */
     private final Set<String> said = new LinkedHashSet<>();
 
     private ExampleVerifier(souther.compiler.check.Prepared.ExampleExecution module,
@@ -325,9 +327,9 @@ public final class ExampleVerifier {
             out.add(notRunnable(ex));
             return;
         }
-        // Said once for the behavior: not once for each of its rows, and not once for each block they
-        // are written in. One answer and one module disagreeing is one fact, and a behavior's rows may
-        // be written in as many places as they belong in.
+        // Said once for the behavior in this source: not once for each of its rows, and not once for
+        // each block they are written in. One answer and one module disagreeing is one fact, and a
+        // behavior's rows may be written in as many blocks as they belong in.
         if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)
                 && said.add(target.name())) {
             out.add(cannotBeHeldTo(ex, target.name(), target.agreement()));

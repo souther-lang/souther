@@ -439,21 +439,6 @@ public final class Output {
     }
 
     /**
-     * The loader an <em>evaluation</em> runs against, where a class read from the path is counted on
-     * the way in.
-     *
-     * <p>A published module carries what an importer needs to read its declarations and no more, so a
-     * behavior's body stays in the jar it was built into. Regenerating what does travel and taking
-     * the rest from the jar is the one thing that must not be done: a class defined here and one
-     * defined by the parent are different types under one binary name, so a module split between them
-     * hands its own types to its own implementation and the cast fails — which is reported as an
-     * example that does not hold, about a model that is fine.
-     *
-     * <p>So the path's classes are defined here, whole, with a counted point on every backward
-     * branch. One loader, one version of every type, and a row that loops inside a dependency spends
-     * the budget there rather than running until the wait ends.
-     */
-    /**
      * Where this compilation reads declarations of a module from — its own generated classes first,
      * then the path.
      *
@@ -477,6 +462,21 @@ public final class Output {
         });
     }
 
+    /**
+     * The loader an <em>evaluation</em> runs against, where a class read from the path is counted on
+     * the way in.
+     *
+     * <p>A published module carries what an importer needs to read its declarations and no more, so a
+     * behavior's body stays in the jar it was built into. Regenerating what does travel and taking
+     * the rest from the jar is the one thing that must not be done: a class defined here and one
+     * defined by the parent are different types under one binary name, so a module split between them
+     * hands its own types to its own implementation and the cast fails — which is reported as an
+     * example that does not hold, about a model that is fine.
+     *
+     * <p>So the path's classes are defined here, whole, with a counted point on every backward
+     * branch. One loader, one version of every type, and a row that loops inside a dependency spends
+     * the budget there rather than running until the wait ends.
+     */
     static ClassLoader evaluationLoader(Db db) {
         ModulePath path = db.ask(new Front.Path()).value();
         ClassLoader compiler = Output.class.getClassLoader();

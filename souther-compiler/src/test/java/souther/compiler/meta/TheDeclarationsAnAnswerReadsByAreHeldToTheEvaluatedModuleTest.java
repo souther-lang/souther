@@ -72,7 +72,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     private static final String EXPOSING_MODEL = """
             module example.published exposing ( Title, describe )
-            import String ( length )
+            import String ( length, trim )
 
             data Title = String
                 invariant longEnough(value)
@@ -82,9 +82,22 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
             let longEnough (s: String) : Bool = length(s) > 0
 
-            let describe (t: Title) : String = t.value
+            let describe (t: Title) : String = trim(t.value)
 
             let rename (t) = Title(t.value)
+            """;
+
+    /** A model whose invariant states a number, for what stating it another way is. */
+    private static final String DECIMAL_MODEL = """
+            module example.rates
+
+            data Rate = Decimal
+                invariant value >= 1.0m
+
+            behavior raise : (r: Rate) -> Rate
+                constructs Rate
+
+            let raise (r) = Rate(r.value)
             """;
 
     /** The same model with a behavior that answers with a union, for what a case being added is. */
@@ -256,8 +269,8 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     @Test
     void anExposedHelperNoDeclarationReadsIsNotADisagreement() {
-        String moved = EXPOSING_MODEL.replace("let describe (t: Title) : String = t.value",
-                "let describe (t: Title) : String = \"a different answer\"");
+        String moved = EXPOSING_MODEL.replace("let describe (t: Title) : String = trim(t.value)",
+                "let describe (t: Title) : String = trim(trim(t.value))");
 
         Agreement held = DeclarationAgreement.of("example.published",
                 declarationsOf(moved), declarationsOf(EXPOSING_MODEL));
@@ -295,6 +308,57 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "an import list is the names it brings in, not the order they are written in");
+    }
+
+    /**
+     * An import only a helper nothing is read through needed.
+     *
+     * <p>The other half of the same rule. A published helper no declaration is read through is not
+     * compared, and neither is what it brought in to be written: an import is on the module because
+     * something published needed it, and a comparison holding the whole import list would report a
+     * build that changed only the thing it just decided not to compare.
+     */
+    @Test
+    void anImportOnlyAnUnreadHelperNeededIsNotADisagreement() {
+        String withoutIt = EXPOSING_MODEL
+                .replace("import String ( length, trim )", "import String ( length )")
+                .replace("let describe (t: Title) : String = trim(t.value)",
+                        "let describe (t: Title) : String = t.value");
+
+        Agreement held = DeclarationAgreement.of("example.published",
+                declarationsOf(withoutIt), declarationsOf(EXPOSING_MODEL));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "what a helper nothing reads through brought in is not read through either");
+    }
+
+    /**
+     * A number stated with another scale is the same number.
+     *
+     * <p>What an invariant says is which values it admits, and `1.0m` and `1.00m` admit the same
+     * ones — the language says so wherever else two of them meet. A comparison deciding otherwise
+     * would report a stale build over a difference the model does not have.
+     */
+    @Test
+    void aDecimalWrittenWithAnotherScaleIsNotADisagreement() {
+        String written = DECIMAL_MODEL.replace("value >= 1.0m", "value >= 1.00m");
+
+        Agreement held = DeclarationAgreement.of("example.rates",
+                declarationsOf(written), declarationsOf(DECIMAL_MODEL));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "the two admit the same values, which is what the invariant says");
+    }
+
+    /** And a bound that really moved is still a disagreement. */
+    @Test
+    void aDecimalBoundThatMovedIsADisagreement() {
+        String raised = DECIMAL_MODEL.replace("value >= 1.0m", "value >= 1.5m");
+
+        Agreement held = DeclarationAgreement.of("example.rates",
+                declarationsOf(raised), declarationsOf(DECIMAL_MODEL));
+
+        assertInstanceOf(Agreement.Disagree.class, held);
     }
 
     /**
