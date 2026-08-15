@@ -86,7 +86,7 @@ public interface DiagnosticRenderer {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
         String said = d.literalMessage() != null ? d.literalMessage()
                 : d.said() == null ? "" : Messages.render(d.said(), locale);
-        if (!(caretStandsInFor(d) instanceof WrittenAt.OutOfSight out)) {
+        if (!(citedBy(d) instanceof Citation.OutOfSight out)) {
             return said;
         }
         String about = Messages.render(
@@ -95,9 +95,9 @@ public interface DiagnosticRenderer {
         return said.isEmpty() ? about : said + " " + about;
     }
 
-    /** What this report's caret stands in for, or {@link WrittenAt#HERE} where it is at the code —
-     *  and where it points at nothing at all, there being no claim about a place to qualify. */
-    private static WrittenAt caretStandsInFor(Diagnostic d) {
-        return d.pos() == null ? WrittenAt.HERE : d.pos().writtenAt();
+    /** What this report's caret cites, or null where it points at nothing at all, there being no
+     *  claim about a place to qualify. */
+    static Citation citedBy(Diagnostic d) {
+        return d.pos() == null ? null : Citation.of(d.pos());
     }
 }
