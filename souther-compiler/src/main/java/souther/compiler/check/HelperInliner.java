@@ -1098,8 +1098,8 @@ public final class HelperInliner {
         // code is written.
         WrittenAt written = whereTheBodyIs(call, helper);
         Renaming renaming = new Renaming(arguments.subst(), new Copy(helper.writtenBody(), ours),
-                written instanceof WrittenAt.OutOfSight out ? call.pos().standingInFor(out) : null,
-                written instanceof WrittenAt.OutOfSight out ? standingIn(call.region(), out) : null);
+                written.isOutOfSight() ? call.pos().standingInFor(written) : null,
+                written.isOutOfSight() ? standingIn(call.region(), written) : null);
         Hir.Expr body = inline(rename(helper.writtenBody(), renaming));   // expand nested helpers too
         List<Hir.Bound> bound = new ArrayList<>(arguments.bound());
         // A scoped lambda the body still names was passed rather than applied, so nothing
@@ -1836,7 +1836,7 @@ public final class HelperInliner {
         // Reached rather than declared: `List.map` is what a reader here writes and what a report
         // about it should quote, and which module declares it is the other half, read off the
         // declaration rather than split back out of the name.
-        return new WrittenAt.OutOfSight(call.answered().reaches());
+        return WrittenAt.outOfSight(call.answered().reaches());
     }
 
     /** {@code call}'s own place, said to stand in for a body written out of sight — what a copy that

@@ -3,6 +3,7 @@ package souther.compiler.query;
 
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
@@ -235,8 +236,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
             Map<String, souther.compiler.partition.GuardReachability> out = new LinkedHashMap<>();
@@ -355,8 +355,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), producing);
+                    souther.compiler.coverage.CoverageSites.of(producing);
             Map<String, Effective> reachableArms = db.ask(new Reached(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -405,7 +404,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             // What every line this module's rules drew came to, asked once and read here. Measuring a
@@ -431,12 +430,6 @@ public final class Adequacy {
             }
             return Answer.of(Ordered.map(out));
         }
-
-        private static String sourceIdOf(Db db, String module) {
-            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
-        }
-
     }
 
     /**
@@ -475,8 +468,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
@@ -727,10 +719,17 @@ public final class Adequacy {
         /**
          * The arms no row goes through, one entry per arm.
          *
-         * <p>Named at the first occurrence the body holds. Where the copies keep the position they
-         * were written at they all say the same thing; where a copy was stamped with the call site
-         * that spliced it — a helper of another module — the occurrences are at different places and
-         * one of them has to be the one shown, since the arm is one arm and the report says so once.
+         * <p>Named at the first occurrence the body holds. Where the copies keep the positions they
+         * were written at they all say the same thing; where a copy could not — the body came from a
+         * module this compile has no source for, so each copy was given the call site that spliced it
+         * — the occurrences are at different places and one of them has to be the one shown, since
+         * the arm is one arm and the report says so once.
+         *
+         * <p>Which one is a choice about where to send a reader and not about where the arm is. What
+         * each occurrence carries says the arm is written out of sight and names the declaration, so
+         * the report says that however this chooses; the choice only decides which call the reader is
+         * shown. A module of this compile that declares the helper is not this case at all — its body
+         * is in a file the reader holds, and every copy keeps its own positions.
          */
         public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
             List<souther.compiler.coverage.CoverageSites.Site> out = new ArrayList<>();
@@ -1054,8 +1053,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(
-                            Coverage.sourceIdOf(db, name), bodies);
+                    souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
@@ -1437,11 +1435,20 @@ public final class Adequacy {
      * not be completed is worth printing — it says a row may be missing — and is not worth failing a
      * build over, because telling an author to write a row they may already have written is worse than
      * saying nothing.
+     *
+     * <p>{@code at} is a {@link souther.compiler.diag.Citation} and not a place. Most of these are
+     * about a declaration this compile read, where the two are the same thing; an arm is not, being
+     * one of a body that may have been spliced in from a file nobody holds. A report reading a
+     * coordinate cannot tell the two apart, and printed the second as though it were the first.
      */
-    public record Finding(Kind kind, String behavior, MeasurementStatus status, SourcePos at,
-                          List<Object> args) {
+    public record Finding(Kind kind, String behavior, MeasurementStatus status,
+                          Citation at, List<Object> args) {
 
         public Finding {
+            // A finding is about somewhere. A place-less one used to become a warning with no
+            // caret, which nothing produced and nothing wanted; now the reading of the citation
+            // rests on there being one, so the type says so rather than the reader finding out.
+            java.util.Objects.requireNonNull(at, "a finding is about a place");
             args = List.copyOf(args);
         }
 
@@ -1515,7 +1522,7 @@ public final class Adequacy {
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
                 out.add(new Finding(Kind.OUTPUT_CASE_UNSPECIFIED, behavior.name(), status,
-                        behavior.pos(), List.of(missing.name(), behavior.name())));
+                        Citation.of(behavior.pos()), List.of(missing.name(), behavior.name())));
             }
             // Where the behavior answered for no row, every case is unverified and naming each of
             // them adds nothing to that. Asked of the rows rather than of the declaration: the two
@@ -1533,14 +1540,14 @@ public final class Adequacy {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
                         out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,
-                                behavior.pos(), List.of(missing.name(), behavior.name())));
+                                Citation.of(behavior.pos()), List.of(missing.name(), behavior.name())));
                     }
                 }
             }
             for (int i = 0; i < signature.inputs().size(); i++) {
                 for (TypeSymbol missing : signature.inputs().get(i).unspecified()) {
                     out.add(new Finding(Kind.INPUT_CASE_UNSPECIFIED, behavior.name(), status,
-                            behavior.pos(), List.of(missing.name(), i + 1, behavior.name())));
+                            Citation.of(behavior.pos()), List.of(missing.name(), i + 1, behavior.name())));
                 }
             }
         }
@@ -1562,7 +1569,7 @@ public final class Adequacy {
                 }
                 for (String missing : axis.uncovered()) {
                     out.add(new Finding(Kind.AXIS_CLASS_UNCOVERED, behavior.name(), axis.status(),
-                            behavior.pos(), List.of(missing)));
+                            Citation.of(behavior.pos()), List.of(missing)));
                 }
             }
             for (BoundaryAssessment boundary : partition.boundaries()) {
@@ -1572,8 +1579,8 @@ public final class Adequacy {
                 // does, and a row at it may be one nobody can write.
                 if (boundary.isUnmetGap()) {
                     out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
-                            MeasurementStatus.COMPLETE, behavior.pos(),
-                            List.of(boundary.axis(), boundary.value(), boundary.origin())));
+                            MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
+                            List.of(boundary.axis(), boundary.value(), boundary.rule())));
                 }
             }
             // What the model divides this position no way at all, which is the classes question and
@@ -1581,7 +1588,7 @@ public final class Adequacy {
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
                 if (position.isAbsent()) {
                     out.add(new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
-                            MeasurementStatus.COMPLETE, behavior.pos(),
+                            MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
                             List.of(position.at().toString())));
                 }
             }
@@ -1606,11 +1613,11 @@ public final class Adequacy {
             for (List<Object> each : unread) {
                 // Not measured, because nothing here established anything either way about it.
                 out.add(new Finding(Kind.PARTITION_NOT_READ, behavior.name(),
-                        MeasurementStatus.NOT_MEASURED, behavior.pos(), each));
+                        MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()), each));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
-                        MeasurementStatus.COMPLETE, behavior.pos(),
+                        MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
                         List.of(dropped.axis().toString())));
             }
         }
@@ -1641,7 +1648,7 @@ public final class Adequacy {
             }
             for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
                 out.add(new Finding(Kind.ARM_UNREACHED, behavior.name(), branch.status(),
-                        arm.at().pos(), List.of(arm.label(), arm.behavior())));
+                        arm.at(), List.of(arm.label(), arm.behavior())));
             }
         }
     }
@@ -1699,14 +1706,21 @@ public final class Adequacy {
         private static Report warning(Finding finding) {
             List<Object> said = finding.args();
             souther.compiler.diag.Diagnostic.Builder built = souther.compiler.diag.Diagnostic
-                    .at(finding.at())
+                    .at(sentTo(finding.at()))
                     .say(switch (finding.kind()) {
                         case OUTPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowExpectsThatCase(
                                 text(said, 0), text(said, 1));
                         case INPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowAppliesItToThatCase(
                                 text(said, 0), text(said, 1), text(said, 2));
-                        case BOUNDARY_UNMET -> new ExampleMessage.NoRowIsAtThatBoundary(
-                                text(said, 0), text(said, 1), text(said, 2));
+                        // The rule named without a place. Nothing here knows what to call a
+                        // source, so a line and a column written into the sentence would be read
+                        // against whichever file the reader has in mind. Where the rule is a
+                        // guard, the place is pointed at rather than said.
+                        case BOUNDARY_UNMET -> rule(said).isAGuard()
+                                ? new ExampleMessage.NoRowIsAtTheLineAGuardDrew(
+                                        text(said, 0), text(said, 1))
+                                : new ExampleMessage.NoRowIsAtThatBoundary(
+                                        text(said, 0), text(said, 1), rule(said).named());
                         case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
                                 text(said, 0), text(said, 1));
                         default -> throw new IllegalArgumentException(
@@ -1715,13 +1729,57 @@ public final class Adequacy {
             switch (finding.kind()) {
                 case OUTPUT_CASE_UNSPECIFIED ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(text(said, 0)));
-                case BOUNDARY_UNMET ->
-                        built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                case BOUNDARY_UNMET -> {
+                    built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                    // Where the rule has a place rather than a name, the place is a second region
+                    // and not words in the sentence: a renderer resolves what to call its file,
+                    // and a body written out of sight says so off its own coordinate.
+                    //
+                    // Pointed at only where this compile can quote it. A region naming no source is
+                    // resolved against the file the diagnostic is in, so a label on one would sit on
+                    // whatever happens to be at those numbers in a file the code is not in — which
+                    // is the thing this branch is about, and the reason a place is asked before it
+                    // is pointed at rather than after.
+                    rule(said).citation().ifPresent(cited -> {
+                        souther.compiler.diag.SourceRef where = switch (cited) {
+                            case souther.compiler.diag.Citation.Written w -> w.at();
+                            case souther.compiler.diag.Citation.OutOfSight o -> o.reachedFrom();
+                        };
+                        if (where.sourceId() == null) {
+                            return;
+                        }
+                        built.secondaryIn(where.sourceId(),
+                                souther.compiler.diag.Region.point(where.pos()),
+                                new ExampleMessage.TheGuardThatDrawsTheLine());
+                    });
+                }
                 case ARM_UNREACHED ->
                         built.hint(new ExampleMessage.EitherARowIsMissingOrNothingReachesIt());
                 default -> { }   // the message says all there is to say
             }
             return Report.of(built.build());
+        }
+
+        /**
+         * Where a reader is sent for a finding: the place, or where the code was reached from when
+         * it is written out of sight.
+         *
+         * <p>Only where to put the caret. What the warning says about that place is the body's, said
+         * off the coordinate it is built at — which carries the same provenance this reads, so the
+         * two cannot come apart.
+         */
+        private static SourcePos sentTo(Citation cited) {
+            return switch (cited) {
+                case Citation.Written written -> written.at().pos();
+                case Citation.OutOfSight out -> out.reachedFrom().pos();
+            };
+        }
+
+        /** The rule a boundary finding is about, which it carries as itself rather than as words:
+         *  what to say about it differs between a report, which can name a file, and a diagnostic,
+         *  which cannot. */
+        private static souther.compiler.partition.OriginRef rule(List<Object> said) {
+            return (souther.compiler.partition.OriginRef) said.get(2);
         }
 
         /** What a finding put at {@code at}, as the text a message carries. */

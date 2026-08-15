@@ -2,7 +2,8 @@ package souther.compiler.coverage;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
-import souther.compiler.diag.SourceRef;
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
 
@@ -68,13 +69,17 @@ public final class CoverageSites {
     /**
      * One arm, as it stands in the tree that runs.
      *
+     * @param at          where the arm is written, as a report may say it. A {@link Citation} and
+     *                    not a place, because an arm of a body spliced in from out of sight is at a
+     *                    call in the caller's file and is not written there — a report handed the
+     *                    coordinate said it was, in both of its renderings
      * @param index       what identifies it in this run — the probe number, and what a hit set holds.
      *                    One per occurrence: the emitter lights this one, and the reachability
      *                    analysis proves things about this one
      * @param ordinal     where it comes in its behavior, for display
      * @param obligation  what a row would be owed for, which several occurrences share
      */
-    public record Site(String behavior, Kind kind, String label, SourceRef at,
+    public record Site(String behavior, Kind kind, String label, Citation at,
                        int index, int ordinal, Obligation obligation) {
 
         public enum Kind {
@@ -126,8 +131,15 @@ public final class CoverageSites {
      * {@code GuardRef} at all — there is nothing left for a row to reach, and a reference with two
      * absent sides would report the line as never met however the model is exercised.
      */
+    /**
+     * @param at the fork's own place. A coordinate and not a reference over one: a reference
+     *           carries a source beside the one the coordinate has, and a walk over one module
+     *           pairs its own with a position from a helper another module wrote. Nothing reads
+     *           the pair, and a value that can hold two answers about one place is one a reader
+     *           can pick the wrong half of.
+     */
     public record GuardRef(String behavior, CoverageOrigin origin, int siteIndexThen,
-                           int siteIndexElse, SourceRef at) {
+                           int siteIndexElse, SourcePos at) {
 
         /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
          * drawn on the condition is one line however many of them there are. */
@@ -208,8 +220,8 @@ public final class CoverageSites {
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
-    public static Plan of(String sourceId, Map<String, Core> behaviorBodies) {
-        Walk walk = new Walk(sourceId);
+    public static Plan of(Map<String, Core> behaviorBodies) {
+        Walk walk = new Walk();
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
@@ -219,7 +231,6 @@ public final class CoverageSites {
 
     private static final class Walk {
 
-        private final String sourceId;
         private final List<Site> sites = new ArrayList<>();
         private final List<GuardRef> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
@@ -228,8 +239,7 @@ public final class CoverageSites {
         private String behavior;
         private int ordinal;
 
-        Walk(String sourceId) {
-            this.sourceId = sourceId;
+        Walk() {
         }
 
         void behavior(String name, Core body) {
@@ -285,7 +295,11 @@ public final class CoverageSites {
          */
         private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part) {
             int index = sites.size();
-            sites.add(new Site(behavior, kind, label, new SourceRef(sourceId, owner.pos()),
+            // Of the node's own coordinate. This walk is over one module and an arm of a
+            // helper another module of this compile wrote is in that module's file, so a
+            // source carried here beside the position would be the wrong half of two
+            // answers about one place. The walk holds none for that reason.
+            sites.add(new Site(behavior, kind, label, Citation.of(owner.pos()),
                     index, ordinal++, new Obligation(behavior, origin, part)));
             return index;
         }
@@ -349,7 +363,7 @@ public final class CoverageSites {
                     byNode.put(iff, new int[] {then, els});
                     if (then != NO_SITE || els != NO_SITE) {
                         guards.add(new GuardRef(behavior, iff.origin(), then, els,
-                                new SourceRef(sourceId, iff.pos())));
+                                iff.pos()));
                         comparisons(iff.cond());
                     }
                 }

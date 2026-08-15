@@ -54,7 +54,9 @@ public final class JsonRenderer implements DiagnosticRenderer {
                     }
                 }
                 s.put("region", region(other.region()));
-                s.put("label", Messages.render(other.said(), locale));
+                s.put("label", DiagnosticRenderer.qualified(
+                        Messages.render(other.said(), locale),
+                        other.region().start(), locale));
                 // A label is a message like the line above it and carries values of its own — the
                 // type an operand has, the clause a construction reaches — so a tool reads them by
                 // name here too. Written for one of the three and not the others is how a reader of
@@ -105,6 +107,21 @@ public final class JsonRenderer implements DiagnosticRenderer {
         return JSON.writeValueAsString(obj);
     }
 
+    /**
+     * A region, and what its numbers are.
+     *
+     * <p>{@code writtenAt} because they are where this compile met the code, which is where the code
+     * is written for everything read from a source this compile holds and is a call in the caller's
+     * file for a body spliced in from one it does not. The sentence in {@code message} says so, and
+     * a tool reading this interface is reading the structure rather than the prose — so a consumer
+     * that had only these numbers was told an arm of {@code List.filter} is at {@code m.sou:15:23}.
+     *
+     * <p>The words are the citation's own, which is what the adequacy report writes them from too. A
+     * consumer that has learned to read one of the two documents can read the other.
+     *
+     * <p>Both regions go through here, the one under the caret and every secondary. A secondary
+     * pointing into a copied body makes the same claim the primary would.
+     */
     private Map<String, Object> region(Region region) {
         SourcePos s = region.start();
         SourcePos e = region.end();
@@ -113,6 +130,7 @@ public final class JsonRenderer implements DiagnosticRenderer {
         r.put("startCol", s.column());
         r.put("endLine", e.line());
         r.put("endCol", e.column());
+        r.put("writtenAt", new LinkedHashMap<String, String>(Citation.of(s).writtenAtFields()));
         return r;
     }
 }

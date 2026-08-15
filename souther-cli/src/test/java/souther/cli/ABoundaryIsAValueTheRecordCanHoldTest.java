@@ -164,7 +164,10 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         List<String> asked = boundariesOf(gated);
 
         assertEquals(4, asked.size(), () -> "asked for " + asked);
-        assertFalse(asked.stream().anyMatch(l -> l.contains("guard@")),
+        // The word and not the spelling. A guard says `guard@15:23` where it is written in a file
+        // this compile holds and names its declaration where it is not, so matching the first of
+        // those would stop seeing the second — which is a line drawn by a guard all the same.
+        assertFalse(asked.stream().anyMatch(l -> l.contains("guard")),
                 () -> "no interval starts at 1440, so the comparison has no line to be at: " + asked);
     }
 

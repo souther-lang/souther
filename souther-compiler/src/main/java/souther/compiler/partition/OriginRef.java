@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.TypeSymbol;
 
@@ -61,12 +63,14 @@ public sealed interface OriginRef {
      */
     record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
                        souther.compiler.coverage.CoverageSites.Obligation comparison,
-                       SourceRef at, boolean valueBelongsBelow, Witness witness,
+                       Citation at, boolean valueBelongsBelow,
+                       Witness witness,
                        boolean holdsAtTheValue, boolean singles) implements OriginRef {
 
         public GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
                            souther.compiler.coverage.CoverageSites.Obligation comparison,
-                           SourceRef at, boolean valueBelongsBelow, Witness witness,
+                           Citation at, boolean valueBelongsBelow,
+                           Witness witness,
                            boolean holdsAtTheValue) {
             this(guard, site, comparison, at, valueBelongsBelow, witness, holdsAtTheValue, false);
         }
@@ -150,15 +154,71 @@ public sealed interface OriginRef {
         };
     }
 
-    /** Where this came from, for a report to print. */
-    default String describe() {
+    /**
+     * Where this came from, as a report writes it, with the sources under the names {@code names}
+     * gives them and the section it is printed under being about {@code sectionSource}.
+     *
+     * <p>A guard has no name, so what identifies it is where it is written — and that is a place, so
+     * it is said the way every other place a report names is said. Its own file where that is not the
+     * section's, and the declaration it is written in where this compile has no source for it. Built
+     * from the place instead, one compile reported a guard of {@code Int.abs} as {@code guard@7:22}
+     * two lines under an arm of that same body saying where it was.
+     *
+     * <p>A type and an invariant have names, and a name is the same wherever it is read, so they take
+     * no resolver and are given one only because this is one question.
+     */
+    default String describe(SourceNameResolver names, String sectionSource) {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
-            case GuardOrigin g -> "guard@" + g.at().pos();
-            case NarrowedOrigin n -> n.bound().describe() + " within "
+            case GuardOrigin g -> switch (g.at()) {
+                case Citation.Written _ -> "guard@" + g.at().said(names, sectionSource);
+                case Citation.OutOfSight _ -> "guard in " + g.at().said(names, sectionSource);
+            };
+            case NarrowedOrigin n -> n.bound().describe(names, sectionSource) + " within "
                     + n.within().stream().map(TypeSymbol::name)
                             .collect(java.util.stream.Collectors.joining(" or "));
+        };
+    }
+
+    /**
+     * The same rule, named without a place.
+     *
+     * <p>What a diagnostic's own sentence says. A diagnostic is built where no reader is — nothing
+     * there knows what to call a source — so a place written into its text would be a line and a
+     * column with no file, read against whichever file the report happens to be about. Where the rule
+     * is a guard, the place is pointed at instead, by {@link #citation}.
+     */
+    default String named() {
+        return switch (this) {
+            case TypeOrigin t -> "type " + t.type().name();
+            case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
+            // Never rendered to a reader: a rule with no name gets a sentence of its own, so the
+            // catalog holds those words in every language rather than this building them in one.
+            // What reaches this is a caller that wanted something to call the rule anyway.
+            case GuardOrigin _ -> "a guard";
+            case NarrowedOrigin n -> n.bound().named() + " within "
+                    + n.within().stream().map(TypeSymbol::name)
+                            .collect(java.util.stream.Collectors.joining(" or "));
+        };
+    }
+
+    /** Whether a guard drew this line, through however many narrowings. Asked rather than matched
+     *  on the text: what a rule is called is a rendering, and two of them read the same word. */
+    default boolean isAGuard() {
+        return switch (this) {
+            case GuardOrigin _ -> true;
+            case NarrowedOrigin n -> n.bound().isAGuard();
+            case TypeOrigin _, InvariantOrigin _ -> false;
+        };
+    }
+
+    /** Where the rule is written, where it is a rule that has a place rather than a name. */
+    default java.util.Optional<Citation> citation() {
+        return switch (this) {
+            case GuardOrigin g -> java.util.Optional.of(g.at());
+            case NarrowedOrigin n -> n.bound().citation();
+            case TypeOrigin _, InvariantOrigin _ -> java.util.Optional.empty();
         };
     }
 }

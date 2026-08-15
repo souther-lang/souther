@@ -55,7 +55,7 @@ class ThresholdNormalizationTest {
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
         List<Threshold> thresholds = guards.thresholds();

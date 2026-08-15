@@ -292,7 +292,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertFalse(lines.isEmpty(), "the invariant draws two");
         for (BoundaryAssessment line : lines) {
             assertEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, line.reason(),
-                    line.origin() + " at " + line.value());
+                    line.rule().named() + " at " + line.value());
         }
     }
 
@@ -380,9 +380,9 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertFalse(partition.boundaries().isEmpty(), "the invariant and the guard draw lines");
         for (BoundaryAssessment line : partition.boundaries()) {
             assertNotEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, line.reason(),
-                    line.origin() + " at " + line.value());
+                    line.rule().named() + " at " + line.value());
             assertEquals(MeasurementStatus.PARTIAL, line.status(),
-                    line.origin() + " at " + line.value());
+                    line.rule().named() + " at " + line.value());
         }
     }
 

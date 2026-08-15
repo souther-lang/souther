@@ -1,6 +1,8 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 
 import java.util.List;
@@ -20,9 +22,11 @@ import java.util.Optional;
  *               in a source, and while that was a guess from the shape of a string, three readers
  *               guessed differently and each was found separately
  * @param at     where, when there is a source to point at; empty for something with no position of
- *               its own, such as an invariant that arrived from a module compiled elsewhere
+ *               its own, such as an invariant that arrived from a module compiled elsewhere. A
+ *               {@link Citation}, so that a reason about a place says what the place is —
+ *               the same question every other thing this report points at now answers
  */
-public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
+public record Incompleteness(Code code, Target target, Optional<Citation> at) {
 
     /** What a reason is about, and so who it counts against. */
     public enum Scope {
@@ -131,8 +135,12 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
     }
 
-    public static Incompleteness at(Code code, Scope scope, String subject, SourceRef where) {
-        return new Incompleteness(code, Target.of(scope, subject), Optional.ofNullable(where));
+    /** A reason about a place. The coordinate and not a reference over one: a reference holds a
+     *  source beside the one the coordinate has, this reads the coordinate's, and a signature that
+     *  still asked for the pair would let a caller write a half nothing reads. */
+    public static Incompleteness at(Code code, Scope scope, String subject, SourcePos where) {
+        return new Incompleteness(code, Target.of(scope, subject),
+                Optional.ofNullable(where).map(Citation::of));
     }
 
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose

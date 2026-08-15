@@ -59,7 +59,7 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("pick")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("pick");
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of("pick", body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
         Map<String, OriginRef.GuardOrigin.Witness> out = new LinkedHashMap<>();

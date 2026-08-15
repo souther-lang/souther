@@ -1,7 +1,5 @@
 package souther.compiler.diag;
 
-import java.util.Objects;
-
 /**
  * Whether a coordinate is where the code it names is written, or stands in for code written
  * somewhere this compile cannot show.
@@ -23,18 +21,60 @@ import java.util.Objects;
  * has to pass on, and a rebuild that passed the wrong one would compile — which is the shape of
  * defect this is here to close, written a second time.
  *
+ * <p>This is what a pass writes down, and it is not what a report says. The two are different
+ * questions and this answers only the first, so what it publishes is whether the coordinate stands
+ * in ({@link #isOutOfSight()}) and nothing else: no reader can take the declaration out of it and
+ * write a place of its own. Turning it into something a report may say is {@link #cite}, which is
+ * package-private and reached through {@link Citation#of}. Every statement about where code is
+ * written is then a {@link Citation}, whose two cases a reader has to tell apart to read either.
+ *
+ * <p>A class rather than an interface for the same reason. An interface's methods are public, so a
+ * projection declared on one would be a projection anybody could call, and the arms would have to
+ * carry public accessors for the values it reads. Being a class puts the projection where only this
+ * package can reach it and leaves the arms nothing to expose.
+ *
  * <p>Two states, and a reader must say which it means: reading it off a null would put "the code is
  * here" and "nobody said" under one answer.
  */
-public sealed interface WrittenAt {
+public sealed abstract class WrittenAt permits AtItsPlace, StoodInFor {
 
-    /** The code this coordinate names is written at it. */
-    record Here() implements WrittenAt {}
+    WrittenAt() {
+    }
+
+    /** Whether the coordinate carrying this stands in for code written somewhere this compile
+     *  cannot show. The whole of what a pass outside this package is told: what it stands in for is
+     *  a statement about a place, and statements about places are {@link Citation}s. */
+    public abstract boolean isOutOfSight();
 
     /**
-     * The coordinate stands in for code written in {@code declaration}, which this compile has no
-     * source for. It is where the code was reached from — the call the body was spliced into — and
-     * not where the code is, so a report anchored on it says so rather than claiming the place.
+     * This provenance as something a report may say about {@code reachedFrom}.
+     *
+     * <p>The one way the declaration a coordinate stands in for reaches a reader, and package-private
+     * so that it stays the one way. Every surface that says where code is written — the terminal, the
+     * JSON a build reads, an editor, the adequacy report — reads a {@link Citation}, and a surface
+     * added later has nothing else to read: there is no accessor here to build a second answer out
+     * of.
+     *
+     * <p>Total, and defined on both arms. A projection that answered only for the case it was written
+     * for would leave the other reading the coordinate, which is where this started.
+     *
+     * <p>Takes the coordinate and not a {@link SourceRef} over it. A reference holds a source of its
+     * own beside the one the coordinate carries, and the two can disagree — a walk over one module
+     * pairs its own source with a position from a helper another module of the same compile wrote.
+     * Reading either of them was survivable while each reader picked one; a citation is the single
+     * answer about a place, so a contradiction inside it is a place that is two places.
+     */
+    abstract Citation cite(SourcePos reachedFrom);
+
+    /** The ordinary answer: what every coordinate a source was read for carries. */
+    public static final WrittenAt HERE = new AtItsPlace();
+
+    /**
+     * The provenance of a copy that could not keep the positions it was written at.
+     *
+     * <p>Minted here and nowhere a source is read: a coordinate a parser made is where the code is,
+     * by construction, and one that says otherwise was made by a pass that put code somewhere it was
+     * not written.
      *
      * @param declaration the name a reader here reaches that code by: {@code helpers.atLeastZero},
      *        {@code List.map}. How it is reached and not which module declares it — a name reached
@@ -43,13 +83,7 @@ public sealed interface WrittenAt {
      *        ({@code List.map} is declared in {@code souther.list}, which is not how anyone reaches
      *        it)
      */
-    record OutOfSight(String declaration) implements WrittenAt {
-
-        public OutOfSight {
-            Objects.requireNonNull(declaration, "code out of sight is reached by a name");
-        }
+    public static WrittenAt outOfSight(String declaration) {
+        return new StoodInFor(declaration);
     }
-
-    /** The ordinary answer: what every coordinate a source was read for carries. */
-    WrittenAt HERE = new Here();
 }

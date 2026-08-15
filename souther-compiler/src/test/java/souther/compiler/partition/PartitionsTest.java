@@ -146,7 +146,7 @@ class PartitionsTest {
                 axis(span, "span.to").cuts().stream().map(Cut::value).toList());
         assertEquals(List.of("invariant Minute (min)", "invariant Minute (max) within Span"),
                 axis(span, "span.from").cuts().stream()
-                        .map(c -> c.origins().get(0).describe()).toList(),
+                        .map(c -> c.origins().get(0).named()).toList(),
                 "the rule that drew each end is the one that wrote it, not the outermost name");
     }
 
@@ -182,10 +182,10 @@ class PartitionsTest {
         assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(10L)),
                 o.cuts().stream().map(Cut::value).toList());
         assertEquals(List.of("invariant Outer (min)", "invariant Inner (min)"),
-                o.cuts().get(0).origins().stream().map(OriginRef::describe).toList(),
+                o.cuts().get(0).origins().stream().map(OriginRef::named).toList(),
                 "one value, two rules, and a row is owed to each");
         assertEquals(List.of("invariant Outer (max)"),
-                o.cuts().get(1).origins().stream().map(OriginRef::describe).toList());
+                o.cuts().get(1).origins().stream().map(OriginRef::named).toList());
     }
 
     /** A `Decimal` under two names reads the same way. */

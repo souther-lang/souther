@@ -56,7 +56,7 @@ class CoverageSitesTest {
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of("leave.sou", bodiesOf(source));
+        return CoverageSites.of(bodiesOf(source));
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {
@@ -188,7 +188,7 @@ class CoverageSitesTest {
                                 | No  -> Score(3)
                         }
                 """);
-        CoverageSites.Plan plan = CoverageSites.of("dead.sou", bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies);
 
         Core.Match outer = (Core.Match) unwrap(bodies.get("scoreFor"));
         Core.Match inner = innerMatch(outer.cases().get(1).body());
@@ -283,7 +283,7 @@ class CoverageSitesTest {
                         | Yes -> unreachable "the caller has already refused a yes"
                         | No  -> Score(0)
                 """);
-        CoverageSites.Plan plan = CoverageSites.of("order.sou", bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies);
 
         Core.Match match = (Core.Match) unwrap(bodies.get("scoreFor"));
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, 0}, plan.probesOf(match),
@@ -351,7 +351,7 @@ class CoverageSitesTest {
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
         Map<String, Core> bodies = bodiesOf(MODEL);
-        CoverageSites.Plan plan = CoverageSites.of("leave.sou", bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies);
 
         Core body = bodies.get("daysFor");
         Core.Match match = (Core.Match) unwrap(body);
@@ -434,6 +434,6 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, CoverageSites.of("x.sou", Map.of()).isEmpty());
+        assertSame(true, CoverageSites.of(Map.of()).isEmpty());
     }
 }

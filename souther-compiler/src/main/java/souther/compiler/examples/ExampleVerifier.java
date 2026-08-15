@@ -150,8 +150,7 @@ public final class ExampleVerifier {
                 // was observed, and a measure that read the empty result as "no row covers this"
                 // would report a gap nobody left.
                 incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
-                        Incompleteness.Scope.BEHAVIOR, ex.target(),
-                        new SourceRef(sourceId, ex.pos())));
+                        Incompleteness.Scope.BEHAVIOR, ex.target(), ex.pos()));
             }
         }
         // A row that could not be decided is read here rather than restated at each place it happens,
@@ -160,7 +159,8 @@ public final class ExampleVerifier {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
                 incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_UNDECIDED,
                         new souther.compiler.observe.Target.OfBehavior(outcome.target()),
-                        java.util.Optional.of(outcome.at())));
+                        java.util.Optional.of(
+                                souther.compiler.diag.Citation.of(outcome.at().pos()))));
             }
         }
         return new Observations(failures, rows, incompleteness);

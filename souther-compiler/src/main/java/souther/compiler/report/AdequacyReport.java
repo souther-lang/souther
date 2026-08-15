@@ -1,8 +1,8 @@
 package souther.compiler.report;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
@@ -412,7 +412,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                 behavior.injected() ? "injected" : "implemented", 13),
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
-                partition(out, behavior);
+                partition(out, behavior, module.declaredIn(), names);
                 branch(out, behavior, module.declaredIn(), names);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
@@ -537,7 +537,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
      * more than writing the value — the comparison has to have run — and nothing counts that yet.
      */
-    private static void partition(StringBuilder out, BehaviorReport behavior) {
+    private static void partition(StringBuilder out, BehaviorReport behavior,
+                                  String declaredIn, SourceNameResolver names) {
         PartitionEvidence partition = behavior.partition();
         if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
                 && partition.notDerivable().isEmpty())) {
@@ -607,8 +608,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
+            // The rule as this report writes it. The finding carries the rule and not words about
+            // it, because what to say differs between here — where a file has a name — and the
+            // warning built from the same finding, where nothing knows what to call one.
             out.append(String.format("      · no row is at %s = %s (%s)%n",
-                    f.args().get(0), f.args().get(1), f.args().get(2)));
+                    f.args().get(0), f.args().get(1),
+                    ((souther.compiler.partition.OriginRef) f.args().get(2))
+                            .describe(names, declaredIn)));
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection
         // could not read every rule of the value, and nothing built one either — so they are not
@@ -620,7 +626,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // two models that differ here is looking at what the compiler could establish — and
             // without this line the difference reads as the tool being arbitrary.
             out.append(String.format("      · not known to be writable: %s = %s (%s)%s%n",
-                    b.axis(), b.value(), b.origin(), whatWasTried(b.attempt())));
+                    b.axis(), b.value(), b.origin(names, declaredIn),
+                    whatWasTried(b.attempt())));
         }
     }
 
@@ -694,24 +701,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.ARM_UNREACHED)) {
             out.append(String.format("      · no row goes through `%s` (%s)%n",
-                    f.args().get(0), where(f.at(), declaredIn, names)));
+                    f.args().get(0), f.at().said(names, declaredIn)));
         }
-    }
-
-    /**
-     * Where a site is, as this report writes it: the position on its own where it is in the source
-     * the section is about, and the file with it where it is not.
-     *
-     * <p>A line and a column are a place only beside a file. They read as one here because the
-     * section names the module and nearly everything it reports is written there — and a coordinate
-     * from another file, printed the same way, points at whatever happens to sit at those numbers in
-     * the one the reader has in mind.
-     */
-    private static String where(SourcePos at, String declaredIn, SourceNameResolver names) {
-        if (at == null || at.sourceId() == null || at.sourceId().equals(declaredIn)) {
-            return String.valueOf(at);
-        }
-        return names.nameOf(at.sourceId()) + ":" + at;
     }
 
     /**
@@ -890,7 +881,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
                 signature(b, behavior.signature());
-                partition(b, behavior.partition());
+                partition(b, behavior.partition(), sources);
                 branch(b, behavior.branch(), sources);
             }
         }
@@ -909,12 +900,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * spelled out at each of the two places that point into a source, which is two places to write a
      * position and a line and two places to know that the id needs explaining — and a third would
      * have been written the way the first two were.
+     *
+     * <p>{@code writtenAt} says what the numbers beside it are. They are where this compile met the
+     * code, which is where the code is written for everything read from a source this compile holds
+     * and is a call in the caller's file for a body spliced in from one it does not. A consumer
+     * handed the numbers alone was told an arm of {@code List.filter} is at {@code m.sou:15:23}. The
+     * words come from the citation itself, so this document and the JSON a diagnostic is read from
+     * say it the same way.
      */
-    private static void at(ObjectNode into, SourceRef where, DocumentSources sources) {
+    private static void at(ObjectNode into, Citation where, DocumentSources sources) {
         ObjectNode at = into.putObject("at");
-        at.put("sourceId", sources.written(where.sourceId()));
-        at.put("line", where.pos().line());
-        at.put("column", where.pos().column());
+        SourceRef ref = switch (where) {
+            case Citation.Written written -> written.at();
+            case Citation.OutOfSight out -> out.reachedFrom();
+        };
+        at.put("sourceId", sources.written(ref.sourceId()));
+        at.put("line", ref.pos().line());
+        at.put("column", ref.pos().column());
+        ObjectNode writtenAt = at.putObject("writtenAt");
+        where.writtenAtFields().forEach(writtenAt::put);
     }
 
     private static void signature(ObjectNode behavior, Adequacy.SignatureEvidence signature) {
@@ -941,7 +945,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
     }
 
-    private static void partition(ObjectNode behavior, PartitionEvidence partition) {
+    private static void partition(ObjectNode behavior, PartitionEvidence partition,
+                                  DocumentSources sources) {
         if (partition == null) {
             return;
         }
@@ -975,7 +980,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (BoundaryAssessment boundary : partition.boundaries()) {
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
-            b.put("origin", boundary.origin());
+            // The identity, and never left out. This document says what it is about with the
+            // ids the caller handed its sources over as, and `sources` explains each one; a
+            // display name written here would be a file nothing in the document maps back.
+            //
+            // No section to leave it out against, either. A person reads a line under a heading
+            // that names the module and takes the file from there; a document has no heading, so
+            // a place written without its source is a line and a column belonging to nothing —
+            // and where a boundary is the only place a report points at, the `sources` table has
+            // no other entry to guess from.
+            b.put("origin", boundary.origin(sources::written, null));
             b.put("side", word(boundary.side()));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count

@@ -65,7 +65,7 @@ class AGuardsArmsAreNotItsThresholdTest {
                 .filter(b -> b.name().equals("pick")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
+        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         return GuardThresholds.of("pick", body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
     }

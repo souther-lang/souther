@@ -9,10 +9,12 @@ import java.util.Objects;
  *
  * <p>The coordinate is <b>where this compile places the node</b>, which is where the code is written
  * for everything a source was read for and is not for a copy that could not keep its own positions.
- * Reading the line as the line the code is on is right only where {@link #writtenAt()} says so, and
- * a reader that wants the second question answered asks it rather than inferring it from the first:
- * inferring it is what {@code BottomInfer} did, by comparing an argument's coordinate with its
- * call's, and what {@code HelperInliner} did, by comparing the declaring module with its own.
+ * So this answers where to send a reader and never, on its own, where the code is written. What
+ * answers that is a {@link Citation}, which a report holds instead of a coordinate; a pass that
+ * wants only to know whether the place is a stand-in asks {@link #isOutOfSight()}. Neither is
+ * inferred from the line: inferring it is what {@code BottomInfer} did, by comparing an argument's
+ * coordinate with its call's, and what {@code HelperInliner} did, by comparing the declaring module
+ * with its own.
  *
  * <p>A line and a column are enough while one file is being read and not enough afterwards. A
  * module's {@code example} rows, fake tables and values are written in the module's own source and
@@ -31,7 +33,10 @@ import java.util.Objects;
  * than beside it: an expansion gives a copy the call site where it cannot give it its own positions,
  * and after that the coordinate is a place in the caller's file which is not where the code is. That
  * is a fact about this coordinate, so it travels with it — through every pass that rebuilds a node
- * keeping its position, which is all of them.
+ * keeping its position, which is all of them. It is part of what makes two positions the same one
+ * for that reason: two coordinates that differ in it are read differently by every surface, so an
+ * answer that changed only here has changed and two diagnostics that differ only here are two
+ * problems.
  *
  * @param line the 1-based line this node is placed at
  * @param column the 1-based column this node is placed at, in UTF-16 code units
@@ -67,8 +72,16 @@ public record SourcePos(int line, int column, String sourceId, WrittenAt written
      * <p>Set here and nowhere else that a source is read: a coordinate a parser made is where the
      * code is, by construction, and one that says otherwise was made by a pass that put code
      * somewhere it was not written.
+     *
+     * @throws IllegalArgumentException where {@code out} is not a stand-in. Standing in for code
+     *         written at this very coordinate is not a thing to say, and a caller that reached here
+     *         with {@link WrittenAt#HERE} was branching on something other than the question
      */
     public SourcePos standingInFor(WrittenAt out) {
+        if (!out.isOutOfSight()) {
+            throw new IllegalArgumentException(
+                    "a coordinate stands in only for code written out of sight");
+        }
         return new SourcePos(line, column, sourceId, out);
     }
 
@@ -81,7 +94,7 @@ public record SourcePos(int line, int column, String sourceId, WrittenAt written
     /** Whether the code this names is written somewhere this compile cannot show, this coordinate
      *  being where it was reached from instead. */
     public boolean isOutOfSight() {
-        return writtenAt instanceof WrittenAt.OutOfSight;
+        return writtenAt.isOutOfSight();
     }
 
     @Override
