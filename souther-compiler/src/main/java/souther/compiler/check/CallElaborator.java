@@ -104,7 +104,7 @@ public final class CallElaborator {
      * <p>The Core is the one the application spelling produced, so nothing downstream of here tells
      * the two apart — which is what keeps a growing fold's seed the seed it was.
      */
-    static Core libraryValue(Hir.Var v, CheckContext ctx, Type expected) {
+    static Core libraryValue(Hir.Var.Denoting v, CheckContext ctx, Type expected) {
         if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
             return null;
         }
@@ -125,25 +125,31 @@ public final class CallElaborator {
             // reported where the name was written; this definition has no meaning to work out
             throw new Unanswerable(call.pos());
         }
+        // What this applies, as the name that names it — null where what is applied is not a name,
+        // which the typing below refuses where it reads the callee.
+        Hir.Var.Denoting callee = call.answered();
         // A call this representation said it keeps standing, asked before anything tries to expand or
         // resolve it: what it names is settled, and the only question left is its signature. Asked of
         // the representation and not of the operation — whether anything downstream has a rule about
         // it is not this walk's business, and a kept call with no rule types like any other.
-        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        CompleteSignature kept = callee == null
+                ? null : ctx.preserved().signatureOf(callee.denotes());
         if (kept != null) {
-            return preservedCall(call, kept, env, ctx, expected);
+            return preservedCall(call, callee, kept, env, ctx, expected);
         }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
         // applying something this body binds is a different operation from calling something
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
-        if (call.denotes() instanceof ValueName.Local local
+        if (callee != null && callee.denotes() instanceof ValueName.Local local
                 && env.typeOf(local.id()) instanceof Type.FnOf) {
             return new Core.Apply(
                     new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
-        return new Core.Call(call.reachedAs(), call.denotes(), ca.cores(), result, call.pos());
+        // Typing the call above refuses what is not a name outright, so what is left here names a
+        // declaration and says which one and how this module reaches it.
+        return new Core.Call(callee.reachedAs(), callee.denotes(), ca.cores(), result, call.pos());
     }
 
     /**
@@ -155,7 +161,8 @@ public final class CallElaborator {
      * business with a call left standing meets it as itself rather than as an ordinary call it might
      * try to emit.
      */
-    private static Core preservedCall(Hir.Apply call, CompleteSignature kept, Scope env,
+    private static Core preservedCall(Hir.Apply call, Hir.Var.Denoting callee,
+                                      CompleteSignature kept, Scope env,
                                       CheckContext ctx, Type expected) {
         List<Type> params = kept.params();
         CallArgs ca = new CallArgs(call.args(), env, ctx);
@@ -183,7 +190,7 @@ public final class CallElaborator {
                 }
             }
         }
-        return new Core.PreservedCall(call.denotes(), ca.cores(),
+        return new Core.PreservedCall(callee.denotes(), ca.cores(),
                 TypeOps.substitute(kept.result(), bind), call.pos());
     }
 
@@ -350,7 +357,11 @@ public final class CallElaborator {
      * with itself and not something an author can act on.
      */
     static RuntimeException noCallee(Hir.Apply call) {
-        return switch (call.denotes()) {
+        if (call.answered() == null) {
+            return new IllegalStateException("`" + call.written()
+                    + "` applies something that is not a name, at " + call.pos());
+        }
+        return switch (call.answered().denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
             case ValueName.Behavior _ -> CompileException.of(Diagnostic.at(call.appliedAt())
@@ -483,12 +494,13 @@ public final class CallElaborator {
             // reported where the name was written; this definition has no meaning to work out
             throw new Unanswerable(call.pos());
         }
-        if (call.denotes() == null) {
+        Hir.Var.Denoting callee = call.answered();
+        if (callee == null) {
             throw new IllegalStateException("`" + call.written()
                     + "` applies something that is not a name, at " + call.pos());
         }
-        boolean library = call.denotes() instanceof ValueName.Stdlib;
-        Prelude.PreludeEntry entry = library ? Prelude.entry(call.reaches()) : null;
+        boolean library = callee.denotes() instanceof ValueName.Stdlib;
+        Prelude.PreludeEntry entry = library ? Prelude.entry(callee.reaches()) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
@@ -528,11 +540,11 @@ public final class CallElaborator {
             }
             return applied.result();
         }
-        return switch (library ? call.reaches() : "") {
+        return switch (library ? callee.reaches() : "") {
             case "Date", "Time", "DateTime", "Instant" -> {
                 arity(call, 1);
                 ca.type(0);   // the literal text, which temporalLiteral parses
-                yield temporalLiteral(call);
+                yield temporalLiteral(call, callee);
             }
             default -> {
                 // a function-typed value in scope (a helper's function parameter) applied to
@@ -540,7 +552,7 @@ public final class CallElaborator {
                 // reaches here — NewtypeDesugar has lowered it to a NewData literal.
                 // a function value in force, or a recursive helper's signature: which of the two
                 // is the denotation's to say, and only one of them is bound here
-                if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
+                if (env.of(callee.denotes(), call.written()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
                         throw CompileException.of(Diagnostic
                                         .at(call.appliedAt())
@@ -553,7 +565,7 @@ public final class CallElaborator {
                 // of name this reaches and not of whether the spelling holds a dot: a field read
                 // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
                 // what is wrong with it is that it is not a function, which the report below says.
-                if (call.reachedAs() instanceof ReachName.OfLibrary) {
+                if (callee.reachedAs() instanceof ReachName.OfLibrary) {
                     throw CompileException.of(Diagnostic
                                     .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
                 }
@@ -562,18 +574,18 @@ public final class CallElaborator {
                 // which is this compiler having failed to do one of them rather than anything the
                 // author wrote. Said outright: reported as a wrong library call, it named a library
                 // the author never wrote.
-                if (call.reachedAs() instanceof ReachName.OfModule reached) {
+                if (callee.reachedAs() instanceof ReachName.OfModule reached) {
                     throw new IllegalStateException("`" + reached + "` was neither expanded nor"
                             + " bound before the call to it at " + call.pos() + " was typed");
                 }
                 // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
                 // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
                 // declaration; where the behavior comes from at run time is the backend's to know.
-                ReqSig callee = ctx.reqs().get(call.reaches());
-                if (callee == null) {
-                    callee = ctx.callees().get(call.reaches());
+                ReqSig required = ctx.reqs().get(callee.reaches());
+                if (required == null) {
+                    required = ctx.callees().get(callee.reaches());
                 }
-                if (callee == null) {
+                if (required == null) {
                     Elaborator.optionCaseWritten(call.written(), call.pos());
                     CompileException bareLibraryName = StdlibNames.writtenBare(
                             call.written(), call.written(), call.name().region());
@@ -582,11 +594,11 @@ public final class CallElaborator {
                     }
                     throw noCallee(call);
                 }
-                arity(call, callee.params().size());
-                for (int i = 0; i < callee.params().size(); i++) {
-                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.written());
+                arity(call, required.params().size());
+                for (int i = 0; i < required.params().size(); i++) {
+                    ca.require(i, required.params().get(i), "argument " + (i + 1) + " of " + call.written());
                 }
-                yield callee.success();
+                yield required.success();
             }
         };
     }
@@ -700,8 +712,8 @@ public final class CallElaborator {
      * temporal at all). This form spells one out; a temporal computed from values comes from the
      * boundary, from the arithmetic, or from {@code Date.fromParts} / {@code Time.fromParts}, which
      * answer a case where the parts name no such moment. */
-    static Type temporalLiteral(Hir.Apply call) {
-        Type.Prim kind = Type.Prim.named(call.reaches());
+    static Type temporalLiteral(Hir.Apply call, Hir.Var.Denoting callee) {
+        Type.Prim kind = Type.Prim.named(callee.reaches());
         if (!(call.args().get(0) instanceof Hir.StringLit lit)) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());

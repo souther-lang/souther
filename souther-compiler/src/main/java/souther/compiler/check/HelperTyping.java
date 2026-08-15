@@ -343,7 +343,8 @@ public final class HelperTyping {
 
     /** A call in {@code body} to a behavior, which no helper reaches (spec [#calling-a-behavior]). */
     private static Optional<Hir.Apply> callToABehavior(Hir.Expr body) {
-        if (body instanceof Hir.Apply call && call.denotes() instanceof ValueName.Behavior) {
+        if (body instanceof Hir.Apply call && call.answered() != null
+                && call.answered().denotes() instanceof ValueName.Behavior) {
             return Optional.of(call);
         }
         List<Hir.Apply> found = new ArrayList<>();
@@ -409,7 +410,8 @@ public final class HelperTyping {
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where
      * the clause holds none (a lowering wrote the call without a name of its own). */
     private static Hir.Apply firstCallTo(Hir.Expr e, String name) {
-        if (e instanceof Hir.Apply call && call.reaches().equals(name)) {
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && call.answered().reaches().equals(name)) {
             return call;
         }
         Hir.Apply[] found = new Hir.Apply[1];
@@ -489,7 +491,8 @@ public final class HelperTyping {
 
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec §fn-declaration). */
     private static void rejectInjectedCalls(Hir.Expr e, String helper, Set<String> injected) {
-        if (e instanceof Hir.Apply call && injected.contains(call.reaches())) {
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && injected.contains(call.answered().reaches())) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.ARecursiveHelperIsPure(helper, call.written())).build());
         }
@@ -643,7 +646,7 @@ public final class HelperTyping {
             if (!TypeOps.assignable(got, want.result(), symbols)) {
                 throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
             }
-        } else if (arg instanceof Hir.Var v
+        } else if (arg instanceof Hir.Var.Denoting v
                 && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
             throw CompileException.of(Diagnostic.at(arg.pos())
                     .say(new HelperMessage.AValueWhereAFunctionIsTaken(paramName, h.name(),
@@ -696,8 +699,9 @@ public final class HelperTyping {
 
     /** Collects the names in {@code names} that {@code e} calls (a recursive-helper call graph edge). */
     private static void collectCalls(Hir.Expr e, Set<String> out, Set<String> names) {
-        if (e instanceof Hir.Apply call && names.contains(call.reaches())) {
-            out.add(call.reaches());
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && names.contains(call.answered().reaches())) {
+            out.add(call.answered().reaches());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));
     }

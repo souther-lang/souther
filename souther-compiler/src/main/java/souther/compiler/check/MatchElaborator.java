@@ -57,7 +57,8 @@ public final class MatchElaborator {
                 continue;
             }
             List<TypeSymbol> others = TypeOps.caseNames(sum);
-            if (others.contains(written.denotes()) && !cases.containsAll(others)) {
+            if (written.answered() != null && others.contains(written.answered().type())
+                    && !cases.containsAll(others)) {
                 otherSum = sum.name();
                 break;
             }
@@ -193,10 +194,10 @@ public final class MatchElaborator {
      * for.
      */
     private static TypeSymbol names(Hir.Name arm) {
-        if (arm instanceof Hir.Name.Unanswered) {
+        if (!(arm.answered() instanceof Hir.Name.Denoting named)) {
             throw new Unanswerable(arm.pos());
         }
-        return arm.denotes();
+        return named.type();
     }
 
     /** The type a match case binds. A primitive-named case (e.g. {@code Int} in {@code Int |

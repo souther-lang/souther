@@ -88,10 +88,10 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
 
         List<String> unanswered = new ArrayList<>();
         for (Hir.Expr node : nodes) {
-            if (node instanceof Hir.Var name && name.denotes() == null) {
+            if (node instanceof Hir.Var name && name.answered() == null) {
                 unanswered.add(name.name());
             }
-            if (node instanceof Hir.NewData nd && nd.typeName().denotes() == null) {
+            if (node instanceof Hir.NewData nd && nd.typeName().answered() == null) {
                 unanswered.add(nd.typeName().written());
             }
         }
@@ -108,7 +108,7 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
     void everyNameInARowAnswersWhatItReaches() {
         List<String> reached = new ArrayList<>();
         for (Hir.Expr node : everyNodeOfEveryRow()) {
-            if (node instanceof Hir.Var name) {
+            if (node instanceof Hir.Var.Denoting name) {
                 reached.add(name.reaches());
             }
         }

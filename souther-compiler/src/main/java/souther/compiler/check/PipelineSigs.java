@@ -109,17 +109,19 @@ public final class PipelineSigs {
             // A stage that names nothing was reported where it is written. It is no pipeline to
             // splice in, and the composition it is part of is abandoned where its signature is
             // asked for rather than here.
-            List<Hir.Var> sub = s.unresolved() ? null : pipeStages.get(s.bare());
+            List<Hir.Var> sub = s.answered() instanceof Hir.Var.Denoting named
+                    ? pipeStages.get(named.bare()) : null;
             if (sub == null) {
                 out.add(s);
                 continue;
             }
-            if (!inProgress.add(s.bare())) {
+            String named = s.answered().bare();
+            if (!inProgress.add(named)) {
                 throw CompileException.of(Diagnostic
                                 .at(pos).say(new BehaviorMessage.APipelineComposesWithItself(s.name())).build());
             }
             flattenInto(sub, pipeStages, out, inProgress, pos);
-            inProgress.remove(s.bare());
+            inProgress.remove(named);
         }
     }
 
@@ -133,10 +135,10 @@ public final class PipelineSigs {
      */
     public static Sig stageSig(Hir.Var stage, Map<String, Sig> sigs, Symbols symbols,
                                SourcePos pos) {
-        if (stage.unresolved()) {
+        if (!(stage.answered() instanceof Hir.Var.Denoting named)) {
             throw new Unanswerable(stage.pos());
         }
-        Sig s = sigs.get(stage.bare());
+        Sig s = sigs.get(named.bare());
         if (s == null) {
             // The behavior is declared by a module this compilation could not work out — reported
             // on that module, whose author is the one who can act on it.

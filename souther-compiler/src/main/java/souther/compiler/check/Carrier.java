@@ -426,7 +426,7 @@ public sealed interface Carrier {
             // A case is named rather than written, so the literal is a name and what it denotes says
             // which case it is. Read off the denotation and not the text: a case is reachable under
             // an alias, and two enumerations may declare cases spelled the same way.
-            case Ordinal ordinal -> e instanceof Hir.Var v
+            case Ordinal ordinal -> e instanceof Hir.Var.Denoting v
                     && v.denotes() instanceof ValueName.OfType named
                     ? ordinal.at(named.type()) : null;
             case Text _ -> e instanceof Hir.StringLit lit
@@ -439,7 +439,8 @@ public sealed interface Carrier {
      *  §a-temporal-value-is-written-as-a-literal), so it is read here rather than run. */
     private static Count temporal(Hir.Expr e, String written,
                                   java.util.function.Function<String, Count> countOf) {
-        return e instanceof Hir.Apply call && written.equals(call.reaches())
+        return e instanceof Hir.Apply call && call.answered() != null
+                && written.equals(call.answered().reaches())
                 && call.args().size() == 1 && call.args().get(0) instanceof Hir.StringLit iso
                 ? countOf.apply(iso.value()) : null;
     }

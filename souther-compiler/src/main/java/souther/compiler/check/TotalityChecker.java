@@ -316,7 +316,7 @@ final class TotalityChecker {
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
             case Hir.Apply call -> {
-                if (group.contains(call.reaches())) {
+                if (call.answered() != null && group.contains(call.answered().reaches())) {
                     calls.add(new RecCall(call.written(), call, lt, eq));
                 }
                 Combinators.Written handed = Combinators.handedTo(call);
@@ -353,7 +353,7 @@ final class TotalityChecker {
     private static Set<BindingId> rootParams(Hir.Expr e, Map<BindingId, Set<BindingId>> lt,
                                           Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
         return switch (e) {
-            case Hir.Var v when v.denotes() instanceof ValueName.Local local -> {
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local -> {
                 Set<BindingId> s = new HashSet<>();
                 if (paramNames.contains(local.id())) {
                     s.add(local.id());
@@ -373,7 +373,7 @@ final class TotalityChecker {
     private static Set<BindingId> strictSmaller(Hir.Expr e, Map<BindingId, Set<BindingId>> lt,
                                              Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
         return switch (e) {
-            case Hir.Var v when v.denotes() instanceof ValueName.Local local ->
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local ->
                     lt.getOrDefault(local.id(), Set.of());
             case Hir.FieldAccess fa -> rootParams(fa.target(), lt, eq, paramNames);
             default -> Set.of();
@@ -384,7 +384,7 @@ final class TotalityChecker {
      * field access is strictly smaller, not equal, so it is not here (it is in {@link #strictSmaller}). */
     private static Set<BindingId> eqRoots(Hir.Expr e, Map<BindingId, Set<BindingId>> eq,
                                           Set<BindingId> paramNames) {
-        if (e instanceof Hir.Var v && v.denotes() instanceof ValueName.Local local) {
+        if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Local local) {
             Set<BindingId> s = new HashSet<>();
             if (paramNames.contains(local.id())) {
                 s.add(local.id());
@@ -429,7 +429,7 @@ final class TotalityChecker {
 
     private static void collectOwnCalls(Hir.Expr e, Set<String> own, Set<String> out) {
         if (e instanceof Hir.Apply call && call.answered() != null
-                && own.contains(call.reaches())) {
+                && own.contains(call.answered().reaches())) {
             out.add(call.written());
         }
         forEachChild(e, c -> collectOwnCalls(c, own, out));

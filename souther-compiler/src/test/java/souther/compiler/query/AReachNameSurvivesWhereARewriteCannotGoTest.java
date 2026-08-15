@@ -110,13 +110,15 @@ class AReachNameSurvivesWhereARewriteCannotGoTest {
     @Test
     void andItIsReachedByTheNameTheReaderReachesItBy() {
         assertEquals(List.of(new ReachName.OfModule("lib", "flatten")),
-                calls(inWhatWasHandedOver(taken())).stream().map(Hir.Apply::reachedAs).toList(),
+                calls(inWhatWasHandedOver(taken())).stream()
+                        .map(call -> call.answered().reachedAs()).toList(),
                 "reached under the module that declares it, which is how `app` keys the method");
     }
 
     private static List<Hir.Apply> calls(List<Hir.Apply> found) {
         return found.stream()
-                .filter(call -> call.denotes() != null && call.denotes().name().equals("flatten"))
+                .filter(call -> call.answered() != null
+                        && call.answered().denotes().name().equals("flatten"))
                 .toList();
     }
 }

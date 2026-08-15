@@ -155,10 +155,11 @@ public final class HelperNames {
             // what is underlined for it is the stretch the name it replaced was read over — not the
             // application's, which takes in arguments this pass did not touch.
             case Hir.Apply call when call.answered() != null
-                    && foreign(call.denotes(), which) ->
+                    && foreign(call.answered().denotes(), which) ->
                     new Hir.Apply(
-                            Hir.Var.respelled(qualifiedName(call.denotes()), call.denotes(),
-                                    ofModule(call.denotes()), call.function().pos(),
+                            Hir.Var.respelled(qualifiedName(call.answered().denotes()),
+                                    call.answered().denotes(),
+                                    ofModule(call.answered().denotes()), call.function().pos(),
                                     call.function().region()),
                             call.args(), call.origin(), call.pos(), call.region());
             case Hir.Var v -> qualified(v, which);
@@ -168,9 +169,10 @@ public final class HelperNames {
 
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Hir.Var qualified(Hir.Var name, Predicate<ValueName.Helper> which) {
-        return name.answered() != null && foreign(name.denotes(), which)
-                ? Hir.Var.respelled(qualifiedName(name.denotes()), name.denotes(),
-                        ofModule(name.denotes()), name.pos(), name.region())
+        return name.answered() instanceof Hir.Var.Denoting named
+                && foreign(named.denotes(), which)
+                ? Hir.Var.respelled(qualifiedName(named.denotes()), named.denotes(),
+                        ofModule(named.denotes()), name.pos(), name.region())
                 : name;
     }
 
@@ -289,7 +291,7 @@ public final class HelperNames {
         // A name nothing declares reaches no helper: it was reported where it is written, and a
         // walk that asks what a name stands for has no edge to add for it.
         ValueName denotes = switch (e) {
-            case Hir.Apply call when call.answered() != null -> call.denotes();
+            case Hir.Apply call when call.answered() != null -> call.answered().denotes();
             case Hir.Var.Denoting v -> v.denotes();
             default -> null;
         };

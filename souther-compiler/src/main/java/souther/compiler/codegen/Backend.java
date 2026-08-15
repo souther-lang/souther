@@ -179,7 +179,7 @@ public final class Backend {
         for (Hir.Def def : module.defs()) {
             if (def instanceof Hir.SumData sum) {
                 for (Hir.Name caseName : sum.cases()) {
-                    caseToSums.computeIfAbsent(caseName.denotes().name(), k -> new ArrayList<>())
+                    caseToSums.computeIfAbsent(names(caseName).name(), k -> new ArrayList<>())
                             .add(new GeneratedClass.Value(sum.declares()));
                 }
             }
@@ -324,9 +324,9 @@ public final class Backend {
                     for (Hir.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.declarations().declaration(tn.denotes().key()) instanceof Hir.Data
-                                && seenConstruct.add(tn.denotes())) {
-                            dataConstructs.add(tn.denotes());
+                        if (b.symbols.declarations().declaration(names(tn).key()) instanceof Hir.Data
+                                && seenConstruct.add(names(tn))) {
+                            dataConstructs.add(names(tn));
                         }
                     }
                 }
@@ -354,7 +354,7 @@ public final class Backend {
                 continue;
             }
             for (Hir.Var req : spec.dependsOn()) {
-                String name = req.bare();
+                String name = reachedBy(req);
                 if (requiredNames.contains(name)) {
                     continue;
                 }
@@ -1192,9 +1192,40 @@ public final class Backend {
     private static List<String> requiredBy(Hir.SpecBehavior spec) {
         List<String> names = new ArrayList<>();
         for (Hir.Var req : spec.dependsOn()) {
-            names.add(req.bare());
+            names.add(reachedBy(req));
         }
         return names;
+    }
+
+    /**
+     * The name a dependency or a pipeline stage is reached by.
+     *
+     * <p>Every name in a module reaching the backend was answered. {@code Bodies.Checked} hands over
+     * an elaboration only where {@code Names.Sound} holds of the module, and that is false as soon
+     * as resolution reports a name denoting nothing; {@code Output.Classes} builds what it generates
+     * from that answer and from nothing else. So one arriving here is not a mistake in the source —
+     * it is this module being emitted with a hole in it, which is the thing that gate is for.
+     */
+    /**
+     * The declaration a type name written in a module being generated names.
+     *
+     * <p>Answered for the same reason {@link #reachedBy} is: what reaches the backend is an
+     * elaboration {@code Bodies.Checked} handed over, and it hands one over only where
+     * {@code Names.Sound} holds of the module — which resolution makes false as soon as it reports
+     * a name denoting nothing.
+     */
+    static TypeSymbol names(Hir.Name name) {
+        return switch (name) {
+            case Hir.Name.Denoting d -> d.type();
+            case Hir.Name.Unanswered u -> throw u.unexpectedHere();
+        };
+    }
+
+    private static String reachedBy(Hir.Var named) {
+        return switch (named) {
+            case Hir.Var.Denoting d -> d.bare();
+            case Hir.Var.Unanswered u -> throw u.unexpectedHere();
+        };
     }
 
     private byte[] generatePipe(Hir.PipeBehavior pipe, Set<String> requiredNames,
@@ -1225,11 +1256,11 @@ public final class Backend {
                 List<Hir.Var> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
                 Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).outputType();
-                applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps,
+                applyFirstStage(code, cdP, reachedBy(stages.get(0)), arity, requiredNames, behaviorDeps,
                         mainline, arity + 1);
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
-                    String stage = stages.get(i).bare();
+                    String stage = reachedBy(stages.get(i));
                     Sig g = PipelineSigs.stageSig(stages.get(i), sigs, symbols, pipe.pos());
                     if (TypeOps.isDataLike(mainline)) {
                         // Apply g only when the running value is one of the main-line cases it

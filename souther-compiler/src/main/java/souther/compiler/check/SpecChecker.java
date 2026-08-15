@@ -60,11 +60,11 @@ public final class SpecChecker {
             switch (b) {
                 case Hir.SpecBehavior spec -> {
                     for (Hir.Var req : spec.dependsOn()) {
-                        if (req.unresolved()) {
+                        if (!(req.answered() instanceof Hir.Var.Denoting named)) {
                             continue;   // it names no behavior, so it is no edge of this graph
                         }
-                        if (names.contains(req.bare()) && !out.contains(req.bare())) {
-                            out.add(req.bare());
+                        if (names.contains(named.bare()) && !out.contains(named.bare())) {
+                            out.add(named.bare());
                         }
                     }
                     Hir.FnDef fn = fns.get(spec.name());
@@ -78,11 +78,11 @@ public final class SpecChecker {
                 }
                 case Hir.PipeBehavior pipe -> {
                     for (Hir.Var stage : pipe.stages()) {
-                        if (stage.unresolved()) {
+                        if (!(stage.answered() instanceof Hir.Var.Denoting named)) {
                             continue;   // it names no behavior, so it is no edge of this graph
                         }
-                        if (names.contains(stage.bare()) && !out.contains(stage.bare())) {
-                            out.add(stage.bare());
+                        if (names.contains(named.bare()) && !out.contains(named.bare())) {
+                            out.add(named.bare());
                         }
                     }
                 }
@@ -136,10 +136,11 @@ public final class SpecChecker {
                 continue;
             }
             for (Hir.Var required : spec.dependsOn()) {
-                if (required.unresolved() || reqSigs.containsKey(required.bare())) {
+                if (!(required.answered() instanceof Hir.Var.Denoting named)
+                        || reqSigs.containsKey(named.bare())) {
                     continue;
                 }
-                String req = required.bare();
+                String req = named.bare();
                 // Three ways a name can be wrong here, told apart because the fix differs. A
                 // behavior that depends on nothing has nothing to inject and is called instead; a
                 // composition cannot be rested on because its requirements are not written; a name
@@ -148,7 +149,7 @@ public final class SpecChecker {
                 // rather than the unknown one — scanning this module's own behaviors would only find
                 // the local ones. All are reported at the name, as the clause that names nothing is.
                 boolean dependsOnNothing = calleeSigs.containsKey(req);
-                boolean aComposition = required.denotes() instanceof ValueName.Behavior;
+                boolean aComposition = named.denotes() instanceof ValueName.Behavior;
                 throw CompileException.of(Diagnostic.at(required.written().reportedAt())
                         .say(dependsOnNothing
                                 ? new DeclarationMessage
@@ -272,8 +273,14 @@ public final class SpecChecker {
             }
         }
         for (int i = 0; i < nReq; i++) {
+            // A clause naming nothing names no parameter for this one to be out of order against;
+            // it is reported where it is written, and the parameters beside it are still held to
+            // the ones that do.
+            if (!(spec.dependsOn().get(i).answered() instanceof Hir.Var.Denoting named)) {
+                continue;
+            }
             String got = fn.params().get(nBusiness + i).name();
-            String want = spec.dependsOn().get(i).bare();
+            String want = named.bare();
             if (!got.equals(want)) {
                 throw CompileException.of(Diagnostic
                                 .at(fn.pos()).say(new BehaviorMessage.AnInjectedParameterIsOutOfOrder(fn.name(), got, want)).build());
@@ -355,7 +362,12 @@ public final class SpecChecker {
             }
             for (Hir.Name declaredName : spec.constructs()) {
                 String name = declaredName.written();
-                if (!constructed.builds(declaredName.denotes())) {
+                // A name that names nothing declares no construction to be kept or removed; it is
+                // reported where it is written.
+                if (declaredName.answered() == null) {
+                    continue;
+                }
+                if (!constructed.builds(declaredName.answered().type())) {
                     disagreements.add(Diagnostic.at(spec.pos())
                                     .hint(new DeclarationMessage.RemoveTheConstructsEntry(name)).say(new DeclarationMessage.ItDeclaresConstructsAndNeverBuilds(spec.name(), name)).build());
                 }
@@ -370,7 +382,10 @@ public final class SpecChecker {
         List<String> actual = requiredCalls(body, reqSigs.keySet());
         List<String> declared = new ArrayList<>();
         for (Hir.Var required : spec.dependsOn()) {
-            declared.add(required.bare());
+            // Reported where it is written; it declares no requirement for a call to answer to.
+            if (required.answered() instanceof Hir.Var.Denoting named) {
+                declared.add(named.bare());
+            }
         }
         for (String call : actual) {
             if (!declared.contains(call)) {
@@ -466,7 +481,10 @@ public final class SpecChecker {
                                                  boolean exposeAll, Set<String> exposed) {
         for (Hir.Name name : spec.constructs()) {
             String c = name.written();
-            TypeSymbol built = name.denotes();
+            if (name.answered() == null) {
+                continue;   // it names no type to be built from outside; reported where written
+            }
+            TypeSymbol built = name.answered().type();
             if (symbols.declarations().declaration(built.key()) instanceof Hir.UnitData) {
                 continue;   // a unit has a generated factory
             }
@@ -665,10 +683,10 @@ public final class SpecChecker {
             List<Hir.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
                     pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
-                if (stages.get(i).unresolved()) {
+                if (!(stages.get(i).answered() instanceof Hir.Var.Denoting named)) {
                     continue;   // reported where it is written; it declares no arity to hold it to
                 }
-                String stage = stages.get(i).bare();
+                String stage = named.bare();
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
                     throw CompileException.of(Diagnostic
@@ -688,8 +706,8 @@ public final class SpecChecker {
 
     private static void collectRequiredCalls(Hir.Expr e, Set<String> requiredNames, List<String> out) {
         if (e instanceof Hir.Apply call && call.answered() != null
-                && requiredNames.contains(call.reaches())
-                && !out.contains(call.reaches())) {
+                && requiredNames.contains(call.answered().reaches())
+                && !out.contains(call.answered().reaches())) {
             out.add(call.written());
         }
         // Every subexpression, through the one exhaustive walk — a call to an injected behavior may

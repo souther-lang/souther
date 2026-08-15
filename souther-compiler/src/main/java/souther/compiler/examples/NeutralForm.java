@@ -203,7 +203,8 @@ final class NeutralForm {
         }
         Hir.Discriminate reads = sum.decoder().get();
         for (Hir.Variant variant : reads.variants()) {
-            if (caseName.equals(variant.caseType().denotes())) {
+            if (variant.caseType().answered() instanceof Hir.Name.Denoting names
+                    && caseName.equals(names.type())) {
                 map.putIfAbsent(reads.key(), variant.tag());
                 return;
             }

@@ -127,8 +127,7 @@ public final class ValueCycles {
         if (e == null) {
             return;
         }
-        if (e instanceof Hir.Var v && v.answered() != null
-                && v.denotes() instanceof ValueName.Helper) {
+        if (e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Helper) {
             Hir.FnDef d = reachable.get(v.reaches());
             if (d != null && d.params().isEmpty()) {
                 out.add(v.reaches());

@@ -95,7 +95,8 @@ public final class NewtypeDesugar {
                 // same spelling as the type it shadows, and rewrite an application of it into a
                 // construction — both of which compile, so the meaning would change in silence.
                 TypeSymbol built = call.answered() != null
-                        && call.denotes() instanceof ValueName.OfType named ? named.type() : null;
+                        && call.answered().denotes() instanceof ValueName.OfType named
+                        ? named.type() : null;
                 if (built != null && symbols.declarations().declaration(built.key()) instanceof Hir.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(Diagnostic

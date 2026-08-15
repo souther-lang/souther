@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -60,7 +61,9 @@ class ResolvedValueNamesTest {
     }
 
     private static ValueName denotes(Hir.Expr e) {
-        return e instanceof Hir.Var v ? v.denotes() : ((Hir.Apply) e).denotes();
+        Hir.Var.Denoting named = e instanceof Hir.Var v
+                ? v.answered() : ((Hir.Apply) e).answered();
+        return named == null ? null : named.denotes();
     }
 
     /** The name written as {@code written}, whatever state resolution left it in. */
@@ -196,7 +199,7 @@ class ResolvedValueNamesTest {
 
         for (Hir.Expr e : named(resolve(source))) {
             if (e instanceof Hir.Apply call && call.written().equals("List.length")) {
-                assertEquals("List.length", call.reaches());
+                assertEquals("List.length", call.answered().reaches());
                 return;
             }
         }
@@ -281,8 +284,9 @@ class ResolvedValueNamesTest {
 
         Hir.Var name = nameOf(source, "nosuch");
         assertInstanceOf(Hir.Var.Unanswered.class, name);
-        // and it holds no stand-in for a reader below to take for a declaration
-        assertThrows(IllegalStateException.class, name::denotes);
+        // and it holds no stand-in for a reader below to take for a declaration: what a name names
+        // is the answered form's to say, and this is not one
+        assertNull(name.answered());
     }
 
     /** Every name in every body is answered — nothing is left as a spelling for a later reader to
@@ -369,7 +373,7 @@ class ResolvedValueNamesTest {
 
         List<ValueName.Local> reads = new ArrayList<>();
         for (Hir.Expr e : named(m)) {
-            if (e instanceof Hir.Var v && v.name().equals("x")
+            if (e instanceof Hir.Var.Denoting v && v.name().equals("x")
                     && v.denotes() instanceof ValueName.Local local) {
                 reads.add(local);
             }

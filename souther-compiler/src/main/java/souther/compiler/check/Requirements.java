@@ -125,17 +125,17 @@ public final class Requirements {
             case Hir.SpecBehavior spec -> {
                 for (Hir.Var req : spec.dependsOn()) {
                     // Reported where it is written; it names no requirement to propagate.
-                    if (!req.unresolved()) {
-                        add(acc, req.bare(), name);
+                    if (req.answered() instanceof Hir.Var.Denoting named) {
+                        add(acc, named.bare(), name);
                     }
                 }
             }
             case Hir.PipeBehavior pipe -> {
                 for (Hir.Var stage : pipe.stages()) {
-                    if (stage.unresolved()) {
+                    if (!(stage.answered() instanceof Hir.Var.Denoting named)) {
                         continue;   // it names no behavior, so it carries no requirement in
                     }
-                    String s = stage.bare();
+                    String s = named.bare();
                     if (injected.contains(s)) {
                         // the stage is the dependency: the composition holds it in a field and
                         // applies it there (spec §composition-with-requirements)

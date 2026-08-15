@@ -231,9 +231,23 @@ public final class Runner {
     private static String dependencyNames(Hir.SpecBehavior spec) {
         List<String> names = new java.util.ArrayList<>();
         for (Hir.Var dep : spec.dependsOn()) {
-            names.add(dep.bare());
+            names.add(named(dep));
         }
         return String.join(", ", names);
+    }
+
+    /**
+     * The name a declared dependency or a pipeline stage is reached by.
+     *
+     * <p>Everything below the compile above names something: {@code Compiler.compiled} raises on the
+     * first error and a name that denotes nothing is one, so this reads a module that got past it.
+     * One arriving here would be `run` working from a module the compile refused.
+     */
+    private static String named(Hir.Var name) {
+        return switch (name) {
+            case Hir.Var.Denoting d -> d.bare();
+            case Hir.Var.Unanswered u -> throw u.unexpectedHere();
+        };
     }
 
     /**
@@ -316,8 +330,8 @@ public final class Runner {
                 specs.put(spec.name(), spec);
             }
         }
-        for (Hir.Var named : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
-            String stage = named.bare();
+        for (Hir.Var each : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
+            String stage = named(each);
             if (!implemented.contains(stage)) {
                 return new Blocker("run.pipeline.noimpl",
                         "`" + pipe.name() + "` is a pipeline whose stage `" + stage

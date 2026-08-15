@@ -11,6 +11,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,7 +41,7 @@ class ANameUsedAsAValueHasTwoAnswersTest {
 
     private static final ReachName REACHED = new ReachName.OfModule("demo", "spin");
 
-    private static Hir.Var denoting(WrittenName name) {
+    private static Hir.Var.Denoting denoting(WrittenName name) {
         return new Hir.Var.Denoting(name, DECLARED, REACHED, name.region());
     }
 
@@ -48,17 +49,48 @@ class ANameUsedAsAValueHasTwoAnswersTest {
         return new Hir.Var.Unanswered(name, name.region());
     }
 
-    /** Read and found nothing, a name refuses both answers — and says which of the two questions it
-     * is refusing, because what a reader does about each differs. */
+    /** Read and found nothing, a name has neither answer to give, and says so by being the form
+     * that carries neither. What it does carry is where it is written. */
     @Test
-    void aNameNothingAnswersToRefusesBothAnswers() {
+    void aNameNothingAnswersToCarriesNeitherAnswer() {
         Hir.Var nothing = unanswered(WrittenName.of("spin", POS));
 
         assertEquals("spin", nothing.name());
         assertTrue(nothing.unresolved());
-        assertTrue(assertThrows(IllegalStateException.class, nothing::bare)
-                .getMessage().contains("denotes nothing"));
-        assertThrows(IllegalStateException.class, nothing::reaches);
+        assertNull(nothing.answered());
+    }
+
+    /**
+     * And what a name names is asked of the form that has an answer, never of the two together.
+     *
+     * <p>The observations that read a declaration — what it denotes, how it is reached, either of
+     * them rendered — are {@link Hir.Var.Denoting}'s. Put on {@link Hir.Var} they could be asked of
+     * a name that answers nothing, which every reader then had to remember not to do; a reader that
+     * forgot compiled and threw where the name was read rather than where it was reported. So the
+     * question is not "did every reader remember" but "can it be written at all".
+     */
+    @Test
+    void whatANameNamesIsNotAskedOfANameThatMayNotAnswer() {
+        Set<String> answeredOnly = Set.of("denotes", "reachedAs", "bare", "reaches");
+        Set<String> onTheInterface = new java.util.TreeSet<>();
+        for (java.lang.reflect.Method m : Hir.Var.class.getDeclaredMethods()) {
+            if (answeredOnly.contains(m.getName())) {
+                onTheInterface.add(m.getName());
+            }
+        }
+
+        assertEquals(Set.of(), onTheInterface);
+    }
+
+    /** A reader whose input is built from answered names says so, and what it says names the name
+     * and where it is written. */
+    @Test
+    void aReaderThatWasNotToMeetOneSaysWhichNameItMet() {
+        WrittenName spin = WrittenName.of("spin", POS);
+        Hir.Var.Unanswered nothing = new Hir.Var.Unanswered(spin, spin.region());
+
+        assertTrue(nothing.unexpectedHere().getMessage().contains("`spin`"));
+        assertTrue(nothing.unexpectedHere().getMessage().contains("denotes nothing"));
     }
 
     /**
@@ -68,7 +100,7 @@ class ANameUsedAsAValueHasTwoAnswersTest {
      */
     @Test
     void anAnsweredNameIsAnsweredOnBothCounts() {
-        Hir.Var answered = denoting(WrittenName.of("spin", POS));
+        Hir.Var.Denoting answered = denoting(WrittenName.of("spin", POS));
 
         assertEquals("spin", answered.bare());
         assertEquals("demo.spin", answered.reaches());

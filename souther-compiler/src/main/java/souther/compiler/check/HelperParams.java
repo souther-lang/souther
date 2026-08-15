@@ -337,7 +337,7 @@ final class HelperParams {
      * know which node kinds bind: what the name resolved to already says it.
      */
     private static boolean refersTo(Hir.Expr e, BindingId id) {
-        return e instanceof Hir.Var v && v.answered() != null
+        return e instanceof Hir.Var.Denoting v
                 && v.denotes() instanceof ValueName.Local local && local.id().equals(id);
     }
 
@@ -573,7 +573,8 @@ final class HelperParams {
             }
             // the value the attempt built is in force over the success arm, at the type it was built as
             Scope built = ic.construct() instanceof Hir.NewData nd
-                    ? env.with(ic.binder(), Type.ref(nd.typeName().denotes())) : env;
+                    && nd.typeName().answered() instanceof Hir.Name.Denoting names
+                    ? env.with(ic.binder(), Type.ref(names.type())) : env;
             List<Reading> arms = new ArrayList<>();
             arms.add(new Reading(ic.then(), built));
             for (Hir.ElseArm arm : ic.els()) {
@@ -870,7 +871,10 @@ final class HelperParams {
             if (c.binding() == null || c.caseTypes().size() != 1) {
                 return env;
             }
-            TypeSymbol arm = c.caseTypes().get(0).denotes();
+            if (c.caseTypes().get(0).answered() == null) {
+                return env;   // it names no case, so it binds nothing this can say the type of
+            }
+            TypeSymbol arm = c.caseTypes().get(0).answered().type();
             Type bound = scrutinee instanceof Type.OptionOf opt && TypeSymbol.SOME.equals(arm)
                     ? opt.element() : MatchElaborator.caseBindType(arm);
             return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
@@ -1015,7 +1019,9 @@ final class HelperParams {
 
         /** Each field of a construction, asked for the type that field holds. */
         private void visitInits(Hir.NewData nd, Scope env, BindingId target) {
-            Hir.Data data = symbols.declarations().declaration(nd.typeName().denotes().key()) instanceof Hir.Data d ? d : null;
+            Hir.Data data = nd.typeName().answered() instanceof Hir.Name.Denoting names
+                    && symbols.declarations().declaration(names.type().key()) instanceof Hir.Data d
+                    ? d : null;
             for (Hir.FieldInit init : nd.inits()) {
                 visit(init.value(), env, target,
                         data == null ? null : TypeOps.fieldType(data, init.name(), symbols));
@@ -1038,13 +1044,18 @@ final class HelperParams {
          * the parameter is annotated instead.
          */
         private Type.FnOf calleeSignature(Hir.Apply call, Scope env) {
-            if (call.denotes() instanceof ValueName.Local local) {
+            // What is applied names no declaration, so there is no signature to read: the name is
+            // reported where it is written, and the argument is left to be read on its own.
+            if (call.answered() == null) {
+                return null;
+            }
+            if (call.answered().denotes() instanceof ValueName.Local local) {
                 // What is applied is this binding, whatever else carries its spelling. A declaration
                 // of the same name is a different thing, so where the scope cannot say what the
                 // binding holds, nothing here can.
                 return env.typeOf(local.id()) instanceof Type.FnOf sig ? sig : null;
             }
-            String fn = call.reaches();
+            String fn = call.answered().reaches();
             ReqSig req = reqSigs.get(fn);
             if (req != null) {
                 return new Type.FnOf(req.params(), req.success());

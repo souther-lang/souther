@@ -187,7 +187,10 @@ final class ValueClassGen {
         ClassDesc cdX = cd(sum);
         List<ClassDesc> caseCds = new ArrayList<>();
         for (Hir.Name caseName : sum.cases()) {
-            caseCds.add(cd(caseName.denotes()));
+            // Every name in a module the backend generates was answered: `Bodies.Checked` hands an
+            // elaboration over only where `Names.Sound` holds of the module, which resolution makes
+            // false as soon as it reports a name denoting nothing.
+            caseCds.add(cd(Backend.names(caseName)));
         }
         boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
         List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);

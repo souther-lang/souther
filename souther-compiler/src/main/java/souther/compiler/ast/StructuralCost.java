@@ -117,10 +117,14 @@ public final class StructuralCost {
     /**
      * What a name reaches, for counting what substituting it would cost: the body substituted
      * there, or null where the name stands for itself.
+     *
+     * <p>Asked of a name that names something. Nothing is substituted for one that names nothing,
+     * so the question does not arise for it, and asking it would be asking what a name reaches of a
+     * name that reaches nowhere.
      */
     @FunctionalInterface
     public interface Reaches {
-        Hir.Expr substitutedAt(Hir.Var name);
+        Hir.Expr substitutedAt(Hir.Var.Denoting name);
     }
 
     /**
@@ -181,7 +185,7 @@ public final class StructuralCost {
             // reaches is an answer resolution gives, and the tree this is measured on before that
             // has none — a definition is counted as written the moment it is parsed, and nothing is
             // substituted into it there.
-            if (node instanceof Hir.Var name) {
+            if (node instanceof Hir.Var.Denoting name) {
                 Hir.Expr body = reaches.substitutedAt(name);
                 if (body != null && !Path.holds(step.path(), name.reaches())) {
                     todo.add(new Step(body, step.above(), name,
@@ -203,7 +207,7 @@ public final class StructuralCost {
     /** Whether applying this splices a body here, which is what makes its arguments bindings. */
     private static boolean isExpanded(Hir.Expr e, Reaches reaches) {
         return e instanceof Hir.Apply apply
-                && apply.function() instanceof Hir.Var applied
+                && apply.function() instanceof Hir.Var.Denoting applied
                 && reaches.substitutedAt(applied) != null;
     }
 

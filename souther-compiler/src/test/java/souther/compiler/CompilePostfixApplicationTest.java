@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * An argument list applies to the expression before it, not only to a name. What is applied is
@@ -147,7 +148,8 @@ class CompilePostfixApplicationTest {
     }
 
     private static int occurrences(Hir.Expr e, String callee) {
-        int[] n = {e instanceof Hir.Apply a && callee.equals(a.reaches()) ? 1 : 0};
+        int[] n = {e instanceof Hir.Apply a && a.answered() != null
+                && callee.equals(a.answered().reaches()) ? 1 : 0};
         Hir.forEachChild(e, c -> n[0] += occurrences(c, callee));
         return n[0];
     }
@@ -318,11 +320,11 @@ class CompilePostfixApplicationTest {
 
         assertTrue(named.appliesAName());
         assertEquals("List.map", named.written());
-        assertEquals("List.map", named.reaches());
+        assertEquals("List.map", named.answered().reaches());
 
         assertFalse(nameless.appliesAName());
         assertEquals("", nameless.written(), "there is no spelling to quote");
-        assertEquals("", nameless.reaches(), "and no declaration to look up");
+        assertNull(nameless.answered(), "and no declaration to look up");
     }
 
     /**
@@ -341,6 +343,7 @@ class CompilePostfixApplicationTest {
                 java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at, null);
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");
-        assertEquals("$fn0", lowered.reaches(), "a table is looked up with the binding");
+        assertEquals("$fn0", lowered.answered().reaches(),
+                "a table is looked up with the binding");
     }
 }
