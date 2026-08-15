@@ -407,11 +407,14 @@ public final class TypeOps {
         return leaves;
     }
 
-    /** A sum's cases: what each name it lists denotes. */
+    /** A sum's cases: what each name it lists denotes. A name that denotes nothing lists no case —
+     * it is reported where it is written, and a reader counting the cases counts what is there. */
     public static List<TypeSymbol> caseNames(Hir.SumData sum) {
         List<TypeSymbol> names = new ArrayList<>();
         for (Hir.Name c : sum.cases()) {
-            names.add(c.denotes());
+            if (c.answered() instanceof Hir.Name.Denoting named) {
+                names.add(named.type());
+            }
         }
         return names;
     }
@@ -1058,13 +1061,13 @@ public final class TypeOps {
         // through spreads, holds no such field at all.
         Map<String, String> suppliedBy = new LinkedHashMap<>();
         for (Hir.Name inc : data.includes()) {
-            if (inc instanceof Hir.Name.Unanswered) {
+            if (!(inc.answered() instanceof Hir.Name.Denoting names)) {
                 // Nothing declares it, which was reported where it is written. It brings in no
                 // fields, and complaining here that it is not a product data would be a second
                 // report about the one mistake.
                 continue;
             }
-            TypeSymbol included = inc.denotes();
+            TypeSymbol included = names.type();
             if (!(symbols.declarations().declaration(included.key()) instanceof Hir.Data id)) {
                 throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
                         .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
@@ -1119,7 +1122,9 @@ public final class TypeOps {
      * not a product. Only {@link #fieldTypes} turns those into a diagnostic, and every declared data
      * goes through it; the readers asked about one field or one invariant answer for what they see. */
     private static Hir.Data spreadTarget(Hir.Name inc, Symbols symbols) {
-        return symbols.declarations().declaration(inc.denotes().key()) instanceof Hir.Data d ? d : null;
+        return inc.answered() instanceof Hir.Name.Denoting named
+                && symbols.declarations().declaration(named.type().key()) instanceof Hir.Data d
+                ? d : null;
     }
 
     /** Whether a data has a field of that name, without resolving any type. */
@@ -1187,7 +1192,7 @@ public final class TypeOps {
     private static void collectSpreadAncestors(Hir.Data data, Symbols symbols, Set<TypeSymbol> out) {
         for (Hir.Name inc : data.includes()) {
             Hir.Data included = spreadTarget(inc, symbols);
-            if (included != null && out.add(inc.denotes())) {
+            if (included != null && out.add(inc.answered().type())) {
                 collectSpreadAncestors(included, symbols, out);
             }
         }
@@ -1254,7 +1259,7 @@ public final class TypeOps {
         for (Hir.Name inc : data.includes()) {
             Hir.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(declaredInvariants(inc.denotes(), id, symbols, form));
+                invs.addAll(declaredInvariants(inc.answered().type(), id, symbols, form));
             }
         }
         List<Hir.InvariantClause> own = named == null ? null : form.apply(named);

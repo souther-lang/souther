@@ -237,7 +237,7 @@ final class CodecGen {
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
      * method reference when the type is a sum (its factory lives on a sealed interface). */
     private void invokeCodec(CodeBuilder code, Hir.Name typeName, String method, MethodTypeDesc mtd) {
-        invokeCodec(code, typeName.denotes(), method, mtd);
+        invokeCodec(code, Backend.names(typeName), method, mtd);
     }
 
     private void invokeCodec(CodeBuilder code, TypeSymbol type, String method, MethodTypeDesc mtd) {
@@ -255,7 +255,7 @@ final class CodecGen {
             // membership in this sum requires of it (spec §encoder-derivation).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 for (Hir.EncVariant v : enc.variants()) {
-                    TypeSymbol caseName = v.caseType().denotes();
+                    TypeSymbol caseName = Backend.names(v.caseType());
                     code.aload(1);
                     code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
@@ -308,7 +308,7 @@ final class CodecGen {
                     // what is under `"value"` and reads it as the standalone value it is, while a
                     // product and a unit read the discriminated object they are part of. So a wrapped
                     // case is read from under a key, which is not always this source's own decoder.
-                    if (TypeOps.caseShape(v.caseType().denotes(), symbols) == CaseShape.WRAPPED) {
+                    if (TypeOps.caseShape(Backend.names(v.caseType()), symbols) == CaseShape.WRAPPED) {
                         code.loadConstant(CaseShape.ENVELOPE_KEY);
                         emitUnderAKeyDecoder(code, v.caseType(), src);
                         code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
@@ -534,7 +534,7 @@ final class CodecGen {
                 return false;   // an enumeration is a bare column, not a whole row (issue #161)
             }
             for (Hir.Name written : sum.cases()) {
-                TypeSymbol caseName = written.denotes();
+                TypeSymbol caseName = Backend.names(written);
                 Hir.Def caseDef = symbols.declarations().declaration(caseName.key());
                 if (caseDef instanceof Hir.UnitData) continue;   // the discriminator alone, no column
                 if (!(caseDef instanceof Hir.Data d)) return false;   // a nested sum is not a row
@@ -849,7 +849,7 @@ final class CodecGen {
     }
 
     boolean isMapInput(Hir.Name typeName) {
-        return isMapInputOf(symbols.declarations().declaration(typeName.denotes().key()));
+        return isMapInputOf(symbols.declarations().declaration(Backend.names(typeName).key()));
     }
 
     private boolean isMapInputOf(Hir.Def def) {
@@ -1212,7 +1212,7 @@ final class CodecGen {
     private Type bindType(Hir.DecRef ref) {
         return switch (ref) {
             case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
-            case Hir.DataDecRef d -> Type.ref(d.typeName().denotes());
+            case Hir.DataDecRef d -> Type.ref(Backend.names(d.typeName()));
             case Hir.ListDecRef l -> Type.list(bindType(l.element()));
             case Hir.SetDecRef s -> Type.set(bindType(s.element()));
             case Hir.OptionDecRef o -> Type.option(bindType(o.element()));

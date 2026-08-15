@@ -221,7 +221,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
     private static boolean takesSizeOf(Hir.Expr e, ValueName measure, String subject) {
         return e instanceof Hir.Apply call && call.args().size() == 1
                 && call.args().get(0) instanceof Hir.Var arg && arg.name().equals(subject)
-                && call.function() instanceof Hir.Var fn && measure.equals(fn.denotes());
+                && call.function() instanceof Hir.Var.Denoting fn && measure.equals(fn.denotes());
     }
 
     /**

@@ -70,11 +70,12 @@ public final class DataChecker {
     }
 
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
-        if (e instanceof Hir.NewData nd && !(nd.typeName() instanceof Hir.Name.Unanswered)
-                && symbols.declarations().declaration(nd.typeName().denotes().key()) instanceof Hir.Data nt
-                && nt.newtype() && isInvariantBearing(nd.typeName().denotes(), symbols)) {
+        if (e instanceof Hir.NewData nd
+                && nd.typeName().answered() instanceof Hir.Name.Denoting built
+                && symbols.declarations().declaration(built.type().key()) instanceof Hir.Data nt
+                && nt.newtype() && isInvariantBearing(built.type(), symbols)) {
             CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
-                    out.add(new ConstCheck(nd.typeName().written(), nd.typeName().denotes(), v, nd.pos())));
+                    out.add(new ConstCheck(nd.typeName().written(), built.type(), v, nd.pos())));
         }
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
     }
@@ -194,9 +195,13 @@ public final class DataChecker {
                 // which it can. A value carries the construction its definition made, whatever module
                 // declares the type: the definition is where the value is made, and a body that names
                 // it compares against a limit rather than setting one.
-                Map<TypeSymbol, String> side = carried(nd, nd.typeName().denotes())
-                        ? out.carried() : out.originated();
-                side.putIfAbsent(nd.typeName().denotes(), nd.typeName().name().quoted());
+                // A construction naming nothing builds no type to record; it is reported where the
+                // name is written, and the fields written under it are still walked.
+                if (nd.typeName().answered() instanceof Hir.Name.Denoting built) {
+                    Map<TypeSymbol, String> side = carried(nd, built.type())
+                            ? out.carried() : out.originated();
+                    side.putIfAbsent(built.type(), nd.typeName().name().quoted());
+                }
                 for (Hir.FieldInit init : nd.inits()) {
                     collectConstructs(init.value(), out, symbols, recConstructs);
                 }
@@ -212,7 +217,8 @@ public final class DataChecker {
                 // on a value, none of them are this body's: the value's definition is what reached
                 // the helper, and the call is standing in for constructions that would have been
                 // marked had the helper been expandable.
-                Constructs viaHelper = recConstructs.get(call.reaches());
+                Constructs viaHelper = call.answered() == null
+                        ? null : recConstructs.get(call.answered().reaches());
                 if (viaHelper != null) {
                     out.absorb(call.origin().viaValueReference() ? viaHelper.allCarried() : viaHelper);
                 }
@@ -260,7 +266,7 @@ public final class DataChecker {
             // it is asked of a construction node — it is the same question about the same thing.
             // `constructs` governs what this compilation declares; a unit the language gives
             // (`HALF_UP`) is vocabulary, not business data — as `None` is.
-            case Hir.Var v when v.denotes() instanceof ValueName.OfType named
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named
                     && symbols.declarations().declaredByCompilation(named.type().key())
                     && symbols.declarations().declaration(named.type().key()) instanceof Hir.UnitData -> {
                 Map<TypeSymbol, String> side = named.origin().carried(named.type())
@@ -305,10 +311,10 @@ public final class DataChecker {
             // A name nothing declares denotes no type, so there is no type here for another to be
             // the same as. It was reported where it is written; calling it a duplicate as well
             // would be a second report about the one mistake.
-            if (n instanceof Hir.Name.Unanswered) {
+            if (n.answered() == null) {
                 continue;
             }
-            if (!seen.add(n.denotes())) {
+            if (!seen.add(n.answered().type())) {
                 throw duplicate(n.written(), where, pos);
             }
         }
@@ -337,7 +343,12 @@ public final class DataChecker {
             return null;
         }
         for (Hir.Name caseName : s.cases()) {
-            if (target.equals(caseName.denotes())) {
+            // A case naming nothing is no step of a cycle, and it is reported on the declaration
+            // that writes it — which may be another module's, and not one this check was handed.
+            if (!(caseName.answered() instanceof Hir.Name.Denoting names)) {
+                continue;
+            }
+            if (target.equals(names.type())) {
                 List<String> out = new ArrayList<>();
                 for (TypeSymbol seen : path) {
                     out.add(seen.name());
@@ -345,12 +356,13 @@ public final class DataChecker {
                 out.add(caseName.written());
                 return out;
             }
-            if (symbols.declarations().declaration(caseName.denotes().key()) instanceof Hir.SumData && path.add(caseName.denotes())) {
+            if (symbols.declarations().declaration(names.type().key()) instanceof Hir.SumData
+                    && path.add(names.type())) {
                 List<String> found = sumCycle(target, symbols, path);
                 if (found != null) {
                     return found;
                 }
-                path.remove(caseName.denotes());
+                path.remove(names.type());
             }
         }
         return null;
@@ -364,6 +376,21 @@ public final class DataChecker {
         return out;
     }
 
+    /**
+     * The declaration a name written in the declaration being checked names.
+     *
+     * <p>Every name written in one of these was answered. A declaration holding a name that names
+     * nothing has no meaning to check — {@code Names.Unbuilt} collects it and {@code Names.Definition}
+     * hands it to nobody — and {@code TypeChecker} checks only the declarations it was handed. One
+     * arriving here is this compiler checking a declaration that was not among them.
+     */
+    private static TypeSymbol names(Hir.Name name) {
+        return switch (name) {
+            case Hir.Name.Denoting d -> d.type();
+            case Hir.Name.Unanswered u -> throw u.unexpectedHere();
+        };
+    }
+
     static void checkSum(Hir.SumData sum, Symbols symbols) {
         rejectDuplicateTypes(sum.cases(), "the sum `" + sum.name() + "`", sum.pos());
         // A generated sum is a sealed interface, and its `permits` is settled when its own module is
@@ -371,11 +398,11 @@ public final class DataChecker {
         // being a member: no value satisfies the type and an exhaustive switch over it has no arms
         // (ADR-0057, the declared-sum counterpart of E1606).
         for (Hir.Name c : sum.cases()) {
-            if (symbols.scope().isForeign(c.denotes())) {
+            if (symbols.scope().isForeign(names(c))) {
                 throw CompileException.of(Diagnostic
                                 .at(c.name().reportedAt())
                                 
-                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), c.denotes().module())).build());
+                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), names(c).module())).build());
             }
         }
         List<String> cycle = sumCycle(sum.declares(), symbols, new LinkedHashSet<>());
@@ -388,8 +415,8 @@ public final class DataChecker {
             // §sum-discrimination)
             Set<TypeSymbol> dispatchable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
             for (Hir.Variant v : disc.variants()) {
-                Hir.Def caseDef = symbols.declarations().declaration(v.caseType().denotes().key());
-                if (!dispatchable.contains(v.caseType().denotes())) {
+                Hir.Def caseDef = symbols.declarations().declaration(names(v.caseType()).key());
+                if (!dispatchable.contains(names(v.caseType()))) {
                     throw CompileException.of(Diagnostic.at(v.pos())
                             .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
                             .build());
@@ -420,12 +447,12 @@ public final class DataChecker {
             Set<TypeSymbol> covered = new HashSet<>();
             Set<TypeSymbol> encodable = TypeOps.leafCases(Type.ref(sum.declares()), symbols);
             for (Hir.EncVariant v : enc.variants()) {
-                if (!encodable.contains(v.caseType().denotes())) {
+                if (!encodable.contains(names(v.caseType()))) {
                     throw CompileException.of(Diagnostic.at(v.pos())
                             .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
                             .build());
                 }
-                Hir.Def caseDef = symbols.declarations().declaration(v.caseType().denotes().key());
+                Hir.Def caseDef = symbols.declarations().declaration(names(v.caseType()).key());
                 boolean caseEncodes = caseDef instanceof Hir.UnitData
                         || (caseDef instanceof Hir.Data d && d.encoder().isPresent())
                         || (caseDef instanceof Hir.SumData s && s.encoder().isPresent());
@@ -434,7 +461,7 @@ public final class DataChecker {
                             .say(new CodecMessage.CaseNeedsAnEncoder(v.caseType().written()))
                             .build());
                 }
-                covered.add(v.caseType().denotes());
+                covered.add(names(v.caseType()));
             }
             for (TypeSymbol caseName : encodable) {
                 if (!covered.contains(caseName)) {
@@ -620,12 +647,12 @@ public final class DataChecker {
             case Hir.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Hir.PrimDecRef p -> TypeOps.primType(p.kind());
             case Hir.DataDecRef d -> {
-                if (!hasDecoder(symbols.declarations().declaration(d.typeName().denotes().key()))) {
+                if (!hasDecoder(symbols.declarations().declaration(names(d.typeName()).key()))) {
                     throw CompileException.of(Diagnostic.at(d.pos())
                             .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
                             .build());
                 }
-                yield Type.ref(d.typeName().denotes());
+                yield Type.ref(names(d.typeName()));
             }
             case Hir.ListDecRef l -> Type.list(decRefType(l.element(), symbols));
             case Hir.OptionDecRef o -> Type.option(decRefType(o.element(), symbols));
@@ -635,7 +662,7 @@ public final class DataChecker {
 
     private static void checkConstruct(Hir.Construct c, CheckContext ctx, Map<String, Type> fields,
                                        Scope env) {
-        if (!c.typeName().denotes().equals(ctx.data().declares())) {
+        if (!names(c.typeName()).equals(ctx.data().declares())) {
             throw CompileException.of(Diagnostic.at(c.pos())
                     .say(new CodecMessage.TheDecoderBuildsAnotherType(ctx.data().name(),
                             c.typeName().written()))
@@ -852,12 +879,12 @@ public final class DataChecker {
             }
             case Hir.EncodeRaw e -> {
                 if (!hasEncoder(ctx.symbols().declarations()
-                        .declaration(e.typeName().denotes().key()))) {
+                        .declaration(names(e.typeName()).key()))) {
                     throw CompileException.of(Diagnostic.at(e.pos())
                             .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
                             .build());
                 }
-                Elaborator.requireType(e.arg(), Type.ref(e.typeName().denotes()), env, ctx,
+                Elaborator.requireType(e.arg(), Type.ref(names(e.typeName())), env, ctx,
                         "argument of " + e.typeName().written() + ".encode");
             }
             case Hir.ListEnc le -> {
@@ -900,10 +927,10 @@ public final class DataChecker {
             }
             case Hir.DataEnc d -> {
                 // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
-                Hir.Def def = symbols.declarations().declaration(d.typeName().denotes().key());
+                Hir.Def def = symbols.declarations().declaration(names(d.typeName()).key());
                 boolean hasEncoder = (def instanceof Hir.Data dd && dd.encoder().isPresent())
                         || (def instanceof Hir.SumData sd && sd.encoder().isPresent());
-                if (!elemType.equals(Type.ref(d.typeName().denotes())) || !hasEncoder) {
+                if (!elemType.equals(Type.ref(names(d.typeName()))) || !hasEncoder) {
                     throw elemEncMismatch(d.typeName().written(), elemType, pos);
                 }
             }

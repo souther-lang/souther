@@ -228,19 +228,15 @@ public interface Hir {
         }
 
         /**
-         * The declaration this names, for a reader that is asking which one it is.
+         * This name where it names a declaration, and null where resolution read it and found none.
          *
-         * <p>Refused for an {@link Unanswered} one, which is a mistake in the source reported where
-         * the name is written: there is no declaration to hand back, and a reader that wants to go
-         * on without one asks which of the two it is rather than taking the spelling. This is the
-         * one place that says so.
+         * <p>The one way from here to the declaration. What names it — {@link Denoting#type()} — is
+         * the answered form's, so a reader arrives at it through this projection or through
+         * narrowing to the two forms, and says what it does with an {@link Unanswered} name where it
+         * makes that choice.
          */
-        default TypeSymbol denotes() {
-            if (this instanceof Denoting denoting) {
-                return denoting.type();
-            }
-            throw new IllegalStateException("`" + written() + "` at " + pos()
-                    + " denotes nothing and was read as though it did");
+        default Denoting answered() {
+            return this instanceof Denoting denoting ? denoting : null;
         }
 
         /** The same name, read and found to name nothing. */
@@ -277,8 +273,28 @@ public interface Hir {
          * — which {@code Names.Unbuilt} is what settles, so the rest of the module goes on being
          * answered. This is an answer. A name nothing has looked at is {@link Ast.Name}, and the
          * two were one value for as long as a missing identity stood for both.
+         *
+         * <p>What a reader does on meeting one is the reader's to say, and the readers here say one
+         * of two things. A walk that recovers — reads no declaration, states no type, builds
+         * nothing — passes it over: what is wrong is reported already. A reader whose input is
+         * built from answered names only says so with {@link #unexpectedHere()}, naming the
+         * construction that makes it so. The order the passes run in makes nothing so: a
+         * compilation goes on answering after an error, so only a producer that leaves them out can
+         * be named.
          */
         record Unanswered(WrittenName name) implements Name {
+
+            /**
+             * The claim that this name is somewhere it could not have reached.
+             *
+             * <p>Not a reading: there is nothing here to read, and what a reader arriving here is
+             * saying is that its input was built from answered names. The caller throws it, and
+             * names beside the throw the construction it is standing on.
+             */
+            public IllegalStateException unexpectedHere() {
+                return new IllegalStateException("`" + written() + "` at " + pos()
+                        + " denotes nothing and was read as though it did");
+            }
 
             @Override
             public String toString() {
@@ -1631,62 +1647,21 @@ public interface Hir {
          * <p>What a walk over a body asks. An edge, a substitution, a rewrite is about what a name
          * stands for; a name nothing declares stands for nothing, so there is no edge to add and
          * nothing to rewrite, and the mistake was reported where the name is written.
+         *
+         * <p>The one way from here to what a name names. What a declaration-reading observation
+         * needs — {@link Denoting#denotes()}, {@link Denoting#reachedAs()} — is the answered form's,
+         * so a reader arrives at it through this projection or through narrowing to the two forms,
+         * and says what it does with an {@link Unanswered} name where it makes that choice.
          */
         default Denoting answered() {
             return this instanceof Denoting denoting ? denoting : null;
         }
 
-        /**
-         * What this name names, for a reader that is asking which declaration it is and has no
-         * answer to give where there is none.
-         *
-         * <p>{@link #answered()} is for the reader that has: a walk that adds no edge for a name
-         * nothing declares. This one is for a reader that would have to make something up.
-         */
-        default ValueName denotes() {
-            Denoting names = answered();
-            if (names == null) {
-                throw new IllegalStateException("`" + name() + "` at " + pos()
-                        + " denotes nothing and was read as though it did");
-            }
-            return names.denotes();
-        }
-
-        /**
-         * How this module reaches what the name names — what a table keyed by a declaration's name
-         * is looked up with. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is
-         * the name the source writes, which an import may have let go without its qualifier.
-         */
-        default ReachName reachedAs() {
-            Denoting names = answered();
-            if (names == null) {
-                throw new IllegalStateException("`" + name() + "` at " + pos()
-                        + " reaches nothing this module can name");
-            }
-            return names.reachedAs();
-        }
-
-        /** As {@link #denotes()}, by the bare name of what it names. */
-        default String bare() {
-            return denotes().name();
-        }
-
-        /**
-         * As {@link #reachedAs()}, rendered.
-         *
-         * <p>Never the spelling. An import lets a name be written without its qualifier, so the
-         * spelling misses in the very table this is asked for, and a table answers a key it has not
-         * got with silence. Every pass that writes a reference of its own says what it means
-         * (ADR-0067), so there is no tree downstream of resolution for a fallback to have been for.
-         */
-        default String reaches() {
-            return reachedAs().rendered();
-        }
-
         /** Whether this name denotes nothing — read by resolution, and reported where it was
-         * written. */
+         * written. Asked of {@link #answered()} rather than of the form, so that what a name
+         * answers and whether it answered cannot come apart. */
         default boolean unresolved() {
-            return this instanceof Unanswered;
+            return answered() == null;
         }
 
         /**
@@ -1700,13 +1675,6 @@ public interface Hir {
          */
         default Var denoting(ValueName resolved, ReachName reachedAs) {
             return new Denoting(written(), resolved, reachedAs, region());
-        }
-
-        /** The same name denoting {@code resolved}, reached as it already was — for a pass that
-         * changes what a name says about where its construction came from and not which declaration
-         * it reaches. */
-        default Var denoting(ValueName resolved) {
-            return new Denoting(written(), resolved, reachedAs(), region());
         }
 
         /** The same name, over {@code region} — whichever of the two it is. */
@@ -1736,6 +1704,32 @@ public interface Hir {
                 heldBy(written, region);
             }
 
+            /** As {@link #denotes()}, by the bare name of what it names. */
+            public String bare() {
+                return denotes().name();
+            }
+
+            /**
+             * As {@link #reachedAs()}, rendered — what a table keyed by a declaration's name is
+             * looked up with.
+             *
+             * <p>Never the spelling. An import lets a name be written without its qualifier, so the
+             * spelling misses in the very table this is asked for, and a table answers a key it has
+             * not got with silence. Every pass that writes a reference of its own says what it
+             * means (ADR-0067), so there is no tree downstream of resolution for a fallback to have
+             * been for.
+             */
+            public String reaches() {
+                return reachedAs().rendered();
+            }
+
+            /** The same name denoting {@code resolved}, reached as it already was — for a pass that
+             * changes what a name says about where its construction came from and not which
+             * declaration it reaches. */
+            public Var denoting(ValueName resolved) {
+                return new Denoting(written(), resolved, reachedAs(), region());
+            }
+
             @Override
             public String toString() {
                 return name();
@@ -1748,11 +1742,30 @@ public interface Hir {
          * <p>Reported where it is written, or on the import line or the module that could not be
          * read — whichever could say what is wrong. It carries neither answer, so a reader below has
          * no spelling to match and no report to repeat.
+         *
+         * <p>What a reader does on meeting one is the reader's to say, and the readers here say one
+         * of two things. A walk that recovers — adds no edge, states no type, settles no call —
+         * passes it over: what is wrong is reported already. A reader whose input is built from
+         * answered names only says so with {@link #unexpectedHere()}, naming the construction that
+         * makes it so. The order the passes run in makes nothing so: a compilation goes on
+         * answering after an error, so only a producer that leaves them out can be named.
          */
         record Unanswered(WrittenName written, Region region) implements Var {
 
             public Unanswered {
                 heldBy(written, region);
+            }
+
+            /**
+             * The claim that this name is somewhere it could not have reached.
+             *
+             * <p>Not a reading: there is nothing here to read, and what a reader arriving here is
+             * saying is that its input was built from answered names. The caller throws it, and
+             * names beside the throw the construction it is standing on.
+             */
+            public IllegalStateException unexpectedHere() {
+                return new IllegalStateException("`" + name() + "` at " + pos()
+                        + " denotes nothing and was read as though it did");
             }
 
             @Override
@@ -1910,40 +1923,18 @@ public interface Hir {
         }
 
         /**
-         * The name of the declaration this application reaches, or the empty spelling where it
-         * reaches none — what a table keyed by a declaration's name is looked up with.
-         *
-         * <p>A library name is filed under its qualifier whether or not an import let it be written
-         * bare, so that is what it answers; every other name is filed as it is written. The empty
-         * answer is not a convention: it is what applying something that is not a name leaves, and
-         * no declaration is named the empty spelling.
-         *
-         * <p>Never {@link #written()}: a spelling a report quotes is not what this application
-         * reaches, and a lowering that put one there would otherwise have every table in the
-         * compiler looked up with it.
-         */
-        public String reaches() {
-            return function instanceof Var v ? v.reaches() : "";
-        }
-
-        /** How this module reaches what the application applies, or null where what it applies is
-         * not a name. Settled at resolution and carried, so it says the same thing whichever passes
-         * have run. */
-        public ReachName reachedAs() {
-            return function instanceof Var v ? v.reachedAs() : null;
-        }
-
-        /** What the name this applies denotes, or null where what it applies is not a name. */
-        public ValueName denotes() {
-            return function instanceof Var v ? v.denotes() : null;
-        }
-
-        /**
-         * As {@link Var#answered()}, of the name this applies.
+         * As {@link Var#answered()}, of the name this applies — and what a reader asking which
+         * declaration this reaches goes through.
          *
          * <p>Null the two ways there is no declaration to look up: what is applied is not a name,
          * or it is one nothing declares. A callee nothing has read yet is refused there, as it is
          * of a name standing on its own.
+         *
+         * <p>What the answered form says — {@link Var.Denoting#denotes()},
+         * {@link Var.Denoting#reachedAs()}, {@link Var.Denoting#reaches()} — is read off it here
+         * rather than carried across by this one. Carried, it would answer for a callee that is not
+         * a name and for one that names nothing in the same value, and a reader would have neither
+         * to hand.
          */
         public Var.Denoting answered() {
             return function instanceof Var v ? v.answered() : null;

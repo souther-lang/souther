@@ -151,10 +151,10 @@ final class PartialReachability {
      * not be written where a value goes. A value takes none and is read rather than handed over.
      */
     boolean isPartialFunctionNamed(Hir.Var v) {
-        if (v.answered() == null) {
+        if (!(v.answered() instanceof Hir.Var.Denoting named)) {
             return false;   // it names no helper, partial or otherwise
         }
-        Hir.FnDef declared = declarationOf(v.denotes(), v.reachedAs(), inliner);
+        Hir.FnDef declared = declarationOf(named, inliner);
         return declared != null && declared.partial() && !declared.params().isEmpty();
     }
 
@@ -255,15 +255,15 @@ final class PartialReachability {
         switch (e) {
             // A name nothing answered reaches no declaration, so it makes no edge.
             case Hir.Apply call when call.answered() != null -> {
-                Hir.FnDef applied = declarationOf(call.denotes(), call.reachedAs(), inliner);
+                Hir.FnDef applied = declarationOf(call.answered(), inliner);
                 if (applied != null) {
-                    out.add(keyOf(call.denotes(), call.reachedAs()));
+                    out.add(keyOf(call.answered()));
                 }
             }
-            case Hir.Var v when v.answered() != null -> {
-                Hir.FnDef read = declarationOf(v.denotes(), v.reachedAs(), inliner);
+            case Hir.Var.Denoting v -> {
+                Hir.FnDef read = declarationOf(v, inliner);
                 if (read != null && read.params().isEmpty()) {
-                    out.add(keyOf(v.denotes(), v.reachedAs()));
+                    out.add(keyOf(v));
                 }
             }
             default -> { }
@@ -282,19 +282,18 @@ final class PartialReachability {
      * today, so keeping it changes no answer; leaving it out would make that a premise of the check
      * rather than a fact about the library, and one the library could stop honouring in silence.
      */
-    private static String keyOf(ValueName denotes, ReachName reachedAs) {
-        return switch (denotes) {
+    private static String keyOf(Hir.Var.Denoting named) {
+        return switch (named.denotes()) {
             // Which key it is, the reference says: settled where the name was resolved and carried
             // here. What decides whether there is a node at all is what the name denotes — a binding
             // spelled like a helper reaches no declaration however it is written.
-            case ValueName.Helper _, ValueName.Stdlib _ -> reachedAs.rendered();
+            case ValueName.Helper _, ValueName.Stdlib _ -> named.reaches();
             case null, default -> null;
         };
     }
 
-    private static Hir.FnDef declarationOf(ValueName denotes, ReachName reachedAs,
-                                           HelperInliner inliner) {
-        String key = keyOf(denotes, reachedAs);
+    private static Hir.FnDef declarationOf(Hir.Var.Denoting named, HelperInliner inliner) {
+        String key = keyOf(named);
         return key == null ? null : inliner.helper(key);
     }
 }

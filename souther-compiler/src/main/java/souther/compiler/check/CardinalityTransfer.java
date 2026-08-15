@@ -67,7 +67,11 @@ final class CardinalityTransfer {
                 // of them has none.
                 Cardinality across = Cardinality.NO_VALUE;
                 for (Hir.Name each : sum.cases()) {
-                    across = across.plus(known(solution, each.denotes()));
+                    // A case naming nothing carries no values in, which is what it adds: it is
+                    // reported where it is written and says nothing about how many the sum has.
+                    if (each.answered() instanceof Hir.Name.Denoting names) {
+                        across = across.plus(known(solution, names.type()));
+                    }
                 }
                 yield across;
             }

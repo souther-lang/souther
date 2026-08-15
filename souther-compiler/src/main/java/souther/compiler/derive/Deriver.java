@@ -288,7 +288,13 @@ public final class Deriver {
             return;   // a sum that reaches itself; DataChecker reports it, this only has to terminate
         }
         for (Hir.Name caseName : s.cases()) {
-            if (symbols.declarations().declaration(caseName.denotes().key()) instanceof Hir.SumData nested) {
+            // A case naming nothing is no sum to descend into and no leaf to derive a codec for; it
+            // is reported where it is written.
+            if (caseName.answered() == null) {
+                continue;
+            }
+            if (symbols.declarations().declaration(caseName.answered().type().key())
+                    instanceof Hir.SumData nested) {
                 collectLeafCases(nested, symbols, out, visiting);
             } else if (!out.contains(caseName)) {
                 out.add(caseName);
@@ -299,7 +305,7 @@ public final class Deriver {
     private static List<Hir.Variant> tagVariants(Hir.SumData s, List<Hir.Name> cases) {
         List<Hir.Variant> variants = new ArrayList<>();
         for (Hir.Name caseName : cases) {
-            variants.add(new Hir.Variant(caseName.denotes().name(), caseName, s.pos()));
+            variants.add(new Hir.Variant(caseName.answered().type().name(), caseName, s.pos()));
         }
         return variants;
     }
@@ -307,7 +313,7 @@ public final class Deriver {
     private static List<Hir.EncVariant> encVariants(Hir.SumData s, List<Hir.Name> cases) {
         List<Hir.EncVariant> variants = new ArrayList<>();
         for (Hir.Name caseName : cases) {
-            variants.add(new Hir.EncVariant(caseName, caseName.denotes().name(), s.pos()));
+            variants.add(new Hir.EncVariant(caseName, caseName.answered().type().name(), s.pos()));
         }
         return variants;
     }

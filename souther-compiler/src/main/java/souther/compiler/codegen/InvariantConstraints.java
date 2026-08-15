@@ -171,7 +171,7 @@ public final class InvariantConstraints {
 
     /** The literal bound {@code size(value)} is compared against, or null when this is not that shape. */
     private static Integer sizeBound(String size, Hir.Expr left, Hir.Expr right) {
-        if (!(left instanceof Hir.Apply call) || !call.reaches().equals(size)
+        if (!(left instanceof Hir.Apply call) || !applies(call, size)
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return null;
         }
@@ -188,7 +188,7 @@ public final class InvariantConstraints {
         // same way the check asks — one reading of which expressions are compile-time strings and of
         // what one composes to, so a pattern the check accepted cannot arrive here unrecognised and
         // lose its constraint. It has been compiled once at check time, so it is known well-formed.
-        if (base == Type.STRING && "String.matches".equals(call.reaches()) && call.args().size() == 2
+        if (base == Type.STRING && applies(call, "String.matches") && call.args().size() == 2
                 && isValue(call.args().get(1))) {
             return ConstEval.evalString(call.args().get(0)).map(Pattern::new);
         }
@@ -196,7 +196,7 @@ public final class InvariantConstraints {
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
         // is not the identity says it of something else — the elements' products, their ids — and Raoh
         // has no constraint for that, so the clause keeps its own check.
-        if (base instanceof Type.ListOf && "List.allDistinctBy".equals(call.reaches())
+        if (base instanceof Type.ListOf && applies(call, "List.allDistinctBy")
                 && call.args().size() == 2 && isValue(call.args().get(1))
                 && isIdentity(call.args().get(0))) {
             return Optional.of(new Unique());
@@ -205,7 +205,7 @@ public final class InvariantConstraints {
     }
 
     private static Optional<Constraint> ofStringLength(Hir.BinOp op, Hir.Expr left, Hir.Expr right) {
-        if (!(left instanceof Hir.Apply call) || !"String.length".equals(call.reaches())
+        if (!(left instanceof Hir.Apply call) || !applies(call, "String.length")
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return Optional.empty();
         }
@@ -278,13 +278,24 @@ public final class InvariantConstraints {
         return e instanceof Hir.Var v && v.name().equals(VALUE);
     }
 
+    /**
+     * Whether {@code call} applies {@code operation} — asked of what the name reaches, which is what
+     * a library operation is filed under whether or not an import let it be written bare.
+     *
+     * <p>A call applying a name nothing declares applies no operation this recognises. There is no
+     * constraint to map it to, and the clause keeps the check it already has.
+     */
+    private static boolean applies(Hir.Apply call, String operation) {
+        return call.answered() != null && operation.equals(call.answered().reaches());
+    }
+
     /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is
      * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). The body reads
      * the parameter when it reads that binding; a name spelled like it, bound elsewhere, is another
      * value. */
     private static boolean isIdentity(Hir.Expr e) {
         return e instanceof Hir.Block b && b.params().size() == 1
-                && b.body() instanceof Hir.Var v
+                && b.body() instanceof Hir.Var.Denoting v
                 && v.denotes() instanceof ValueName.Local local
                 && local.id().equals(b.params().get(0).id());
     }

@@ -201,7 +201,7 @@ public final class Elaborator {
             // A name nothing answered has no meaning to work out, and the definition it is in has
             // none either: reported where it is written, and abandoned here.
             case Hir.Var.Unanswered v -> throw new Unanswerable(v.pos());
-            case Hir.Var v -> switch (v.denotes()) {
+            case Hir.Var.Denoting v -> switch (v.denotes()) {
                 // A binding with no type here is not a naming question: an inference probe types a
                 // body before the binding it asks about has one, and reads the report to find out.
                 case ValueName.Local local when env.typeOf(local.id()) != null ->
@@ -238,11 +238,11 @@ public final class Elaborator {
             case Hir.Apply call -> CallElaborator.elaborateCall(call, env, ctx, expected);
             case Hir.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Hir.NewData nd -> {
-                Hir.Name built = nd.typeName();
-                if (built instanceof Hir.Name.Unanswered) {
+                if (!(nd.typeName().answered() instanceof Hir.Name.Denoting built)) {
+                    // reported where the name is written; this definition has no meaning to work out
                     throw new Unanswerable(nd.pos());
                 }
-                if (!(ctx.symbols().declarations().declaration(built.denotes().key()) instanceof Hir.Data owner)) {
+                if (!(ctx.symbols().declarations().declaration(built.type().key()) instanceof Hir.Data owner)) {
                     throw CompileException.of(Diagnostic
                                     .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
@@ -254,15 +254,17 @@ public final class Elaborator {
                 // fields, so it is refused the way the name would be anywhere else a value goes.
                 List<Core.Read> spreads = new ArrayList<>();
                 for (Hir.Var s : nd.spreads()) {
-                    if (!(s.answered() != null && s.denotes() instanceof ValueName.Local local)) {
+                    if (!(s.answered() instanceof Hir.Var.Denoting named
+                            && named.denotes() instanceof ValueName.Local local)) {
                         throw notAValue(s, env);
                     }
-                    spreads.add(new Core.Read(s.bare(), local.id(), env.typeOf(local.id()), s.pos()));
+                    spreads.add(new Core.Read(named.bare(), local.id(), env.typeOf(local.id()),
+                            s.pos()));
                 }
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
                         nd.inits(), spreads, nd.pos(),
                         TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx, nd.fields());
-                yield new Core.Construct(built.denotes(), values, Type.ref(built.denotes()), nd.pos());
+                yield new Core.Construct(built.type(), values, Type.ref(built.type()), nd.pos());
             }
             case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Hir.If iff -> {
@@ -642,7 +644,14 @@ public final class Elaborator {
      */
     private static void checkOpens(Hir.LetIn li, Type valueType, Symbols symbols) {
         String opened = li.opens().written();
-        TypeSymbol layer = li.opens().denotes();
+        // A name nothing declares was reported where it is written, and what is left here is not a
+        // question about it: what the binding opens has no type, so the body under it would be
+        // checked against a shape nothing states. Abandoned as a name standing anywhere else in a
+        // body is, rather than passed on as an absent type for the reading below to take for one.
+        if (!(li.opens().answered() instanceof Hir.Name.Denoting opens)) {
+            throw new Unanswerable(li.opens().pos());
+        }
+        TypeSymbol layer = opens.type();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
             throw CompileException.of(Diagnostic
                             .at(li.pos())
@@ -872,7 +881,7 @@ public final class Elaborator {
      */
     private static Type arrivesAs(Hir.Given g, Hir.Expansion ex, Scope env, CheckContext ctx) {
         Type is = g.arrivesAs() != null ? TypeOps.resolveParamType(g.arrivesAs())
-                : g.value() instanceof Hir.Var v
+                : g.value() instanceof Hir.Var.Denoting v
                         && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf fn ? fn : null;
         return is == null ? null : instantiated(is, ex);
     }
@@ -935,7 +944,8 @@ public final class Elaborator {
      * it as, and what it is declared as is carried on the boundary instead.
      */
     private static boolean inSight(Hir.Expr function, Scope env) {
-        if (function instanceof Hir.Var v && v.denotes() instanceof ValueName.Local local) {
+        if (function instanceof Hir.Var.Denoting v
+                && v.denotes() instanceof ValueName.Local local) {
             return env.holds(local.id());
         }
         return reads(function, env);
@@ -948,8 +958,9 @@ public final class Elaborator {
      * where it is applied and not here. Where it is not, it is left to the body that applies it.
      */
     private static boolean reads(Hir.Expr e, Scope env) {
-        if (e instanceof Hir.Apply call && call.denotes() instanceof ValueName.Helper
-                && env.of(call.denotes(), call.reaches()) == null) {
+        if (e instanceof Hir.Apply call && call.answered() instanceof Hir.Var.Denoting callee
+                && callee.denotes() instanceof ValueName.Helper
+                && env.of(callee.denotes(), callee.reaches()) == null) {
             return false;
         }
         boolean[] all = {true};
@@ -1104,7 +1115,8 @@ public final class Elaborator {
         if (e instanceof Hir.Apply call) {
             handedOver(binder, call, env, ctx, out);
         }
-        if (e instanceof Hir.Apply call && call.denotes() instanceof ValueName.Local applied
+        if (e instanceof Hir.Apply call && call.answered() != null
+                && call.answered().denotes() instanceof ValueName.Local applied
                 && applied.id().equals(binder.id())
                 && call.args().stream().noneMatch(a -> reaches(a, inner))) {
             List<Type> argTypes = new ArrayList<>();
@@ -1122,7 +1134,8 @@ public final class Elaborator {
                 // A name given to this function is this function: what the second name is used for is
                 // what the first one is used for. Followed rather than left to the applications alone,
                 // because an alias may be the only thing that is ever applied or handed over.
-                if (li.value() instanceof Hir.Var v && v.denotes() instanceof ValueName.Local local
+                if (li.value() instanceof Hir.Var.Denoting v
+                        && v.denotes() instanceof ValueName.Local local
                         && local.id().equals(binder.id())) {
                     collectApplications(li.binder(), li.body(), env, ctx, out, inner);
                 }
@@ -1158,12 +1171,13 @@ public final class Elaborator {
      */
     private static void handedOver(Hir.Binder binder, Hir.Apply call, Scope env, CheckContext ctx,
                                    List<List<Type>> out) {
-        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        CompleteSignature kept = call.answered() == null
+                ? null : ctx.preserved().signatureOf(call.answered().denotes());
         if (kept == null || kept.params().size() != call.args().size()) {
             return;
         }
         for (int i = 0; i < call.args().size(); i++) {
-            if (!(call.args().get(i) instanceof Hir.Var v)
+            if (!(call.args().get(i) instanceof Hir.Var.Denoting v)
                     || !(v.denotes() instanceof ValueName.Local local)
                     || !local.id().equals(binder.id())
                     || !(kept.params().get(i) instanceof Type.FnOf declared)) {
@@ -1206,8 +1220,8 @@ public final class Elaborator {
             return false;
         }
         ValueName denotes = switch (e) {
-            case Hir.Var v -> v.denotes();
-            case Hir.Apply c -> c.denotes();
+            case Hir.Var.Denoting v -> v.denotes();
+            case Hir.Apply c when c.answered() != null -> c.answered().denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Local local && inner.contains(local.id())) {
@@ -1470,7 +1484,7 @@ public final class Elaborator {
         optionCaseWritten(v.name(), v.pos());
         // A name that was answered is not an unknown one, and saying it is sends the reader looking
         // for a spelling mistake. What it denotes is what cannot stand here, so that is the report.
-        String denotes = switch (v.denotes()) {
+        String denotes = switch (v.answered().denotes()) {
             case ValueName.Behavior _ -> "a behavior";
             case ValueName.Builtin _ -> "written at the position that reads it, not evaluated";
             // Reached from a name slot the inliner does not substitute into — a spread. In an

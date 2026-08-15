@@ -77,7 +77,7 @@ public final class BottomInfer {
         if (e instanceof Hir.RowCollection row) {
             return row.elements().isEmpty();
         }
-        return e instanceof Hir.Var v && v.denotes() instanceof ValueName.Stdlib lib
+        return e instanceof Hir.Var.Denoting v && v.denotes() instanceof ValueName.Stdlib lib
                 && Prelude.isEmptyCollectionValue(lib.qualified());
     }
 

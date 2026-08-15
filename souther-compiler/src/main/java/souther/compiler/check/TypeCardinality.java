@@ -233,7 +233,12 @@ public final class TypeCardinality {
         Set<TypeSymbol> named = new LinkedHashSet<>();
         switch (def) {
             case Hir.UnitData _ -> { }
-            case Hir.SumData sum -> sum.cases().forEach(each -> named.add(each.denotes()));
+            // A case naming nothing names no declaration for this to have read.
+ 	    case Hir.SumData sum -> sum.cases().forEach(each -> {
+                if (each.answered() instanceof Hir.Name.Denoting names) {
+                    named.add(names.type());
+                }
+            });
             case Hir.Data data ->
                     TypeOps.fieldTypes(data, symbols).values().forEach(each -> names(each, named));
         }

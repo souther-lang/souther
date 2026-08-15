@@ -466,12 +466,13 @@ public final class HelperInliner {
      */
     private static void kernelCallsIn(Hir.Expr e, FixtureEvidence evidence,
                                       Map<String, Hir.FnDef> out) {
-        if (e instanceof Hir.Apply call && call.answered() != null
-                && call.denotes() instanceof ValueName.Stdlib) {
-            Prelude.PreludeEntry entry = Prelude.entry(call.reaches());
+        if (e instanceof Hir.Apply call
+                && call.answered() instanceof Hir.Var.Denoting callee
+                && callee.denotes() instanceof ValueName.Stdlib) {
+            Prelude.PreludeEntry entry = Prelude.entry(callee.reaches());
             if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic
                     && !entry.declaration().params().isEmpty()
-                    && FixtureApplication.settle(call.reaches(), entry.declaration(),
+                    && FixtureApplication.settle(callee.reaches(), entry.declaration(),
                             FixtureArgumentTypes.of(call, evidence), evidence.symbols())
                             instanceof FixtureApplication.Settled(var settled)) {
                 FixtureCallable.Realization realization = FixtureCallable.resolve(settled);
@@ -616,7 +617,7 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return call;   // it reaches no library name, so there is no sugar to write out
         }
-        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
+        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.answered().reaches());
         if (rewrite == null || call.args().size() != rewrite.keptArgs()) {
             return call;
         }
@@ -697,10 +698,10 @@ public final class HelperInliner {
      * boundary is read in is what answers for it.
      */
     private Hir.RetType arrivesAs(Hir.Expr arg) {
-        if (!(arg instanceof Hir.Var v) || v.answered() == null) {
+        if (!(arg instanceof Hir.Var v) || !(v.answered() instanceof Hir.Var.Denoting named)) {
             return null;
         }
-        Hir.FnDef is = expands(v.denotes(), v.reaches());
+        Hir.FnDef is = expands(named);
         if (is == null || is.declaredReturn() == null) {
             return null;
         }
@@ -784,12 +785,12 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return null;   // it reaches no declaration, so none of them declares anything
         }
-        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
+        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.answered().reaches());
         if (rewrite != null && call.args().size() == rewrite.keptArgs()) {
             Hir.FnDef target = table.reached(rewrite.target().qualified());
             return target == null ? null : target.params().subList(0, rewrite.keptArgs());
         }
-        Hir.FnDef helper = table.reached(call.reaches());
+        Hir.FnDef helper = table.reached(call.answered().reaches());
         return helper == null ? null : helper.params();
     }
 
@@ -850,22 +851,26 @@ public final class HelperInliner {
      * module declares is the lambda — with nothing to tell the two apart by.
      */
     private Hir.FnDef appliedHelper(Hir.Apply call) {
-        if (call.appliesAName() && call.answered() == null) {
-            return null;   // it names nothing, so no body stands behind it
+        if (call.answered() == null) {
+            // it names nothing, or what is applied is not a name at all: either way no body stands
+            // behind it, and the expression works out what is applied
+            return null;
         }
-        return expands(call.denotes(), call.reaches());
+        return expands(call.answered());
     }
 
     /**
-     * The body {@code denotes} stands for here, or null where no body stands behind it.
+     * The body {@code named} stands for here, or null where no body stands behind it.
      *
      * <p>The one place that answers it, so a name applied and a name handed over get the same answer.
-     * {@code reachedBy} is how the name is written here — bare for a definition of this module,
-     * qualified for the library and for what another module publishes — which is the namespace the
-     * table is keyed by; which namespace to look in is decided by the denotation, never by the text.
+     * The two halves of the answer arrive together, as one name: how it is written here — bare for a
+     * definition of this module, qualified for the library and for what another module publishes —
+     * is the namespace the table is keyed by, and which namespace to look in is decided by what it
+     * denotes, never by the text. A name that names nothing has neither, so it is not asked at all.
      */
-    private Hir.FnDef expands(ValueName denotes, String reachedBy) {
-        return switch (denotes) {
+    private Hir.FnDef expands(Hir.Var.Denoting named) {
+        String reachedBy = named.reaches();
+        return switch (named.denotes()) {
             // applying something that is not a name: what is applied is worked out by the expression,
             // and no declaration stands behind it
             case null -> null;
@@ -911,7 +916,7 @@ public final class HelperInliner {
         for (int i = 0; i < callee.params().size() && i < out.size(); i++) {
             Hir.RetType declared = callee.params().get(i).type();
             Hir.FnType want = declared == null ? null : declared.asFn();
-            if (want == null || !(out.get(i) instanceof Hir.Var v)
+            if (want == null || !(out.get(i) instanceof Hir.Var.Denoting v)
                     || !(v.denotes() instanceof ValueName.Local local)
                     || !writing.dependencies().contains(local.id())) {
                 continue;
@@ -994,9 +999,8 @@ public final class HelperInliner {
 
     /** The body {@code name} would put here, or null where the name stands for itself — asked as
      *  {@link #valueOf} and {@link #expandCall} ask it, so what is counted is what is spliced. */
-    private Hir.Expr substitutedAt(Hir.Var name) {
-        if (name.answered() == null
-                || !(name.denotes() instanceof ValueName.Helper)
+    private Hir.Expr substitutedAt(Hir.Var.Denoting name) {
+        if (!(name.denotes() instanceof ValueName.Helper)
                 || graph.recurses(name.reaches())) {
             return null;
         }
@@ -1087,7 +1091,7 @@ public final class HelperInliner {
                 // A binding that holds a function, read into another binding: the second names the
                 // same function, so it is registered under it. Nothing is copied — what a name means
                 // is what it was given, and here it was given a binding.
-                Hir.FnDef aliased = value instanceof Hir.Var v ? expands(v.denotes(), v.reaches()) : null;
+                Hir.FnDef aliased = value instanceof Hir.Var.Denoting v ? expands(v) : null;
                 if (aliased != null) {
                     BindingId alias = li.binder().id();
                     writing.scopedLambdas().put(alias, new ScopedLambda(aliased));
@@ -1174,10 +1178,14 @@ public final class HelperInliner {
             args.add(inline(a));
         }
         Hir.FnDef helper = appliedHelper(call);
+        // What is applied, where it is a name that names something. A body stands behind nothing
+        // else, so where this is absent the call is left as it is.
+        Hir.Var.Denoting callee = call.answered();
         // a recursive helper is reached by the name it is declared under; a lambda a binding
         // holds is not one, whatever it is called
-        boolean standing = !(call.denotes() instanceof ValueName.Local)
-                && graph.recurses(call.reaches());
+        boolean standing = callee != null
+                && !(callee.denotes() instanceof ValueName.Local)
+                && graph.recurses(callee.reaches());
         if (helper == null || standing) {
             // builtin, injected behavior, a function-typed parameter, or a recursive helper —
             // a recursive helper is lowered to a method, so its call stays a Call (spec §fn-declaration);
@@ -1200,7 +1208,7 @@ public final class HelperInliner {
         // declared return is carried on, and every binding copied out of the callee's body.
         // One minter, so no two of them are the same binding, and a reader can ask of any of
         // them which call it came from.
-        BindingOwner mine = new BindingOwner.Expansion(writing.into(), call.denotes(), next());
+        BindingOwner mine = new BindingOwner.Expansion(writing.into(), callee.denotes(), next());
         Hir.Binders ours = new Hir.Binders(mine);
         // What the callee's signature leaves open, this call decides. Its variables are
         // instantiated once, here, over the whole signature at once — so a variable it wrote
@@ -1229,7 +1237,7 @@ public final class HelperInliner {
             }
         });
         arguments.unreduced().keySet().forEach(writing.scopedLambdas()::remove);
-        return new Hir.Expansion(call.denotes(), mine, bound, arguments.given(),
+        return new Hir.Expansion(callee.denotes(), mine, bound, arguments.given(),
                 instantiated(helper.declaredReturn(), applied), body, call.pos(), call.region());
     }
 
@@ -1242,7 +1250,8 @@ public final class HelperInliner {
      * the parameter count is reported against the lambda instead.
      */
     private CompileException wrongArity(Hir.Apply call, Hir.FnDef helper, int given) {
-        ScopedLambda applied = call.denotes() instanceof ValueName.Local local
+        ScopedLambda applied = call.answered() != null
+                && call.answered().denotes() instanceof ValueName.Local local
                 ? writing.scopedLambdas().get(local.id()) : null;
         LambdaOrigin origin = applied == null ? null : applied.origin();
         if (origin != null) {
@@ -1305,7 +1314,7 @@ public final class HelperInliner {
                 given.add(new Hir.Given(instantiated(p.type(), applied), arg,
                         references(helper.writtenBody(), p.binder().id()), arrivesAs(arg)));
                 Hir.FnType declares = declaredFn(p.type(), applied);
-                if (arg instanceof Hir.Var fnName && fnName.answered() != null) {
+                if (arg instanceof Hir.Var.Denoting fnName) {
                     // A name handed to a function parameter is substituted through: what
                     // applies it applies what it stands for. What it stands for is declared
                     // somewhere — a helper's own parameter, a binding, a function an
@@ -1415,8 +1424,8 @@ public final class HelperInliner {
      * declines to make: a {@code let} with no parameter list is a value and is written without
      * {@code ()}, and there is no block taking no parameter to expand it to.
      */
-    private OptionalInt declarationArity(Hir.Var v) {
-        if (v.answered() == null) {
+    private OptionalInt declarationArity(Hir.Var name) {
+        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
             return OptionalInt.empty();   // it stands for no declaration to take anything
         }
         int arity = switch (v.denotes()) {
@@ -1462,17 +1471,18 @@ public final class HelperInliner {
             int k = next();
             return inline(etaExpand(v, arity.getAsInt(), i -> "$v" + k + "_" + i));
         }
-        if (v.answered() == null || !(v.denotes() instanceof ValueName.Helper)) {
+        if (!(v.answered() instanceof Hir.Var.Denoting named)
+                || !(named.denotes() instanceof ValueName.Helper)) {
             return v;
         }
-        Hir.FnDef value = table.reached(v.reaches());
+        Hir.FnDef value = table.reached(named.reaches());
         // Asked with the name the table was asked with. The graph is keyed as the table is, and a
         // spelling agrees with that key only where a pass has already written it out qualified.
-        if (value == null || value.body() == null || graph.recurses(v.reaches())) {
+        if (value == null || value.body() == null || graph.recurses(named.reaches())) {
             return v;
         }
-        Hir.Expr settled = settled(v);
-        return settled != null ? settled : substituted(v.reaches(), value.writtenBody());
+        Hir.Expr settled = settled(named);
+        return settled != null ? settled : substituted(named.reaches(), value.writtenBody());
     }
 
     /**
@@ -1492,7 +1502,7 @@ public final class HelperInliner {
      * (ADR-0072), so what stands there is this reference's, and a report about it belongs where the
      * name was written rather than in the body it came from.
      */
-    private Hir.Expr settled(Hir.Var v) {
+    private Hir.Expr settled(Hir.Var.Denoting v) {
         Type type = settledValues.valueKept(v.denotes());
         if (type == null) {
             return null;
@@ -1570,7 +1580,8 @@ public final class HelperInliner {
                 spreads.add(spread);
                 continue;
             }
-            Hir.Binder name = writing.binders().binder("$s" + next() + "_" + spread.bare(), spread.pos());
+            Hir.Binder name = writing.binders().binder(
+                    "$s" + next() + "_" + spread.answered().bare(), spread.pos());
             bound.add(name);
             values.add(substituted(spread.name(), value.writtenBody()));
             spreads.add(Hir.Var.local(name, spread.pos()));
@@ -1614,12 +1625,13 @@ public final class HelperInliner {
         if (call.answered() == null) {
             return call;   // it reaches nothing, so it is no named block to desugar
         }
-        Integer idx = BLOCK_ARG.get(call.reaches());
+        Integer idx = BLOCK_ARG.get(call.answered().reaches());
         if (idx == null || idx >= call.args().size()
-                || !(call.args().get(idx) instanceof Hir.Var v) || v.answered() == null) {
+                || !(call.args().get(idx) instanceof Hir.Var v)
+                || !(v.answered() instanceof Hir.Var.Denoting named)) {
             return call;
         }
-        Hir.FnDef helper = expands(v.denotes(), v.reaches());
+        Hir.FnDef helper = expands(named);
         if (helper == null) {
             return call;   // a bare name that stands for no body is left for the type checker to report
         }
@@ -1942,13 +1954,15 @@ public final class HelperInliner {
      * holding it, and asking again would answer about the wrong thing.
      */
     private WrittenAt whereTheBodyIs(Hir.Apply call, Hir.FnDef helper) {
-        if (call.denotes() instanceof ValueName.Local || CitableRegion.canShow(helper.pos())) {
+        if (call.answered() == null
+                || call.answered().denotes() instanceof ValueName.Local
+                || CitableRegion.canShow(helper.pos())) {
             return WrittenAt.HERE;
         }
         // Reached rather than declared: `List.map` is what a reader here writes and what a report
         // about it should quote, and which module declares it is the other half, read off the
         // declaration rather than split back out of the name.
-        return new WrittenAt.OutOfSight(call.reaches());
+        return new WrittenAt.OutOfSight(call.answered().reaches());
     }
 
     /** {@code call}'s own place, said to stand in for a body written out of sight — what a copy that
@@ -1985,9 +1999,9 @@ public final class HelperInliner {
      * spelling comes out of an expansion a unit short and a qualified one written over a line break
      * comes out as far as its spelling is long.
      */
-    private Hir.Var renameVar(Hir.Var v, Renaming renaming) {
-        if (v.answered() == null) {
-            return v;   // it names nothing, so there is nothing to rename it to
+    private Hir.Var renameVar(Hir.Var name, Renaming renaming) {
+        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+            return name;   // it names nothing, so there is nothing to rename it to
         }
         Substituted stands = renaming.substituted(v.denotes());
         if (stands != null) {
@@ -2018,8 +2032,8 @@ public final class HelperInliner {
      * against the module's definitions: a binding in force wins over a declaration, and a spread is
      * no exception.
      */
-    private Hir.FnDef valueSpread(Hir.Var spread) {
-        if (spread.answered() == null
+    private Hir.FnDef valueSpread(Hir.Var name) {
+        if (!(name.answered() instanceof Hir.Var.Denoting spread)
                 || !(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }
@@ -2042,8 +2056,8 @@ public final class HelperInliner {
      */
     private static boolean references(Hir.Expr e, BindingId binding) {
         ValueName denotes = switch (e) {
-            case Hir.Var v when v.answered() != null -> v.denotes();
-            case Hir.Apply c when c.answered() != null -> c.denotes();
+            case Hir.Var.Denoting v -> v.denotes();
+            case Hir.Apply c when c.answered() != null -> c.answered().denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Local local && local.id().equals(binding)) {
@@ -2099,14 +2113,14 @@ public final class HelperInliner {
             // the recursive `foldFrom` and not the wrapper it wrote.
             case Hir.Apply call when call.answered() instanceof Hir.Var.Denoting callee
                     && !(callee.denotes() instanceof ValueName.Local) -> {
-                String fn = "List.fold".equals(call.reaches()) ? "List.foldFrom" : call.reaches();
+                String fn = "List.fold".equals(callee.reaches())
+                        ? "List.foldFrom" : callee.reaches();
                 if (table.containsKey(fn)) {
                     out.add(fn);
                 }
             }
-            case Hir.Var v when v.answered() != null
-                    && (v.denotes() instanceof ValueName.Helper
-                            || v.denotes() instanceof ValueName.Stdlib) -> {
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Helper
+                    || v.denotes() instanceof ValueName.Stdlib -> {
                 if (table.containsKey(v.reaches())) {
                     out.add(v.reaches());
                 }
@@ -2132,7 +2146,8 @@ public final class HelperInliner {
                 && !(callee.denotes() instanceof ValueName.Local)) {
             // `List.fold` desugars to `List.foldFrom` before inlining, so a body that folds reaches the
             // recursive `foldFrom` — recursion classification and prelude-injection must see that.
-            String fn = "List.fold".equals(call.reaches()) ? "List.foldFrom" : call.reaches();
+            String fn = "List.fold".equals(callee.reaches())
+                    ? "List.foldFrom" : callee.reaches();
             if (table.containsKey(fn)) {
                 out.add(fn);
             }

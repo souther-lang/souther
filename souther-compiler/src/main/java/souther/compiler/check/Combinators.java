@@ -96,7 +96,10 @@ final class Combinators {
      * was handed, so one that exists has both.
      */
     static Written handedTo(Hir.Apply call) {
-        Combinator rule = of(call.denotes());
+        // A call applying a name nothing declares hands its closure to no operation this table
+        // has: there is no declaration to find a rule under, and what is wrong with it is reported
+        // where the name is written.
+        Combinator rule = call.answered() == null ? null : of(call.answered().denotes());
         if (rule == null || rule.closureArg() >= call.args().size()
                 || rule.containerArg() >= call.args().size()
                 || !(call.args().get(rule.closureArg()) instanceof Hir.Block step)) {

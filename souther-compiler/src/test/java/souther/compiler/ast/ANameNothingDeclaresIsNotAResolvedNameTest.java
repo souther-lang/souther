@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -50,24 +52,43 @@ class ANameNothingDeclaresIsNotAResolvedNameTest {
     }
 
     /**
-     * Read and found nothing, it refuses the question — and says which of the two it is refusing,
-     * because what a reader does next differs. This is a mistake in the source, reported where it is
-     * written, and the declaration holding it has no meaning to work out.
+     * Read and found nothing, it has no declaration to give, and says so by being the form that
+     * carries none. This is a mistake in the source, reported where it is written, and the
+     * declaration holding it has no meaning to work out.
      */
     @Test
-    void aNameNothingDeclaresRefusesTheQuestion() {
+    void aNameNothingDeclaresCarriesNoDeclaration() {
         Hir.Name unanswered = new Hir.Name.Unanswered(WrittenName.of("Invoice", POS));
 
         assertEquals("Invoice", unanswered.written());
-        IllegalStateException e = assertThrows(IllegalStateException.class, unanswered::denotes);
-        assertTrue(e.getMessage().contains("denotes nothing"), e.getMessage());
+        assertNull(unanswered.answered());
     }
 
-    /** Answered, it says which declaration. */
+    /**
+     * And which declaration a name names is asked of the form that has one.
+     *
+     * <p>Asked of {@link Hir.Name} it could be asked of one that names nothing, which every reader
+     * then had to remember not to do; a reader that forgot compiled and threw where the name was
+     * read rather than where it was reported.
+     */
     @Test
-    void aResolvedNameSaysWhatItDenotes() {
+    void whichDeclarationANameNamesIsNotAskedOfANameThatMayHaveNone() {
         assertEquals(DECLARED,
-                new Hir.Name.Denoting(WrittenName.of("Invoice", POS), DECLARED).denotes());
+                new Hir.Name.Denoting(WrittenName.of("Invoice", POS), DECLARED).type());
+
+        for (java.lang.reflect.Method m : Hir.Name.class.getDeclaredMethods()) {
+            assertNotEquals("denotes", m.getName(),
+                    "what a name denotes is the answered form's to say");
+        }
+    }
+
+    /** A reader whose input is built from answered names says so, naming the name it met. */
+    @Test
+    void aReaderThatWasNotToMeetOneSaysWhichNameItMet() {
+        Hir.Name.Unanswered nothing = new Hir.Name.Unanswered(WrittenName.of("Invoice", POS));
+
+        assertTrue(nothing.unexpectedHere().getMessage().contains("`Invoice`"));
+        assertTrue(nothing.unexpectedHere().getMessage().contains("denotes nothing"));
     }
 
     /** And there is no third answer for a reader below the pass to tell apart. */

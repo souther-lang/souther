@@ -290,8 +290,8 @@ public final class TypeChecker {
                 for (Hir.Var req : spec.dependsOn()) {
                     // A name nothing answered is no name for another to be a duplicate of, and it
                     // was reported where it is written.
-                    if (!req.unresolved()) {
-                        required.add(req.bare());
+                    if (req.answered() instanceof Hir.Var.Denoting named) {
+                        required.add(named.bare());
                     }
                 }
                 DataChecker.rejectDuplicateNames(required, "`depends on`", spec.pos());

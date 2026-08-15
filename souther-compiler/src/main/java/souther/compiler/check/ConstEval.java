@@ -244,7 +244,12 @@ public final class ConstEval {
 
     private static Optional<Object> call(Hir.Apply call) {
         List<Hir.Expr> args = call.args();
-        switch (call.reaches()) {
+        // Applying a name nothing declares is not a constant. There is no operation to fold it to,
+        // and the name is reported where it is written.
+        if (call.answered() == null) {
+            return Optional.empty();
+        }
+        switch (call.answered().reaches()) {
             case "String.length" -> {
                 if (args.size() == 1 && eval(args.get(0)).orElse(null) instanceof String s) {
                     return Optional.of((long) s.length());

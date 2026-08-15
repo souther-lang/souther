@@ -44,6 +44,11 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
      * What {@code e} is declared to be, or null where no declaration says — which is where a helper
      * stands, since what a helper was declared to answer with is not read and what it supplied is
      * its answer's to say.
+     *
+     * <p>Null is this walk's word for absence, and every caller reads it as that and nothing else:
+     * the expression states no type here. A name resolution answered with nothing is one of the
+     * ways — it names no declaration to read a type off, and the mistake in it is reported where it
+     * is written.
      */
     public Type declaredTypeOf(Hir.Expr e) {
         return declaredTypeOf(e, new HashSet<>(), new HashMap<>(bound));
@@ -52,7 +57,8 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
     /** As above, from a walk that already has names in force and a record of what it has entered. */
     public Type declaredTypeOf(Hir.Expr e, Set<ValueName> seen, Map<BindingId, Hir.Expr> inForce) {
         return switch (e) {
-            case Hir.NewData nd -> Type.ref(nd.typeName().denotes());
+            case Hir.NewData nd -> nd.typeName().answered() == null
+                    ? null : Type.ref(nd.typeName().answered().type());
             // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
             case Hir.Apply c when constructsANewtype(c) -> Type.ref(constructs(c));
             case Hir.FieldAccess fa -> {
@@ -72,10 +78,13 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
                     }
                 }
             }
+            // A name resolution answered with nothing states no type: there is no declaration to
+            // read one off, and what is wrong with the name is reported where it is written.
+            case Hir.Var v when v.answered() == null -> null;
             case Hir.Var v -> {
-                ValueName denotes = v.denotes();
+                ValueName denotes = v.answered().denotes();
                 // A name reached twice is the cycle the reading itself reports; this walk only stops.
-                if (denotes == null || !seen.add(denotes)) {
+                if (!seen.add(denotes)) {
                     yield null;
                 }
                 Hir.Expr body = denotes instanceof ValueName.Local local
@@ -122,7 +131,8 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
     }
 
     private static TypeSymbol constructs(Hir.Apply c) {
-        return c.denotes() instanceof ValueName.OfType named ? named.type() : null;
+        return c.answered() != null && c.answered().denotes() instanceof ValueName.OfType named
+                ? named.type() : null;
     }
 
     // --- what a declaration says, asked of the resolution and never of a spelling ------------------
@@ -151,7 +161,10 @@ public record FixtureEvidence(Symbols symbols, Map<String, Hir.FnDef> values,
         Map<String, Hir.TypeRef> out = new LinkedHashMap<>();
         if (symbols.declarations().declaration(typeName.key()) instanceof Hir.Data d) {
             for (Hir.Name inc : d.includes()) {
-                out.putAll(fieldTypes(inc.denotes(), symbols));
+                // A spread naming nothing brings in no fields; it is reported where it is written.
+                if (inc.answered() instanceof Hir.Name.Denoting named) {
+                    out.putAll(fieldTypes(named.type(), symbols));
+                }
             }
             for (Hir.Field f : d.fields()) {
                 // an example builds its input through a decoder, so a field with no external

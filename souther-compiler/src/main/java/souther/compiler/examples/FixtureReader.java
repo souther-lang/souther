@@ -375,7 +375,8 @@ public final class FixtureReader {
      * under, so a row spelling that type qualified asserts the same case.
      */
     TypeSymbol caseOnly(Hir.Expr expected) {
-        return expected instanceof Hir.Var v && v.denotes() instanceof ValueName.OfType named
+        return expected instanceof Hir.Var.Denoting v
+                && v.denotes() instanceof ValueName.OfType named
                 ? named.type() : null;
     }
 
@@ -484,7 +485,8 @@ public final class FixtureReader {
      * silently, since a miss is what a table keyed by names does with a key it has not got.
      */
     private static TypeSymbol constructs(Hir.Apply c) {
-        return c.denotes() instanceof ValueName.OfType named ? named.type() : null;
+        return c.answered() != null && c.answered().denotes() instanceof ValueName.OfType named
+                ? named.type() : null;
     }
 
     /** Whether an application is a newtype's construction written in call form (ADR-0032). */
@@ -722,11 +724,11 @@ public final class FixtureReader {
             case Hir.LetIn let -> helperAnswer(let.body(), followed);
             // a binding holds what it was bound to; a value stands for the body it was defined as.
             // A name that denotes a type is a case, and no helper answered it.
-            case Hir.Var v when v.denotes() instanceof ValueName.Local local -> {
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local -> {
                 Hir.Expr held = bindings.get(local.id());
                 yield held == null ? null : helperAnswer(held, followed);
             }
-            case Hir.Var v when v.denotes() instanceof ValueName.Helper -> {
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Helper -> {
                 Hir.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
                 yield body == null ? null : helperAnswer(body, followed);
             }
@@ -800,7 +802,8 @@ public final class FixtureReader {
      */
     private TypeSymbol constructedCase(Hir.Expr e, Set<String> followed, List<TypeSymbol> worn) {
         return switch (e) {
-            case Hir.NewData nd -> nd.typeName().denotes();
+            case Hir.NewData nd -> nd.typeName().answered() == null
+                    ? null : nd.typeName().answered().type();
             case Hir.Apply c when constructsANewtype(c) -> {
                 TypeSymbol named = constructs(c);
                 yield wears(named, c, worn)
@@ -820,7 +823,11 @@ public final class FixtureReader {
 
     /** The case a bare name stands for: the type it denotes where it denotes one — a unit case, or a
      * case written bare — and otherwise the case the value or binding it names constructs. */
-    private TypeSymbol namedCase(Hir.Var v, Set<String> followed, List<TypeSymbol> worn) {
+    private TypeSymbol namedCase(Hir.Var name, Set<String> followed, List<TypeSymbol> worn) {
+        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+            // it names nothing, so it stands for no case; reported where it is written
+            return null;
+        }
         return switch (v.denotes()) {
             case ValueName.OfType named -> named.type();
             case ValueName.Local local -> {
@@ -1098,7 +1105,9 @@ public final class FixtureReader {
                     bindings.remove(binding);
                 }
             }
-            case Hir.Var v -> {
+            // A name that names nothing falls to the reading below with everything else a field
+            // cannot be taken off, and is refused there rather than guessed at here.
+            case Hir.Var.Denoting v -> {
                 ValueName denotes = v.denotes();
                 Hir.Expr body = denotes instanceof ValueName.Local local ? bindings.get(local.id())
                         : denotes instanceof ValueName.Helper ? valueBody(v.name()) : null;
@@ -1356,13 +1365,16 @@ public final class FixtureReader {
     private Stated states(Hir.Expr e) {
         return switch (e) {
             case Hir.LetIn _ -> ELSEWHERE;
-            case Hir.NewData nd -> new Stated.Name(nd.typeName().denotes());
+            case Hir.NewData nd when nd.typeName().answered() != null ->
+                    new Stated.Name(nd.typeName().answered().type());
             case Hir.Var v -> statedByName(v);
             case Hir.Apply c when appliedHelper(c) != null -> ELSEWHERE;
             case Hir.Apply c when constructsANewtype(c) -> caseNamed(constructs(c));
             // `Date("…")` is a temporal, and `Set.fromList([…])` a collection: values under no name.
-            case Hir.Apply c when Type.Prim.named(c.reaches()) != null
-                    || "Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches()) ->
+            case Hir.Apply c when c.answered() != null
+                    && (Type.Prim.named(c.answered().reaches()) != null
+                            || "Set.fromList".equals(c.answered().reaches())
+                            || "Map.fromList".equals(c.answered().reaches())) ->
                     STATES_NO_NAME;
             case Hir.Apply _ -> ELSEWHERE;
             case Hir.FieldAccess fa -> {
@@ -1417,7 +1429,11 @@ public final class FixtureReader {
         return resolved == null ? STATES_NO_NAME : new Stated.Name(resolved);
     }
 
-    private Stated statedByName(Hir.Var v) {
+    private Stated statedByName(Hir.Var name) {
+        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+            // it names nothing, and the reading that follows says so where it is written
+            return ELSEWHERE;
+        }
         return switch (v.denotes()) {
             case ValueName.OfType of -> new Stated.Name(of.type());
             case ValueName.Builtin b when b.name().equals("None") -> ABSENCE;
@@ -1496,7 +1512,10 @@ public final class FixtureReader {
      * <p>Which of the four it is was settled where the name was written, so it is not worked out
      * again here: a binding in force is the value it holds, whatever else bears its spelling.
      */
-    private Object named(Hir.Var v, Position at, Admission admission) {
+    private Object named(Hir.Var name, Position at, Admission admission) {
+        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+            throw new FixtureException("`" + name.name() + "` is not a value a fixture can name");
+        }
         return switch (v.denotes()) {
             // `None` maps to a null, which the optional decoder reads as the absent optional
             // (spec §absence-is-written-as-null, absent/null -> None), the same as omitting a `T?` field
@@ -1640,7 +1659,7 @@ public final class FixtureReader {
      * ({@code Map.empty}), so it is read in {@link #named}.
      */
     private Object collectionOrNewtype(Hir.Apply c, Position at, Admission admission) {
-        if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())) {
+        if (isFromList(c)) {
             if (c.args().size() != 1) {
                 throw new FixtureException("`" + c.written() + "` takes one argument");
             }
@@ -1666,8 +1685,7 @@ public final class FixtureReader {
      * a helper however it is spelled. Asked wherever an application has to be told from a construction,
      * so the two readers of a call cannot come to different answers. */
     private Applied appliedHelper(Hir.Apply c) {
-        if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())
-                || constructsANewtype(c)) {
+        if (isFromList(c) || constructsANewtype(c)) {
             return null;
         }
         String reached = helperKey(c);
@@ -1686,12 +1704,25 @@ public final class FixtureReader {
      * reach name the reference carries, settled at resolution and not worked out again here.
      */
     private String helperKey(Hir.Apply c) {
-        return switch (c.denotes()) {
-            case ValueName.Helper _, ValueName.Stdlib _ -> c.reaches();
+        if (c.answered() == null) {
+            // what applying something that is not a name leaves, and what a name nothing declares
+            // leaves: neither reaches a declaration for a table to answer about
+            return null;
+        }
+        return switch (c.answered().denotes()) {
+            case ValueName.Helper _, ValueName.Stdlib _ -> c.answered().reaches();
             case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _,
                     ValueName.Behavior _ -> null;
-            case null -> null;   // what applying something that is not a name leaves
+            case null -> null;
         };
+    }
+
+    /** Whether {@code c} is the collection notation a fixture writes as its elements — asked of what
+     *  the callee reaches, as every other question about which operation a call applies is. */
+    private static boolean isFromList(Hir.Apply c) {
+        return c.answered() != null
+                && ("Set.fromList".equals(c.answered().reaches())
+                        || "Map.fromList".equals(c.answered().reaches()));
     }
 
     /**
@@ -1809,7 +1840,8 @@ public final class FixtureReader {
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {
-        Type.Prim written = Type.Prim.named(c.reaches());
+        Type.Prim written = c.answered() == null
+                ? null : Type.Prim.named(c.answered().reaches());
         if (written != null && written.temporal()) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
@@ -1846,21 +1878,31 @@ public final class FixtureReader {
     }
 
     private Object record(Hir.NewData nd, Position at, Admission admission) {
+        // A construction naming nothing builds no value a fixture can supply, and the name it wrote
+        // is reported where it is written.
+        if (nd.typeName().answered() == null) {
+            throw new FixtureException("`" + nd.typeName().written()
+                    + "` is not a type a fixture can build");
+        }
         // `金額(500)` is the record literal `金額 { value = 500 }` written in call form (ADR-0032), and
         // a value's body reaches here already written the second way. Either spelling is the newtype's
         // own neutral form — its inner value — not a field map.
-        TypeSymbol built = nd.typeName().denotes();
+        TypeSymbol built = nd.typeName().answered().type();
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
             Position base = Position.declaredBy(neutral.newtypeBaseType(built));
             return neutral.newtypeAt(at, built,
                     neutral.shaped(raw(nd.inits().get(0).value(), base, below(admission)), base));
         }
-        Map<String, Hir.TypeRef> declared = neutral.fieldTypes(nd.typeName().denotes());
+        Map<String, Hir.TypeRef> declared = neutral.fieldTypes(nd.typeName().answered().type());
         Map<String, Object> map = new LinkedHashMap<>();
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought.
-        for (Hir.Var ref : nd.spreads()) {
+        for (Hir.Var spreadName : nd.spreads()) {
+            if (!(spreadName.answered() instanceof Hir.Var.Denoting ref)) {
+                throw new FixtureException("`" + spreadName.name()
+                        + "` is not a value a fixture can spread");
+            }
             // A spread names a value in force, so what it copies is what that name denotes: a binding
             // holds what it was bound to, and a definition stands for its body. A definition is
             // reached by the name this row spells it with — a definition of this module by its own
@@ -1878,7 +1920,7 @@ public final class FixtureReader {
             // opens states no value of the construction's type, while the fields it copies were
             // written at their own positions and hold there.
             Object copied = expandedValue(ref.denotes(), value,
-                    Position.at(Type.ref(nd.typeName().denotes())),
+                    Position.at(Type.ref(nd.typeName().answered().type())),
                     admission == Admission.UNHELD ? admission : Admission.HELD_BELOW);
             if (!(copied instanceof Map<?, ?> fields)) {
                 throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
@@ -1909,7 +1951,7 @@ public final class FixtureReader {
             }
             map.put(fi.name(), v);
         }
-        neutral.tagged(at, nd.typeName().denotes(), map);
+        neutral.tagged(at, nd.typeName().answered().type(), map);
         return map;
     }
 
