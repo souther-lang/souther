@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.JsonRenderer;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceNameResolver;
@@ -188,6 +189,25 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         }
     }
 
+    /**
+     * A second region is a sentence about a place as much as the caret is.
+     *
+     * <p>The warning about an edge points at the guard that drew it, and where that guard is a copy
+     * of a body written out of sight the region is a call in the caller's file. A label saying "the
+     * guard that draws that line" against it says the guard is there, which is the caret's own defect
+     * one region over — and it appeared the moment a rule started pointing at a guard, because
+     * qualifying a place was something the body did rather than something a renderer does.
+     */
+    @Test
+    void aSecondRegionSaysWhatItStandsInForToo() {
+        Said said = saidAbout(OUT_OF_SIGHT);
+
+        assertTrue(said.edgeSaid().contains("`" + DECLARATION + "`"),
+                () -> "the label says where the guard is written: " + said.edgeSaid());
+        assertTrue(said.edgeJson().contains("`" + DECLARATION + "`"),
+                () -> "and so does the document: " + said.edgeJson());
+    }
+
     // --- the third state, which is neither of the two a provenance has ------------------------------
 
     /**
@@ -248,6 +268,9 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         JsonNode region = JSON.readTree(said.diagnosticJson()).get("region");
         assertEquals("here", region.get("writtenAt").get("kind").asString());
         assertFalse(region.get("writtenAt").has("declaration"));
+        assertFalse(said.edgeSaid().contains("no source for"),
+                () -> "a second region at a place the reader holds says nothing extra: "
+                        + said.edgeSaid());
     }
 
     @Test
@@ -297,7 +320,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
      */
     private record Said(String warning, String diagnosticJson, String armLine, JsonNode at,
                         List<String> boundaryLines, List<String> boundaryOrigins,
-                        JsonNode document) {
+                        String edgeSaid, String edgeJson, JsonNode document) {
 
         /** What the document says about where the arm is written, or null where it says nothing.
          *  Read and not asserted: whether it is there at all is one of the things under test, and a
@@ -328,12 +351,17 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         AdequacyReport report = AdequacyReport.of(compilation);
 
         List<Diagnostic> arms = new ArrayList<>();
+        List<Diagnostic> edges = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {
             Diagnostic d = found.report().diagnostic();
             if ("E1918".equals(d.code())) {
                 arms.add(d);
             }
+            if ("E1916".equals(d.code()) && !d.secondary().isEmpty()) {
+                edges.add(d);
+            }
         }
+        assertFalse(edges.isEmpty(), "an edge no row is at points at the guard that drew it");
         assertEquals(1, arms.size(), () -> "one arm is unreached: " + arms.size());
         Diagnostic arm = arms.get(0);
 
@@ -353,11 +381,15 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         behavior.get("partition").get("boundaries")
                 .forEach(each -> origins.add(each.get("origin").asString()));
 
+        SourceContext source = new SourceContext("m.sou", model);
         return new Said(
                 DiagnosticRenderer.body(arm, Locale.ENGLISH),
-                new JsonRenderer().render(arm, new SourceContext("m.sou", model), Locale.ENGLISH),
+                new JsonRenderer().render(arm, source, Locale.ENGLISH),
                 armLines.get(0), unreached.get(0).get("at"),
-                boundaryLines, origins, document);
+                boundaryLines, origins,
+                new HumanRenderer(false).render(edges.get(0), source, Locale.ENGLISH),
+                new JsonRenderer().render(edges.get(0), source, Locale.ENGLISH),
+                document);
     }
 
     /** What the two renderings say about an arm written in another source of this compile. */

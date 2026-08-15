@@ -86,19 +86,34 @@ public interface DiagnosticRenderer {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
         String said = d.literalMessage() != null ? d.literalMessage()
                 : d.said() == null ? "" : Messages.render(d.said(), locale);
-        if (!(citedBy(d) instanceof Citation.OutOfSight out)) {
+        return qualified(said, d.pos(), locale);
+    }
+
+    /**
+     * {@code said}, with what the place it is shown against stands in for said after it.
+     *
+     * <p>Every sentence a report puts beside a coordinate, and not only the one under the caret. A
+     * label on a second region is a sentence about the place it points at as much as the body is,
+     * and a second region pointing into a copied body is at a call in the caller's file — so a
+     * label saying what is there says it of code that is somewhere else. Which is what the caret
+     * did before this was said off it at all, repeated one region over the moment a rule started
+     * pointing at a guard.
+     *
+     * <p>So it is a rule of rendering rather than a thing the body does. A renderer that shows text
+     * against a place calls this; a renderer written later that does not is missing the same
+     * sentence the first one was.
+     *
+     * @param at where the text is shown against, or null where it is shown against nothing — there
+     *        being no claim about a place to qualify
+     */
+    static String qualified(String said, SourcePos at, Locale locale) {
+        java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
+        if (at == null || !(Citation.of(at) instanceof Citation.OutOfSight out)) {
             return said;
         }
         String about = Messages.render(
                 new WrittenAtMessage.TheCodeIsWrittenOutOfSight(out.declaration()),
                 locale);
         return said.isEmpty() ? about : said + " " + about;
-    }
-
-    /** What this report's caret cites, or null where it points at nothing at all, there being no
-     *  claim about a place to qualify. Private: a projection every reader can reach is a second
-     *  way to the declaration, and the point of {@link Citation} is that there is one. */
-    private static Citation citedBy(Diagnostic d) {
-        return d.pos() == null ? null : Citation.of(d.pos());
     }
 }

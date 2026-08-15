@@ -1929,7 +1929,9 @@ public final class Analyzer {
             }
             related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.region()),
                     other.labelled()
-                            ? Messages.render(other.said(), EDITOR_LANGUAGE)
+                            ? DiagnosticRenderer.qualified(
+                                    Messages.render(other.said(), EDITOR_LANGUAGE),
+                                    other.region().start(), EDITOR_LANGUAGE)
                             : message));
         }
         Range range = view.anchor().region() != null
