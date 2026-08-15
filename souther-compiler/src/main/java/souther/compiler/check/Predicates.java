@@ -384,7 +384,7 @@ final class Predicates {
                 // The same clause read as the cases of whatever chooses inside it. Both readings are
                 // kept: a guard may name the call itself, which the clause as it stands is what
                 // settles, and reading it case by case never takes that away.
-                piecewise = piecewiseOf(numeric, inv, at, k);
+                piecewise = piecewiseOf(numeric, inv, at);
             }
         }
         Polar polar = polar(inv, positive);
@@ -400,7 +400,7 @@ final class Predicates {
         }
         List<Constraint> known = new ArrayList<>();
         sizeFacts(inv, at, known);
-        resultFacts(inv, at, k, known);
+        resultFacts(inv, at, known);
         return Owed.of(new Clause(numeric, fact, known, piecewise));
     }
 
@@ -442,7 +442,7 @@ final class Predicates {
         // whichever way the condition itself is read.
         List<Constraint> known = new ArrayList<>();
         sizeFacts(cond, at, known);
-        resultFacts(cond, at, k, known);
+        resultFacts(cond, at, known);
         for (Constraint c : known) {
             // A size is never negative whether or not the condition holds, so this holds of the value
             // and not of the path — the condition is only where the container got named.
@@ -607,21 +607,21 @@ final class Predicates {
      * answer, and what they are read as is this reading's answer — a name given a constant is that
      * constant, here as everywhere.
      */
-    void resultFacts(Core e, Denotations at, Known k, List<Constraint> out) {
+    void resultFacts(Core e, Denotations at, List<Constraint> out) {
         // A name is what it was given, as in `sizeFacts`: an operation's guarantee does not depend on
         // whether its call was written where it is read or bound first.
         if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
-            resultFacts(at.valueOf(r.binding()), at, k, out);
+            resultFacts(at.valueOf(r.binding()), at, out);
             return;
         }
         if (!(e instanceof Core.PreservedCall call)) {
-            Core.forEachChild(e, child -> resultFacts(child, at, k, out));
+            Core.forEachChild(e, child -> resultFacts(child, at, out));
             return;
         }
         Term result = terms.atomOf(call, at);
         if (result != null) {
             for (DischargeRules.ResultBound bound
-                    : DischargeRules.boundsOn(call, arg -> constantOf(arg, at, k))) {
+                    : DischargeRules.boundsOn(call, arg -> constantOf(arg, at))) {
                 LinearForm<Term> against = bound.against() == null
                         ? LinearForm.constant(bound.offset())
                         : addTo(terms.affineOf(bound.against().of(call), at), bound.offset());
@@ -630,9 +630,9 @@ final class Predicates {
                 }
             }
         }
-        shiftFact(call, at, k, out);
+        shiftFact(call, at, out);
         for (Core arg : call.args()) {
-            resultFacts(arg, at, k, out);
+            resultFacts(arg, at, out);
         }
     }
 
@@ -656,7 +656,7 @@ final class Predicates {
         if (la == null || ra == null) {
             return false;
         }
-        Piecewise cases = piecewiseOf(new Constraint(la.minus(ra), stated), cond, at, k);
+        Piecewise cases = piecewiseOf(new Constraint(la.minus(ra), stated), cond, at);
         return cases != null && cases.refutedBy(k.numbers());
     }
 
@@ -670,7 +670,7 @@ final class Predicates {
      * keys as — so replacing the atom answers both, where rewriting the expression would answer the
      * first and leave the second saying nothing.
      */
-    private Piecewise piecewiseOf(Constraint owed, Core inv, Denotations at, Known k) {
+    private Piecewise piecewiseOf(Constraint owed, Core inv, Denotations at) {
         Map<Term, Core.PreservedCall> choosing = new LinkedHashMap<>();
         chosenCalls(inv, at, choosing);
         choosing.keySet().retainAll(owed.form().coefs().keySet());
@@ -737,7 +737,7 @@ final class Predicates {
      * fact and the clause meet at one term. Where either value is named by nothing there is no such
      * atom, and nothing is stated.
      */
-    private void shiftFact(Core.PreservedCall call, Denotations at, Known k, List<Constraint> out) {
+    private void shiftFact(Core.PreservedCall call, Denotations at, List<Constraint> out) {
         DischargeRules.Shift shift = DischargeRules.shiftBy(call);
         if (shift == null) {
             return;
@@ -760,7 +760,7 @@ final class Predicates {
     }
 
     /** The constant {@code e} reads as, or null where it reads as none. */
-    private BigDecimal constantOf(Core e, Denotations at, Known k) {
+    private BigDecimal constantOf(Core e, Denotations at) {
         LinearForm<Term> form = terms.affineOf(e, at);
         return form == null || !form.coefs().isEmpty() ? null : form.constant();
     }
