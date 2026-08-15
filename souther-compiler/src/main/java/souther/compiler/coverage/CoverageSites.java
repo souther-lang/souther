@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
@@ -68,13 +69,17 @@ public final class CoverageSites {
     /**
      * One arm, as it stands in the tree that runs.
      *
+     * @param at          where the arm is written, as a report may say it. A {@link Citation} and
+     *                    not a place, because an arm of a body spliced in from out of sight is at a
+     *                    call in the caller's file and is not written there — a report handed the
+     *                    coordinate said it was, in both of its renderings
      * @param index       what identifies it in this run — the probe number, and what a hit set holds.
      *                    One per occurrence: the emitter lights this one, and the reachability
      *                    analysis proves things about this one
      * @param ordinal     where it comes in its behavior, for display
      * @param obligation  what a row would be owed for, which several occurrences share
      */
-    public record Site(String behavior, Kind kind, String label, SourceRef at,
+    public record Site(String behavior, Kind kind, String label, Citation at,
                        int index, int ordinal, Obligation obligation) {
 
         public enum Kind {
@@ -285,7 +290,8 @@ public final class CoverageSites {
          */
         private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part) {
             int index = sites.size();
-            sites.add(new Site(behavior, kind, label, new SourceRef(sourceId, owner.pos()),
+            sites.add(new Site(behavior, kind, label,
+                    Citation.of(new SourceRef(sourceId, owner.pos())),
                     index, ordinal++, new Obligation(behavior, origin, part)));
             return index;
         }

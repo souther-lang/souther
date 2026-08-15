@@ -3,6 +3,7 @@ package souther.compiler.query;
 
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
@@ -727,10 +728,17 @@ public final class Adequacy {
         /**
          * The arms no row goes through, one entry per arm.
          *
-         * <p>Named at the first occurrence the body holds. Where the copies keep the position they
-         * were written at they all say the same thing; where a copy was stamped with the call site
-         * that spliced it — a helper of another module — the occurrences are at different places and
-         * one of them has to be the one shown, since the arm is one arm and the report says so once.
+         * <p>Named at the first occurrence the body holds. Where the copies keep the positions they
+         * were written at they all say the same thing; where a copy could not — the body came from a
+         * module this compile has no source for, so each copy was given the call site that spliced it
+         * — the occurrences are at different places and one of them has to be the one shown, since
+         * the arm is one arm and the report says so once.
+         *
+         * <p>Which one is a choice about where to send a reader and not about where the arm is. What
+         * each occurrence carries says the arm is written out of sight and names the declaration, so
+         * the report says that however this chooses; the choice only decides which call the reader is
+         * shown. A module of this compile that declares the helper is not this case at all — its body
+         * is in a file the reader holds, and every copy keeps its own positions.
          */
         public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
             List<souther.compiler.coverage.CoverageSites.Site> out = new ArrayList<>();
@@ -1437,9 +1445,14 @@ public final class Adequacy {
      * not be completed is worth printing — it says a row may be missing — and is not worth failing a
      * build over, because telling an author to write a row they may already have written is worse than
      * saying nothing.
+     *
+     * <p>{@code at} is a {@link souther.compiler.diag.Citation} and not a place. Most of these are
+     * about a declaration this compile read, where the two are the same thing; an arm is not, being
+     * one of a body that may have been spliced in from a file nobody holds. A report reading a
+     * coordinate cannot tell the two apart, and printed the second as though it were the first.
      */
-    public record Finding(Kind kind, String behavior, MeasurementStatus status, SourcePos at,
-                          List<Object> args) {
+    public record Finding(Kind kind, String behavior, MeasurementStatus status,
+                          Citation at, List<Object> args) {
 
         public Finding {
             args = List.copyOf(args);
@@ -1515,7 +1528,7 @@ public final class Adequacy {
             OutputCaseEvidence output = signature.output();
             for (TypeSymbol missing : output.unspecified()) {
                 out.add(new Finding(Kind.OUTPUT_CASE_UNSPECIFIED, behavior.name(), status,
-                        behavior.pos(), List.of(missing.name(), behavior.name())));
+                        Citation.of(behavior.pos()), List.of(missing.name(), behavior.name())));
             }
             // Where the behavior answered for no row, every case is unverified and naming each of
             // them adds nothing to that. Asked of the rows rather than of the declaration: the two
@@ -1533,14 +1546,14 @@ public final class Adequacy {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
                         out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,
-                                behavior.pos(), List.of(missing.name(), behavior.name())));
+                                Citation.of(behavior.pos()), List.of(missing.name(), behavior.name())));
                     }
                 }
             }
             for (int i = 0; i < signature.inputs().size(); i++) {
                 for (TypeSymbol missing : signature.inputs().get(i).unspecified()) {
                     out.add(new Finding(Kind.INPUT_CASE_UNSPECIFIED, behavior.name(), status,
-                            behavior.pos(), List.of(missing.name(), i + 1, behavior.name())));
+                            Citation.of(behavior.pos()), List.of(missing.name(), i + 1, behavior.name())));
                 }
             }
         }
@@ -1562,7 +1575,7 @@ public final class Adequacy {
                 }
                 for (String missing : axis.uncovered()) {
                     out.add(new Finding(Kind.AXIS_CLASS_UNCOVERED, behavior.name(), axis.status(),
-                            behavior.pos(), List.of(missing)));
+                            Citation.of(behavior.pos()), List.of(missing)));
                 }
             }
             for (BoundaryAssessment boundary : partition.boundaries()) {
@@ -1572,7 +1585,7 @@ public final class Adequacy {
                 // does, and a row at it may be one nobody can write.
                 if (boundary.isUnmetGap()) {
                     out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
-                            MeasurementStatus.COMPLETE, behavior.pos(),
+                            MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
                             List.of(boundary.axis(), boundary.value(), boundary.origin())));
                 }
             }
@@ -1581,7 +1594,7 @@ public final class Adequacy {
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
                 if (position.isAbsent()) {
                     out.add(new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
-                            MeasurementStatus.COMPLETE, behavior.pos(),
+                            MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
                             List.of(position.at().toString())));
                 }
             }
@@ -1606,11 +1619,11 @@ public final class Adequacy {
             for (List<Object> each : unread) {
                 // Not measured, because nothing here established anything either way about it.
                 out.add(new Finding(Kind.PARTITION_NOT_READ, behavior.name(),
-                        MeasurementStatus.NOT_MEASURED, behavior.pos(), each));
+                        MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()), each));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
-                        MeasurementStatus.COMPLETE, behavior.pos(),
+                        MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
                         List.of(dropped.axis().toString())));
             }
         }
@@ -1641,7 +1654,7 @@ public final class Adequacy {
             }
             for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
                 out.add(new Finding(Kind.ARM_UNREACHED, behavior.name(), branch.status(),
-                        arm.at().pos(), List.of(arm.label(), arm.behavior())));
+                        arm.at(), List.of(arm.label(), arm.behavior())));
             }
         }
     }
@@ -1699,7 +1712,7 @@ public final class Adequacy {
         private static Report warning(Finding finding) {
             List<Object> said = finding.args();
             souther.compiler.diag.Diagnostic.Builder built = souther.compiler.diag.Diagnostic
-                    .at(finding.at())
+                    .at(sentTo(finding.at()))
                     .say(switch (finding.kind()) {
                         case OUTPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowExpectsThatCase(
                                 text(said, 0), text(said, 1));
@@ -1722,6 +1735,21 @@ public final class Adequacy {
                 default -> { }   // the message says all there is to say
             }
             return Report.of(built.build());
+        }
+
+        /**
+         * Where a reader is sent for a finding: the place, or where the code was reached from when
+         * it is written out of sight.
+         *
+         * <p>Only where to put the caret. What the warning says about that place is the body's, said
+         * off the coordinate it is built at — which carries the same provenance this reads, so the
+         * two cannot come apart.
+         */
+        private static SourcePos sentTo(Citation cited) {
+            return switch (cited) {
+                case Citation.Written written -> written.at().pos();
+                case Citation.OutOfSight out -> out.reachedFrom().pos();
+            };
         }
 
         /** What a finding put at {@code at}, as the text a message carries. */

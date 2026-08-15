@@ -160,7 +160,8 @@ public final class ExampleVerifier {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
                 incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_UNDECIDED,
                         new souther.compiler.observe.Target.OfBehavior(outcome.target()),
-                        java.util.Optional.of(outcome.at())));
+                        java.util.Optional.of(
+                                souther.compiler.diag.Citation.of(outcome.at()))));
             }
         }
         return new Observations(failures, rows, incompleteness);

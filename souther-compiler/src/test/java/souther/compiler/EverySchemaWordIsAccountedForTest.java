@@ -3,6 +3,9 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.WrittenAt;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.BoundaryObligation;
@@ -61,14 +64,14 @@ class EverySchemaWordIsAccountedForTest {
      *
      * @param at the field, as the keys leading to it from the root of the schema
      */
-    private record Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source,
+    private record Vocabulary(String label, List<String> at, Class<?> source,
                               Set<String> written, Set<String> retired) {
 
-        Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source) {
+        Vocabulary(String label, List<String> at, Class<?> source) {
             this(label, at, source, null, Set.of());
         }
 
-        Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source,
+        Vocabulary(String label, List<String> at, Class<?> source,
                    Set<String> retired) {
             this(label, at, source, null, retired);
         }
@@ -92,6 +95,21 @@ class EverySchemaWordIsAccountedForTest {
         return Arrays.stream(CoverageSites.Site.Kind.values())
                 .filter(CoverageSites.Site.Kind::isArm)
                 .map(AdequacyReport::word)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * What a citation can say about a place, spelled by the one writer of the field.
+     *
+     * <p>Both arms built rather than listed. These words are not an enum's — they are what the
+     * citation writes — so a list here would be a second copy of them, and the schema would go on
+     * agreeing with the copy after the writer had stopped saying it.
+     */
+    private static Set<String> writtenAtWords() {
+        SourcePos here = new SourcePos(1, 1, "s");
+        return java.util.stream.Stream
+                .of(here, here.standingInFor(WrittenAt.outOfSight("List.filter")))
+                .map(pos -> Citation.of(pos).writtenAtFields().get("kind"))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
@@ -173,7 +191,12 @@ class EverySchemaWordIsAccountedForTest {
             // the contract — a word that stops being emitted and is not written down still fails.
             new Vocabulary("incompleteness.code",
                     List.of("$defs", "incompleteness", "properties", "code"),
-                    Incompleteness.Code.class, Set.of("probe_mapping_lost")));
+                    Incompleteness.Code.class, Set.of("probe_mapping_lost")),
+            // Whether a place is where the code it names is written. Not an enum: the two words
+            // are the citation's own, and are read off it rather than listed here.
+            new Vocabulary("at.writtenAt.kind",
+                    List.of("$defs", "writtenAt", "properties", "kind"),
+                    Citation.class, writtenAtWords(), Set.of()));
 
     /**
      * The status words the schema allows are the ones the writer can write.
@@ -317,9 +340,9 @@ class EverySchemaWordIsAccountedForTest {
      * consumer reads is what the encoder produces, so that is the side a contract has to be held
      * against.
      */
-    private static Set<String> wordsOf(Class<? extends Enum<?>> source) {
+    private static Set<String> wordsOf(Class<?> source) {
         return Arrays.stream(source.getEnumConstants())
-                .map(AdequacyReport::word)
+                .map(constant -> AdequacyReport.word((Enum<?>) constant))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 

@@ -354,7 +354,7 @@
     },
     "at": {
       "type": "object",
-      "description": "Where in which source. A position alone cannot say which file, since a module's rows are written across its own source and any attached ones.",
+      "description": "Where in which source. A position alone cannot say which file, since a module's rows are written across its own source and any attached ones. It says where this compile met the code, which `writtenAt` says whether to read as where the code is written.",
       "required": ["sourceId", "line", "column"],
       "additionalProperties": false,
       "properties": {
@@ -363,7 +363,21 @@
           "description": "The source, as an identity, read the way a `source` subject is. `sources` says what it is called."
         },
         "line": { "type": "integer" },
-        "column": { "type": "integer" }
+        "column": { "type": "integer" },
+        "writtenAt": { "$ref": "#/$defs/writtenAt" }
+      }
+    },
+    "writtenAt": {
+      "type": "object",
+      "description": "Whether the position beside this is where the code it names is written. A body is copied into everything that calls it, and a copy from a module this compile has no source for is given the call site, since the positions it was written at name a file nobody holds. Absent in a document written before this key existed, which is not the same as `here`: such a document does not answer the question.",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["here", "outOfSight"] },
+        "declaration": {
+          "type": "string",
+          "description": "The name a reader of the file the position is in reaches that code by — `List.filter`. Written where `kind` is `outOfSight` and never otherwise. How it is reached and not which module declares it: a name reached from out of sight is qualified, so it is already enough to look the code up by."
+        }
       }
     }
   }
