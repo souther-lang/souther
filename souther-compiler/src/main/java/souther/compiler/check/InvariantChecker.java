@@ -773,8 +773,10 @@ public final class InvariantChecker {
      * compiler not being able to follow a program.
      */
     static void gaveUp(String where, RuntimeException why) {
-        if (why instanceof Terms.OneTermTwoKinds || why instanceof CitableRegion.NotOnePlace
-                || why instanceof Clause.NotOneClause) {
+        // Asked of what the failure is and not of which ones this has met. A list here is a copy of
+        // the types that carry the distinction, and a new way for the check to disagree with itself
+        // would go on being reported as an ordinary limit with nothing failing while it did.
+        if (why instanceof TheCheckDisagreesWithItself) {
             throw why;
         }
         List<GaveUp> watching = GAVE_UP;
@@ -1106,6 +1108,14 @@ public final class InvariantChecker {
                 alone = alone.assume(known.form(), known.rel(), kinds);
             }
         }
+        // What follows about the arithmetic the domain cannot carry — a product of two values, a
+        // truncating quotient — read off what each reading proves of the values it was computed
+        // from. Both readings are refined, and each answers with its own: a bound derived here is
+        // derived from what the reading assumed, so it belongs to that reading and not to the value.
+        // Asked once the clauses' own statements are in, so a size a clause bounds is one the
+        // arithmetic over it can be read against.
+        dom = DerivedBounds.refine(dom, terms);
+        alone = DerivedBounds.refine(alone, terms);
         // An invariant is the conjunction of its clauses, so every one of them is read before what
         // the invariant came out as is decided. A clause the values alone refute is the whole
         // invariant refuted on the values alone, whatever another clause needed to be refuted —

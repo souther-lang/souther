@@ -60,6 +60,13 @@ final class Terms {
      * terms equal ({@link Term}).
      */
     private final Term.Interner interned = new Term.Interner();
+    /** How each atom outside the affine fragment was computed. */
+    private final Map<Term, Derivation> derivations = new HashMap<>();
+
+    /** What each atom this named outside the affine fragment was computed from. */
+    Map<Term, Derivation> derivations() {
+        return derivations;
+    }
 
     Terms(Symbols symbols) {
         this.symbols = symbols;
@@ -193,18 +200,18 @@ final class Terms {
 
     /** The affine form of an expression: a numeric atom, a newtype construct's wrapped value, or
      * {@code null}. */
-    LinearForm<Term> affineOf(Core e, Denotations at, Known k) {
+    LinearForm<Term> affineOf(Core e, Denotations at) {
         return affine(e, at, n -> {
             // A newtype built around a number is that number here. What makes it one is the
             // declaration, which `affineScalarBase` asks; a construction of it has the one field the
             // declaration gives it.
             if (n instanceof Core.Construct nd
                     && affineScalarBase(Type.ref(nd.typeName())) != null) {
-                return affineOf(nd.values().get(0).value(), at, k);
+                return affineOf(nd.values().get(0).value(), at);
             }
             Core written = writtenValue(n, at);
             if (written != null && written != n) {
-                return affineOf(written, at, k);
+                return affineOf(written, at);
             }
             // An operation answering a number it was given is that number here, whatever type it
             // answers it in: `Decimal.fromInt(n)` is `n`, so a guard about `n` is about the call as
@@ -212,7 +219,7 @@ final class Terms {
             // unrelated and the guard saying nothing about the construction.
             Core answered = DischargeRules.answersItsArgument(n);
             if (answered != null) {
-                return affineOf(answered, at, k);
+                return affineOf(answered, at);
             }
             // A list written out has as many elements as it is written with, whatever they are.
             BigDecimal counted = writtenSize(n, at);
@@ -223,7 +230,7 @@ final class Terms {
             // §invariant-discharge-terms). Read through it, as the `let` node above is read through:
             // the name and the expression it was given are one value, and reading one as an atom of
             // its own leaves a guard on the name saying nothing about the value it was built from.
-            LinearForm<Term> given = givenForm(n, at, k);
+            LinearForm<Term> given = givenForm(n, at);
             if (given != null) {
                 return given;
             }
@@ -237,13 +244,13 @@ final class Terms {
      * given is arithmetic this can read. A name given a location is not this — {@link #atomOf}
      * answers that with the location, which is what the seeding wrote about.
      */
-    private LinearForm<Term> givenForm(Core e, Denotations at, Known k) {
+    private LinearForm<Term> givenForm(Core e, Denotations at) {
         if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Computed)
                 || affineScalarBase(e.type()) == null) {
             return null;
         }
         Core given = at.valueOf(r.binding());
-        return given == null || given == e ? null : affineOf(given, at, k);
+        return given == null || given == e ? null : affineOf(given, at);
     }
 
     /**
@@ -308,7 +315,133 @@ final class Terms {
         if (affineScalarBase(e.type()) == null) {
             return null;
         }
-        return named(bodyKey(e, at), granularityOf(e.type()));
+        Term atom = named(bodyKey(e, at), granularityOf(e.type()));
+        if (atom != null) {
+            recording(atom, e, at);
+        }
+        return atom;
+    }
+
+    /**
+     * Records how {@code atom} was computed, where it stands for arithmetic the affine fragment
+     * cannot carry.
+     *
+     * <p>Here because this is where such an atom is named, and the name is what everything else
+     * about it is filed under: a second place deciding which expressions are products would be a
+     * second answer to keep in step with this one. It is the same reason the spacing of an atom is
+     * recorded here ({@link #named}).
+     *
+     * <p>What is recorded is how the value was computed and not what it lies between. What it lies
+     * between depends on what the path assumed, and the path is not something the naming of an
+     * expression knows — which is why the walk that reads the operands is not handed one.
+     */
+    private void recording(Term atom, Core e, Denotations at) {
+        if (!(asOperator(e) instanceof Core.Binary b)) {
+            return;
+        }
+        Derivation made = switch (b.op()) {
+            case MUL -> product(b, at);
+            case DIV -> quotient(b, at);
+            default -> null;
+        };
+        if (made == null) {
+            return;
+        }
+        Derivation had = derivations.putIfAbsent(atom, made);
+        if (had != null && !sameDerivation(had, made)) {
+            throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` was computed as "
+                    + had + " and as " + made);
+        }
+    }
+
+    /** The product {@code b} is, or null where either factor is a value nothing can be said of. A
+     * factor that is a written constant is not this: that product is a scalar multiply and the
+     * fragment carries it ({@link #scale}). */
+    private Derivation product(Core.Binary b, Denotations at) {
+        LinearForm<Term> left = affineOf(b.left(), at);
+        LinearForm<Term> right = affineOf(b.right(), at);
+        return left == null || right == null ? null : new Derivation.Product(left, right);
+    }
+
+    /**
+     * The quotient {@code b} is, or null where there is no rule about it.
+     *
+     * <p>Only over whole numbers, and only by a divisor that is a whole number other than zero.
+     * {@code /} on {@code Int} truncates toward zero, which is a step nothing about the divisor
+     * changes; on {@code Decimal} it rounds to a precision the run time sets (spec §stdlib-decimal),
+     * and what that rounding does to an end is not something this reads. A divisor the path only
+     * bounds away from zero is not read either — it is the sign and the magnitude of a written
+     * number that the rule is about.
+     *
+     * <p>And only by a divisor an {@code Int} can hold. The arithmetic composed here is over
+     * numbers of any size, so a written form can reach one no {@code Int} is; the rule is about the
+     * operator, whose divisor is an {@code Int}. Asked for one as the other this threw, and a throw
+     * here is read as a limit of the analysis and swallowed — which left the construction reported
+     * as nothing at all rather than as a clause nothing here establishes.
+     */
+    private Derivation quotient(Core.Binary b, Denotations at) {
+        if (granularityOf(b.type()) != Granularity.DISCRETE) {
+            return null;
+        }
+        LinearForm<Term> numerator = affineOf(b.left(), at);
+        LinearForm<Term> divisor = affineOf(b.right(), at);
+        if (numerator == null || divisor == null || !divisor.coefs().isEmpty()) {
+            return null;
+        }
+        BigDecimal written = divisor.constant();
+        if (written.signum() == 0 || written.stripTrailingZeros().scale() > 0
+                || !isWholeNumberAnIntHolds(written)) {
+            return null;
+        }
+        return new Derivation.Quotient(numerator, written.longValue());
+    }
+
+    /** Whether {@code written} is a number an {@code Int} is (spec §primitives), which is what the
+     * operator's divisor is. */
+    private static boolean isWholeNumberAnIntHolds(BigDecimal written) {
+        return written.compareTo(BigDecimal.valueOf(Long.MIN_VALUE)) >= 0
+                && written.compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) <= 0;
+    }
+
+    /**
+     * Whether two readings computed a value the same way.
+     *
+     * <p>Asked of the numbers and not of how they are written: a coefficient of {@code 0.10} and one
+     * of {@code 0.1} are one number, and a record's own equality says they are two. What this is for
+     * is catching the check naming two values alike, and a difference in scale is not that.
+     */
+    private static boolean sameDerivation(Derivation a, Derivation b) {
+        return switch (a) {
+            case Derivation.Product one -> b instanceof Derivation.Product other
+                    && sameForm(one.left(), other.left())
+                    && sameForm(one.right(), other.right());
+            case Derivation.Quotient one -> b instanceof Derivation.Quotient other
+                    && one.divisor() == other.divisor()
+                    && sameForm(one.numerator(), other.numerator());
+        };
+    }
+
+    private static boolean sameForm(LinearForm<Term> a, LinearForm<Term> b) {
+        if (a.constant().compareTo(b.constant()) != 0 || !a.coefs().keySet().equals(b.coefs().keySet())) {
+            return false;
+        }
+        return a.coefs().entrySet().stream()
+                .allMatch(one -> one.getValue().compareTo(b.coefs().get(one.getKey())) == 0);
+    }
+
+    /**
+     * One atom this said was computed two ways.
+     *
+     * <p>Beside {@link OneTermTwoKinds} and for its reason. A term is a value, and a value is
+     * computed by whatever computes it — so an atom recorded as two different pieces of arithmetic
+     * is the naming and the reading disagreeing about which value the atom is, and every bound
+     * derived under that name is about neither of them.
+     */
+    static final class OneTermTwoDerivations extends TheCheckDisagreesWithItself {
+
+        OneTermTwoDerivations(String message) {
+            super(message);
+        }
     }
 
     /** The atom of the size {@code e} takes of a container {@code key} can name, or null where it
@@ -384,7 +517,7 @@ final class Terms {
      * differently. Terms are held by what they are made of now, so that route is gone and what is
      * left is the check handing one value two spacings.
      */
-    static final class OneTermTwoKinds extends IllegalStateException {
+    static final class OneTermTwoKinds extends TheCheckDisagreesWithItself {
 
         OneTermTwoKinds(String message) {
             super(message);
@@ -782,7 +915,7 @@ final class Terms {
         Term term = named.term();
         // Readable where there is something to say of it: a form the numeric domain built, or a rule
         // about how it was made. This is asked of the expression, so a name for it answers the same.
-        return new Denotes.Computed(term, affineOf(e, at, k) != null || namedByRule(e, at));
+        return new Denotes.Computed(term, affineOf(e, at) != null || namedByRule(e, at));
     }
 
     /**

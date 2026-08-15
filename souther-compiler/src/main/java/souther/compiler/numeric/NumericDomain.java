@@ -467,6 +467,48 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * The tightest bounds this proves on a whole form, {@code null} at either end where it proves
+     * none.
+     *
+     * <p>The same reading {@link #proveLe} decides a comparison by, asked for the end rather than
+     * for an answer about one: the atoms' own bounds through the differences, and the relation on a
+     * difference of two of them where that is the shape the form has. A caller adding up what is
+     * known atom by atom would be a second reading of this — and it would come back with nothing
+     * where the domain holds a relation between two atoms and no bound on either.
+     *
+     * <p>Read for a value the domain cannot carry: a product of two values and a truncating
+     * quotient are outside the fragment, and what they answer is bounded by what their parts are
+     * proven to lie between. The kept relations are not read here, for the reason they are not read
+     * in {@link #proveBaseLe}.
+     */
+    public Bounds boundsOf(LinearForm<A> f) {
+        if (bottom) {
+            return new Bounds(null, null);
+        }
+        return new Bounds(negated(highestOf(f.negate())), highestOf(f));
+    }
+
+    /** The tightest upper end this proves on {@code f}: its atoms' bounds, and the relation on a
+     * difference where the form is one. */
+    private Endpoint highestOf(LinearForm<A> f) {
+        Endpoint best = upperBound(f);
+        List<A> ab = unitDiffAtoms(f.coefs());
+        if (ab == null) {
+            return best;
+        }
+        Endpoint d = closedDiff(ab.get(0), ab.get(1));
+        // a - b <= d, so the form, which is that difference and a constant, is no higher than both.
+        return d == null ? best
+                : Endpoint.upper(best,
+                        new Endpoint(at(d).plus(Count.of(f.constant())), d.inclusive()));
+    }
+
+    /** An end on the other side of zero, which is what an upper end of the negated form is. */
+    private static Endpoint negated(Endpoint end) {
+        return end == null ? null : new Endpoint(at(end).negate(), end.inclusive());
+    }
+
+    /**
      * How the values of {@code atom} are spaced here, or null where nothing said.
      *
      * <p>Asked by a reader counting the values between two ends, which only a spacing makes a number:

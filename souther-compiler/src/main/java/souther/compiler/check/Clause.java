@@ -81,7 +81,7 @@ record Clause(Id id, Optional<ClauseName> name, Optional<CitableRegion> at) {
      * thing a behavior whose invariants all discharge comes out as.
      * {@link InvariantChecker#gaveUp} refuses it for that reason.
      */
-    static final class NotOneClause extends IllegalStateException {
+    static final class NotOneClause extends TheCheckDisagreesWithItself {
 
         private static final long serialVersionUID = 1L;
 

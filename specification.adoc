@@ -1352,7 +1352,7 @@ let build (rows) = {
 
 A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a behavior answered — is not a term, and a clause needing it is left to the run-time check.
 
-Beyond those, a value is named by what computes it wherever that computation is a function of named parts. `+List.sum(xs)+` is a term, and so is `+a * b+`, which the arithmetic below does not read, and so is a value chosen by an `+if+` or opened by a `+match+`, and one built by a construction. Naming a value says that two writings of it are one value, and says nothing else: nothing follows from `+List.sum+` being a sum, and nothing has to. A `+guard List.sum(xs) >= bill+` states a relation about that value, `+List.sum(xs) - bill+` is arithmetic over it, and the two meet because both mentions of the call are the same value. A term exists before anything is said about it, so the first guard to mention one states what it states, exactly as a later one does.
+Beyond those, a value is named by what computes it wherever that computation is a function of named parts. `+List.sum(xs)+` is a term, and so is `+a * b+`, which is not a form the fragment carries and is bounded by what its factors are bounded to (<<invariant-discharge-arithmetic>>), and so is a value chosen by an `+if+` or opened by a `+match+`, and one built by a construction. Naming a value says that two writings of it are one value, and says nothing else: nothing follows from `+List.sum+` being a sum, and nothing has to. A `+guard List.sum(xs) >= bill+` states a relation about that value, `+List.sum(xs) - bill+` is arithmetic over it, and the two meet because both mentions of the call are the same value. A term exists before anything is said about it, so the first guard to mention one states what it states, exactly as a later one does.
 
 What is named and what is known of it are two questions, and the second is the one that has rules. A named value the procedure has no rule about is still a value a guard can be written about, and a construction from one is reported as unproven rather than left unsaid — the author is told that the invariant was read here and not established, which is a different thing from its not having been read. Giving the procedure a rule about an operation moves such a construction from unproven to discharged without anything being named differently.
 
@@ -1591,6 +1591,38 @@ Over the cases that are reached, the clause is established where every one of th
 *A value it was already given.* `+Decimal.fromInt(n)+` answers the number `+n+` is, so a clause about the call and a guard about `+n+` are about one value rather than two.
 
 An operation not named here guarantees nothing that can be relied on, and a clause over what it answered is left to the run-time check. What is known of the arguments at one call is a different question: it is what the path establishes, and it is read where the clause is.
+
+[#invariant-discharge-arithmetic]
+==== What arithmetic outside the fragment lies between
+
+A product of two values and a truncating division are not linear, so neither is a form the procedure derives in and each names one value the guards may say nothing about (<<invariant-discharge-terms>>). What is known of such a value is read off what it was computed from, where the construction stands: a quantity times a unit price is not negative wherever both of them are, and there is no third `+guard+` about the product that an author could write instead.
+
+This is not a rule about `+*+` or `+/+`, in the way <<invariant-discharge-guarantees>> states rules about operations. Nothing holds of a product wherever it is written. What holds is decided by what the path establishes about the two factors at the point the clause is read, and a construction under guards that say nothing about them is reported exactly as before.
+
+*A product.* It lies between the least and the greatest of the four products of its factors' ends. A factor with an end nothing bounds leaves the product unbounded that way, except against a factor that is only ever zero, since every value times zero is zero. Both `+Int+` and `+Decimal+` are read: multiplication of either is exact, and an `+Int+` that overflows aborts rather than wrapping (<<primitives>>).
+
+Where an end of the product is at zero, whether the product *reaches* it is a separate question from where the end is. A product is constant along the axis where a factor is zero, so zero is a value it takes wherever either factor holds zero at all — which a factor may do between its ends, or at an end the other factor's ends do not pair with. So `+a * b+` for an `+a+` in `+[0, 1]+` and a `+b+` above zero without reaching it is at or above zero *and reaches it*, at `+a = 0+`, whatever `+b+` is.
+
+[,souther]
+----
+data NonNeg = Int
+    invariant value >= 0
+
+behavior total : (a: Int, b: Int) -> NonNeg | Bad
+let total (a, b) = {
+    guard a >= 0 else Bad
+    guard b >= 0 else Bad
+    NonNeg(a * b) // discharged: both factors are at or above zero, so the product is
+}
+----
+
+*A quotient by a written divisor.* `+x / k+` over `+Int+` truncates toward zero (<<stdlib-int>>), which is monotone, so the quotient lies between the ends of `+x+` put through it — exchanged where `+k+` is negative. The divisor must be a whole number other than zero that the reading can read as a constant, which a name given one is (<<invariant-discharge-terms>>), and one an `+Int+` holds — the arithmetic a constant is read through composes numbers of any size, and what the operator divides by is an `+Int+`. A divisor the guards only bound away from zero is not read: what the rule is about is the sign and the magnitude of a number that is written.
+
+`+/+` over `+Decimal+` is *not* read. It rounds half away from zero at a precision the run time sets (<<stdlib-decimal>>) rather than truncating, and where an end of the quotient lands under that rounding is not something the procedure states. A clause over one is left to the run-time check.
+
+A bound derived this way is not a fact about the value that is kept and read back afterwards. A construction is read twice — under what the guards established, and under what holds of the values whatever the guards did (<<invariant-discharge>>) — and each reading derives its own from what that reading holds. So a bound that rests on a guard is in the first and not the second, and one that follows from what the values' own types guarantee is in both: a product of two values a type puts at or above zero is at or above zero wherever it is built, and a construction the two refuse is refused wherever it is built rather than on a path an author is told to guard. And it refuses as readily as it discharges — a product the guards put on the other side of zero is a construction the value fails, which is an error (<<construction-satisfies-its-invariant>>) and not a warning.
+
+What is derived is derived once, from what is known where the clause is read. Nothing derived here is read back to derive something further about the same value: a bound that tightened under its own answers would be a procedure that decides when to stop, which this is not. A value computed from another such value is read through — `+a * b / 100+` reads what the product was bounded to — because that is the expression's own structure and not a second round over the same one.
 
 [#invariant-discharge-quantified]
 ==== A relation over every element, read at the element

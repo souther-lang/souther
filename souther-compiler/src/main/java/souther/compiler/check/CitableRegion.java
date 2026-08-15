@@ -75,7 +75,7 @@ record CitableRegion(Region region) {
      * thing a behavior whose invariants all discharge comes out as. {@link InvariantChecker#gaveUp}
      * refuses it for that reason.
      */
-    static final class NotOnePlace extends IllegalArgumentException {
+    static final class NotOnePlace extends TheCheckDisagreesWithItself {
 
         private static final long serialVersionUID = 1L;
 
