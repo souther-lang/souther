@@ -214,7 +214,6 @@ public final class ModuleMetadata {
      *
      * <p>One set does for both visited and reached: a helper is added the first time it is seen, and
      * nothing is ever taken out, so a second sighting stops the walk by itself.
-     *
      */
     private static void reach(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> reached) {
         String named = switch (e) {

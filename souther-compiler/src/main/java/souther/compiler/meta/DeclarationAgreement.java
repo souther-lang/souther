@@ -92,13 +92,22 @@ public final class DeclarationAgreement {
                 }
             }
         }
-        Set<ValueName.Helper> readThrough = readThrough(ourSide.values());
-        for (Map.Entry<String, Hir.Module> each : ourSide.entrySet()) {
-            Hir.Module theirSide = yours.resolved(each.getKey());
-            if (theirSide == null) {
-                return unreadable(each.getKey(), yours, Agreement.Side.THE_ANSWER);
+        Map<String, Hir.Module> theirSide = new LinkedHashMap<>();
+        for (String name : ourSide.keySet()) {
+            Hir.Module there = yours.resolved(name);
+            if (there == null) {
+                return unreadable(name, yours, Agreement.Side.THE_ANSWER);
             }
-            Agreement said = agreed(each.getKey(), each.getValue(), theirSide, readThrough);
+            theirSide.put(name, there);
+        }
+        // What a declaration is read through, of both builds. A helper only one side's declarations
+        // reach is one side's answer about what its values are, and leaving it out would compare the
+        // two builds by what only one of them says is part of a declaration.
+        Set<ValueName.Helper> readThrough = new LinkedHashSet<>(readThrough(ourSide.values()));
+        readThrough.addAll(readThrough(theirSide.values()));
+        for (Map.Entry<String, Hir.Module> each : ourSide.entrySet()) {
+            Agreement said = agreed(each.getKey(), each.getValue(),
+                    theirSide.get(each.getKey()), readThrough);
             if (!(said instanceof Agreement.Agree)) {
                 return said;
             }
@@ -384,10 +393,16 @@ public final class DeclarationAgreement {
             }
             return true;
         }
+        // A set, and the keys of a map, are compared by their own equality — which reads every part
+        // of what they hold, including the parts erased here. That is right for the values they hold
+        // today and wrong for a form, so a form arriving in one stops the comparison rather than
+        // being compared by an equality that does not know what this does.
         if (ours instanceof Set<?> mine && theirs instanceof Set<?> yours) {
+            refuseForms(mine);
             return mine.equals(yours);
         }
         if (ours instanceof Map<?, ?> mine && theirs instanceof Map<?, ?> yours) {
+            refuseForms(mine.keySet());
             return mine.keySet().equals(yours.keySet())
                     && mine.entrySet().stream()
                             .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey()), bound));
@@ -408,6 +423,25 @@ public final class DeclarationAgreement {
             }
         }
         return true;
+    }
+
+    /**
+     * Refuses a collection that holds a form of a declaration.
+     *
+     * <p>What is held in one is compared by its own equality, and a form's equality reads where it
+     * was written and which binding it is — the two things this erases. A form arriving here is
+     * therefore compared by a rule this class does not control, which is a decision nobody made.
+     */
+    private static void refuseForms(Set<?> held) {
+        for (Object one : held) {
+            if (one != null && one.getClass().isRecord()) {
+                throw new IllegalStateException(one.getClass().getName()
+                        + " is a form of a declaration held in a set or used as a map key, and a"
+                        + " collection compares what it holds by its own equality — which reads what"
+                        + " this comparison erases. Compare it as a form, or say why its equality is"
+                        + " the right one.");
+            }
+        }
     }
 
     /**
@@ -441,10 +475,17 @@ public final class DeclarationAgreement {
         private final Map<BindingId, BindingId> ours = new LinkedHashMap<>();
 
         boolean bind(BindingId ourBinding, BindingId theirBinding) {
-            BindingId already = theirs.put(ourBinding, theirBinding);
-            BindingId alreadyOurs = ours.put(theirBinding, ourBinding);
-            return (already == null || already.equals(theirBinding))
-                    && (alreadyOurs == null || alreadyOurs.equals(ourBinding));
+            BindingId already = theirs.get(ourBinding);
+            BindingId alreadyOurs = ours.get(theirBinding);
+            if (already != null || alreadyOurs != null) {
+                // Each stands for one of the other's, so a pair that contradicts what is already
+                // held is refused — and refused without being written down, so what is held stays
+                // what was agreed rather than what was rejected.
+                return theirBinding.equals(already) && ourBinding.equals(alreadyOurs);
+            }
+            theirs.put(ourBinding, theirBinding);
+            ours.put(theirBinding, ourBinding);
+            return true;
         }
     }
 
