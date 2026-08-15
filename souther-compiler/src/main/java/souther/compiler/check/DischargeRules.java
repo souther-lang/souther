@@ -407,6 +407,11 @@ final class DischargeRules {
         return new ResultBound(null, BigDecimal.valueOf(n), rel, new Provided.Always());
     }
 
+    /** The same, where the operation answers that only under a condition on its arguments. */
+    private static ResultBound resultIs(Rel rel, long n, Provided provided) {
+        return new ResultBound(null, BigDecimal.valueOf(n), rel, provided);
+    }
+
     /** {@code result rel argument + offset}. */
     private static ResultBound resultIs(Rel rel, Reads argument, long offset, Provided provided) {
         return new ResultBound(argument, BigDecimal.valueOf(offset), rel, provided);
@@ -421,10 +426,11 @@ final class DischargeRules {
      * past, and it is read the same way — asserted into the domain where a clause is read and where a
      * condition is assumed alike.
      *
-     * <p>{@code Int.floorMod} is here for its lower bound alone and for its upper bound only where
-     * the divisor reads as a constant above zero: the result takes the sign of the divisor, so a
-     * divisor that could be negative bounds it in the other direction, and a divisor the check cannot
-     * read bounds it nowhere. Its {@code 0} is not a case at all — the operation aborts.
+     * <p>{@code Int.floorMod} states both its ends only where the divisor reads as a constant above
+     * zero, and neither of them otherwise. The result takes the sign of the divisor — {@code
+     * floorMod(1, -3)} is {@code -2} — so a divisor that could be negative puts it the other side of
+     * zero, and the lower end is as much the divisor's to decide as the upper one. A divisor the
+     * check cannot read bounds it nowhere. Its {@code 0} is not a case at all: the operation aborts.
      *
      * <p>{@code Decimal.toInt} is within one of what it rounds, whichever mode it is handed. What a
      * single mode does more narrowly — {@code HALF_UP} rounds to within a half — is a second rule and
@@ -434,7 +440,7 @@ final class DischargeRules {
             op("Int", "abs"), List.of(resultIs(Rel.GE, 0)),
             op("Decimal", "abs"), List.of(resultIs(Rel.GE, 0)),
             op("Int", "floorMod"), List.of(
-                    resultIs(Rel.GE, 0),
+                    resultIs(Rel.GE, 0, new Provided.ConstantAboveZero(at(1))),
                     resultIs(Rel.LT, at(1), 0, new Provided.ConstantAboveZero(at(1)))),
             op("Decimal", "toInt"), List.of(
                     resultIs(Rel.GT, at(1), -1, new Provided.Always()),

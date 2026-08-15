@@ -74,6 +74,27 @@ class AnOperationsOwnGuaranteeDischargesAClauseTest {
                 """));
     }
 
+    /**
+     * A remainder takes the sign of its divisor, so a negative divisor puts it the other side of
+     * zero: {@code Int.floorMod(1, 0 - 3)} is {@code -2}. Neither end of it is known without knowing
+     * the divisor is above zero.
+     */
+    @Test
+    void aRemainderByANegativeDivisorIsNotKnownToBeNonNegative() {
+        assertEquals(List.of("E2011"), warningsOf(TYPES + """
+                behavior wrap : (x: Int) -> NonNeg constructs NonNeg
+                let wrap (x) = NonNeg(Int.floorMod(x, 0 - 3))
+                """));
+    }
+
+    @Test
+    void aRemainderByADivisorThatIsNotAConstantIsNotKnownToBeNonNegative() {
+        assertEquals(List.of("E2011"), warningsOf(TYPES + """
+                behavior wrap : (x: Int, k: Int) -> NonNeg constructs NonNeg
+                let wrap (x, k) = NonNeg(Int.floorMod(x, k))
+                """));
+    }
+
     @Test
     void aRemainderByADivisorThatIsNotAConstantIsNotBoundedAbove() {
         assertEquals(List.of("E2011"), warningsOf(TYPES + """

@@ -1540,11 +1540,11 @@ A guarantee takes one of four forms.
 | the operation | what holds of its result
 
 | `+Int.abs+`, `+Decimal.abs+` | not negative
-| `+Int.floorMod(x, k)+` | not negative; and below `+k+` where `+k+` reads as a constant above zero
+| `+Int.floorMod(x, k)+` | not negative, and below `+k+` — both only where `+k+` reads as a constant above zero
 | `+Decimal.toInt(mode, d)+` | within one of `+d+`, whichever mode it is handed
 |===
 
-A divisor that is not a constant here bounds the remainder nowhere: `+Int.floorMod+` takes the sign of its divisor, so a divisor that could be negative puts the result the other side of zero. A name given a constant is that constant, so `+let k = 100+` and a written `+100+` are one divisor.
+Neither end is known without the divisor: `+Int.floorMod+` takes the sign of its divisor, so a divisor that could be negative puts the result the other side of zero — `+Int.floorMod(1, 0 - 3)+` is `+-2+` — and one the check cannot read says nothing about either end. A name given a constant is that constant, so `+let k = 100+` and a written `+100+` are one divisor. A divisor that is above zero for some other reason — a parameter whose type says so — is not read here: what an operation guarantees holds wherever it is called, and that one holds where the caller happens to have such a value.
 
 *One of the values it was given.* What such an operation answers depends on what it was given, so it is stated as the cases its definition is written in, and a clause holds of the result when it holds in every case.
 

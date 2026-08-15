@@ -19,6 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * tables' own rather than a list written beside them: a rule added with no program that fires it
  * fails this, and so does a program left behind by a rule that was removed.
  *
+ * <p>A row and not an operation. An operation whose rule is more than one statement — a remainder is
+ * bounded at both ends, a rounded value is within one of what it rounds either way — has a program
+ * for each, since one program needs one of them and would leave the other free to be dropped.
+ *
  * <p>Held to what the library declares as well. Each of these compiles, so a row naming an argument
  * the declaration does not have, or reading a value of a kind the rule is not about, is a failure
  * here and not a silence at whichever call arrives first.
@@ -60,6 +64,27 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                             else Bad
                         AtLeastTen(Decimal.toInt(HALF_UP, d))
                     }
+                    """),
+            // The other end of the same operation. One program needs one of the two rows, so a row
+            // with no program of its own could be dropped and nothing here would say so.
+            new Discharges("Decimal.toInt", """
+                    module demo
+                    data Bad
+                    data BelowTen = Int
+                        invariant value < 10
+                    behavior whole : (d: Decimal) -> BelowTen | Bad constructs BelowTen, Bad
+                    let whole (d) = {
+                        guard d <= 9.0m
+                            else Bad
+                        BelowTen(Decimal.toInt(HALF_UP, d))
+                    }
+                    """),
+            new Discharges("Int.floorMod", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior wrap : (x: Int) -> NonNeg constructs NonNeg
+                    let wrap (x) = NonNeg(Int.floorMod(x, 100))
                     """));
 
     private static final List<Discharges> CHOOSING = List.of(

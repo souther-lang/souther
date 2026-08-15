@@ -155,15 +155,19 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
     }
 
     /**
-     * A guard about the call itself and the cases the call is defined in are two readings of one
-     * value, and they have to agree. Where the guards cannot all hold, they disagree about what
-     * cannot happen — the case reading finds no case left, the reading that takes the call as an
-     * unknown still has the guard's bound — and a clause that came out established by one and
-     * refused by the other is a check contradicting itself rather than an answer.
+     * A guard is read as the cases too, so a guard no case can satisfy is one the walk does not go
+     * past. Both numbers here are at least ten, so neither of the two the smaller of them can be is
+     * three or less: the third guard always takes the other way out, and the construction under it
+     * is not reached.
+     *
+     * <p>Nothing is reported there. A construction the program never builds is not one to report
+     * about — and a construction whose guards contradict is where the two readings would otherwise
+     * come out one established and the other refused, which is a check contradicting itself rather
+     * than an answer.
      */
     @Test
-    void aGuardAboutTheCallItselfIsReadAlongsideTheCases() {
-        String module = TYPES + """
+    void aGuardNoCaseCanSatisfyIsNotWalkedPast() {
+        assertEquals(List.of(), codesOf(TYPES + """
                 behavior odd : (a: Int, b: Int) -> AboveTen | Bad constructs AboveTen, Bad
                 let odd (a, b) = {
                     guard a >= 10
@@ -174,10 +178,30 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
                         else Bad
                     AboveTen(Int.min(a, b))
                 }
-                """;
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(module));
-        assertEquals("E2010", e.diagnostic().code(),
-                "the guard puts the value below what the invariant asks: " + e.getMessage());
+                """));
+    }
+
+    /**
+     * The same where the contradiction is not in a guard about the call. Each of the two the smaller
+     * of them can be is below zero once {@code c} is added, and the third guard asks for the sum to
+     * be at least zero — so the construction is not reached, and neither reading of it is asked.
+     * Read against forms the domain keeps as written, where the equality tying a case to the call is
+     * not what settles it.
+     */
+    @Test
+    void guardsThatCannotAllHoldAreNotWalkedPastEitherWhereTheFormsAreKeptAsWritten() {
+        assertEquals(List.of(), codesOf(TYPES + """
+                behavior sum : (a: Int, b: Int, c: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                let sum (a, b, c) = {
+                    guard a + c < 0
+                        else Bad
+                    guard b + c < 0
+                        else Bad
+                    guard Int.min(a, b) + c >= 0
+                        else Bad
+                    NonNeg(Int.min(a, b) + c)
+                }
+                """));
     }
 
     @Test

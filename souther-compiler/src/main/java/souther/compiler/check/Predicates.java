@@ -255,14 +255,32 @@ final class Predicates {
 
         boolean dischargedBy(NumericDomain<Term> d, PredicateFacts facts) {
             return numeric != null && d.entails(numeric.form(), numeric.rel())
-                    || piecewise != null && piecewise.entailedBy(d)
-                    || fact != null && fact.entailedBy(facts);
+                    || fact != null && fact.entailedBy(facts)
+                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.entailedBy(d);
         }
 
         boolean refutedBy(NumericDomain<Term> d, PredicateFacts facts) {
             return numeric != null && d.refutes(numeric.form(), numeric.rel())
-                    || piecewise != null && piecewise.refutedBy(d)
-                    || fact != null && fact.refutedBy(facts);
+                    || fact != null && fact.refutedBy(facts)
+                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.refutedBy(d);
+        }
+
+        /**
+         * Whether the clause as written already came out one way or the other.
+         *
+         * <p>The cases are asked only where it did not. Both readings are sound, so they can differ
+         * only where the path cannot be taken — the guards contradict, and each is answering about a
+         * value the program never builds. Where that is visible in the guards it is said there
+         * ({@link #noCaseSatisfies}) and neither reading is reached; where it is not, this is what
+         * keeps one clause from coming out established and refused at once, which is a check
+         * contradicting itself rather than an answer. What the cases are for is a clause the reading
+         * that takes the call as an unknown cannot settle, and that is untouched.
+         */
+        private boolean decidedAsWritten(NumericDomain<Term> d, PredicateFacts facts) {
+            return numeric != null
+                    && (d.entails(numeric.form(), numeric.rel())
+                            || d.refutes(numeric.form(), numeric.rel()))
+                    || fact != null && (fact.entailedBy(facts) || fact.refutedBy(facts));
         }
     }
 
@@ -418,6 +436,13 @@ final class Predicates {
         Core under = negated(cond);
         if (under != null) {
             return assumeCond(under, k, at, !positive);
+        }
+        // A condition no case of what it is written over can satisfy is one this branch is never
+        // entered under, however little is known of the call itself. Asked of what held on the way
+        // in, before any of the condition is taken as holding, and asked here rather than left to
+        // the construction below: a value the program never builds is not one to report about.
+        if (noCaseSatisfies(cond, k, at, positive)) {
+            return k.reachingNothing();
         }
         Known out = k;
         // What holds of the sizes the condition names, and of what the operations in it answer,
@@ -607,6 +632,30 @@ final class Predicates {
         for (Core arg : call.args()) {
             resultFacts(arg, at, k, out);
         }
+    }
+
+    /**
+     * Whether {@code cond}, asserted with polarity {@code positive}, fails in every case an
+     * operation inside it is defined in — so the branch it guards is not entered.
+     *
+     * <p>The same reading the construction below does, done where the condition is taken instead.
+     * Without it what an operation answers is read at one of the two and not the other, and a path
+     * the cases show cannot be taken is walked as though it could: the construction under it is then
+     * reported against guards that cannot all hold, which is a diagnostic about a value the program
+     * never builds.
+     */
+    private boolean noCaseSatisfies(Core cond, Known k, Denotations at, boolean positive) {
+        if (!(cond instanceof Core.Binary b) || relOf(b.op()) == null) {
+            return false;
+        }
+        Rel stated = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
+        LinearForm<Term> la = stated == null ? null : terms.affineOf(b.left(), at, k);
+        LinearForm<Term> ra = stated == null ? null : terms.affineOf(b.right(), at, k);
+        if (la == null || ra == null) {
+            return false;
+        }
+        Piecewise cases = piecewiseOf(new Constraint(la.minus(ra), stated), cond, at, k);
+        return cases != null && cases.refutedBy(k.numbers());
     }
 
     /**
