@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * A name nothing declares, standing in a row that applies an intrinsic, is the naming error
@@ -75,5 +76,34 @@ class ARowApplyingAnIntrinsicRefusesANameItCannotAnswerTest {
     @Test
     void theSameCallSpelledAsCoreDeclaresItIsSettled() {
         assertEquals(List.of("ok"), verdict("Decimal.round(2, HALF_UP, 1.005m)"));
+    }
+
+    /**
+     * And a body writing the same call answers the same, as it did before the row did.
+     *
+     * <p>What decided the answer was the walk a row's operands go through and nothing about the
+     * call, so the body is held here beside the row: a fix that settled the row by teaching that
+     * walk to make something up would show as the two coming apart.
+     */
+    @Test
+    void aBodyWritingTheSameCallIsTheSameNamingError() {
+        String body = """
+                module demo
+
+                data Ok = { n: Int }
+
+                behavior take : (d: Decimal) -> Ok
+                    constructs Ok
+                let take (d) = Ok { n = 1 }
+
+                let round2 (r: Decimal) : Decimal = Decimal.round(2, HalfUp, r)
+                """;
+        try {
+            Compiler.compile(body);
+            fail("`HalfUp` names nothing in a body either");
+        } catch (CompileException e) {
+            assertEquals(List.of("E1023"),
+                    e.diagnostics().stream().map(Diagnostic::code).toList(), e.getMessage());
+        }
     }
 }

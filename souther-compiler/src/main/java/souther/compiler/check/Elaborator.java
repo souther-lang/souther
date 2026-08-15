@@ -644,9 +644,14 @@ public final class Elaborator {
      */
     private static void checkOpens(Hir.LetIn li, Type valueType, Symbols symbols) {
         String opened = li.opens().written();
-        // A name that names nothing opens nothing: it is reported where it is written, and what is
-        // said here — that it is not a newtype — would be a second report about the one mistake.
-        TypeSymbol layer = li.opens().answered() == null ? null : li.opens().answered().type();
+        // A name nothing declares was reported where it is written, and what is left here is not a
+        // question about it: what the binding opens has no type, so the body under it would be
+        // checked against a shape nothing states. Abandoned as a name standing anywhere else in a
+        // body is, rather than passed on as an absent type for the reading below to take for one.
+        if (!(li.opens().answered() instanceof Hir.Name.Denoting opens)) {
+            throw new Unanswerable(li.opens().pos());
+        }
+        TypeSymbol layer = opens.type();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
             throw CompileException.of(Diagnostic
                             .at(li.pos())

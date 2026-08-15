@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 
@@ -290,6 +291,32 @@ class CompileDestructuringTest {
                 }
                 """));
         assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class, e.diagnostic().said(), e.getMessage());
+    }
+
+    /**
+     * A pattern naming nothing is the naming error, once, and the compile ends saying it.
+     *
+     * <p>Beside the three rules above rather than among them. Each of those holds a name against
+     * what it names; this one has nothing to hold it against, so the reading stops where the name
+     * is and what is left of the definition is not asked about. Read as a rule, a name that names
+     * nothing would be answered "it is not a newtype", which is a second sentence about the one
+     * mistake — and asked of the declaration it does not have, an internal error.
+     */
+    @Test
+    void openingSomethingNothingDeclaresIsTheNamingErrorOnce() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                import List ( length )
+                data Tags = List<String>
+
+                behavior countTags : (t: Tags) -> Int
+                let countTags (t) = {
+                    let Tgas(xs) = t
+                    length(xs)
+                }
+                """));
+        assertEquals(List.of("E1023"), e.diagnostics().stream().map(Diagnostic::code).toList(),
+                e.getMessage());
     }
 
     @Test
