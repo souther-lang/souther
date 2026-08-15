@@ -5,7 +5,10 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Exposing;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.SyntaxSymbols;
+import souther.compiler.query.Bodies;
+import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 
 import java.util.ArrayDeque;
@@ -92,9 +95,13 @@ public final class PublishedUniverse {
      * cannot be read here is another.
      */
     public boolean declares(String module) {
-        return classes.of(souther.compiler.jvm.SoutherJvmAbi.nameOf(
-                new souther.compiler.jvm.GeneratedClass.ModuleDeclarations(module)).binaryName())
-                != null;
+        PublishedModule.Declarations found = classes.of(souther.compiler.jvm.SoutherJvmAbi.nameOf(
+                new souther.compiler.jvm.GeneratedClass.ModuleDeclarations(module)).binaryName());
+        // The same thing `PublishedModule.read` calls nothing published: a class of that name with
+        // no declarations on it is a class this compiler put nothing on, not something it failed to
+        // read. Asked the same way in both places, so a reader is not sent to look for a boundary
+        // revision that has nothing to do with it.
+        return found != null && found.module() != null;
     }
 
     /** Reads {@code module} and everything its declarations name, as far as these classes go. */
@@ -142,15 +149,75 @@ public final class PublishedUniverse {
     }
 
     /** {@code module} with every name it writes answered, or null where a name could not be. */
-    private static Hir.Module resolve(Ast.Module module, Registry<Ast.Def> registry,
-                                      Exposing.Checked exposed) {
+    private Hir.Module resolve(Ast.Module module, Registry<Ast.Def> registry,
+                               Exposing.Checked exposed) {
         SyntaxSymbols symbols = SyntaxSymbols.of(module.name(), registry,
                 denotations(registry, module), aliases(module));
-        Resolve.Values base = Resolve.Values.of(module);
-        Resolve.Values values = new Resolve.Values(base.module(), base.helpers(), base.behaviors(),
-                base.behaviorsWhole(), exposed.exposed(), base.elsewhere());
-        Resolve.Resolution resolution = Resolve.resolving(module, symbols, values);
+        Resolve.Resolution resolution =
+                Resolve.resolving(module, symbols, reachable(module, exposed));
         return resolution.unresolved().isEmpty() ? resolution.module() : null;
+    }
+
+    /**
+     * What {@code module}'s declarations can name without a binding: its own helpers and behaviors,
+     * the definitions its imports bring in, and the library names its import lines let it write bare.
+     *
+     * <p>Assembled the way a compilation assembles it, and out of the same pieces: what a module
+     * publishes among the names an import asks for is {@link Bodies#publishedNames}, which is what
+     * decides it for a module being compiled. An invariant may call a helper another module
+     * published (spec {@code modules}), so a reader without this leaves that name answered by
+     * nothing and reads a module that is perfectly good as one it cannot read.
+     */
+    private Resolve.Values reachable(Ast.Module module, Exposing.Checked exposed) {
+        Set<String> behaviorNames = new LinkedHashSet<>();
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            behaviorNames.add(b.name());
+        }
+        Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
+        for (Ast.FnDef fn : module.fns()) {
+            if (HelperInliner.isHelperName(behaviorNames, fn.name())) {
+                helpers.put(fn.name(), new ValueName.Helper(module.name(), fn.name()));
+            }
+        }
+        Map<String, ValueName.Behavior> behaviors = new LinkedHashMap<>();
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            behaviors.put(b.name(), new ValueName.Behavior(module.name(), b.name()));
+        }
+        for (Ast.Import imported : module.imports()) {
+            Ast.Module from = written.get(imported.module());
+            if (from == null) {
+                continue;
+            }
+            for (String published : Bodies.publishedNames(from, imported.names())) {
+                helpers.putIfAbsent(published, new ValueName.Helper(from.name(), published));
+            }
+            for (Ast.BehaviorDef b : from.behaviors()) {
+                if (imported.names().contains(b.name())) {
+                    behaviors.putIfAbsent(b.name(), new ValueName.Behavior(from.name(), b.name()));
+                }
+            }
+        }
+        return new Resolve.Values(module.name(), helpers, behaviors, true, exposed.exposed(),
+                new Resolve.Elsewhere() {
+
+                    @Override
+                    public boolean hasModule(String name) {
+                        return written.containsKey(name);
+                    }
+
+                    @Override
+                    public Set<String> behaviorsOf(String name) {
+                        Ast.Module other = written.get(name);
+                        if (other == null) {
+                            return null;
+                        }
+                        Set<String> declared = new LinkedHashSet<>();
+                        for (Ast.BehaviorDef b : other.behaviors()) {
+                            declared.add(b.name());
+                        }
+                        return declared;
+                    }
+                });
     }
 
     /**

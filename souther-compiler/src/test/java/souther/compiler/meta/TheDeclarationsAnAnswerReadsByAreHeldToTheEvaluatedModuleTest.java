@@ -168,6 +168,29 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             let rename (t) = Todo { title = t.title, note = t.note }
             """;
 
+    /** A module offering a type and a rule written against it, which another module's invariant
+     *  reads through. */
+    private static final String OFFERING = """
+            module example.money exposing ( Amount, atLeast )
+
+            data Amount = Decimal
+
+            let atLeast (a: Amount) : Bool = a.value >= 1.0m
+            """;
+
+    private static final String READING = """
+            module example.order
+            import example.money ( Amount, atLeast )
+
+            data Line = { amount: Amount }
+                invariant atLeast(amount)
+
+            behavior price : (l: Line) -> Line
+                constructs Line
+
+            let price (l) = Line { amount = l.amount }
+            """;
+
     /** A model whose invariant states a number, for what stating it another way is. */
     private static final String DECIMAL_MODEL = """
             module example.rates
@@ -569,6 +592,28 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         assertInstanceOf(Agreement.Agree.class, held,
                 "the field is called `note`; it does not name what the import brings in");
+    }
+
+    /**
+     * A helper another module published, which this one's invariant is read through.
+     *
+     * <p>What a declaration is read through does not have to be its own module's. A rule written in
+     * the module that owns the type and called by a reader's invariant is as much a part of what the
+     * reader's values are as one written beside it — so a build where that rule tightened admits
+     * something else, and a row's value built here is refused there.
+     */
+    @Test
+    void aHelperOfAnotherModuleAnInvariantReadsThroughIsADisagreement() {
+        String tightened = OFFERING.replace("a.value >= 1.0m", "a.value >= 5.0m");
+
+        Agreement held = DeclarationAgreement.of("example.order",
+                declarationsOf(List.of(tightened, READING)),
+                declarationsOf(List.of(OFFERING, READING)));
+
+        Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
+                "the rule the reader's invariant is read through admits something else now");
+        assertEquals("example.money", said.module());
+        assertEquals("atLeast", said.declaration());
     }
 
     /**

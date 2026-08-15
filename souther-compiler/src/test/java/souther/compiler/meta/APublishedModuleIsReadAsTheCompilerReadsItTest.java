@@ -91,6 +91,39 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         org.junit.jupiter.api.Assertions.assertFalse(universe.declares("nothing.here"));
     }
 
+    /** A module whose invariant calls a helper another module published. */
+    private static final String OFFERING = """
+            module example.money exposing ( Amount, scale )
+
+            data Amount = Decimal
+
+            let scale (a: Amount) : Decimal = a.value
+            """;
+
+    private static final String READING = """
+            module example.order
+            import example.money ( Amount, scale )
+
+            data Line = { amount: Amount }
+                invariant scale(amount) > 0.0m
+            """;
+
+    /**
+     * A module whose declaration reads through a helper another module published.
+     *
+     * <p>What a module offers is a type and the rules written against it, so an invariant may call a
+     * helper an import brought in. Reading that module back needs the value namespace its imports
+     * bring in, not only the type namespace.
+     */
+    @Test
+    void aDeclarationThatReadsThroughAnotherModulesHelperIsRead() {
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(OFFERING, READING));
+        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get));
+
+        assertNotNull(universe.resolved("example.order"),
+                "its invariant calls a helper `example.money` published, which the import brings in");
+    }
+
     /** What the invariant of {@code type} calls, as the front end answered it. */
     private static ValueName calledByTheInvariantOf(Hir.Module module, String type) {
         for (Hir.Def def : module.defs()) {

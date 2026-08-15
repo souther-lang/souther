@@ -67,32 +67,40 @@ public final class DeclarationAgreement {
                                PublishedModule.Classes theirs) {
         PublishedUniverse mine = PublishedUniverse.of(ours);
         PublishedUniverse yours = PublishedUniverse.of(theirs);
+        // Read the whole closure before comparing any of it. What a declaration is read through may
+        // be a helper another module published, so which helpers are part of a declaration is not
+        // settled until every module a declaration reaches has been read.
+        Map<String, Hir.Module> ourSide = new LinkedHashMap<>();
         Deque<String> toRead = new ArrayDeque<>(List.of(module));
         Set<String> read = new LinkedHashSet<>(List.of(module));
         while (!toRead.isEmpty()) {
             String name = toRead.removeFirst();
-            Hir.Module ourSide = mine.resolved(name);
-            Hir.Module theirSide = yours.resolved(name);
-            if (ourSide == null) {
+            Hir.Module here = mine.resolved(name);
+            if (here == null) {
                 return unreadable(name, mine, Agreement.Side.THE_MODULE_BEING_EVALUATED);
             }
-            if (theirSide == null) {
-                return unreadable(name, yours, Agreement.Side.THE_ANSWER);
-            }
-            Agreement said = agreed(name, ourSide, theirSide);
-            if (!(said instanceof Agreement.Agree)) {
-                return said;
-            }
+            ourSide.put(name, here);
             // The modules the compared declarations reach into, read off what the front end resolved
             // each name to. Not the import lines: a module may import what only an unread helper
             // wanted, and may name a declaration in full with no import at all.
             //
             // The standard library is in neither. Nobody publishes it, and whether two builds have
             // the same one is what the boundary revision on each of them says.
-            for (String reached : modulesReached(ourSide)) {
+            for (String reached : modulesReached(here)) {
                 if (read.add(reached)) {
                     toRead.addLast(reached);
                 }
+            }
+        }
+        Set<ValueName.Helper> readThrough = readThrough(ourSide.values());
+        for (Map.Entry<String, Hir.Module> each : ourSide.entrySet()) {
+            Hir.Module theirSide = yours.resolved(each.getKey());
+            if (theirSide == null) {
+                return unreadable(each.getKey(), yours, Agreement.Side.THE_ANSWER);
+            }
+            Agreement said = agreed(each.getKey(), each.getValue(), theirSide, readThrough);
+            if (!(said instanceof Agreement.Agree)) {
+                return said;
             }
         }
         return new Agreement.Agree();
@@ -108,7 +116,8 @@ public final class DeclarationAgreement {
     }
 
     /** Whether two readings of one module say the same thing about what a crossing depends on. */
-    private static Agreement agreed(String module, Hir.Module ours, Hir.Module theirs) {
+    private static Agreement agreed(String module, Hir.Module ours, Hir.Module theirs,
+                                    Set<ValueName.Helper> readThrough) {
         Agreement types = held(module, byName(ours.defs(), Hir.Def::name),
                 byName(theirs.defs(), Hir.Def::name), DeclarationAgreement::crossingParts);
         if (!(types instanceof Agreement.Agree)) {
@@ -125,7 +134,6 @@ public final class DeclarationAgreement {
         // is called. Those are read by whatever calls them, and a row's values crossing into an
         // answer never do — what they meet is what a declaration says, so what is compared is the
         // helpers a declaration cannot be read without.
-        Set<String> readThrough = readThrough(ours);
         return held(module, byName(publishedHelpers(ours, readThrough), Hir.FnDef::name),
                 byName(publishedHelpers(theirs, readThrough), Hir.FnDef::name),
                 DeclarationAgreement::crossingParts);
@@ -241,46 +249,58 @@ public final class DeclarationAgreement {
      * <p>Read off what an invariant calls, as the front end resolved it: a helper of this module is
      * a {@link ValueName.Helper} of it, and reaching one reaches whatever it calls in turn.
      */
-    private static Set<String> readThrough(Hir.Module module) {
-        Map<String, Hir.FnDef> own = byName(module.fns(), Hir.FnDef::name);
-        Set<String> reached = new LinkedHashSet<>();
-        for (Hir.Def def : module.defs()) {
-            if (def instanceof Hir.Data data) {
-                for (Hir.InvariantClause clause : data.invariants()) {
-                    reach(clause.expr(), module.name(), own, reached);
+    private static Set<ValueName.Helper> readThrough(Iterable<Hir.Module> closure) {
+        Map<String, Map<String, Hir.FnDef>> byModule = new LinkedHashMap<>();
+        for (Hir.Module module : closure) {
+            byModule.put(module.name(), byName(module.fns(), Hir.FnDef::name));
+        }
+        Set<ValueName.Helper> reached = new LinkedHashSet<>();
+        for (Hir.Module module : closure) {
+            for (Hir.Def def : module.defs()) {
+                if (def instanceof Hir.Data data) {
+                    for (Hir.InvariantClause clause : data.invariants()) {
+                        reach(clause.expr(), byModule, reached);
+                    }
                 }
             }
         }
         return reached;
     }
 
-    /** Whatever {@code form} names of this module's own helpers, and what those reach in turn. */
-    private static void reach(Object form, String module, Map<String, Hir.FnDef> own,
-                              Set<String> reached) {
-        for (String named : helpersNamedIn(form, module)) {
-            Hir.FnDef fn = own.get(named);
+    /**
+     * Whatever {@code form} names of the closure's helpers, and what those reach in turn.
+     *
+     * <p>Whichever module declares one. A rule written in the module that owns a type and called by
+     * a reader's invariant is as much a part of what the reader's values are as one written beside
+     * it, and the front end says which module each name is of.
+     */
+    private static void reach(Object form, Map<String, Map<String, Hir.FnDef>> byModule,
+                              Set<ValueName.Helper> reached) {
+        for (ValueName.Helper named : helpersNamedIn(form)) {
+            Hir.FnDef fn = byModule.getOrDefault(named.module(), Map.of()).get(named.name());
             if (fn != null && reached.add(named)) {
-                reach(fn.body(), module, own, reached);
+                reach(fn.body(), byModule, reached);
             }
         }
     }
 
-    /** The helpers of {@code module} a form names, as the front end answered each name. */
-    private static Set<String> helpersNamedIn(Object form, String module) {
-        Set<String> named = new LinkedHashSet<>();
+    /** The helpers a form names, as the front end answered each name. */
+    private static Set<ValueName.Helper> helpersNamedIn(Object form) {
+        Set<ValueName.Helper> named = new LinkedHashSet<>();
         walk(form, new IdentityHashMap<>(), part -> {
-            if (part instanceof ValueName.Helper helper && helper.module().equals(module)) {
-                named.add(helper.name());
+            if (part instanceof ValueName.Helper helper) {
+                named.add(helper);
             }
         });
         return named;
     }
 
     /** The published helpers of {@code module} that are among {@code readThrough}. */
-    private static List<Hir.FnDef> publishedHelpers(Hir.Module module, Set<String> readThrough) {
+    private static List<Hir.FnDef> publishedHelpers(Hir.Module module,
+                                                    Set<ValueName.Helper> readThrough) {
         List<Hir.FnDef> kept = new ArrayList<>();
         for (Hir.FnDef fn : module.fns()) {
-            if (readThrough.contains(fn.name())) {
+            if (readThrough.contains(new ValueName.Helper(module.name(), fn.name()))) {
                 kept.add(fn);
             }
         }
@@ -298,7 +318,7 @@ public final class DeclarationAgreement {
     private static Set<String> modulesReached(Hir.Module module) {
         List<Object> compared = new ArrayList<>(module.defs());
         compared.addAll(module.behaviors());
-        compared.addAll(publishedHelpers(module, readThrough(module)));
+        compared.addAll(module.fns());
         Set<String> reached = new LinkedHashSet<>();
         walk(compared, new IdentityHashMap<>(), part -> {
             if (part instanceof TypeSymbol type) {
