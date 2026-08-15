@@ -1,6 +1,5 @@
 package souther.compiler.report;
 
-import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourcePos;
@@ -220,8 +219,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             Adequacy.BranchEvidence branch =
                     branches == null ? null : branches.get(behavior.name());
             behaviors.add(new BehaviorReport(behavior.name(),
-                    ExampleVerifier.isPending(module.behaviors(),
-                            ExampleVerifier.definedNames(module.fns()), behavior.name()),
+                    module.injected(behavior),
                     rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
                     signature, partition, branch,

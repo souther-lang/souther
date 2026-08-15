@@ -135,6 +135,18 @@ public final class Prepared {
         return desugared.behaviors();
     }
 
+    /**
+     * Whether {@code behavior} is written here with no implementation to run — an injected one (spec
+     * §injected-behavior).
+     *
+     * <p>How the behavior is written. What a compile emitted for it and what a run can apply are
+     * different questions with owners of their own, and this is not an answer to either: a reader
+     * wanting to know whether anything will run a behavior asks what will run it.
+     */
+    public boolean injected(Hir.BehaviorDef behavior) {
+        return Requirements.injected(module(), behavior);
+    }
+
     /** The names its source offers to whatever reads it, which no stage rewrites. */
     public List<String> exposing() {
         return desugared.module().exposing();
@@ -334,6 +346,12 @@ public final class Prepared {
         /** The definitions the module wrote. */
         public List<Desugared.Fn> fns() {
             return module.fns();
+        }
+
+        /** Whether {@code behavior} is written with no implementation to run — an injected one, which
+         *  is what a fake stands in for. How it is written, and no answer to what will run it. */
+        public boolean injected(Hir.BehaviorDef behavior) {
+            return module.injected(behavior);
         }
 
         /**

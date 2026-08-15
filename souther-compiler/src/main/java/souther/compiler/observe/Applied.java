@@ -10,7 +10,7 @@ package souther.compiler.observe;
  * answered several times with nothing holding the answers together.
  *
  * <p>This says what the run applied and nothing else. How a behavior is written is answered where it
- * is written ({@code ExampleVerifier.isPending}), and a second answer to that question is what this
+ * is written ({@code Prepared.injected}), and a second answer to that question is what this
  * must not become. What the row cost is {@link Counted}, which covers the fixtures as well and so is
  * not a fact about the application alone.
  *

@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 
 /**
@@ -28,12 +29,20 @@ import souther.compiler.generated.MemoryClassLoader;
 public interface Answering {
 
     /**
-     * The answerer for a run over {@code module}, whose values are built in {@code compiled}.
+     * The answerer for a run over the module {@code generated} is of, whose values are built in
+     * {@code compiled}.
      *
-     * @param module   the module whose rows are being evaluated
-     * @param compiled the classes this compile generated, defined once
+     * <p>What the compile generated an implementation for is handed over rather than worked out from
+     * either of the things here. Not from the declarations, because how a behavior is written is not
+     * what a run can apply — that is the question this seam exists to own. And not from the loader:
+     * a class that is not in it is a class that could not be reached, which is a failure, and reading
+     * membership for this would answer that failure with "nothing applies this behavior", which is
+     * not a failure at all.
+     *
+     * @param generated what the compile emitted an implementation for, and which module of
+     * @param compiled  the classes that compile generated, defined once
      */
-    Answerer over(String module, MemoryClassLoader compiled);
+    Answerer over(GeneratedImplementations generated, MemoryClassLoader compiled);
 
     /** The compile's own: the {@code $Impl} it emitted, constructed with the row's stand-ins and
      *  applied, all in the loader the run built. */

@@ -59,11 +59,11 @@ class ProbedBytecodeTest {
     }
 
     private static Map<String, byte[]> probed(Compilation compilation) {
-        Map<String, byte[]> classes = compilation.db()
+        souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                 .ask(new Output.Evaluated(compilation.modules().get(0),
                         Output.CoverageMode.ARMS)).value();
-        assertNotNull(classes, "the model under test compiles");
-        return classes;
+        assertNotNull(artifact, "the model under test compiles");
+        return artifact.classes();
     }
 
     /** The classes a class names — what a loader will go looking for when it loads this one. */
@@ -204,9 +204,9 @@ class ProbedBytecodeTest {
         String module = compilation.modules().get(0);
         Map<String, byte[]> plain = compilation.db().ask(new Output.Linked(module)).value();
         Map<String, byte[]> measured = compilation.db()
-                .ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value();
+                .ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value().classes();
         Map<String, byte[]> linked = compilation.db()
-                .ask(new Output.EvaluationLinked(module, Output.CoverageMode.ARMS)).value();
+                .ask(new Output.EvaluationLinked(module, Output.CoverageMode.ARMS)).value().classes();
         assertNotNull(plain);
         assertNotNull(linked);
 

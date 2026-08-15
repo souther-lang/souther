@@ -260,7 +260,7 @@ public final class Backend {
             }
         });
         b.rejectBridgeCaseCollisions(module, bridgeCases, localTypes, behaviorClassOwner);
-        Emissions out = new Emissions();
+        Emissions out = new Emissions(module.name());
         behaviorResults.forEach((union, members) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them

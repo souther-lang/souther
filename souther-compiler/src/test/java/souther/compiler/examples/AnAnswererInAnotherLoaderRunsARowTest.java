@@ -131,14 +131,19 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         private String hereNamed;
 
         private Answering asAnswering(Map<String, byte[]> classes, ClassLoader parent) {
-            return (module, compiled) -> {
+            return (generated, compiled) -> {
                 mine = new MemoryClassLoader(classes, parent);
                 return this;
             };
         }
 
         @Override
-        public Applying applying(String behavior, List<DependencyStandin> standins) {
+        public Answer of(String behavior) {
+            Answer.Something something = standins -> applying(behavior, standins);
+            return something;
+        }
+
+        private Applying applying(String behavior, List<DependencyStandin> standins) {
             assertEquals(List.of(), standins, "an example of a `let` body depends on nothing");
             return new Applying() {
 
@@ -200,8 +205,9 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         Compilation c = Compilation.ofSource(MODEL, "Main");
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
-        Map<String, byte[]> classes = c.db()
+        souther.compiler.generated.EvaluationArtifact artifact = c.db()
                 .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
+        Map<String, byte[]> classes = artifact.classes();
         ClassLoader parent = ExampleVerifier.class.getClassLoader();
         answerer.hereNamed = "example.crossing.倍額";
         answerer.hereLoaded = loaded(new MemoryClassLoader(classes, parent), answerer.hereNamed);
@@ -209,7 +215,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 c.db().ask(new Shapes.Scope(name)).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
-                classes,
+                artifact,
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),

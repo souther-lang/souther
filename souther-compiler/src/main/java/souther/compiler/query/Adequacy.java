@@ -1353,13 +1353,16 @@ public final class Adequacy {
      */
     static FixtureReader.Construction constructing(Db db, String module, souther.compiler.check.Prepared.ExampleExecution written,
                                                    Symbols symbols) {
-        Map<String, byte[]> classes =
+        // The classes alone: building a value applies no behavior, so what the compile implemented is
+        // not a question this asks.
+        souther.compiler.generated.EvaluationArtifact artifact =
                 db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
         Map<String, List<BehaviorRequirement>> requirements =
                 db.ask(new Bodies.Requirements(module)).value();
-        if (classes == null || requirements == null) {
+        if (artifact == null || requirements == null) {
             return null;
         }
+        Map<String, byte[]> classes = artifact.classes();
         Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
         // `requirements` is asked above as a readiness condition, not as an input: whether a
         // value builds at this module's boundary is the decoder's answer, and nothing here runs.

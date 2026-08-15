@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.generated.EvaluationArtifact;
+import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -305,14 +307,15 @@ public final class Output {
      * arm that ran as one nothing reaches, and that reads as a gap in the model rather than a fault in
      * the measurement.
      */
-    public record Evaluated(String name, CoverageMode coverage) implements Key<Map<String, byte[]>> {
+    public record Evaluated(String name, CoverageMode coverage)
+            implements Key<EvaluationArtifact> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, byte[]>> compute(Db db) {
+        public Answer<EvaluationArtifact> compute(Db db) {
             Classes.Inputs in = Classes.inputs(db, name);
             if (in == null) {
                 return Answer.absent();
@@ -329,7 +332,9 @@ public final class Output {
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
                         instrumentation);
                 Classes.stamp(db, name, emitted);
-                return Answer.of(Ordered.map(emitted.byBinaryName()));
+                // The classes and what they implement, from the one emission that decided both.
+                return Answer.of(new EvaluationArtifact(Ordered.map(emitted.byBinaryName()),
+                        emitted.implemented()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             } catch (IllegalStateException _) {
@@ -370,20 +375,26 @@ public final class Output {
      * counts them on the way in, so the counting still does not stop at the import.
      */
     public record EvaluationLinked(String name, CoverageMode coverage)
-            implements Key<Map<String, byte[]>> {
+            implements Key<EvaluationArtifact> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, byte[]>> compute(Db db) {
+        public Answer<EvaluationArtifact> compute(Db db) {
             List<String> reaches = db.ask(new Reaches(name)).value();
             if (reaches == null) {
-                return Answer.of(Map.of());
+                // What this module reaches always includes this module, so there is no such answer.
+                // Absent rather than an empty set of classes with an empty manifest beside it: a
+                // manifest saying nothing is generated is an answer, and it would tell every row that
+                // nothing applies its behavior, which is what a module with no `let` anywhere looks
+                // like. Nothing was worked out, so nothing is said.
+                return Answer.absent();
             }
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             Map<String, byte[]> linked = new LinkedHashMap<>();
+            GeneratedImplementations implemented = null;
             // Furthest first, so the module being evaluated is put on last, as Linked does.
             for (int i = reaches.size() - 1; i >= 0; i--) {
                 String reached = reaches.get(i);
@@ -396,7 +407,7 @@ public final class Output {
                 if (layout == null || !layout.idOfModule().containsKey(reached)) {
                     continue;
                 }
-                Answer<Map<String, byte[]>> classes = db.ask(new Evaluated(reached,
+                Answer<EvaluationArtifact> classes = db.ask(new Evaluated(reached,
                         reached.equals(name) ? coverage : CoverageMode.NONE));
                 // A module this compilation declares and could not generate makes this absent rather
                 // than making the set one class short. Evaluating against a set with a hole in it
@@ -406,9 +417,19 @@ public final class Output {
                 if (classes.value() == null) {
                     return Answer.absent(classes.reports());
                 }
-                linked.putAll(classes.value());
+                linked.putAll(classes.value().classes());
+                if (reached.equals(name)) {
+                    implemented = classes.value().implementations();
+                }
             }
-            return Answer.of(Ordered.map(linked));
+            if (implemented == null) {
+                // The module being evaluated was not generated here, so what applies its behaviors is
+                // not known — and an evaluation is over its rows. Absent for the reason the loop above
+                // is absent one class short: a run given no manifest for it would read every one of
+                // its rows as one nothing applies.
+                return Answer.absent();
+            }
+            return Answer.of(new EvaluationArtifact(Ordered.map(linked), implemented));
         }
     }
 
@@ -629,8 +650,11 @@ public final class Output {
                 // a module that did not check states nothing yet
                 return Answer.of(souther.compiler.examples.ExampleStatements.Readings.NONE);
             }
-            Map<String, byte[]> classes =
+            // The classes alone: nothing here applies a behavior, so what the compile implemented is
+            // not a question this asks.
+            EvaluationArtifact artifact =
                     db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
+            Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
             List<String> exampleOrigins = db.ask(new Front.ExampleOrigins(name)).value();
@@ -857,8 +881,10 @@ public final class Output {
             if (!db.ask(new Bodies.Checked(name)).present()) {
                 return List.of();   // a module that did not check has nothing to build a value with
             }
-            Map<String, byte[]> classes =
+            // As above: building a table applies no behavior, so only the classes are read.
+            EvaluationArtifact artifact =
                     db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
+            Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
             List<String> fakeOrigins = db.ask(new Front.FakeOrigins(name)).value();
@@ -882,7 +908,7 @@ public final class Output {
          * become two evaluations. A row that held under one and failed under the other would be a
          * difference in the measurement, not in the model, and the report has no way to tell.
          */
-        static Answer<Of> evaluate(Db db, String name, String sourceId, Map<String, byte[]> classes,
+        static Answer<Of> evaluate(Db db, String name, String sourceId, EvaluationArtifact artifact,
                                    CoverageMode coverage) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
@@ -893,7 +919,7 @@ public final class Output {
             if (!db.ask(new Bodies.Checked(name)).present()) {
                 return Answer.absent();   // a module that did not check has nothing to run
             }
-            if (classes == null) {
+            if (artifact == null) {
                 // Arms were asked for and the instrumented classes could not be made. Falling back to
                 // uncounted ones is not open: what holds a row to a budget is the counting, so a row
                 // run against them would be back on the clock. Nothing was observed, and that travels
@@ -921,7 +947,8 @@ public final class Output {
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             souther.compiler.examples.ExampleVerifier.Observations observed =
-                    souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
+                    souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
+                            artifact,
                             requirements, evaluationLoader(db),
                             values == null ? Map.of() : values, sourceId, deadlineOf(db),
                             policyOf(db),

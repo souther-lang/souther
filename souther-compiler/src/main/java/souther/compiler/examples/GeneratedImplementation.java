@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
@@ -25,12 +26,34 @@ import java.util.function.Function;
  */
 final class GeneratedImplementation implements Answerer {
 
-    private final String module;
+    private final GeneratedImplementations generated;
     private final MemoryClassLoader loader;
 
-    GeneratedImplementation(String module, MemoryClassLoader loader) {
-        this.module = module;
+    GeneratedImplementation(GeneratedImplementations generated, MemoryClassLoader loader) {
+        this.generated = generated;
         this.loader = loader;
+    }
+
+    /**
+     * What this compile emitted for the behavior, if it emitted one.
+     *
+     * <p>Read off the manifest the emission produced. This compile applies what it generated, so what
+     * it generated is the whole of the answer — and it is the emitter's own record of that rather than
+     * the same decision made a second time from the module's declarations. The two agree today; the
+     * one that is right the day they part is the emitter's.
+     *
+     * <p>A behavior it did generate is answered with {@link Answer.Something} whether or not the class
+     * can be loaded. Loading is applying, and an implementation that was generated and cannot be
+     * reached is {@link ImplementationNotReached} — a failure, and not this run having nothing to
+     * apply.
+     */
+    @Override
+    public Answer of(String behavior) {
+        if (!generated.has(behavior)) {
+            return new Answer.Nothing();
+        }
+        Answer.Something something = standins -> applying(behavior, standins);
+        return something;
     }
 
     /**
@@ -39,8 +62,7 @@ final class GeneratedImplementation implements Answerer {
      * <p>Made here rather than when the behavior is applied, because a row whose stand-ins could not
      * be made never entered the behavior and its outcome has to say so.
      */
-    @Override
-    public Applying applying(String behavior, List<DependencyStandin> standins) {
+    private Applying applying(String behavior, List<DependencyStandin> standins) {
         Object[] instances = new Object[standins.size()];
         for (int i = 0; i < standins.size(); i++) {
             instances[i] = instanceOf(standins.get(i));
@@ -94,7 +116,8 @@ final class GeneratedImplementation implements Answerer {
         Object instance;
         java.lang.reflect.Method apply;
         try {
-            c = GeneratedClasses.load(loader, new GeneratedClass.BehaviorImpl(module, behavior));
+            c = GeneratedClasses.load(loader,
+                    new GeneratedClass.BehaviorImpl(generated.module(), behavior));
             if (fakes.length == 0) {
                 instance = openCtor(c).newInstance();
             } else {
@@ -167,7 +190,7 @@ final class GeneratedImplementation implements Answerer {
      * answers. */
     private Object standaloneInstance(DependencyStandin standin) {
         GeneratedClass.BehaviorInterface baseClass =
-                new GeneratedClass.BehaviorInterface(module, standin.dependency());
+                new GeneratedClass.BehaviorInterface(generated.module(), standin.dependency());
         try {
             Class<?> base = GeneratedClasses.load(loader, baseClass);
             java.lang.reflect.Method apply = null;

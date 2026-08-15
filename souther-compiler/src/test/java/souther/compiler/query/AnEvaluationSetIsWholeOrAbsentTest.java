@@ -2,8 +2,9 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.generated.EvaluationArtifact;
+
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -47,7 +48,7 @@ class AnEvaluationSetIsWholeOrAbsentTest {
     /** The module that cannot be generated has no evaluation classes. */
     @Test
     void aModuleThatDoesNotCheckHasNoEvaluationClasses() {
-        Answer<Map<String, byte[]>> broken = compiled().db()
+        Answer<EvaluationArtifact> broken = compiled().db()
                 .ask(new Output.Evaluated("example.broken", Output.CoverageMode.NONE));
 
         assertNull(broken.value(), "nothing was generated for it");
@@ -62,7 +63,7 @@ class AnEvaluationSetIsWholeOrAbsentTest {
      */
     @Test
     void aSetThatReachesItIsAbsentRatherThanShortAClass() {
-        Answer<Map<String, byte[]>> linked = compiled().db()
+        Answer<EvaluationArtifact> linked = compiled().db()
                 .ask(new Output.EvaluationLinked("example.reaches", Output.CoverageMode.NONE));
 
         assertNull(linked.value(),
@@ -82,10 +83,10 @@ class AnEvaluationSetIsWholeOrAbsentTest {
                 """, "Main");
         compilation.answerEverything();
 
-        Map<String, byte[]> linked = compilation.db()
+        EvaluationArtifact linked = compilation.db()
                 .ask(new Output.EvaluationLinked("example.whole", Output.CoverageMode.NONE)).value();
 
         assertNotNull(linked);
-        assertFalse(linked.isEmpty(), "the module's own classes are there");
+        assertFalse(linked.classes().isEmpty(), "the module's own classes are there");
     }
 }
