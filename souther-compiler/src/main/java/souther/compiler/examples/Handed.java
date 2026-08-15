@@ -51,10 +51,11 @@ public final class Handed {
      * answerer cannot catch it by name and has no reason to catch it at all — everything it did not
      * raise itself goes out.
      *
-     * <p>What a row makes of one is not settled here, because no answerer a compile has crosses: the
-     * one it has of its own applies the classes these values already are. It is settled by whatever
-     * first supplies an answerer that does, which is also what decides whether such a row is a
-     * failure or a row that could not be decided.
+     * <p>A row that meets one is recorded as undecided, having applied nothing: it was never handed
+     * over, so nothing about it was established, and reporting a failure would put a diagnostic on a
+     * model that may be right. Whether there is more to say than that — a reason a reader is given,
+     * a way to tell a value that cannot be re-materialised from one whose form is wrong — is settled
+     * by whatever first supplies an answerer that crosses, since no answerer a compile has does.
      */
     public NeutralValue neutral() {
         if (neutral == null) {

@@ -98,6 +98,52 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 "and what entered it is on the record");
     }
 
+    /**
+     * The implementation could not be reached, so nothing applied the row.
+     *
+     * <p>The other half of the same invariant. A row is marked as having entered the behavior before
+     * the answerer is asked, because that is the one thing a reader of a row that never comes back
+     * can be given; an answerer that comes back saying it never got in takes the mark with it.
+     */
+    @Test
+    void anImplementationThatCouldNotBeReachedLeavesTheRowHavingAppliedNothing() {
+        ExampleVerifier.Observations observed = evaluated(new Unreachable());
+
+        RowOutcome row = only(observed);
+        assertEquals(Stage.FIXTURES_VALIDATED, row.stage(), "it never got in");
+        assertInstanceOf(Applied.Nothing.class, row.run().applied(),
+                "so nothing is recorded as having applied it");
+        assertEquals(Disposition.FAILED, row.disposition());
+        assertEquals(FailurePhase.INVOCATION, row.failurePhase());
+        assertEquals(1, observed.failures().size(),
+                "and the row is told, in the words it was told while this and the applied code"
+                        + " failing arrived as one throw");
+    }
+
+    /**
+     * The row could not be put in the form the answerer reads, so it is undecided.
+     *
+     * <p>What {@link Handed#neutral} raises, let out by the answerer as the contract says. Nothing
+     * about the row was established, so no diagnostic is said about a model that may be right — and
+     * it does not take the module's evaluation down with it, which is what it did while nothing
+     * caught it.
+     */
+    @Test
+    void aRowThatCouldNotBeHandedOverIsUndecidedRatherThanFailed() {
+        ExampleVerifier.Observations observed = evaluated(new Uncrossable());
+
+        RowOutcome row = only(observed);
+        assertEquals(Stage.FIXTURES_VALIDATED, row.stage(), "it was never handed over");
+        assertEquals(Disposition.INCOMPLETE, row.disposition(),
+                "so nothing about it was established");
+        assertEquals(FailurePhase.INFRASTRUCTURE, row.failurePhase());
+        assertInstanceOf(Applied.Nothing.class, row.run().applied());
+        assertEquals(List.of(), observed.failures(),
+                "and nothing is said about the model, which may be right");
+        assertEquals(1, observed.incompleteness().size(),
+                "the row is reported as one that could not be decided");
+    }
+
     /** A stand-in the answerer will not make. What it could not make is the whole of what it says. */
     private static final class Refusing implements Answerer {
 
@@ -126,6 +172,46 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         public Applying applying(String behavior, List<DependencyStandin> standins) {
             return _ -> {
                 throw new InvocationFailure(new IllegalStateException("it stopped itself"));
+            };
+        }
+    }
+
+    /** An answerer whose implementation is not where it looked. */
+    private static final class Unreachable implements Answerer {
+
+        @Override
+        public Applied applied() {
+            return new Applied.GeneratedHere();
+        }
+
+        @Override
+        public Applying applying(String behavior, List<DependencyStandin> standins) {
+            return _ -> {
+                throw new ImplementationNotReached("no class of that name (said by the test)",
+                        new ClassNotFoundException(behavior));
+            };
+        }
+    }
+
+    /**
+     * An answerer that reads a value it cannot put in its own form.
+     *
+     * <p>Raises what {@link Handed#neutral} raises rather than reading one, because a row's input is
+     * built by this compile's decoders and always readable back. What is being held is what the row
+     * does with it, which is the same whichever of the two produced it.
+     */
+    private static final class Uncrossable implements Answerer {
+
+        @Override
+        public Applied applied() {
+            return new Applied.GeneratedHere();
+        }
+
+        @Override
+        public Applying applying(String behavior, List<DependencyStandin> standins) {
+            return _ -> {
+                throw new FixtureException("`x` is a Nothing, which is not a type this example"
+                        + " can read");
             };
         }
     }

@@ -764,11 +764,21 @@ public final class ExampleVerifier {
             applicationFailed(fixtures, row, asserted, f.getCause(), out, state);
             return;
         } catch (ImplementationNotReached e) {
-            // Reported as the row aborting, which is what it was reported as while this and the
-            // applied code failing arrived as one throw. What it is — this compiler unable to reach
-            // what it emitted — is a different thing to say, and saying it differently is a change to
-            // what a row is told rather than to where the two are told apart.
+            // Nothing was applied: what would have applied it could not be reached. Told as the row
+            // aborting, which is what it was told while this and the applied code failing arrived as
+            // one throw — saying it differently is a change to what a row is told, and a different
+            // thing from where the two are told apart.
+            neverEntered(state);
             aborted(fixtures, row, asserted, String.valueOf(e.getMessage()), out, state);
+            return;
+        } catch (FixtureException fe) {
+            // The row's input could not be put in the form the answerer reads. Nothing about the row
+            // was established — it was never handed over — so it is undecided rather than failed, and
+            // no diagnostic is said about a model that may be right. Which is as far as this goes:
+            // no answerer a compile has crosses, so what more to say about such a row is settled by
+            // whatever first supplies one that does.
+            neverEntered(state);
+            state.incomplete(FailurePhase.INFRASTRUCTURE);
             return;
         }
         result = projected(result, sig.outputType());
@@ -1034,6 +1044,21 @@ public final class ExampleVerifier {
             over.add(new Handed(built, () -> fixtures.neutral(built, at, what)));
         }
         return over;
+    }
+
+    /**
+     * Takes back the row having entered the behavior.
+     *
+     * <p>A row is marked as having entered before the answerer is asked, because that is the one
+     * thing a reader of a row that never comes back needs and it can only be published beforehand.
+     * Where the answerer comes back saying it never got in, that mark is wrong: everything at
+     * {@link Stage#INVOKED} says what applied it ({@link Run#applied()}), and nothing applied this.
+     *
+     * <p>Safe to write here and nowhere else. The reader across the thread boundary is the one that
+     * reads a row still running, and a row that reached this came back.
+     */
+    private static void neverEntered(RowState state) {
+        state.stage = Stage.FIXTURES_VALIDATED;
     }
 
     /**

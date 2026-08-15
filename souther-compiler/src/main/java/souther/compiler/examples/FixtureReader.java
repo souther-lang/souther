@@ -1195,7 +1195,10 @@ public final class FixtureReader {
                 if (admission == Admission.HELD) {
                     admitBuilt(value, at, written);
                 }
-                yield neutral.of(value, at, answeredBy(written));
+                // Named by the path it was reached along, not as what something answered with: by
+                // here `written` has a field appended for every step taken ({@link #takeField}), so
+                // it names this value rather than the application that produced the one above it.
+                yield neutral.of(value, at, "`" + written + "`");
             }
         };
     }
