@@ -208,10 +208,14 @@
                 <version>3.15.0</version>
                 <configuration>
                     <compilerArgs>
-                        <!-- javac prints a hundred warnings per compilation and stops counting.
-                             A report that stops at a round number reads as the whole of what was
-                             found, so the limit is raised past anything this build produces. -->
+                        <!-- javac prints a hundred warnings per compilation and stops counting, and
+                             a hundred errors likewise. A report that stops at a round number reads
+                             as the whole of what was found — a change that breaks two hundred call
+                             sites is read as breaking a hundred — so both limits are raised past
+                             anything this build produces. -->
                         <arg>-Xmaxwarns</arg>
+                        <arg>100000</arg>
+                        <arg>-Xmaxerrs</arg>
                         <arg>100000</arg>
                         <arg>-XDcompilePolicy=simple</arg>
                         <arg>--should-stop=ifError=FLOW</arg>
