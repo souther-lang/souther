@@ -1,0 +1,210 @@
+package souther.compiler.check;
+
+import souther.compiler.Compiler;
+import souther.compiler.diag.Severity;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * A rule about what an operation answers is worth having only where a construction discharges
+ * because of it. So every row of every table is held here to a program that does, and the set is the
+ * tables' own rather than a list written beside them: a rule added with no program that fires it
+ * fails this, and so does a program left behind by a rule that was removed.
+ *
+ * <p>Held to what the library declares as well. Each of these compiles, so a row naming an argument
+ * the declaration does not have, or reading a value of a kind the rule is not about, is a failure
+ * here and not a silence at whichever call arrives first.
+ */
+class ARuleAboutAnOperationsResultCarriesSomethingTest {
+
+    private record Discharges(String operation, String module) {}
+
+    private static final List<Discharges> BOUNDED = List.of(
+            new Discharges("Int.abs", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior far : (x: Int) -> NonNeg constructs NonNeg
+                    let far (x) = NonNeg(Int.abs(x))
+                    """),
+            new Discharges("Decimal.abs", """
+                    module demo
+                    data NonNegD = Decimal
+                        invariant value >= 0.0m
+                    behavior far : (d: Decimal) -> NonNegD constructs NonNegD
+                    let far (d) = NonNegD(Decimal.abs(d))
+                    """),
+            new Discharges("Int.floorMod", """
+                    module demo
+                    data Pct = Int
+                        invariant value >= 0 && value <= 100
+                    behavior wrap : (x: Int) -> Pct constructs Pct
+                    let wrap (x) = Pct(Int.floorMod(x, 100))
+                    """),
+            new Discharges("Decimal.toInt", """
+                    module demo
+                    data Bad
+                    data AtLeastTen = Int
+                        invariant value >= 10
+                    behavior whole : (d: Decimal) -> AtLeastTen | Bad constructs AtLeastTen, Bad
+                    let whole (d) = {
+                        guard d >= 11.0m
+                            else Bad
+                        AtLeastTen(Decimal.toInt(HALF_UP, d))
+                    }
+                    """));
+
+    private static final List<Discharges> CHOOSING = List.of(
+            new Discharges("Int.min", """
+                    module demo
+                    data Bad
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior smaller : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                    let smaller (a, b) = {
+                        guard a >= 0
+                            else Bad
+                        guard b >= 0
+                            else Bad
+                        NonNeg(Int.min(a, b))
+                    }
+                    """),
+            new Discharges("Decimal.min", """
+                    module demo
+                    data Bad
+                    data NonNegD = Decimal
+                        invariant value >= 0.0m
+                    behavior smaller : (a: Decimal, b: Decimal) -> NonNegD | Bad
+                        constructs NonNegD, Bad
+                    let smaller (a, b) = {
+                        guard a >= 0.0m
+                            else Bad
+                        guard b >= 0.0m
+                            else Bad
+                        NonNegD(Decimal.min(a, b))
+                    }
+                    """),
+            new Discharges("Int.max", """
+                    module demo
+                    data NonNeg = Int
+                        invariant value >= 0
+                    behavior larger : (x: Int) -> NonNeg constructs NonNeg
+                    let larger (x) = NonNeg(Int.max(0, x))
+                    """),
+            new Discharges("Decimal.max", """
+                    module demo
+                    data NonNegD = Decimal
+                        invariant value >= 0.0m
+                    behavior larger : (d: Decimal) -> NonNegD constructs NonNegD
+                    let larger (d) = NonNegD(Decimal.max(0.0m, d))
+                    """),
+            new Discharges("Int.clamp", """
+                    module demo
+                    data Pct = Int
+                        invariant value >= 0 && value <= 100
+                    behavior score : (x: Int) -> Pct constructs Pct
+                    let score (x) = Pct(Int.clamp(0, 100, x))
+                    """),
+            new Discharges("Decimal.clamp", """
+                    module demo
+                    data Rate = Decimal
+                        invariant value >= 0.0m && value <= 1.0m
+                    behavior capped : (d: Decimal) -> Rate constructs Rate
+                    let capped (d) = Rate(Decimal.clamp(0.0m, 1.0m, d))
+                    """));
+
+    private static final List<Discharges> SHIFTING = List.of(
+            new Discharges("Date.addDays", """
+                    module demo
+                    data Span = { from: Date, to: Date }
+                        invariant Date.daysBetween(from, to) >= 0
+                    behavior makeSpan : (d: Date) -> Span constructs Span
+                    let makeSpan (d) = Span { from = d, to = Date.addDays(1, d) }
+                    """),
+            new Discharges("DateTime.addMinutes", """
+                    module demo
+                    data Window = { opens: DateTime, closes: DateTime }
+                        invariant DateTime.minutesBetween(opens, closes) >= 30
+                    behavior makeWindow : (dt: DateTime) -> Window constructs Window
+                    let makeWindow (dt) = Window { opens = dt, closes = DateTime.addMinutes(30, dt) }
+                    """),
+            new Discharges("DateTime.addHours", """
+                    module demo
+                    data Window = { opens: DateTime, closes: DateTime }
+                        invariant DateTime.minutesBetween(opens, closes) >= 60
+                    behavior makeWindow : (dt: DateTime) -> Window constructs Window
+                    let makeWindow (dt) = Window { opens = dt, closes = DateTime.addHours(1, dt) }
+                    """),
+            new Discharges("DateTime.addDays", """
+                    module demo
+                    data Window = { opens: DateTime, closes: DateTime }
+                        invariant DateTime.minutesBetween(opens, closes) >= 1440
+                    behavior makeWindow : (dt: DateTime) -> Window constructs Window
+                    let makeWindow (dt) = Window { opens = dt, closes = DateTime.addDays(1, dt) }
+                    """));
+
+    private static final List<Discharges> READ_AS_THEIR_ARGUMENT = List.of(
+            new Discharges("Decimal.fromInt", """
+                    module demo
+                    data Bad
+                    data NonNegD = Decimal
+                        invariant value >= 0.0m
+                    behavior widen : (n: Int) -> NonNegD | Bad constructs NonNegD, Bad
+                    let widen (n) = {
+                        guard n >= 0
+                            else Bad
+                        NonNegD(Decimal.fromInt(n))
+                    }
+                    """));
+
+    private static Set<String> namesOf(List<Discharges> programs) {
+        return programs.stream().map(Discharges::operation)
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
+    @Test
+    void everyBoundHasAConstructionThatFiresIt() {
+        assertEquals(new TreeSet<>(DischargeRules.boundedNames()), namesOf(BOUNDED));
+    }
+
+    @Test
+    void everyChoiceHasAConstructionThatFiresIt() {
+        assertEquals(new TreeSet<>(DischargeRules.choosingNames()), namesOf(CHOOSING));
+    }
+
+    @Test
+    void everyShiftHasAConstructionThatFiresIt() {
+        assertEquals(new TreeSet<>(DischargeRules.shiftingNames()), namesOf(SHIFTING));
+    }
+
+    @Test
+    void everyReadThroughHasAConstructionThatFiresIt() {
+        assertEquals(new TreeSet<>(DischargeRules.formNames()), namesOf(READ_AS_THEIR_ARGUMENT));
+    }
+
+    @Test
+    void eachRuleDischargesWhatItsProgramNeeds() {
+        List<String> carriedNothing = new ArrayList<>();
+        List<Discharges> all = new ArrayList<>(BOUNDED);
+        all.addAll(CHOOSING);
+        all.addAll(SHIFTING);
+        all.addAll(READ_AS_THEIR_ARGUMENT);
+        for (Discharges one : all) {
+            long warnings = Compiler.compileWithWarnings(one.module()).warnings().stream()
+                    .filter(d -> d.severity() == Severity.WARNING).count();
+            if (warnings > 0) {
+                carriedNothing.add(one.operation());
+            }
+        }
+        assertEquals(List.of(), carriedNothing,
+                "the clause should discharge from what the operation answers, and does not");
+    }
+}

@@ -206,6 +206,14 @@ final class Terms {
             if (written != null && written != n) {
                 return affineOf(written, at, k);
             }
+            // An operation answering a number it was given is that number here, whatever type it
+            // answers it in: `Decimal.fromInt(n)` is `n`, so a guard about `n` is about the call as
+            // well. Read through rather than made an atom of its own, which would leave the two
+            // unrelated and the guard saying nothing about the construction.
+            Core answered = DischargeRules.answersItsArgument(n);
+            if (answered != null) {
+                return affineOf(answered, at, k);
+            }
             // A list written out has as many elements as it is written with, whatever they are.
             BigDecimal counted = writtenSize(n, at);
             if (counted != null) {
@@ -321,6 +329,20 @@ final class Terms {
      * spelling each other alike. */
     Term sizeKeyOf(ValueName size, Term container) {
         return named(interned.called(size, List.of(container)), Granularity.DISCRETE);
+    }
+
+    /**
+     * The number {@code measure} answers of {@code from} and {@code to}, named as the call it is.
+     *
+     * <p>The same shape a clause writing that measure builds, so a rule stated in it and an invariant
+     * written in it name one value. How its values are spaced is read off what the library declares
+     * the measure to answer, which is what a clause reading the call is named with too — a count of
+     * whole days is one thing wherever it is written.
+     */
+    Term measureKeyOf(ValueName.Stdlib measure, Term from, Term to) {
+        Prelude.PreludeEntry counts = Prelude.entry(measure.qualified());
+        return named(interned.called(measure, List.of(from, to)),
+                granularityOf(counts.signature().result()));
     }
 
     /**
