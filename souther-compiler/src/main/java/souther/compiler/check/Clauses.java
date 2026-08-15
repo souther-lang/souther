@@ -147,7 +147,7 @@ final class Clauses {
     private static Clause clauseOf(TypeOps.Declared inv) {
         return new Clause(new Clause.Id(inv.declaredOn(), inv.ordinal()),
                 inv.clause().name().map(ClauseName::new),
-                CitableRegion.of(inv.clause().reportedAt()));
+                souther.compiler.diag.DiagnosticPlace.of(inv.clause().reportedAt()));
     }
 
     /**

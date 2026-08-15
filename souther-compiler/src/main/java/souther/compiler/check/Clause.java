@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.Objects;
@@ -15,18 +16,22 @@ import java.util.Optional;
  * {@link InvariantChecker.Judgment}'s, which is why a clause is put on one of its sides rather than
  * carrying a verdict here.
  *
- * <p>{@code name} and {@code at} are both optional and are optional for different reasons, which is
- * what {@link #merge} turns on. An absent name is a fact about the declaration: the author wrote
- * none, and every reading of that declaration finds none. An absent {@code at} is a fact about this
- * compile: the clause was written somewhere, and whether that somewhere can be quoted depends on
- * which representation the clause was reached through.
+ * <p>{@code name} is optional and {@code at} is not. An absent name is a fact about the
+ * declaration: the author wrote none, and every reading of that declaration finds none. Where the
+ * clause is written is always answered — a clause of a published module is
+ * {@link DiagnosticPlace.Unavailable}, which says where the code came from rather than being the
+ * absence of an answer. It used to be absent, and absent is what every reader turned into silence.
+ *
+ * <p>Which reading a clause was reached through can still differ, and that is what {@link #merge}
+ * turns on: one representation quotes the clause and another has no file for it, and the reading
+ * that can point somewhere is the one to keep.
  */
-record Clause(Id id, Optional<ClauseName> name, Optional<CitableRegion> at) {
+record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
 
     Clause {
         Objects.requireNonNull(id, "a clause is one clause");
         Objects.requireNonNull(name, "a clause was written with a name or without one");
-        Objects.requireNonNull(at, "a clause can be pointed at or it cannot");
+        Objects.requireNonNull(at, "a clause is written somewhere, quotable here or not");
     }
 
     /**
@@ -55,6 +60,10 @@ record Clause(Id id, Optional<ClauseName> name, Optional<CitableRegion> at) {
      * <p>What may differ between two readings is {@code at} and only {@code at}, because only it is
      * knowledge this compile has rather than something the declaration says. Everything else
      * differing is this compiler having called two clauses one clause, or one clause two.
+     *
+     * <p>Where they differ, the reading that can send a reader somewhere wins. The other one is the
+     * same clause reached through a representation this compile has no file for, and there is
+     * nothing it knows that the first does not.
      */
     static Clause merge(Clause a, Clause b) {
         if (!a.id.equals(b.id)) {
@@ -64,11 +73,12 @@ record Clause(Id id, Optional<ClauseName> name, Optional<CitableRegion> at) {
             throw new NotOneClause("clause " + a.id + " is named " + a.name.orElse(null)
                     + " in one reading and " + b.name.orElse(null) + " in another");
         }
-        if (a.at.isPresent() && b.at.isPresent() && !a.at.equals(b.at)) {
-            throw new NotOneClause("clause " + a.id + " is written at " + a.at.get().start()
-                    + " in one reading and at " + b.at.get().start() + " in another");
+        if (a.at instanceof DiagnosticPlace.InSource && b.at instanceof DiagnosticPlace.InSource
+                && !a.at.equals(b.at)) {
+            throw new NotOneClause("clause " + a.id + " is written at " + a.at
+                    + " in one reading and at " + b.at + " in another");
         }
-        return a.at.isPresent() ? a : b;
+        return a.at instanceof DiagnosticPlace.InSource ? a : b;
     }
 
     /**

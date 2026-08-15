@@ -90,8 +90,8 @@ class CompileFakeExampleDisagreementTest {
         Diagnostic one = found.get(0).diagnostic();
         assertEquals(22, one.pos().line(), "anchored at the recorded row");
         assertEquals(1, one.secondary().size(), one.secondary().toString());
-        assertEquals(25, one.secondary().get(0).region().start().line(), "pointing at the fake row");
-        assertEquals(one.pos().sourceId(), one.secondary().get(0).sourceId(),
+        assertEquals(25, one.secondary().get(0).place().pointsAt().orElseThrow().start().line(), "pointing at the fake row");
+        assertEquals(one.pos().sourceId(), one.secondary().get(0).place().pointsAt().orElseThrow().start().sourceId(),
                 "both are in this source, and the second region says so rather than leaving a"
                         + " reader to work it out from where the diagnostic was filed");
     }
@@ -822,7 +822,7 @@ class CompileFakeExampleDisagreementTest {
         Diagnostic one = found.get(0).diagnostic();
         assertEquals(1, one.secondary().size(), one.secondary().toString());
         String primary = found.get(0).primarySourceId();
-        String other = one.secondary().get(0).sourceId();
+        String other = one.secondary().get(0).place().pointsAt().orElseThrow().start().sourceId();
         assertNotNull(other, why + ": the second region names the file it is in");
         assertNotEquals(primary, other, why + ": the two statements are in different sources");
         assertEquals(java.util.Set.of("0", "1"), java.util.Set.of(primary, other),

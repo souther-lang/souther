@@ -718,9 +718,13 @@ public final class Compilation {
             if (!label.belongsToFinding()) {
                 continue;
             }
-            String where = label.sourceIdOr(primary);
-            if (where != null && !saidAt.contains(where)) {
-                saidAt.add(where);
+            // A label with nowhere to point puts the report in front of nobody new. It is part
+            // of what is found wrong and is in a file this compile does not have, so there is no
+            // author here to tell and no marker to place; what it has to say is said wherever the
+            // report is already said.
+            if (label.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
+                    && !saidAt.contains(in.source())) {
+                saidAt.add(in.source());
             }
         }
         return List.copyOf(saidAt);

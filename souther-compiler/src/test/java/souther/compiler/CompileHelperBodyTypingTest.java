@@ -285,7 +285,7 @@ class CompileHelperBodyTypingTest {
         assertFalse(e.diagnostic().secondary().isEmpty(), "the open use is labelled");
         assertInstanceOf(HelperMessage.AFieldIsReadOffItAndThatNamesNoType.class,
                 e.diagnostic().secondary().get(0).said());
-        assertEquals(5, e.diagnostic().secondary().get(0).region().start().line(),
+        assertEquals(5, e.diagnostic().secondary().get(0).place().pointsAt().orElseThrow().start().line(),
                 "the label sits on `line.qty`, the use that names no type");
     }
 

@@ -86,7 +86,7 @@ class AnErrorSaysWhatEveryPathFailsAndNotWhatOneOfThemDoesTest {
         List<LabeledRegion> marked = error().secondary();
 
         assertEquals(List.of(7, 8),
-                marked.stream().map(one -> one.region().start().line()).toList());
+                marked.stream().map(one -> one.place().pointsAt().orElseThrow().start().line()).toList());
         assertTrue(marked.stream().allMatch(one -> one.said()
                         instanceof InvariantMessage.ThisClauseRejectsTheValueOnSomeOfThePathsHere),
                 "not `ThisClauseRejectsThisValue`, which the value that comes down the other branch"

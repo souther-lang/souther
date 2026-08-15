@@ -102,7 +102,7 @@ class ARowAndItsStandInAreUnderlinedOverWhatTheyStateTest {
     private static Region standIn(String source) {
         List<LabeledRegion> labels = disagreement(source).secondary();
         assertEquals(1, labels.size(), "the stand-in is the one place said beside it: " + labels);
-        return labels.get(0).region();
+        return labels.get(0).place().pointsAt().orElseThrow();
     }
 
     private static Diagnostic disagreement(String source) {

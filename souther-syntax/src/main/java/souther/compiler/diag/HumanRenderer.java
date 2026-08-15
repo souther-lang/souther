@@ -56,6 +56,13 @@ public final class HumanRenderer implements DiagnosticRenderer {
                         startOf(other.region()), locale))).append('\n');
             }
         }
+        // A label with nothing to quote, said after the places there are and before the message.
+        // It is not a block with no snippet in it: there is no line, no file name and no caret, so
+        // what would be left of the block is the sentence, written where the sentences are.
+        for (LabeledRegion label : view.unquotable()) {
+            out.append('\n').append(color(DIM, DiagnosticRenderer.saidAbout(label,
+                    (DiagnosticPlace.Unavailable) label.place(), locale))).append('\n');
+        }
         out.append('\n').append(DiagnosticRenderer.body(d, locale)).append('\n');
         if (d.diff() != null) {
             out.append('\n');

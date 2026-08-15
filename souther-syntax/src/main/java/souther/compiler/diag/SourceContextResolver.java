@@ -11,10 +11,11 @@ import java.util.function.Function;
  * <p>An id it does not know, and a file it cannot read, both answer null — the renderer then leaves
  * the snippet out rather than quoting a line from somewhere else.
  *
- * <p>A secondary that names no source of its own is never asked about: it inherits the diagnostic's
- * ({@link LabeledRegion#sourceIdOr(String)}) before anything is looked up. A whole diagnostic that
- * names none is asked about as {@link Located#NO_SOURCE}, and what that means is the caller's to
- * say — a compile of one source names none and yet has exactly one file to quote.
+ * <p>A secondary is asked about under the source it names, which every one of them does
+ * ({@link DiagnosticPlace.InSource}); one with nothing to quote is not asked about at all, because
+ * it points at nothing and is said in words instead. A whole diagnostic that names none is asked
+ * about as {@link Located#NO_SOURCE}, and what that means is the caller's to say — a compile of one
+ * source names none and yet has exactly one file to quote.
  *
  * <p>Answering twice for one id must give the same text, since a caret is drawn under a line quoted
  * from it. {@link #memoized} is how a caller reading files off disk keeps that true, and it also

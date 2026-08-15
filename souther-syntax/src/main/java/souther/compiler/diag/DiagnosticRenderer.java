@@ -116,4 +116,19 @@ public interface DiagnosticRenderer {
                 locale);
         return said.isEmpty() ? about : said + " " + about;
     }
+
+    /**
+     * What a label with nothing to point at says: what it says, and where that code is.
+     *
+     * <p>Its own wording. The sentence a caret carries ends by saying what the place under it is,
+     * and there is no place under this one — a label about a clause of a published module points at
+     * nothing, so explaining a caret would be explaining something the reader cannot see.
+     */
+    static String saidAbout(LabeledRegion label, DiagnosticPlace.Unavailable place, Locale locale) {
+        String said = Messages.render(label.said(), locale);
+        String about = Messages.render(
+                new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
+                        place.provenance().reachedBy()), locale);
+        return said.isEmpty() ? about : said + " " + about;
+    }
 }

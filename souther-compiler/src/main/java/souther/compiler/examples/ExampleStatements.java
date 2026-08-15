@@ -1002,7 +1002,7 @@ public final class ExampleStatements {
                 .say(dead.row().isDefault()
                         ? new ExampleMessage.ALaterDefaultRowAnswersInstead(fk.target())
                         : new ExampleMessage.AnEarlierRowAnswersTheseArguments(fk.target()))
-                .secondaryIn(null, souther.compiler.diag.Region.point(dead.answeredBy().pos()),
+                .secondary(souther.compiler.diag.Region.point(dead.answeredBy().pos()),
                         new ExampleMessage.TheRowThatAnswersIsHere(fk.target()))
                 .build();
     }

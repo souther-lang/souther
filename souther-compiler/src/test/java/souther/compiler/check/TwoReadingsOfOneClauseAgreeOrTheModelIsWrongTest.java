@@ -1,7 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -36,12 +38,18 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
     private static final Clause.Id FIRST = new Clause.Id(BOUND, 0);
     private static final Clause.Id SECOND = new Clause.Id(BOUND, 1);
 
-    private static Optional<CitableRegion> at(String sourceId, int line) {
-        return CitableRegion.of(new Region(new SourcePos(line, 5, sourceId),
+    private static DiagnosticPlace at(String sourceId, int line) {
+        return DiagnosticPlace.of(new Region(new SourcePos(line, 5, sourceId),
                 new SourcePos(line, 30, sourceId)));
     }
 
-    private static Clause clause(Clause.Id id, String name, Optional<CitableRegion> at) {
+    /** A clause of a module this compile holds no file for: written somewhere, quotable nowhere. */
+    private static DiagnosticPlace outOfSight() {
+        return new DiagnosticPlace.Unavailable(
+                new SourceProvenance.APublishedModule("lib.rule"));
+    }
+
+    private static Clause clause(Clause.Id id, String name, DiagnosticPlace at) {
         return new Clause(id, Optional.ofNullable(name).map(ClauseName::new), at);
     }
 
@@ -50,7 +58,7 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
     @Test
     void aReadingThatKnowsWhereTheClauseIsTellsTheOneThatDoesNot() {
         Clause knows = clause(FIRST, "ordered", at("model.sou", 8));
-        Clause doesNot = clause(FIRST, "ordered", Optional.empty());
+        Clause doesNot = clause(FIRST, "ordered", outOfSight());
 
         assertEquals(knows, Clause.merge(knows, doesNot));
         assertEquals(knows, Clause.merge(doesNot, knows),
@@ -59,7 +67,7 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
 
     @Test
     void twoReadingsThatKnowNothingStillKnowNothing() {
-        Clause blind = clause(FIRST, "ordered", Optional.empty());
+        Clause blind = clause(FIRST, "ordered", outOfSight());
 
         assertEquals(blind, Clause.merge(blind, blind));
     }
@@ -69,7 +77,7 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
     @Test
     void mergingIsCommutativeAssociativeAndIdempotent() {
         Clause knows = clause(FIRST, "ordered", at("model.sou", 8));
-        Clause blind = clause(FIRST, "ordered", Optional.empty());
+        Clause blind = clause(FIRST, "ordered", outOfSight());
         Clause same = clause(FIRST, "ordered", at("model.sou", 8));
 
         for (List<Clause> order : List.of(List.of(knows, blind, same), List.of(blind, same, knows),
@@ -88,11 +96,11 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
     @Test
     void twoClausesAreNotMergedIntoOne() {
         assertThrows(Clause.NotOneClause.class, () -> Clause.merge(
-                clause(FIRST, "ordered", Optional.empty()),
-                clause(SECOND, "ordered", Optional.empty())));
+                clause(FIRST, "ordered", outOfSight()),
+                clause(SECOND, "ordered", outOfSight())));
         assertThrows(Clause.NotOneClause.class, () -> Clause.merge(
-                clause(FIRST, "ordered", Optional.empty()),
-                clause(new Clause.Id(OTHER, 0), "ordered", Optional.empty())));
+                clause(FIRST, "ordered", outOfSight()),
+                clause(new Clause.Id(OTHER, 0), "ordered", outOfSight())));
     }
 
     /**
@@ -103,14 +111,14 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
     @Test
     void oneClauseIsNotNamedTwoWays() {
         assertThrows(Clause.NotOneClause.class, () -> Clause.merge(
-                clause(FIRST, "ordered", Optional.empty()),
-                clause(FIRST, "lowNonNegative", Optional.empty())));
+                clause(FIRST, "ordered", outOfSight()),
+                clause(FIRST, "lowNonNegative", outOfSight())));
         assertThrows(Clause.NotOneClause.class, () -> Clause.merge(
-                clause(FIRST, "ordered", Optional.empty()),
-                clause(FIRST, null, Optional.empty())));
+                clause(FIRST, "ordered", outOfSight()),
+                clause(FIRST, null, outOfSight())));
         assertThrows(Clause.NotOneClause.class, () -> Clause.merge(
-                clause(FIRST, null, Optional.empty()),
-                clause(FIRST, "ordered", Optional.empty())));
+                clause(FIRST, null, outOfSight()),
+                clause(FIRST, "ordered", outOfSight())));
     }
 
     /** Nor written in two places. Which of them is right is not a question with an answer here:
@@ -134,8 +142,8 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
     @Test
     void aDisagreementIsNotSomethingTheCheckMayGiveUpOn() {
         Clause.NotOneClause disagreement = assertThrows(Clause.NotOneClause.class,
-                () -> Clause.merge(clause(FIRST, "ordered", Optional.empty()),
-                        clause(FIRST, null, Optional.empty())));
+                () -> Clause.merge(clause(FIRST, "ordered", outOfSight()),
+                        clause(FIRST, null, outOfSight())));
 
         assertThrows(Clause.NotOneClause.class,
                 () -> InvariantChecker.gaveUp("a test", disagreement));

@@ -766,7 +766,7 @@ public final class InvariantChecker {
      * values one value, and what it would produce if caught is a behavior with no findings — which
      * is exactly what a behavior whose invariants all discharge produces.
      *
-     * <p>{@link CitableRegion.NotOnePlace} and {@link Clause.NotOneClause} are not that either, for
+     * <p>{@link souther.compiler.diag.DiagnosticPlace.NotOnePlace} and {@link Clause.NotOneClause} are not that either, for
      * the same reason. One says a place this check was about to send a reader to runs between two
      * files; the other says two readings of one clause disagree about what the declaration says.
      * Both are this compiler's model contradicting itself, which is a different thing from this
@@ -776,7 +776,7 @@ public final class InvariantChecker {
         // Asked of what the failure is and not of which ones this has met. A list here is a copy of
         // the types that carry the distinction, and a new way for the check to disagree with itself
         // would go on being reported as an ordinary limit with nothing failing while it did.
-        if (why instanceof TheCheckDisagreesWithItself) {
+        if (why instanceof souther.compiler.diag.TheCompilerDisagreesWithItself) {
             throw why;
         }
         List<GaveUp> watching = GAVE_UP;
@@ -1324,10 +1324,11 @@ public final class InvariantChecker {
             return side.values().stream().anyMatch(clause -> clause.name().isPresent());
         }
 
-        /** The clauses on a side this compile can send a reader to, in the order they were
-         * declared. */
-        static Stream<CitableRegion> pointsTo(SequencedMap<Clause.Id, Clause> side) {
-            return side.values().stream().map(Clause::at).flatMap(Optional::stream);
+        /** Where the clauses on a side are, in the order they were declared — every one of them,
+         * whether or not this compile has a file to quote it from. */
+        static Stream<souther.compiler.diag.DiagnosticPlace> pointsTo(
+                SequencedMap<Clause.Id, Clause> side) {
+            return side.values().stream().map(Clause::at);
         }
     }
 
@@ -1777,15 +1778,25 @@ public final class InvariantChecker {
      * with the clauses it is handed is the same either way — every one of them that this compile can
      * quote, in the order the clauses were declared, labelled with what the caller says of them.
      *
-     * <p>A clause with nowhere to point is left out and nothing else changes: what the message says
-     * is decided by whether the clause could be named, which is a different question with a
-     * different answer.
+     * <p>A clause this compile has no file for is said rather than left out: the label says where
+     * the code came from and points at nothing ({@link souther.compiler.diag.DiagnosticPlace}). It
+     * used to be dropped, so the same warning about the same rule told a reader which clause was at
+     * issue when the declaration was in this project and told them nothing when it came off the
+     * module path. What the message says is a different question with a different answer — whether
+     * the clause could be named — and neither decides the other.
      */
     private static <M extends Message & Supporting> Diagnostic finish(
             Diagnostic.Builder said, SourcePos at, SequencedMap<Clause.Id, Clause> clauses,
             M label) {
         said.at(at);
-        Judgment.pointsTo(clauses).forEach(citable -> said.secondary(citable.region(), label));
+        Judgment.pointsTo(clauses).forEach(place -> {
+            switch (place) {
+                case souther.compiler.diag.DiagnosticPlace.InSource in ->
+                        said.secondary(in.region(), label);
+                case souther.compiler.diag.DiagnosticPlace.Unavailable out ->
+                        said.secondaryOutOfSight(out.provenance(), label);
+            }
+        });
         return said.build();
     }
 

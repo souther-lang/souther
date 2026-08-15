@@ -86,11 +86,22 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
         SequencedMap<String, String> fields = new LinkedHashMap<>();
         switch (this) {
             case Written _ -> fields.put("kind", "here");
-            case OutOfSight out -> {
-                fields.put("kind", "outOfSight");
-                fields.put("declaration", out.provenance().reachedBy());
-            }
+            case OutOfSight out -> fields.putAll(outOfSightFields(out.provenance()));
         }
+        return fields;
+    }
+
+    /**
+     * The same fields for code out of sight, said of a provenance rather than of a citation.
+     *
+     * <p>For a report with nowhere to point: a label about a clause of a module this compile holds
+     * no file for has the provenance and no coordinate to project. One writer, so the words a
+     * document uses for "the code is elsewhere" are the same whether or not there was a caret.
+     */
+    static SequencedMap<String, String> outOfSightFields(SourceProvenance provenance) {
+        SequencedMap<String, String> fields = new LinkedHashMap<>();
+        fields.put("kind", "outOfSight");
+        fields.put("declaration", provenance.reachedBy());
         return fields;
     }
 

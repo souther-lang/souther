@@ -22,7 +22,9 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.editor.EditorSymbols;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.DiagnosticView;
+import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Spot;
@@ -1921,8 +1923,16 @@ public final class Analyzer {
                 ? LspDiagnostic.WARNING : LspDiagnostic.ERROR;
         DiagnosticView view = DiagnosticView.of(d, primarySourceId, publishedUri);
         List<LspDiagnostic.Related> related = new ArrayList<>();
+        // A label with nothing to point at joins the message. An editor's related information is a
+        // location, and there is no location — the clause is in a module this workspace has no file
+        // for. It used to be given `publishedUri` and the numbers it was read at, which made a link
+        // the author could follow into an unrelated line of their own file.
+        for (LabeledRegion label : view.unquotable()) {
+            message = message + " " + DiagnosticRenderer.saidAbout(label,
+                    (DiagnosticPlace.Unavailable) label.place(), EDITOR_LANGUAGE);
+        }
         for (Spot other : view.others()) {
-            String uri = other.sourceId() == null ? publishedUri : uriOf.apply(other.sourceId());
+            String uri = uriOf.apply(other.sourceId());
             LineIndex lines = linesOf.apply(other.sourceId());
             if (uri == null || lines == null || other.region() == null) {
                 continue;   // nothing the editor could open, so nothing to link to

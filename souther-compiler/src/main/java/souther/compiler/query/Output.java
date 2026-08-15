@@ -756,15 +756,15 @@ public final class Output {
             souther.compiler.examples.ExampleStatements.Statement recorded = d.recorded();
             souther.compiler.examples.ExampleStatements.Statement standIn = d.standIn();
             boolean viaWith = d.viaWith();
-            // The second region names its source only when that is another file: within one file
-            // there is nothing to say, and the renderer would quote the same name twice.
-            String elsewhere = standIn.sourceId().equals(recorded.sourceId())
-                    ? null : standIn.sourceId();
+            // The region says which file it is in, and whether that is worth printing is the
+            // renderer's — it already leaves the name out where it matches the one in the heading.
+            // Deciding it here meant naming the source a second time beside a region that carries
+            // one, which is two answers to one question and the shape #760 was.
             return Diagnostic.at(recorded.region())
                     .say(viaWith
                             ? new ExampleMessage.TheRowAndTheWithDisagree(d.behavior())
                             : new ExampleMessage.TheRowAndTheFakeDisagree(d.behavior()))
-                    .secondaryIn(elsewhere, standIn.region(),
+                    .secondary(standIn.region(),
                             viaWith ? new ExampleMessage.TheWithIsHere(d.behavior())
                                     : new ExampleMessage.TheFakeRowIsHere(d.behavior()))
                     .hint(viaWith

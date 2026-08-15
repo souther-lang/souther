@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A module read off the class path is read from text this compile put back together out of what the
@@ -423,32 +424,43 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     }
 
     /**
-     * A report whose caret stays put keeps every label it had.
+     * Moving the caret takes nothing away from the labels the report already had.
      *
-     * <p>A label naming no source of its own is read in the diagnostic's, which is what a hand-made
-     * position is for and is a contract older than any of this. Only moving the caret takes that
-     * away — the file the label would be read in stops being the file it was built against — so a
-     * reading that dropped such a label from every report would be reading "no file of its own" as
-     * "no file at all", which is a different thing and is already answered.
+     * <p>Each of them says where it is on its own ({@code DiagnosticPlace}), so none of them meant
+     * anything different while the caret was somewhere else. They used to be filtered here, because
+     * one naming no source was read in whichever file the diagnostic ended up filed under — and
+     * that reading is what made a label about a clause nobody holds a file for land on a line of
+     * the caller's. A label that cannot be pointed at is now said in words instead of dropped, so
+     * there is nothing left for moving a caret to invalidate.
      */
     @Test
-    void anOrdinaryReportKeepsALabelThatNamesNoSourceOfItsOwn() {
+    void movingTheCaretKeepsTheLabelsTheReportAlreadyHad() {
         Diagnostic said = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(1, 1, "0"))
-                .secondary(Region.ofWidth(new SourcePos(3, 3), 4),
+                .secondary(Region.ofWidth(new SourcePos(3, 3, "0"), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
         assertEquals(1, said.secondary().size(), "the label is there to begin with");
-        assertEquals("0", said.secondary().get(0).sourceIdOr("0"),
-                "and is read in the file the diagnostic is in");
 
         Diagnostic moved = said.reachedFrom(List.of(new SourcePos(2, 1, "0")),
                 new SourceProvenance.APublishedModule("lib.held"),
                 new ModuleMessage.ItIsReachedFromHereToo());
 
-        assertEquals(List.of(), moved.secondary(),
-                "moving the caret is what takes the label's file away");
+        assertEquals(1, moved.secondary().size(), "and survives the move, saying what it said");
+        assertEquals(said.secondary().get(0).place(), moved.secondary().get(0).place(),
+                "in the place it named for itself");
+    }
+
+    /** A region nobody placed is refused rather than read against wherever it is shown. */
+    @Test
+    void aLabelOverARegionNamingNoSourceIsRefused() {
+        Diagnostic.Builder building = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
+                .at(new SourcePos(1, 1, "0"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> building.secondary(Region.ofWidth(new SourcePos(3, 3), 4),
+                        new NameMessage.WriteItOnItsOwn("x")));
     }
 
     /** Where the report about {@code module} is said. */

@@ -109,7 +109,7 @@ class AJoinFailureNamesTheOperandItRefusedTest {
         // <<a-region-is-an-extent>>'s question and is one column here.
         String written = "let xs = [1] ++ [\"a\"]";
         assertEquals(List.of(written.indexOf("[1]") + 1, written.indexOf("[\"a\"]") + 1),
-                report.secondary().stream().map(s -> s.region().start().column()).toList());
+                report.secondary().stream().map(s -> s.place().pointsAt().orElseThrow().start().column()).toList());
         assertTrue(values(report).isEmpty(), "the message names neither type: " + values(report));
     }
 

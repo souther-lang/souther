@@ -94,7 +94,7 @@ class AClauseReachedTwiceIsOneClauseTest {
     @Test
     void eachOfTheTwoIsWrittenSomewhereOfItsOwn() {
         List<Integer> lines = judgmentOn(TWO_UNNAMED).unsettled().values().stream()
-                .map(c -> c.at().orElseThrow().start().line()).toList();
+                .map(c -> c.at().pointsAt().orElseThrow().start().line()).toList();
 
         assertEquals(List.of(7, 8), lines, "the two `invariant` lines the declaration writes");
     }
@@ -107,7 +107,7 @@ class AClauseReachedTwiceIsOneClauseTest {
 
         assertEquals(1, judgment.unsettled().size(),
                 "one clause, read once down each branch: " + judgment.unsettled());
-        assertEquals(7, judgment.unsettled().firstEntry().getValue().at().orElseThrow()
+        assertEquals(7, judgment.unsettled().firstEntry().getValue().at().pointsAt().orElseThrow()
                 .start().line(), "and it is still where the declaration writes it");
     }
 

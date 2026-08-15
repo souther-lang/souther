@@ -231,7 +231,7 @@ class AnExpressionIsUnderlinedOverWhatWasWrittenTest {
     /** The {@code n}th secondary region of the one report compiling {@code source} produces. */
     private static Region secondary(String source, int n) {
         List<LabeledRegion> labels = only(source).secondary();
-        return labels.get(n).region();
+        return labels.get(n).place().pointsAt().orElseThrow();
     }
 
     private static Diagnostic only(String source) {

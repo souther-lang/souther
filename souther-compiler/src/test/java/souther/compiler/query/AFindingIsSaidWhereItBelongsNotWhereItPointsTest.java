@@ -57,7 +57,7 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     private static Db.Found pointingAtADefinition(String module, String caretIn, String pointsAt) {
         Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(in(caretIn), 4)
-                .secondaryIn(pointsAt, Region.point(in(pointsAt)),
+                .secondary(Region.point(in(pointsAt)),
                         new NameMessage.ItIsExposedByAnotherModule("other", "x"))
                 .build();
         return new Db.Found(module, null, Report.of(d));
@@ -68,7 +68,7 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
         Diagnostic d = Diagnostic
                 .say(new InvariantMessage.TheValueIsOneTheInvariantRejects("Yen", "nonNegative"))
                 .at(in(caretIn), 4)
-                .secondaryIn(ruleIn, Region.point(in(ruleIn)),
+                .secondary(Region.point(in(ruleIn)),
                         new InvariantMessage.ThisClauseRejectsThisValue())
                 .build();
         return new Db.Found(module, null, Report.of(d));
@@ -80,7 +80,7 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
         Diagnostic d = Diagnostic
                 .say(new InvariantMessage.TheNamedClauseConstructsAData("Table", "Yen", "ok"))
                 .at(in(oneEnd), 4)
-                .secondaryIn(otherEnd, Region.point(in(otherEnd)),
+                .secondary(Region.point(in(otherEnd)),
                         new InvariantMessage.TheClauseReachesThatConstruction("ok"))
                 .build();
         return new Db.Found(module, null, Report.of(d));
@@ -90,7 +90,7 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     private static Db.Found twoStatementsDisagreeingIn(String module, String one, String other) {
         Diagnostic d = Diagnostic.say(new ExampleMessage.TheRowAndTheFakeDisagree("f"))
                 .at(in(one), 4)
-                .secondaryIn(other, Region.point(in(other)),
+                .secondary(Region.point(in(other)),
                         new ExampleMessage.TheFakeRowIsHere("f"))
                 .build();
         return new Db.Found(module, null, Report.of(d));

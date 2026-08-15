@@ -56,10 +56,12 @@ class ASecondaryRegionNamesItsFileTest {
         return new Asked(ids, SourceContextResolver.memoized(base::sourceOf));
     }
 
+    /** A diagnostic whose secondary is in {@code secondarySourceId} — which the region says, being
+     *  the only thing that says it. */
     private static Diagnostic withSecondary(String secondarySourceId) {
         return Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondaryIn(secondarySourceId, Region.ofWidth(new SourcePos(3, 3), 4),
+                .secondary(Region.ofWidth(new SourcePos(3, 3, secondarySourceId), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
     }
@@ -70,7 +72,7 @@ class ASecondaryRegionNamesItsFileTest {
     void aSecondaryInTheDiagnosticsOwnFileIsQuotedFromItAndNotNamed() {
         Asked asked = resolver();
         String out = new HumanRenderer(false).render(
-                new Located(withSecondary(null), "rows"), asked.resolver(), Locale.ENGLISH);
+                new Located(withSecondary("rows"), "rows"), asked.resolver(), Locale.ENGLISH);
 
         assertEquals(2, count(out, "  | \"one\" : (1) -> 2"),
                 "the primary and the secondary both quote the row file: " + out);
@@ -92,7 +94,7 @@ class ASecondaryRegionNamesItsFileTest {
     @Test
     void aDiagnosticThatNamesNoSourceIsQuotedFromWhateverTheCallerAnswersWith() {
         String out = new HumanRenderer(false).render(
-                new Located(withSecondary(null), Located.NO_SOURCE),
+                new Located(withSecondary("rows"), Located.NO_SOURCE),
                 id -> rows(), Locale.ENGLISH);
 
         assertEquals(2, count(out, "  | \"one\" : (1) -> 2"), out);
@@ -104,9 +106,9 @@ class ASecondaryRegionNamesItsFileTest {
         Asked asked = resolver();
         Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4),
+                .secondary(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4),
+                .secondary(Region.ofWidth(new SourcePos(2, 1, "fakes"), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
@@ -122,7 +124,7 @@ class ASecondaryRegionNamesItsFileTest {
     void jsonNamesNoFileForASecondaryInTheDiagnosticsOwnFile() {
         Asked asked = resolver();
         String out = new JsonRenderer().render(
-                new Located(withSecondary(null), "rows"), asked.resolver(), Locale.ENGLISH);
+                new Located(withSecondary("rows"), "rows"), asked.resolver(), Locale.ENGLISH);
 
         assertEquals(1, count(out, "\"file\""), "only the top-level file: " + out);
     }
@@ -154,13 +156,16 @@ class ASecondaryRegionNamesItsFileTest {
         assertEquals(List.of("rows"), other.others().stream().map(Spot::sourceId).toList());
     }
 
+    /** A secondary in the diagnostic's own file is one spot among the others, named the same way
+     *  every other is — by its region, not by being the one that said nothing. */
     @Test
-    void aSecondaryThatNamesNoSourceInheritsTheDiagnosticsOwn() {
-        DiagnosticView view = DiagnosticView.of(withSecondary(null), "rows", "rows");
+    void aSecondaryInTheDiagnosticsOwnFileIsNamedLikeAnyOther() {
+        DiagnosticView view = DiagnosticView.of(withSecondary("rows"), "rows", "rows");
 
         assertEquals(List.of("rows"), view.others().stream().map(Spot::sourceId).toList());
-        assertNull(withSecondary(null).secondary().get(0).sourceId(),
-                "the region itself still names none");
+        assertEquals("rows",
+                withSecondary("rows").secondary().get(0).place().pointsAt().orElseThrow()
+                        .start().sourceId());
     }
 
     @Test
@@ -177,9 +182,9 @@ class ASecondaryRegionNamesItsFileTest {
     void whereOneFileHoldsSeveralRegionsTheFirstWrittenIsTheAnchor() {
         Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4),
+                .secondary(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4),
+                .secondary(Region.ofWidth(new SourcePos(2, 1, "fakes"), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
@@ -190,53 +195,68 @@ class ASecondaryRegionNamesItsFileTest {
         assertEquals(2, view.others().size());
     }
 
-    // --- a label and its region say one file, or one of them says nothing -----------------------
+    // --- what a label says about where it is ----------------------------------------------------
 
     /**
-     * Two things here can say which file a secondary is in: what the label was given, and what its
-     * region's own position was read from. A reader takes the first, so if they can disagree the
-     * file a marker is put in and the file its line is quoted from come apart again — the shape of
-     * mistake this whole change is about. They are refused at construction instead.
+     * A label is in the source its region was read from, and nothing else says which that is.
+     *
+     * <p>There used to be two things that could: what the label was given and what the region
+     * carried. A reader took the first, so the file a marker went into and the file its line was
+     * quoted from could come apart — which is the shape of mistake this whole area is about. The
+     * second one is gone rather than checked for agreement.
      */
     @Test
-    void aLabelAndItsRegionCannotNameTwoFiles() {
-        assertThrows(IllegalArgumentException.class,
-                () -> new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "rows"), 4),
-                        "fakes", new NameMessage.WriteItOnItsOwn("x")));
-    }
-
-    /** A region built from a hand-made position knows no file, and a label that names one is how it
-     *  is told — which is what every site that points across files does. */
-    @Test
-    void aLabelMayNameTheFileWhenItsRegionDoesNot() {
-        assertEquals("fakes", new LabeledRegion(Region.ofWidth(new SourcePos(3, 3), 4),
-                "fakes", new NameMessage.WriteItOnItsOwn("x")).sourceId());
-    }
-
-    /**
-     * A label whose region was read off a source is in that source, whether or not the caller said
-     * so. Which is the half of this that no caller can be trusted to remember: a label that dropped
-     * it read as "the diagnostic's own file", and every site that points at something it did not
-     * itself go and find would have had to know to say otherwise.
-     */
-    @Test
-    void aLabelTakesItsFileFromItsRegionWhereItWasNotGivenOne() {
+    void aLabelIsInTheSourceItsRegionWasReadFrom() {
         LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
-                null, new NameMessage.WriteItOnItsOwn("x"));
+                new NameMessage.WriteItOnItsOwn("x"));
 
-        assertEquals("fakes", label.sourceId());
-        assertEquals("fakes", label.sourceIdOr("rows"),
-                "the diagnostic's file is not what a region that knows its own is read in");
+        assertEquals(new DiagnosticPlace.InSource("fakes",
+                        Region.ofWidth(new SourcePos(3, 3, "fakes"), 4)),
+                label.place());
     }
 
-    /** The fallback is for a region that was read from no source at all. */
+    /** And that survives being read: what the renderer resolves a source for is the label's own,
+     *  whatever file the diagnostic as a whole is filed under. */
     @Test
-    void aLabelWhoseRegionKnowsNoFileIsReadInTheDiagnosticsOwn() {
-        LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3), 4),
-                null, new NameMessage.WriteItOnItsOwn("x"));
+    void theSourceALabelNamesReachesTheRenderer() {
+        Asked asked = resolver();
+        new HumanRenderer(false).render(
+                new Located(withSecondary("fakes"), "rows"), asked.resolver(), Locale.ENGLISH);
 
-        assertNull(label.sourceId());
-        assertEquals("rows", label.sourceIdOr("rows"));
+        assertTrue(asked.ids().contains("fakes"),
+                () -> "the label's own source is what was read: " + asked.ids());
+    }
+
+    /**
+     * A region nobody placed is refused, rather than read against wherever the label ends up.
+     *
+     * <p>It used to mean "the diagnostic's file", which is right for a position made by hand and
+     * wrong for one read out of a text this compile has no file for — and nothing downstream could
+     * tell the two apart, because both of them are a null. So the reading is gone, and the position
+     * that carried it is a caller that has a place to name and has not named it.
+     */
+    @Test
+    void aRegionNamingNoSourceIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new LabeledRegion(Region.ofWidth(new SourcePos(3, 3), 4),
+                        new NameMessage.WriteItOnItsOwn("x")));
+    }
+
+    /**
+     * Unless the position says why it names none: a clause of a module this compile holds no file
+     * for is somewhere, and the label says where in words rather than pointing.
+     */
+    @Test
+    void aRegionOutOfSightBecomesALabelWithNothingToPointAt() {
+        SourcePos there = new SourcePos(3, 3).standingInFor(
+                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.rule")));
+        LabeledRegion label = new LabeledRegion(Region.ofWidth(there, 4),
+                new NameMessage.WriteItOnItsOwn("x"));
+
+        assertEquals(new DiagnosticPlace.Unavailable(
+                        new SourceProvenance.APublishedModule("lib.rule")),
+                label.place());
+        assertTrue(label.place().pointsAt().isEmpty(), "there is nowhere to send a reader");
     }
 
     private static int count(String text, String part) {

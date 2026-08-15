@@ -43,10 +43,15 @@ public final class JsonRenderer implements DiagnosticRenderer {
         if (view.anchor().region() != null) {
             obj.put("region", region(view.anchor().region()));
         }
-        if (!view.others().isEmpty()) {
+        if (!view.others().isEmpty() || !view.unquotable().isEmpty()) {
             List<Object> secs = new ArrayList<>();
             for (Spot other : view.others()) {
                 Map<String, Object> s = new LinkedHashMap<>();
+                // Which of the two kinds of place this is, written on both so that a consumer reads
+                // a value rather than the absence of `region`. An absent field is what a document
+                // written before this existed carries, and reading it as "nowhere to point" would
+                // put those under the same answer as a clause nobody holds a file for.
+                s.put("place", "inSource");
                 if (!Objects.equals(other.sourceId(), view.anchor().sourceId())) {
                     SourceContext src = sources.sourceOf(other.sourceId());
                     if (src != null && src.fileName() != null) {
@@ -63,6 +68,22 @@ public final class JsonRenderer implements DiagnosticRenderer {
                 // this interface comes to parse a sentence for the one that was left out.
                 Map<String, Object> labelled = new LinkedHashMap<>();
                 MessageValues.of(other.said()).forEach((name, value) ->
+                        labelled.put(name, Messages.text(value, locale)));
+                s.put("values", labelled);
+                secs.add(s);
+            }
+            for (LabeledRegion label : view.unquotable()) {
+                DiagnosticPlace.Unavailable place = (DiagnosticPlace.Unavailable) label.place();
+                Map<String, Object> s = new LinkedHashMap<>();
+                s.put("place", "unavailable");
+                // Where the code is, under the field the other arm writes it under inside its
+                // region. One vocabulary: a consumer that has learned to read a caret standing in
+                // for code elsewhere reads this without learning a second one.
+                s.put("writtenAt", new LinkedHashMap<String, String>(
+                        Citation.outOfSightFields(place.provenance())));
+                s.put("label", DiagnosticRenderer.saidAbout(label, place, locale));
+                Map<String, Object> labelled = new LinkedHashMap<>();
+                MessageValues.of(label.said()).forEach((name, value) ->
                         labelled.put(name, Messages.text(value, locale)));
                 s.put("values", labelled);
                 secs.add(s);

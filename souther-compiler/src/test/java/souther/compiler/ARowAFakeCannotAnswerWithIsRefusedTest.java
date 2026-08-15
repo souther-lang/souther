@@ -136,7 +136,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         assertEquals(lineOf(source, "\"second\""), said.get(0).pos().line(),
                 "and it is the later one, since the first match is what answers");
         assertEquals(lineOf(source, "Found { id = MemberId(\"m-1\") }"),
-                said.get(0).secondary().get(0).region().start().line(),
+                said.get(0).secondary().get(0).place().pointsAt().orElseThrow().start().line(),
                 "the row that answers instead is quoted");
     }
 
@@ -154,7 +154,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         assertEquals(lineOf(source, "\"first\""), said.get(0).pos().line(),
                 "and it is the earlier one, since a table falls through to the last `_`");
         assertEquals(lineOf(source, "\"second\""),
-                said.get(0).secondary().get(0).region().start().line(),
+                said.get(0).secondary().get(0).place().pointsAt().orElseThrow().start().line(),
                 "the `_` that answers is quoted");
     }
 
@@ -172,7 +172,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         assertEquals(List.of(lineOf(source, "\"first\""), lineOf(source, "\"second\"")),
                 said.stream().map(d -> d.pos().line()).sorted().toList(),
                 "two rows answer nothing, and each is said at itself");
-        assertTrue(said.stream().allMatch(d -> d.secondary().get(0).region().start().line()
+        assertTrue(said.stream().allMatch(d -> d.secondary().get(0).place().pointsAt().orElseThrow().start().line()
                         == lineOf(source, "\"third\"")),
                 "and both name the one that answers, rather than the row written after them");
     }
