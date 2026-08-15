@@ -193,6 +193,9 @@ public sealed interface OriginRef {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
+            // Never rendered to a reader: a rule with no name gets a sentence of its own, so the
+            // catalog holds those words in every language rather than this building them in one.
+            // What reaches this is a caller that wanted something to call the rule anyway.
             case GuardOrigin _ -> "a guard";
             case NarrowedOrigin n -> n.bound().named() + " within "
                     + n.within().stream().map(TypeSymbol::name)
@@ -206,7 +209,7 @@ public sealed interface OriginRef {
         return switch (this) {
             case GuardOrigin _ -> true;
             case NarrowedOrigin n -> n.bound().isAGuard();
-            default -> false;
+            case TypeOrigin _, InvariantOrigin _ -> false;
         };
     }
 
@@ -215,7 +218,7 @@ public sealed interface OriginRef {
         return switch (this) {
             case GuardOrigin g -> java.util.Optional.of(g.at());
             case NarrowedOrigin n -> n.bound().citation();
-            default -> java.util.Optional.empty();
+            case TypeOrigin _, InvariantOrigin _ -> java.util.Optional.empty();
         };
     }
 }

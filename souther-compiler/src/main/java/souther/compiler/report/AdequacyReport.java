@@ -881,7 +881,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
                 signature(b, behavior.signature());
-                partition(b, behavior.partition(), module.declaredIn(), names);
+                partition(b, behavior.partition(), module.declaredIn(), sources);
                 branch(b, behavior.branch(), sources);
             }
         }
@@ -914,7 +914,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case Citation.Written written -> written.at();
             case Citation.OutOfSight out -> out.reachedFrom();
         };
-        at.put("sourceId", sources.written(ref.sourceId()));
+        // A place this document points at names a source. Nothing produces one that does
+        // not, and the schema requires the field, so a citation with no source is a
+        // defect to find rather than a document to write.
+        at.put("sourceId", sources.written(java.util.Objects.requireNonNull(
+                ref.sourceId(), "a place a document points at names a source")));
         at.put("line", ref.pos().line());
         at.put("column", ref.pos().column());
         ObjectNode writtenAt = at.putObject("writtenAt");
@@ -946,7 +950,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     private static void partition(ObjectNode behavior, PartitionEvidence partition,
-                                  String declaredIn, SourceNameResolver names) {
+                                  String declaredIn, DocumentSources sources) {
         if (partition == null) {
             return;
         }
@@ -980,7 +984,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (BoundaryAssessment boundary : partition.boundaries()) {
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
-            b.put("origin", boundary.origin(names, declaredIn));
+            // The identity and not a name. This document says what it is about with the
+            // ids the caller handed its sources over as, and `sources` explains each one;
+            // a display name written here would be a file nothing in the document maps
+            // back, and would make what is emitted depend on who is reading.
+            b.put("origin", boundary.origin(sources::written, declaredIn));
             b.put("side", word(boundary.side()));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count

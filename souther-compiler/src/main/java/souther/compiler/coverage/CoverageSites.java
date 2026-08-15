@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
@@ -131,8 +132,15 @@ public final class CoverageSites {
      * {@code GuardRef} at all — there is nothing left for a row to reach, and a reference with two
      * absent sides would report the line as never met however the model is exercised.
      */
+    /**
+     * @param at the fork's own place. A coordinate and not a reference over one: a reference
+     *           carries a source beside the one the coordinate has, and a walk over one module
+     *           pairs its own with a position from a helper another module wrote. Nothing reads
+     *           the pair, and a value that can hold two answers about one place is one a reader
+     *           can pick the wrong half of.
+     */
     public record GuardRef(String behavior, CoverageOrigin origin, int siteIndexThen,
-                           int siteIndexElse, SourceRef at) {
+                           int siteIndexElse, SourcePos at) {
 
         /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
          * drawn on the condition is one line however many of them there are. */
@@ -358,7 +366,7 @@ public final class CoverageSites {
                     byNode.put(iff, new int[] {then, els});
                     if (then != NO_SITE || els != NO_SITE) {
                         guards.add(new GuardRef(behavior, iff.origin(), then, els,
-                                new SourceRef(sourceId, iff.pos())));
+                                iff.pos()));
                         comparisons(iff.cond());
                     }
                 }

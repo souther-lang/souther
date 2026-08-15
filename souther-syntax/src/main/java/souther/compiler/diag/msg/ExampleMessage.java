@@ -173,6 +173,20 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1916)
     record NoRowIsAtThatBoundary(String at, String value, String rule) implements ExampleMessage, Reported {}
 
+    /**
+     * The same, where a guard drew the line.
+     *
+     * <p>A rule of its own because a guard has no name to put in the other one's slot. What went
+     * there was a phrase built in Java — `a guard` — which is a rendering, so it read as English in
+     * every language the rest of the sentence was written in. A type and an invariant have names,
+     * and a name is the same in every language; this has none, so the words are the catalog's.
+     *
+     * <p>Where the guard is written is not here either. It is a place, and a place is pointed at.
+     */
+    @Code(DiagnosticCode.E1916)
+    record NoRowIsAtTheLineAGuardDrew(String at, String value)
+            implements ExampleMessage, Reported {}
+
     /** Said beside the guard a line was drawn by, the sentence naming the rule without a place —
      *  a guard has no name, and where it is written is a place a renderer resolves a file for. */
     record TheGuardThatDrawsTheLine() implements ExampleMessage, Supporting {}

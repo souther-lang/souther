@@ -1726,8 +1726,11 @@ public final class Adequacy {
                         // source, so a line and a column written into the sentence would be read
                         // against whichever file the reader has in mind. Where the rule is a
                         // guard, the place is pointed at rather than said.
-                        case BOUNDARY_UNMET -> new ExampleMessage.NoRowIsAtThatBoundary(
-                                text(said, 0), text(said, 1), rule(said).named());
+                        case BOUNDARY_UNMET -> rule(said).isAGuard()
+                                ? new ExampleMessage.NoRowIsAtTheLineAGuardDrew(
+                                        text(said, 0), text(said, 1))
+                                : new ExampleMessage.NoRowIsAtThatBoundary(
+                                        text(said, 0), text(said, 1), rule(said).named());
                         case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
                                 text(said, 0), text(said, 1));
                         default -> throw new IllegalArgumentException(

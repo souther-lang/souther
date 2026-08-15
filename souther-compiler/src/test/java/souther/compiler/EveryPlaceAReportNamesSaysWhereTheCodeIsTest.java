@@ -8,6 +8,7 @@ import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.JsonRenderer;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -247,6 +249,48 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         }
     }
 
+    /**
+     * What a document says a guard's place is, it says with an identity the document explains.
+     *
+     * <p>The report a person reads names files, because what to call one is a fact about the set in
+     * front of a reader. This document says what it is about with the ids the caller handed its
+     * sources over as, and its `sources` table explains each — so a name written into a field here
+     * would be a file nothing in the document maps back, and would make what is emitted depend on
+     * who is reading it.
+     */
+    @Test
+    void theDocumentSaysAGuardsPlaceWithAnIdentityItExplains() {
+        Elsewhere said = fromAnotherSource();
+
+        assertFalse(said.jsonOrigins().isEmpty(), "the comparison drew lines");
+        for (String origin : said.jsonOrigins()) {
+            assertFalse(origin.contains("up.sou"),
+                    () -> "a document says an identity, not what a reader calls it: " + origin);
+            String id = origin.substring(origin.indexOf('@') + 1, origin.lastIndexOf(':',
+                    origin.lastIndexOf(':') - 1));
+            assertEquals("up.sou", said.sources().get(id).asString(),
+                    () -> "and the table explains it: " + origin);
+        }
+    }
+
+    /**
+     * A rule with no name gets a sentence of its own rather than a phrase built for its slot.
+     *
+     * <p>A type and an invariant have names, which read the same in every language. A guard has none,
+     * and what filled the slot for it was English assembled in Java — so the Japanese warning said
+     * "a guard が線を引いているのはそこです". The words belong to the catalog, where every language
+     * has its own.
+     */
+    @Test
+    void aLineAGuardDrewIsSaidInEveryLanguageItIsAskedIn() {
+        Diagnostic edge = saidAbout(IN_SIGHT).edge();
+        assertInstanceOf(ExampleMessage.NoRowIsAtTheLineAGuardDrew.class, edge.said(),
+                "a rule with no name reports its own message");
+        assertFalse(DiagnosticRenderer.body(edge, Locale.JAPANESE).contains("a guard"),
+                () -> "no English is assembled into a Japanese sentence: "
+                        + DiagnosticRenderer.body(edge, Locale.JAPANESE));
+    }
+
     // --- the controls -------------------------------------------------------------------------------
 
     @Test
@@ -320,7 +364,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
      */
     private record Said(String warning, String diagnosticJson, String armLine, JsonNode at,
                         List<String> boundaryLines, List<String> boundaryOrigins,
-                        String edgeSaid, String edgeJson, JsonNode document) {
+                        String edgeSaid, String edgeJson, Diagnostic edge, JsonNode document) {
 
         /** What the document says about where the arm is written, or null where it says nothing.
          *  Read and not asserted: whether it is there at all is one of the things under test, and a
@@ -389,12 +433,13 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 boundaryLines, origins,
                 new HumanRenderer(false).render(edges.get(0), source, Locale.ENGLISH),
                 new JsonRenderer().render(edges.get(0), source, Locale.ENGLISH),
-                document);
+                edges.get(0), document);
     }
 
     /** What the two renderings say about an arm written in another source of this compile. */
     private record Elsewhere(String armLine, String sourceOfTheArm, JsonNode writtenAt,
-                             List<String> boundaryLines) {}
+                             List<String> boundaryLines, List<String> jsonOrigins,
+                             JsonNode sources) {}
 
     /**
      * A compile of two sources, so that the section a report is about and the file an arm is written
@@ -429,9 +474,12 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         JsonNode at = unreached.get(0).get("at");
         List<String> edges = report.human(names).lines().map(String::strip)
                 .filter(line -> line.startsWith("· no row is at")).toList();
+        List<String> jsonOrigins = new ArrayList<>();
+        down.get("behaviors").get(0).get("partition").get("boundaries")
+                .forEach(each -> jsonOrigins.add(each.get("origin").asString()));
         return new Elsewhere(lines.get(0),
                 document.get("sources").get(at.get("sourceId").asString()).asString(),
-                at.get("writtenAt"), edges);
+                at.get("writtenAt"), edges, jsonOrigins, document.get("sources"));
     }
 
     /** Every {@code at} the document holds, wherever it sits. */
