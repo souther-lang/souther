@@ -7,6 +7,8 @@ import souther.compiler.cst.LineIndex;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.TextRead;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,26 +27,49 @@ public final class CstFrontend {
     private CstFrontend() {
     }
 
-    /** Parses one compilation unit, naming a header-less source {@code defaultModuleName} (a
-     * {@code null} default makes the {@code module} header required).
+    /**
+     * Parses one compilation unit of a text nobody has named, naming a header-less source
+     * {@code defaultModuleName} (a {@code null} default makes the {@code module} header required).
      *
-     * <p>The positions it makes name no source. A caller that has a name for the text it is handing
-     * over — a compile reading one of its own sources — parses through
-     * {@link #parseWithSlices(String, String, String)} instead, so that what it gets back says which
-     * file each position was read from. A caller here has no such name: the standard library and a
-     * module read back off the module path are in no source of the compile that is reading them. */
+     * <p>The positions it makes name no source and say the code is written at them, which is what a
+     * text somebody wrote and nobody filed is. A caller that has a name for the text — a compile
+     * reading one of its own sources — parses through
+     * {@link #parseWithSlices(String, String, String)}; a caller reading a text put back together
+     * out of what a module published parses through {@link #parseWhatAModulePublished}, because
+     * those positions are in no file and are not where the code is.
+     */
     public static Ast.Module parse(String source, String defaultModuleName) {
-        CstParser.Result result = CstParser.parse(source);
-        if (!result.errors().isEmpty()) {
-            throw firstError(source, null, result.errors().get(0));
-        }
-        return ImplicitUnits.expand(
-                AstBuilder.build(result.root(), source, defaultModuleName, null));
+        return parse(source, defaultModuleName, TextRead.aTextWithNoIdentity());
     }
 
     /** As {@link #parse(String, String)} with the default module name {@code Main}. */
     public static Ast.Module parse(String source) {
         return parse(source, "Main");
+    }
+
+    /**
+     * Parses the text a module published, put back together by whoever is reading it back.
+     *
+     * <p>Every position it makes says it stands in for code written in {@code provenance}, from the
+     * moment it is made. The text is real and its line 4 is a real line of it; no reader holds a
+     * file for that line, so nothing downstream may read the position as a place. This is where that
+     * is settled, and it is settled once — the pass that splices such a body into a caller reads the
+     * answer rather than working it out from the source being absent.
+     *
+     * <p>The header is required: a published text carries one, and a default module name here would
+     * be a name this compile made up for a module that has one.
+     */
+    public static Ast.Module parseWhatAModulePublished(String source, SourceProvenance provenance) {
+        return parse(source, null, TextRead.whatAModulePublished(provenance));
+    }
+
+    private static Ast.Module parse(String source, String defaultModuleName, TextRead read) {
+        CstParser.Result result = CstParser.parse(source);
+        if (!result.errors().isEmpty()) {
+            throw firstError(source, read, result.errors().get(0));
+        }
+        return ImplicitUnits.expand(
+                AstBuilder.build(result.root(), source, defaultModuleName, read));
     }
 
     /**
@@ -75,12 +100,14 @@ public final class CstFrontend {
      * worked out again.
      */
     public static Parsed parseWithSlices(String source, String defaultModuleName, String sourceId) {
+        TextRead read = sourceId == null ? TextRead.aTextWithNoIdentity()
+                : TextRead.aFileOfThisCompile(sourceId);
         CstParser.Result result = CstParser.parse(source);
         if (!result.errors().isEmpty()) {
-            throw firstError(source, sourceId, result.errors().get(0));
+            throw firstError(source, read, result.errors().get(0));
         }
         Ast.Module module = ImplicitUnits.expand(
-                AstBuilder.build(result.root(), source, defaultModuleName, sourceId));
+                AstBuilder.build(result.root(), source, defaultModuleName, read));
         String header = "module " + module.name();   // a source with no header is named for its file
         List<String> imports = new ArrayList<>();
         Map<String, String> defs = new LinkedHashMap<>();
@@ -120,8 +147,8 @@ public final class CstFrontend {
      * taken off the builder — the build never ran — so this is the one position of a source that
      * would otherwise not say which file it is in, and a syntax error would be the single kind of
      * mistake still reported against whatever file the reader guessed at. */
-    private static CompileException firstError(String source, String sourceId, CstError<?> e) {
-        LineIndex lines = new LineIndex(source, sourceId);
+    private static CompileException firstError(String source, TextRead read, CstError<?> e) {
+        LineIndex lines = new LineIndex(source, read);
         Diagnostic diag = Diagnostic.say(e.said())
                 .at(lines.posOf(e.offset()), e.width()).build();
         return CompileException.of(diag);

@@ -48,8 +48,9 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
      * code is.
      */
     sealed interface OutOfSight extends Citation permits OutOfSightCitation {
-        /** The name a reader here reaches that code by: {@code List.filter}. */
-        String declaration();
+        /** Where that code came from, and the name a reader here reaches it by:
+         *  {@code List.filter}. */
+        SourceProvenance provenance();
 
         /** The call the body was spliced into. A place in a file the reader holds. */
         SourceRef reachedFrom();
@@ -87,7 +88,7 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
             case Written _ -> fields.put("kind", "here");
             case OutOfSight out -> {
                 fields.put("kind", "outOfSight");
-                fields.put("declaration", out.declaration());
+                fields.put("declaration", out.provenance().reachedBy());
             }
         }
         return fields;
@@ -105,7 +106,7 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
     default String said(SourceNameResolver names, String sectionSource) {
         return switch (this) {
             case Written written -> place(written.at(), names, sectionSource);
-            case OutOfSight out -> "`" + out.declaration() + "`, reached at "
+            case OutOfSight out -> "`" + out.provenance().reachedBy() + "`, reached at "
                     + place(out.reachedFrom(), names, sectionSource);
         };
     }

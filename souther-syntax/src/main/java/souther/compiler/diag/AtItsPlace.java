@@ -22,6 +22,12 @@ final class AtItsPlace extends WrittenAt {
     }
 
     @Override
+    public WrittenAt reachedBy(String name) {
+        throw new IllegalStateException("code written at its place is not reached from elsewhere,"
+                + " so there is no name to reach it by: " + name);
+    }
+
+    @Override
     public boolean equals(Object other) {
         return other instanceof AtItsPlace;
     }

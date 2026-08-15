@@ -8,6 +8,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.check.Exposing;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
@@ -452,7 +453,8 @@ public final class Front {
             for (Map.Entry<String, Diagnostic> taken : refused.entrySet()) {
                 List<SourcePos> here = reachedFrom.getOrDefault(taken.getKey(), List.of());
                 reports.add(Report.of(here.isEmpty() ? taken.getValue()
-                        : taken.getValue().reachedFrom(here, taken.getKey(),
+                        : taken.getValue().reachedFrom(here,
+                                new SourceProvenance.APublishedModule(taken.getKey()),
                                 new ModuleMessage.ItIsReachedFromHereToo())));
             }
             for (Map.Entry<String, List<String>> reaching : edges.entrySet()) {
@@ -472,7 +474,8 @@ public final class Front {
                     // neither reached no file at all.
                     reports.add(Report.of(here.isEmpty()
                             ? needs(needed, reaching.getKey())
-                            : needs(needed, reaching.getKey()).reachedFrom(here, reaching.getKey(),
+                            : needs(needed, reaching.getKey()).reachedFrom(here,
+                                    new SourceProvenance.APublishedModule(reaching.getKey()),
                                     new ModuleMessage.ItIsReachedFromHereToo())));
                 }
             }

@@ -112,7 +112,7 @@ public interface DiagnosticRenderer {
             return said;
         }
         String about = Messages.render(
-                new WrittenAtMessage.TheCodeIsWrittenOutOfSight(out.declaration()),
+                new WrittenAtMessage.TheCodeIsWrittenOutOfSight(out.provenance().reachedBy()),
                 locale);
         return said.isEmpty() ? about : said + " " + about;
     }

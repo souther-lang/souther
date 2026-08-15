@@ -7,6 +7,7 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 
@@ -116,7 +117,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         Citation citation = Citation.of(whereTheReportAboutIsSaid(compilation, "lib.held"));
 
         assertEquals("lib.held",
-                assertInstanceOf(Citation.OutOfSight.class, citation).declaration());
+                assertInstanceOf(Citation.OutOfSight.class, citation).provenance().reachedBy());
     }
 
     /**
@@ -339,7 +340,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
             if (at == null || !at.isOutOfSight()) {
                 continue;
             }
-            String stands = ((Citation.OutOfSight) Citation.of(at)).declaration();
+            String stands = ((Citation.OutOfSight) Citation.of(at)).provenance().reachedBy();
             saidAbout.add(stands);
             // Every file it is said in, and not only the one the caret is in: a second place is
             // said as a labelled region, and claiming a file that never reaches this module is
@@ -442,7 +443,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         assertEquals("0", said.secondary().get(0).sourceIdOr("0"),
                 "and is read in the file the diagnostic is in");
 
-        Diagnostic moved = said.reachedFrom(List.of(new SourcePos(2, 1, "0")), "lib.held",
+        Diagnostic moved = said.reachedFrom(List.of(new SourcePos(2, 1, "0")),
+                new SourceProvenance.APublishedModule("lib.held"),
                 new ModuleMessage.ItIsReachedFromHereToo());
 
         assertEquals(List.of(), moved.secondary(),

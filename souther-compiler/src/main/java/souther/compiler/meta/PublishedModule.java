@@ -6,6 +6,7 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.frontend.CstFrontend;
 
@@ -95,7 +96,11 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
             source.append(line).append('\n');
         }
         source.append(declarations);
-        Ast.Module module = CstFrontend.parse(source.toString(), null);
+        // Read back, not read: the text was put together here out of what the module carries, so
+        // its lines are lines of nothing anybody holds. Every position it makes says so from the
+        // start, and a reader here reaches the module by its name.
+        Ast.Module module = CstFrontend.parseWhatAModulePublished(source.toString(),
+                new SourceProvenance.APublishedModule(moduleName));
         // Which imports are needed is asked of the header and the declarations — everything that was
         // published except the import lines themselves.
         return new PublishedModule(

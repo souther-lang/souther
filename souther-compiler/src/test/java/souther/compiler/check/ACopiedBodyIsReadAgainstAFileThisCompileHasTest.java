@@ -6,6 +6,7 @@ import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WrittenAt;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
@@ -120,7 +121,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
         assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() == null).toList(),
                 "every coordinate the backend is built from names a source this compile has");
         assertTrue(positions.stream().anyMatch(p ->
-                        WrittenAt.outOfSight("up.doubled").equals(p.writtenAt())),
+                        WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up.doubled")).equals(p.writtenAt())),
                 "the body came from a module read off the path, and the lowering did not forget");
     }
 

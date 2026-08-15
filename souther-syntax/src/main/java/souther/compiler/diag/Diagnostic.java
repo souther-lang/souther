@@ -141,13 +141,13 @@ public final class Diagnostic {
      *         leave as it is, not one to move
      */
     public <M extends Message & FindingRegion> Diagnostic reachedFrom(List<SourcePos> where,
-                                                                     String declaration,
+                                                                     SourceProvenance provenance,
                                                                      M alsoHere) {
         if (where.isEmpty()) {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
-        WrittenAt out = WrittenAt.outOfSight(declaration);
+        WrittenAt out = WrittenAt.outOfSight(provenance);
         List<LabeledRegion> also = new ArrayList<>(secondaryThatSurvivesTheMove());
         for (SourcePos other : where.subList(1, where.size())) {
             also.add(new LabeledRegion(Region.point(other.standingInFor(out)), null, alsoHere));

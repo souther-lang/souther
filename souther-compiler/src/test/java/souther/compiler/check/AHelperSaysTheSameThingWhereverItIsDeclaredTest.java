@@ -9,6 +9,7 @@ import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Region;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WrittenAt;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.WrittenAtMessage;
@@ -148,7 +149,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said(),
                 "the rule broken is the same rule");
-        assertEquals(WrittenAt.outOfSight("up.atLeastZero"), one.pos().writtenAt());
+        assertEquals(WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up.atLeastZero")), one.pos().writtenAt());
         assertEquals("down.sou", one.pos().sourceId(),
                 "the caret is in the file the reader is compiling, since there is no other");
     }
