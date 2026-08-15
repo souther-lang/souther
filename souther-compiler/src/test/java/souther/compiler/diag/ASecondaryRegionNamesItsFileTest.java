@@ -213,13 +213,29 @@ class ASecondaryRegionNamesItsFileTest {
                 "fakes", new NameMessage.WriteItOnItsOwn("x")).sourceId());
     }
 
-    /** A label that names nothing means the diagnostic's own file, whatever its region was read
-     *  from — that is what {@link LabeledRegion#sourceIdOr(String)} is for. */
+    /**
+     * A label whose region was read off a source is in that source, whether or not the caller said
+     * so. Which is the half of this that no caller can be trusted to remember: a label that dropped
+     * it read as "the diagnostic's own file", and every site that points at something it did not
+     * itself go and find would have had to know to say otherwise.
+     */
     @Test
-    void aLabelMayNameNothingWhileItsRegionKnowsItsFile() {
-        LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "rows"), 4),
+    void aLabelTakesItsFileFromItsRegionWhereItWasNotGivenOne() {
+        LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
                 null, new NameMessage.WriteItOnItsOwn("x"));
 
+        assertEquals("fakes", label.sourceId());
+        assertEquals("fakes", label.sourceIdOr("rows"),
+                "the diagnostic's file is not what a region that knows its own is read in");
+    }
+
+    /** The fallback is for a region that was read from no source at all. */
+    @Test
+    void aLabelWhoseRegionKnowsNoFileIsReadInTheDiagnosticsOwn() {
+        LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3), 4),
+                null, new NameMessage.WriteItOnItsOwn("x"));
+
+        assertNull(label.sourceId());
         assertEquals("rows", label.sourceIdOr("rows"));
     }
 

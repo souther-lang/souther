@@ -136,28 +136,29 @@ final class Clauses {
         for (TypeOps.Declared inv : declared(named, data)) {
             Core one = statedAt(inv.clause().expr(), named, data, given);
             if (one != null) {
-                stated.add(new Stated(inv.clause().name().map(ClauseName::new), inv.declaredOn(),
-                        one));
+                stated.add(new Stated(clauseOf(inv), one));
             }
         }
         return stated;
     }
 
+    /** What a diagnostic can say about the clause {@code inv} is, and what tells it apart from the
+     * declaration's others. */
+    private static Clause clauseOf(TypeOps.Declared inv) {
+        return new Clause(new Clause.Id(inv.declaredOn(), inv.ordinal()),
+                inv.clause().name().map(ClauseName::new),
+                CitableRegion.of(inv.clause().reportedAt()));
+    }
+
     /**
-     * One clause as it reads at a construction, with the name the author gave it and the declaration
-     * it was written on.
+     * One clause as it reads at a construction, beside the clause it is a reading of.
      *
      * <p>A check that judges the clauses one at a time has something to say about the one it could
-     * not settle, and what it says it by is the name — which the clauses were flattened out of
-     * before reaching here, leaving every unproven clause reported as "the invariant".
-     *
-     * <p>The name stays optional the whole way, as {@link Hir.InvariantClause} writes it. A clause
-     * with no name was always a clause — one is here for each of them, and a clause that is not
-     * stated is one this list does not hold — so what the absence of a name is the absence of is the
-     * name. Written as an {@code Optional} so that it says that where it is read: a null String says
-     * only that something is missing, and leaves each reader to decide what.
+     * not settle, and what it says it by is what {@link Clause} holds — which the clauses were
+     * flattened out of before reaching here, leaving every unproven clause reported as "the
+     * invariant".
      */
-    record Stated(Optional<ClauseName> name, TypeSymbol declaredOn, Core expr) {}
+    record Stated(Clause clause, Core expr) {}
 
     /** Every clause of {@code named}, each with the declaration that wrote it. */
     List<TypeOps.Declared> declared(TypeSymbol named, Hir.Data data) {

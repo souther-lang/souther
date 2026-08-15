@@ -630,7 +630,7 @@ public final class Resolve {
         List<Hir.InvariantClause> out = new ArrayList<>();
         for (Ast.InvariantClause clause : clauses) {
             out.add(new Hir.InvariantClause(clause.name(), expr(clause.expr(), bound),
-                    clause.pos()));
+                    clause.pos(), clause.region()));
         }
         return out;
     }

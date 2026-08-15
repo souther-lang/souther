@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -92,8 +91,9 @@ class CompileFakeExampleDisagreementTest {
         assertEquals(22, one.pos().line(), "anchored at the recorded row");
         assertEquals(1, one.secondary().size(), one.secondary().toString());
         assertEquals(25, one.secondary().get(0).region().start().line(), "pointing at the fake row");
-        assertNull(one.secondary().get(0).sourceId(),
-                "both are in this source, so the second region names none of its own");
+        assertEquals(one.pos().sourceId(), one.secondary().get(0).sourceId(),
+                "both are in this source, and the second region says so rather than leaving a"
+                        + " reader to work it out from where the diagnostic was filed");
     }
 
     @Test

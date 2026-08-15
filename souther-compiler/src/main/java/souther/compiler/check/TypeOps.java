@@ -1229,8 +1229,15 @@ public final class TypeOps {
      * have written, and a reader told which clause failed on a data that declares none of its own is
      * told about a declaration they would not find. {@code declaredOn} is null where the walk was
      * not given a name to start from.
+     *
+     * <p>{@code ordinal} is which of {@code declaredOn}'s own clauses this is, counted where that
+     * declaration writes them and not where this walk happened to reach it. Two spreads of one type
+     * bring one clause in twice, and a caller keeping one answer per clause has to be able to tell
+     * that from two clauses — which the pair says and neither half of it does. Every representation
+     * of a declaration writes its clauses in the order they were written, so the number means the
+     * same thing in each.
      */
-    public record Declared(TypeSymbol declaredOn, Hir.InvariantClause clause) {}
+    public record Declared(TypeSymbol declaredOn, int ordinal, Hir.InvariantClause clause) {}
 
     /**
      * The same clauses {@link #effectiveInvariants} answers, each with the declaration it was written
@@ -1251,8 +1258,9 @@ public final class TypeOps {
             }
         }
         List<Hir.InvariantClause> own = named == null ? null : form.apply(named);
-        for (Hir.InvariantClause clause : own != null ? own : data.invariants()) {
-            invs.add(new Declared(named, clause));
+        List<Hir.InvariantClause> wrote = own != null ? own : data.invariants();
+        for (int ordinal = 0; ordinal < wrote.size(); ordinal++) {
+            invs.add(new Declared(named, ordinal, wrote.get(ordinal)));
         }
         return invs;
     }
