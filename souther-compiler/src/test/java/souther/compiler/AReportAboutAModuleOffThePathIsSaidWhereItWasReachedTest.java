@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A module read off the class path is read from text this compile put back together out of what the
@@ -378,9 +377,11 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
         List<Located> onTheSource = compilation.diagnostics().get("0");
         assertNotNull(onTheSource);
-        assertTrue(onTheSource.stream().anyMatch(said ->
-                        "E1502".equals(said.diagnostic().code())),
-                "the refusal reached no file at all: " + onTheSource);
+        // That one, and only that one. A module the path holds and this compilation refuses is
+        // still a module it has heard of, so an importer of it is not also told there is no such
+        // thing — two reports that cannot both be true.
+        assertEquals(List.of("E1502"),
+                onTheSource.stream().map(said -> said.diagnostic().code()).toList());
     }
 
     /**

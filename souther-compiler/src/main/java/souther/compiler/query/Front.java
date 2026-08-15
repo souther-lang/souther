@@ -368,14 +368,22 @@ public final class Front {
             }
         }
 
-        public record Of(Map<String, OnThePath> modules) {}
+        /**
+         * @param modules the ones this compilation may read declarations from
+         * @param refused the ones it will not, and knows are there all the same — a module that
+         *        took a name no module may take. Which of those two a name is settles two different
+         *        questions, and answering only the first made a module that is on the path and
+         *        refused come back as one nobody has heard of: the author was told both that it took
+         *        a reserved name and that there is no such module.
+         */
+        public record Of(Map<String, OnThePath> modules, Set<String> refused) {}
 
         @Override
         public Answer<Of> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
             if (layout == null || path == null) {
-                return Answer.of(new Of(Map.of()));
+                return Answer.of(new Of(Map.of(), Set.of()));
             }
             // Read the graph, work out where each of its modules is reached from, and only then say
             // anything. Each of the three needs the one before it finished: a module is read once
@@ -468,7 +476,8 @@ public final class Front {
                                     new ModuleMessage.ItIsReachedFromHereToo())));
                 }
             }
-            return Answer.of(new Of(Ordered.map(found)), reports);
+            return Answer.of(new Of(Ordered.map(found), Ordered.set(refused.keySet())),
+                    reports);
         }
     }
 
@@ -935,7 +944,15 @@ public final class Front {
         }
     }
 
-    /** Every module name this compilation knows — declared by a source or read off the path. */
+    /**
+     * Every module name this compilation knows — declared by a source, or read off the path whether
+     * or not it may be used.
+     *
+     * <p>Knowing a name and being able to read what it declares are two questions, and this is the
+     * first. An import of a module the path holds and this compilation refuses is a mistake about
+     * what that module is called itself, not about whether there is any such thing; told the second
+     * as well, an author is left with two reports that cannot both be true.
+     */
     public record ModuleNames() implements Key<Set<String>> {
         @Override
         public Answer<Set<String>> compute(Db db) {
@@ -947,6 +964,7 @@ public final class Front {
             }
             if (path != null) {
                 names.addAll(path.modules().keySet());
+                names.addAll(path.refused());
             }
             return Answer.of(Ordered.set(names));
         }
