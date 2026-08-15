@@ -450,7 +450,7 @@ class CompileFakeExampleDisagreementTest {
                 c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
-                        name, souther.compiler.query.Output.CoverageMode.NONE)).value(),
+                        name, souther.compiler.query.Output.CoverageMode.NONE)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
                 c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),

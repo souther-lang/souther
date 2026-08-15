@@ -41,7 +41,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
 
     @Test
     void aDataAndABehaviorThatCapitalizesOntoItAreOneClass() {
-        Emissions out = new Emissions();
+        Emissions out = new Emissions("demo");
         out.put(QUOTE_DATA, new byte[] {1});
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.put(QUOTE_BEHAVIOR, new byte[] {2}));
@@ -59,7 +59,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      *  and this ABI has one name for them. */
     @Test
     void twoMembersBridgedUnderOneNameAreOneClass() {
-        Emissions out = new Emissions();
+        Emissions out = new Emissions("demo");
         out.put(new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("a", "Foo"))), new byte[] {1});
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.put(new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("b", "Foo"))),
@@ -76,7 +76,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      */
     @Test
     void oneIdentityCannotRewriteAnotherThatHasTheSameName() {
-        Emissions out = new Emissions();
+        Emissions out = new Emissions("demo");
         out.put(QUOTE_DATA, new byte[] {1});
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.rewrite(QUOTE_BEHAVIOR, bytes -> new byte[] {2}));
@@ -89,7 +89,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     /** The control: the identity that was emitted may rewrite what it holds, and stays what it is. */
     @Test
     void andTheIdentityThatWasEmittedMayRewriteIt() {
-        Emissions out = new Emissions();
+        Emissions out = new Emissions("demo");
         out.put(QUOTE_DATA, new byte[] {1});
         out.rewrite(QUOTE_DATA, bytes -> new byte[] {(byte) (bytes[0] + 1)});
         assertEquals(2, out.byBinaryName().get(Emitted.value("demo", "Quote"))[0]);
@@ -102,7 +102,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     /** A rewrite of something nothing emitted is refused rather than becoming the emission of it. */
     @Test
     void andNothingCanBeRewrittenThatWasNeverEmitted() {
-        Emissions out = new Emissions();
+        Emissions out = new Emissions("demo");
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> out.rewrite(QUOTE_DATA, bytes -> new byte[] {1}));
         assertTrue(refused.getMessage().contains("demo.Quote"), refused.getMessage());
@@ -113,7 +113,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      *  escaping lambdas are added. */
     @Test
     void andSoIsOneArrivingWithOthers() {
-        Emissions out = new Emissions();
+        Emissions out = new Emissions("demo");
         out.put(QUOTE_DATA, new byte[] {1});
         Map<GeneratedClass, byte[]> more = new LinkedHashMap<>();
         more.put(new GeneratedClass.Lambda("demo", 0), new byte[] {2});
@@ -125,7 +125,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
      *  in. Without it the refusals above would pass on a registry that refused everything. */
     @Test
     void andEveryOtherIdentityIsWritten() {
-        Emissions out = new Emissions();
+        Emissions out = new Emissions("demo");
         out.put(QUOTE_DATA, new byte[] {1});
         out.putAll(Map.of(new GeneratedClass.Encoder(QUOTE_DATA), new byte[] {2}));
         out.put(new GeneratedClass.Decoder(QUOTE_DATA, DecoderKind.JSON), new byte[] {3});

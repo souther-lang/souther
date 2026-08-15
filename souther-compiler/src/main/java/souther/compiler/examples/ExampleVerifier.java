@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
@@ -54,8 +55,9 @@ import java.util.Set;
  * answerer. A row's inputs cross as {@link Handed} and the answer comes back as whatever the answerer
  * applies, read by the one reading a run has.
  *
- * <p>A behavior with a {@code let} body and a {@code >->} composition are evaluable; an injected
- * target is refused ({@code E1902}) — you fake one, you do not example it.
+ * <p>A row whose behavior this run has something applying is evaluated, and one whose behavior
+ * nothing applies is recorded (spec {@code example-pending}). What is refused is a target that is
+ * not a behavior at all — a helper {@code let} of that name ({@code E1902}).
  * A {@code depends on} dependency is satisfied by a fake supplied at the example: a
  * {@code with dep = value} on the row (a constant/value dependency) or a {@code fake dep | table}
  * declaration (an input-keyed function dependency). What the fake answers is read here; making it
@@ -99,10 +101,14 @@ public final class ExampleVerifier {
      * because it is this run's — a row's fixtures are decoded and held to their invariants whether or
      * not there is anything to run them against — and it is handed to {@code answering}, which is what
      * makes an answerer applying this compile's own classes one that can only exist over them.
+     *
+     * <p>{@code artifact} is taken whole rather than as its classes and what they implement. Both are
+     * of one compile and a run has no use for a pairing of two, so the loader is built from one half
+     * of it and the other half goes to {@code answering} from the same value.
      */
     public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
                                      Symbols symbols, Map<String, Sig> sigs,
-                                     Map<String, byte[]> classes,
+                                     EvaluationArtifact artifact,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      String sourceId, Deadline deadline, EvaluationPolicy policy,
@@ -110,9 +116,9 @@ public final class ExampleVerifier {
         if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
-        MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
+        MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
-                deadline, policy, answering.over(module.name(), loader));
+                deadline, policy, answering.over(artifact.implementations(), loader));
         v.sourceId = sourceId;
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
@@ -263,26 +269,30 @@ public final class ExampleVerifier {
     }
 
     /**
-     * What a row runs: the behavior's name, and what it takes injected in the order its constructor
-     * takes it.
+     * What a row runs: the behavior's name, what it takes injected in the order its constructor takes
+     * it, and what this run has to apply it.
      *
      * <p>Which kind of behavior it is does not survive to here. A row applies the class the module
      * emitted, and that class is reached the same way whichever way the behavior was written — the
      * name says which, and the requirements say what to hand it.
      */
     private record ExampleTarget(String name, List<BehaviorRequirement> requirements,
-                                 boolean pending) {}
+                                 Answerer.Answer answer) {}
 
     /**
-     * The behavior a row is about, and whether there is anything to run it against.
+     * The behavior a row is about, and what this run has to apply it with.
      *
-     * <p>A behavior with a {@code let} body and a {@code >->} composition are applied; an injected one
-     * has no body yet, so its rows are <em>recorded</em> rather than evaluated (spec
-     * {@code example-pending}). That is not a lesser state: a model being migrated onto is injected
-     * everywhere at the start, and the rows harvested from the system it replaces are what says what
-     * each behavior owes. They are checked as far as they can be — every fixture is built, so a value
-     * that breaks an invariant is found the day it is written — and evaluation begins by itself the
-     * moment a {@code let} arrives.
+     * <p>Asked of the answerer rather than read off how the behavior is written. The two say the same
+     * thing while a compile's own classes are the only thing that applies anything, and they come
+     * apart the moment something else can: what a row can be held to is decided by what this run was
+     * given, so it is what this run was given that is asked.
+     *
+     * <p>A row nothing applies is <em>recorded</em> rather than evaluated (spec
+     * {@code example-pending}). That is not a lesser state: a model being migrated onto has nothing
+     * applying anything at the start, and the rows harvested from the system it replaces are what says
+     * what each behavior owes. They are checked as far as they can be — every fixture is built, so a
+     * value that breaks an invariant is found the day it is written — and evaluation begins by itself
+     * the moment something applies the behavior.
      *
      * <p>Null when this module declares no behavior of that name; what to say about that is
      * {@link #notRunnable}'s.
@@ -298,7 +308,7 @@ public final class ExampleVerifier {
                 continue;
             }
             return new ExampleTarget(name, requirements.getOrDefault(name, List.of()),
-                    module.injected(b));
+                    answerer.of(name));
         }
         return null;
     }
@@ -728,14 +738,22 @@ public final class ExampleVerifier {
             return;
         }
         state.got(Stage.FIXTURES_VALIDATED);
-        if (target.pending()) {
-            // Everything a row can be held to without a body has been: its arity, its inputs against
-            // their types and invariants, and its expectation against the output's cases. What is left
-            // needs something to run, and there is nothing yet. A fake is not it — a fake stands in for
-            // a dependency while some *other* behavior's row runs, and this row is about this behavior.
-            state.disposition = Disposition.PENDING;
-            state.failurePhase = FailurePhase.NONE;
-            return;
+        // Stated as a switch and not as a test for one of the two: what a run can have for a behavior
+        // may come to say more than it does here, and a reader written as a test would go on taking one
+        // of its ways with an answer it was never shown.
+        Answerer.Answer.Something applies;
+        switch (target.answer()) {
+            case Answerer.Answer.Nothing _ -> {
+                // Everything a row can be held to without something to run it has been: its arity, its
+                // inputs against their types and invariants, and its expectation against the output's
+                // cases. What is left needs something to apply the behavior, and this run has nothing.
+                // A fake is not it — a fake stands in for a dependency while some *other* behavior's
+                // row runs, and this row is about this behavior.
+                state.disposition = Disposition.PENDING;
+                state.failurePhase = FailurePhase.NONE;
+                return;
+            }
+            case Answerer.Answer.Something something -> applies = something;
         }
         List<DependencyStandin> standins = resolveFakes(fixtures, target, row, out);
         if (standins == null) {
@@ -744,7 +762,7 @@ public final class ExampleVerifier {
         }
         Answerer.Applying applying;
         try {
-            applying = answerer.applying(target.name(), standins);
+            applying = applies.applying(standins);
         } catch (StandinNotBuilt e) {
             // The row states the stand-in and it could not be made into an instance the behavior can
             // be constructed with. Nothing was applied, so the row stops where a row whose dependency

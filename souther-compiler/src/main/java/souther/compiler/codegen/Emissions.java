@@ -1,11 +1,14 @@
 package souther.compiler.codegen;
 
+import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.jvm.SoutherJvmAbi;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a module emits: one class under one JVM name, held beside the Souther identity it was emitted
@@ -33,6 +36,13 @@ public final class Emissions {
     private record Emission(GeneratedClass generated, byte[] bytes) {}
 
     private final Map<JvmClassName, Emission> byName = new LinkedHashMap<>();
+    /** Which module these were emitted for, so a set with nothing of a kind in it still says whose
+     *  it is. */
+    private final String module;
+
+    public Emissions(String module) {
+        this.module = module;
+    }
 
     public void put(GeneratedClass generated, byte[] bytes) {
         JvmClassName name = SoutherJvmAbi.nameOf(generated);
@@ -76,6 +86,29 @@ public final class Emissions {
                     + ", not " + generated + "; one name, and not the same thing under it");
         }
         byName.put(name, new Emission(held.generated(), rewriting.apply(held.bytes())));
+    }
+
+    /**
+     * Which behaviors this emission generated an implementation for.
+     *
+     * <p>The decision as it was made: a behavior is here because an implementation class was put here
+     * for it, so the emitter cannot come to generate one without this saying so, or stop generating
+     * one while this goes on claiming it. A set built alongside the puts would be a second record of
+     * one decision, and the write that forgets to update it is the one nothing catches.
+     *
+     * <p>Read off the identity a class was emitted for and never off what it is called. The name a
+     * behavior's implementation carries is this ABI's business and could be spelled another way
+     * tomorrow, and a reader recovering behaviors from class names would be re-deriving the decision
+     * from its own output — which is the thing this exists to stop.
+     */
+    public GeneratedImplementations implemented() {
+        Set<String> behaviors = new LinkedHashSet<>();
+        for (Emission emission : byName.values()) {
+            if (emission.generated() instanceof GeneratedClass.BehaviorImpl impl) {
+                behaviors.add(impl.behavior());
+            }
+        }
+        return new GeneratedImplementations(module, behaviors);
     }
 
     /** What the compilation hands on: a class loader and a file path want the binary name, and by

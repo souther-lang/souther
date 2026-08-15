@@ -118,7 +118,7 @@ class ProbeMappingTest {
     @Test
     void theQueryAnswersWithNothingRatherThanWithAHole() {
         Compilation emitting = compiled();
-        Answer<java.util.Map<String, byte[]>> probed =
+        Answer<souther.compiler.generated.EvaluationArtifact> probed =
                 emitting.db().ask(new Output.Evaluated("no.such.module", Output.CoverageMode.ARMS));
 
         assertTrue(!probed.present() || probed.value() == null);

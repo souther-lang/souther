@@ -160,9 +160,9 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     @Test
     void whatAppliedARowIsTheBehaviorsAnswerAndNotTheAnswerersOne() {
         Map<String, Applied> perBehavior = new LinkedHashMap<>();
-        Answerer resolving = (behavior, standins) -> {
+        Answerer resolving = behavior -> {
             Applied its = perBehavior.computeIfAbsent(behavior, _ -> new Applied.GeneratedHere());
-            return new Answerer.Applying() {
+            Answerer.Answer.Something something = _ -> new Answerer.Applying() {
 
                 @Override
                 public Applied applied() {
@@ -174,6 +174,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                     throw new InvocationFailure(new IllegalStateException("stopped by the test"));
                 }
             };
+            return something;
         };
 
         List<RowOutcome> rows = evaluated(TWO_BEHAVIORS, resolving).rows();
@@ -211,22 +212,22 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
             """;
 
     /** A stand-in the answerer will not make. What it could not make is the whole of what it says. */
-    private static final Answerer REFUSING = (behavior, standins) -> {
+    private static final Answerer REFUSING = something(_ -> standins -> {
         assertEquals(1, standins.size(), "the row does state a stand-in");
         throw new StandinNotBuilt(standins.get(0).dependency(),
                 "its base subclass could not be built: (said by the test)");
-    };
+    });
 
     /** A behavior that stops itself. Read the way the applied code stopping itself is always read. */
-    private static final Answerer FAILING = (behavior, standins) -> applying(_ -> {
+    private static final Answerer FAILING = something(_ -> _ -> applying(_ -> {
         throw new InvocationFailure(new IllegalStateException("it stopped itself"));
-    });
+    }));
 
     /** An answerer whose implementation is not where it looked. */
-    private static final Answerer UNREACHABLE = (behavior, standins) -> applying(_ -> {
+    private static final Answerer UNREACHABLE = something(behavior -> _ -> applying(_ -> {
         throw new ImplementationNotReached("no class of that name (said by the test)",
                 new ClassNotFoundException(behavior));
-    });
+    }));
 
     /**
      * An answerer that cannot put a value in the form it reads.
@@ -235,9 +236,16 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
      * built by this compile's own decoders and is always readable back. What is held is what the row
      * makes of a crossing that failed, which is the same whichever of the two raised it.
      */
-    private static final Answerer UNCROSSABLE = (behavior, standins) -> applying(_ -> {
+    private static final Answerer UNCROSSABLE = something(_ -> _ -> applying(_ -> {
         throw new FixtureException("`x` is a Nothing, which is not a type this example can read");
-    });
+    }));
+
+    /** An answerer that has something for every behavior it is asked about, built from what that
+     * something does with the row's stand-ins. */
+    private static Answerer something(
+            Function<String, Answerer.Answer.Something> per) {
+        return per::apply;
+    }
 
     /** An application that says this compile's classes entered the behavior, and runs {@code body}. */
     private static Answerer.Applying applying(Function<List<Handed>, Object> body) {
@@ -269,19 +277,19 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         Compilation c = Compilation.ofSource(model, "Main");
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
-        Map<String, byte[]> classes = c.db()
+        souther.compiler.generated.EvaluationArtifact artifact = c.db()
                 .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
                 c.db().ask(new Shapes.Scope(name)).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
-                classes,
+                artifact,
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
                 "Main",
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                (module, compiled) -> answerer);
+                (generated, compiled) -> answerer);
     }
 }
