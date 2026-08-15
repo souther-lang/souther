@@ -77,6 +77,11 @@ enum ClauseStatus {
      * about, so what the other found holds of the paths it read and of no others. A refutation is
      * one of those: it says the value fails this clause where this reading looked, which is not the
      * same as failing it wherever it is built.
+     *
+     * <p>{@code SETTLED} answers itself here and no caller asks: a clause one reading established
+     * and the other did not read is not established on every path either, and what becomes of it is
+     * decided before this is reached — it is left out altogether, which is what the two sets this
+     * refines did with it.
      */
     ClauseStatus whereTheOtherReadingSaysNothing() {
         return this == REFUTED ? REFUTED_SOMEWHERE : this;

@@ -1741,11 +1741,11 @@ public final class InvariantChecker {
     private void reportViolation(Hir.Data type, SourcePos pos, Judgment judgment,
                                  boolean onAPath) {
         Diagnostic.Builder said = rejects(type, judgment, onAPath);
-        // What the message names and what it points at are the one set, so a reader is not shown a
-        // clause the sentence does not cover or told of one they cannot find. Where no clause is
-        // failed on every path, that set is empty and the clauses each path fails are pointed at
-        // instead — under what is true of them, which is less than the sentence above says of a
-        // value that fails one clause wherever it is built.
+        // The message says what holds of every path, so it names the clauses the value fails
+        // wherever it is built. Where there are none it names none, and the regions then carry a
+        // weaker claim about a wider set: the clauses some path here fails. Two sets, because they
+        // are two claims — pointing at those clauses under the sentence's own words would say of
+        // each that the value fails it, which the value coming down the other branch refutes.
         errors.add(CompileException.of(judgment.refuted().isEmpty()
                 ? finish(said, pos, judgment.refutedSomewhere(),
                         new InvariantMessage.ThisClauseRejectsTheValueOnSomeOfThePathsHere())
