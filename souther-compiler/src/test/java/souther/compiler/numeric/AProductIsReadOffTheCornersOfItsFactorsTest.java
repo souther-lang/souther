@@ -100,6 +100,48 @@ class AProductIsReadOffTheCornersOfItsFactorsTest {
         assertEquals(true, product.min().inclusive());
     }
 
+    /**
+     * Zero is reached where a factor reaches it, whatever the other factor's ends are: every value
+     * of the other one times zero is zero, and that is a value on the edge of the box and not at a
+     * corner of it.
+     *
+     * <p>{@code [0, 1] * (0, 1)} is {@code [0, 1)}. Read off the corners alone, every corner landing
+     * on zero pairs the zero end with an end the other factor does not reach, and the product comes
+     * back open at an end it reaches — which is a bound on the wrong side of zero, and a clause of
+     * {@code value <= 0} would come out refuted by a product that can be zero.
+     */
+    @Test
+    void zeroIsReachedWhereAFactorReachesItEvenWhereTheOtherFactorReachesNoEnd() {
+        Bounds openBothEnds = new Bounds(new Endpoint(Count.of(0), false),
+                new Endpoint(Count.of(1), false));
+
+        Bounds product = Intervals.product(between(0L, 1L), openBothEnds);
+
+        assertEquals(Count.of(0), at(product.min()));
+        assertEquals(true, product.min().inclusive(), "a = 0 against any b is zero");
+        assertEquals(Count.of(1), at(product.max()));
+        assertEquals(false, product.max().inclusive());
+    }
+
+    /**
+     * A factor that is only ever zero against one reaching neither of its ends: the product is
+     * zero, and an end it does not reach at both ends is no range at all.
+     *
+     * <p>What that would cost is not a lost bound. A range holding nothing is a contradiction to
+     * the domain it is put into, and a domain that holds a contradiction proves every clause — so
+     * the construction would come out discharged, whatever its invariant said.
+     */
+    @Test
+    void aFactorThatIsOnlyZeroAgainstAnOpenFactorIsZero() {
+        Bounds openBothEnds = new Bounds(new Endpoint(Count.of(1), false),
+                new Endpoint(Count.of(2), false));
+
+        Bounds product = Intervals.product(between(0L, 0L), openBothEnds);
+
+        assertEquals(Endpoint.inclusive(Count.of(0)), product.min());
+        assertEquals(Endpoint.inclusive(Count.of(0)), product.max());
+    }
+
     /** Two factors that only approach zero make a product that only approaches it. */
     @Test
     void twoFactorsThatOnlyApproachZeroLeaveAProductThatDoesNotReachIt() {

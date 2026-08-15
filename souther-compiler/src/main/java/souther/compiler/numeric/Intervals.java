@@ -30,10 +30,16 @@ public final class Intervals {
      * landing there rather than of the one that got there first: {@code [-1, 1] * [-1, 1]} reaches 1
      * at two corners, and a factor's end being open at one of them says nothing about the other.
      *
-     * <p>Zero is not a case of its own. Where one range's end is zero the corner it makes with an
-     * unbounded end is zero — every value of the other factor times zero is zero — and it is reached
-     * exactly where that zero end is. So a strict end at zero comes out reached or not by the rule
-     * every other corner is read by.
+     * <p>Where an end is at zero the corners are not the whole of it. A product is bilinear, so it
+     * is constant along the axis where a factor is zero: every value of one factor times zero is
+     * zero, and zero is a value the product takes wherever <em>either</em> factor holds zero at all.
+     * That is a value on an edge of the box and not at a corner of it, so a factor holding zero
+     * strictly between its ends, or holding it at an end the other factor's ends do not pair with,
+     * reaches zero all the same. {@code [0, 1] * (0, 1)} is {@code [0, 1)}, and read off the corners
+     * alone it would come back open at an end it reaches.
+     *
+     * <p>Zero is not special in what the product's ends <em>are</em> — the corners give those — and
+     * it is special in whether an end at zero is reached.
      */
     public static NumericDomain.Bounds product(NumericDomain.Bounds a, NumericDomain.Bounds b) {
         End belowA = End.below(a.min());
@@ -44,7 +50,20 @@ public final class Intervals {
             belowA.times(belowB), belowA.times(aboveB),
             aboveA.times(belowB), aboveA.times(aboveB),
         };
-        return new NumericDomain.Bounds(furthest(corners, -1), furthest(corners, 1));
+        boolean zero = holdsZero(a, b) || holdsZero(b, a);
+        return new NumericDomain.Bounds(furthest(corners, -1, zero), furthest(corners, 1, zero));
+    }
+
+    /** Whether {@code one} holds zero and {@code other} holds anything, which is what makes zero a
+     * value the product takes. */
+    private static boolean holdsZero(NumericDomain.Bounds one, NumericDomain.Bounds other) {
+        return one.admits(Count.ZERO) && holdsAValue(other);
+    }
+
+    /** Whether a range holds any value at all. A range that holds none is not something a feasible
+     * domain proves, and a product of one is not a value to say anything about. */
+    private static boolean holdsAValue(NumericDomain.Bounds bounds) {
+        return Endpoint.someValueLiesBetween(bounds.min(), bounds.max());
     }
 
     /**
@@ -145,9 +164,10 @@ public final class Intervals {
      *
      * <p>Reached where any corner landing there is reached, and not where the first one to land
      * there was: two corners can multiply to one number, and one of them having an open end says
-     * nothing about the other.
+     * nothing about the other. An end at zero is reached where {@code zero} says the product takes
+     * that value at all, which the corners are not the whole account of.
      */
-    private static Endpoint furthest(Corner[] corners, int direction) {
+    private static Endpoint furthest(Corner[] corners, int direction, boolean zero) {
         Count best = null;
         boolean reached = false;
         for (Corner corner : corners) {
@@ -165,6 +185,9 @@ public final class Intervals {
                 reached |= corner.reached();
             }
         }
-        return best == null ? null : new Endpoint(best, reached);
+        if (best == null) {
+            return null;
+        }
+        return new Endpoint(best, reached || (zero && best.signum() == 0));
     }
 }

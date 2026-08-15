@@ -234,6 +234,65 @@ class AProductIsBoundedByWhatThePathBoundsItsFactorsToTest {
     }
 
     /**
+     * A factor that can be zero is a product that can be zero, and a clause the zero satisfies is
+     * not one the product fails.
+     *
+     * <p>{@code a} is at or above zero and {@code b} is above it without reaching it, so the
+     * product is at or above zero and reaches it — at {@code a = 0}, whatever {@code b} is. A
+     * reading that took the ends of the two factors together would have the product strictly above
+     * zero and would report the construction as one the value fails, which is untrue of the value
+     * built where {@code a} is zero.
+     */
+    @Test
+    void aProductWithAFactorThatCanBeZeroIsNotRefusedForBeingAboveZero() {
+        assertEquals(List.of("E2011"), warningsOf(TYPES + """
+                data NotAbove = Decimal
+                    invariant value <= 0.0m
+                behavior total : (a: Decimal, b: Decimal) -> NotAbove | Bad constructs NotAbove, Bad
+                let total (a, b) = {
+                    guard a >= 0.0m
+                        else Bad
+                    guard a <= 1.0m
+                        else Bad
+                    guard b > 0.0m
+                        else Bad
+                    guard b < 1.0m
+                        else Bad
+                    NotAbove(a * b)
+                }
+                """));
+    }
+
+    /**
+     * A factor the guards pin to zero is a product that is zero, and what is derived of it is a
+     * range holding that one value.
+     *
+     * <p>A range holding nothing would be a contradiction to the domain it is taken into, and a
+     * domain holding one proves every clause — so the construction would come out discharged
+     * however far its invariant is from what the value is. The witness asks for a clause the value
+     * plainly fails, and gets the error rather than silence.
+     */
+    @Test
+    void aProductPinnedToZeroIsReadAsZeroAndNotAsNoValueAtAll() {
+        assertEquals("E2010", errorOf(TYPES + """
+                data FarBelow = Decimal
+                    invariant value <= 0.0m - 1000.0m
+                behavior total : (a: Decimal, b: Decimal) -> FarBelow | Bad constructs FarBelow, Bad
+                let total (a, b) = {
+                    guard a >= 0.0m
+                        else Bad
+                    guard a <= 0.0m
+                        else Bad
+                    guard b > 1.0m
+                        else Bad
+                    guard b < 2.0m
+                        else Bad
+                    FarBelow(a * b)
+                }
+                """).code());
+    }
+
+    /**
      * A product refused by what the factors' own types say is refused wherever it is built, and the
      * error says so: nothing about the path is what rejects it.
      *
