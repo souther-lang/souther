@@ -509,6 +509,26 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * Every atom this domain says anything about.
+     *
+     * <p>What it is for is the other side of it: an atom outside this is one no question asked here
+     * can reach. A question is asked of a form, and the answer reads the form's own atoms' ends and
+     * then leaves them by two routes only — the differences, which {@link #closedDiff} carries a
+     * bound through, and the relations kept as written, which {@link #proveLe} subtracts from a
+     * goal. Every atom on either route arrived through {@link #assume} and so is here. So asserting
+     * something about an atom this does not speak of cannot change what it proves about anything
+     * else, which is what lets a caller deriving bounds decide whose bounds are worth deriving.
+     *
+     * <p>Generous where it is uncertain. An atom named in an assertion this could not record — a
+     * disequality, a form kept as written — is here, because what was dropped is a narrowing and the
+     * atom is still one a relation was written about. Answering with the atoms of the bounds alone
+     * would be reading back what was stored rather than saying what can be reached.
+     */
+    public Set<A> atomsSpokenOf() {
+        return kinds.keySet();
+    }
+
+    /**
      * How the values of {@code atom} are spaced here, or null where nothing said.
      *
      * <p>Asked by a reader counting the values between two ends, which only a spacing makes a number:

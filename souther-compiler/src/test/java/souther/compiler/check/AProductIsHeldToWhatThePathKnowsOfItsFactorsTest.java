@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -89,7 +90,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         assertTrue(guarded.boundsOf(atom).isEmpty(),
                 "nothing was said about the product itself");
 
-        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms);
+        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
         assertNull(derived.boundsOf(atom).max(), "nothing bounds either factor above");
@@ -114,7 +115,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
                 arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
         Term atom = product.coefs().keySet().iterator().next();
 
-        NumericDomain<Term> derived = DerivedBounds.refine(NumericDomain.top(), terms);
+        NumericDomain<Term> derived = DerivedBounds.refine(NumericDomain.top(), terms, Set.of(atom));
 
         assertTrue(derived.boundsOf(atom).isEmpty());
     }
@@ -141,7 +142,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Term atom = form.coefs().keySet().iterator().next();
         NumericDomain<Term> guarded = atOrAboveZero(terms, terms.bodyKey(read("x", x), at));
 
-        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms);
+        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
     }
@@ -173,7 +174,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
                 .assume(LinearForm.atom(factorB).minus(num(1000)), Rel.LE,
                         terms.kindsOf(LinearForm.atom(factorB)));
 
-        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms);
+        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
         assertEquals(Endpoint.inclusive(Count.of(100)), derived.boundsOf(atom).max(),

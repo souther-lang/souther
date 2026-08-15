@@ -24,6 +24,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -138,7 +139,13 @@ final class Predicates {
         return found[0];
     }
 
-    record Constraint(LinearForm<Term> form, Rel rel) {}
+    record Constraint(LinearForm<Term> form, Rel rel) {
+
+        /** The atoms this relation is written over. */
+        Set<Term> atoms() {
+            return form.coefs().keySet();
+        }
+    }
 
     /**
      * A predicate stated of a term. {@code keys} is the term as written first, then each container it
@@ -171,6 +178,20 @@ final class Predicates {
      *              be taken into a domain without asking anything further of the caller
      */
     record Case(Constraint numeric, List<Constraint> given, Map<Term, Granularity> kinds) {
+
+        /**
+         * Every atom this case is decided by.
+         *
+         * <p>Read off {@code kinds}, which is where the atoms of this case are registered as its
+         * forms are built — the substituted clause, the equality saying the call answered this
+         * argument, and each condition on the arguments. A reader listing those three would be a
+         * second answer to keep in step with the building, and the one that would fall behind: what
+         * a condition names and never answers is an atom of this case all the same, and today no
+         * operation in the table has such an argument.
+         */
+        Set<Term> atomsItIsDecidedBy() {
+            return kinds.keySet();
+        }
 
         /** {@code d} with this case's conditions on the arguments taken as holding. */
         private NumericDomain<Term> in(NumericDomain<Term> d) {
@@ -208,6 +229,17 @@ final class Predicates {
      * which proves less and states nothing false.
      */
     record Piecewise(List<Case> cases) {
+
+        /** Every atom any case of this is decided by. A case that is never reached is one the
+         * conditions rule out, and which those are is what the domain answers — so every case is
+         * counted here, including the ones a reading will drop. */
+        Set<Term> atomsItIsDecidedBy() {
+            Set<Term> out = new LinkedHashSet<>();
+            for (Case one : cases) {
+                out.addAll(one.atomsItIsDecidedBy());
+            }
+            return out;
+        }
 
         boolean entailedBy(NumericDomain<Term> d) {
             boolean reached = false;
@@ -252,6 +284,38 @@ final class Predicates {
      * another, and which of the two routes carries it is not the author's concern.
      */
     record Clause(Constraint numeric, Fact fact, List<Constraint> known, Piecewise piecewise) {
+
+        /**
+         * Every atom a numeric domain could decide this clause differently by.
+         *
+         * <p>The question a reading asks before it decides what to prove about the arithmetic it
+         * cannot carry: a bound derived for an atom no clause is decided by, and that the domain
+         * does not speak of either, changes nothing here ({@link NumericDomain#atomsSpokenOf}).
+         *
+         * <p>What a guard settled by name is not this. {@link Fact} is answered by
+         * {@link PredicateFacts} and never by the domain, so its keys are not atoms a bound could
+         * reach — and counting them would put terms into a derivation's roots that no arithmetic is
+         * read off.
+         *
+         * <p>{@code known} is here though a reading that takes it as holding first would reach those
+         * atoms anyway. This says what the clause is decided by, which is a fact about the clause;
+         * that a caller happens to have put the same atoms into its domain a line earlier is a fact
+         * about the caller, and answering by what some caller does is how the answer comes to be
+         * wrong for the next one.
+         */
+        Set<Term> atomsItIsDecidedBy() {
+            Set<Term> out = new LinkedHashSet<>();
+            if (numeric != null) {
+                out.addAll(numeric.atoms());
+            }
+            for (Constraint one : known) {
+                out.addAll(one.atoms());
+            }
+            if (piecewise != null) {
+                out.addAll(piecewise.atomsItIsDecidedBy());
+            }
+            return out;
+        }
 
         boolean dischargedBy(NumericDomain<Term> d, PredicateFacts facts) {
             return numeric != null && d.entails(numeric.form(), numeric.rel())

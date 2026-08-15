@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
@@ -1096,26 +1095,11 @@ public final class InvariantChecker {
         if (owed.isEmpty()) {
             return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, found);
         }
-        NumericDomain<Term> dom = k.numbers();
+        NumericDomain<Term> dom = readingOf(k.numbers(), owed);
         // The same clauses read against the same site, under what would be known here had no
         // condition on the path settled anything. What each clause states of the sizes it names holds
         // either way, so both readings take it.
-        NumericDomain<Term> alone = k.unguarded().numbers();
-        for (Owing owing : owed) {
-            for (Predicates.Constraint known : owing.owed().known()) {
-                Map<Term, Granularity> kinds = terms.kindsOf(known.form());
-                dom = dom.assume(known.form(), known.rel(), kinds);
-                alone = alone.assume(known.form(), known.rel(), kinds);
-            }
-        }
-        // What follows about the arithmetic the domain cannot carry — a product of two values, a
-        // truncating quotient — read off what each reading proves of the values it was computed
-        // from. Both readings are refined, and each answers with its own: a bound derived here is
-        // derived from what the reading assumed, so it belongs to that reading and not to the value.
-        // Asked once the clauses' own statements are in, so a size a clause bounds is one the
-        // arithmetic over it can be read against.
-        dom = DerivedBounds.refine(dom, terms);
-        alone = DerivedBounds.refine(alone, terms);
+        NumericDomain<Term> alone = readingOf(k.unguarded().numbers(), owed);
         // An invariant is the conjunction of its clauses, so every one of them is read before what
         // the invariant came out as is decided. A clause the values alone refute is the whole
         // invariant refuted on the values alone, whatever another clause needed to be refuted —
@@ -1146,6 +1130,37 @@ public final class InvariantChecker {
         // Every clause that could be read is discharged. One that could not be read still stands, so
         // this is not the whole invariant proven.
         return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, found);
+    }
+
+    /**
+     * The domain {@code owed} is read against, built from what {@code base} holds.
+     *
+     * <p>Two steps that are one operation. What each clause states of the sizes it names is taken
+     * as holding, and then what follows about the arithmetic the domain cannot carry — a product of
+     * two values, a truncating quotient — is derived from what the reading proves of the values it
+     * was computed from. The second reads the first: a size a clause bounds is one the arithmetic
+     * over it can be read against, so the derivation has to come after, and a clause added to the
+     * first step without the second being asked again is a construction judged against arithmetic
+     * nothing was derived for. Written as one step so there is no order for a caller to keep.
+     *
+     * <p>Each reading answers with its own. A bound derived here is derived from what this reading
+     * assumed, so it belongs to the reading and not to the value — which is why the construction's
+     * two readings are built by two calls rather than sharing one domain.
+     */
+    private NumericDomain<Term> readingOf(NumericDomain<Term> base, List<Owing> owed) {
+        NumericDomain<Term> out = base;
+        // What the clauses are decided by, which is one half of what the derivation can reach. The
+        // other half is what the domain speaks of, and that is the domain's own to answer — asked
+        // after this loop, since assuming a clause's statements is what puts its atoms there.
+        Set<Term> asked = new LinkedHashSet<>();
+        for (Owing owing : owed) {
+            Predicates.Clause c = owing.owed();
+            for (Predicates.Constraint known : c.known()) {
+                out = out.assume(known.form(), known.rel(), terms.kindsOf(known.form()));
+            }
+            asked.addAll(c.atomsItIsDecidedBy());
+        }
+        return DerivedBounds.refine(out, terms, asked);
     }
 
     /**
