@@ -79,7 +79,7 @@ class TheStepBudgetHasRoomOverWhatModelsActuallySpendTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         souther.compiler.diag.CompileException wrong =
-                compilation.failure(compilation.db().allReports());
+                compilation.failure();
         if (wrong != null) {
             throw new IllegalStateException("the census model has to compile: " + wrong.getMessage());
         }

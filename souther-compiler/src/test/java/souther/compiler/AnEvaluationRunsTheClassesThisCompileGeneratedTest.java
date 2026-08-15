@@ -73,7 +73,7 @@ class AnEvaluationRunsTheClassesThisCompileGeneratedTest {
         Compilation compilation = Compilation.ofSources(List.of(NOW), leftOverClassFiles());
         compilation.answerEverything();
 
-        assertNull(compilation.failure(compilation.db().allReports()),
+        assertNull(compilation.failure(),
                 "the model is correct, so nothing is wrong with it");
 
         String sourceId = compilation.exampleSourcesOf("example.stale").get(0);

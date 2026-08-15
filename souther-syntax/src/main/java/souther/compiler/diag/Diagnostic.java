@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.FindingRegion;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.MessageCodes;
@@ -110,6 +111,70 @@ public final class Diagnostic {
     /** The primary source position (the region's start). */
     public SourcePos pos() {
         return region == null ? null : region.start();
+    }
+
+    /**
+     * The same finding, said at {@code where} instead — for one about code this compile has no
+     * source for.
+     *
+     * <p>A coordinate read from a text nobody holds is not a place a reader can be sent, and every
+     * surface that quotes a line quotes it from a file: given one, a run with a single source quotes
+     * whatever happens to sit at those numbers in the file the author is looking at, and one with
+     * several drops the report for having nowhere to file it. Both are worse than saying where the
+     * code is in words, which is what this does — {@code where} is where this compile met the
+     * declaration, and the coordinate it is given says it stands in for code written in
+     * {@code declaration} ({@link Citation}).
+     *
+     * <p>The one way to move a caret. Everything else about the finding is what it was, so the rule
+     * it reports and the values it says it about do not change with how far away the code turned out
+     * to be.
+     *
+     * <p>Every place, not the first. Two files may reach one declaration, and the problem is not
+     * readable from either of them alone — neither import is the premise the other is measured by,
+     * and an author editing the second is looking at a file that is fine while the build fails. So
+     * the rest are labelled {@code alsoHere}, which says they are part of what is found wrong
+     * ({@link souther.compiler.diag.msg.FindingRegion}) and is what puts the report in front of each
+     * of those authors.
+     *
+     * @throws IllegalArgumentException where {@code where} is empty. There is no such thing as
+     *         reaching code from nowhere: a caller with no place to send a reader has a report to
+     *         leave as it is, not one to move
+     */
+    public <M extends Message & FindingRegion> Diagnostic reachedFrom(List<SourcePos> where,
+                                                                     String declaration,
+                                                                     M alsoHere) {
+        if (where.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "code out of sight is reached from somewhere or the report stays where it is");
+        }
+        WrittenAt out = WrittenAt.outOfSight(declaration);
+        List<LabeledRegion> also = new ArrayList<>(secondaryThatSurvivesTheMove());
+        for (SourcePos other : where.subList(1, where.size())) {
+            also.add(new LabeledRegion(Region.point(other.standingInFor(out)), null, alsoHere));
+        }
+        return new Diagnostic(severity, code,
+                Region.point(where.get(0).standingInFor(out)), List.copyOf(also),
+                literalMessage, diff, notes, suggestion, said);
+    }
+
+    /**
+     * The second regions that survive the caret moving.
+     *
+     * <p>A label naming no source of its own is read in the diagnostic's
+     * ({@link LabeledRegion#sourceIdOr}), and that is what a hand-made position is for. It stops
+     * being true when the caret moves: the file it would be read in is no longer the file it was
+     * built against, and the label would say what it says of whatever sits at those numbers in a
+     * file the author wrote. So it is dropped here and nowhere else — a report whose caret stays put
+     * keeps every label it had, whatever any of them names.
+     */
+    private List<LabeledRegion> secondaryThatSurvivesTheMove() {
+        List<LabeledRegion> kept = new ArrayList<>();
+        for (LabeledRegion label : secondary) {
+            if (label.sourceId() != null) {
+                kept.add(label);
+            }
+        }
+        return kept;
     }
 
     /**

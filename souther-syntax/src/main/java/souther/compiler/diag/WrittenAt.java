@@ -81,7 +81,9 @@ public sealed abstract class WrittenAt permits AtItsPlace, StoodInFor {
      *        from out of sight is qualified, so it is already enough to look the code up by, and the
      *        declaring module is a second value a report would have to show and has nothing to add
      *        ({@code List.map} is declared in {@code souther.list}, which is not how anyone reaches
-     *        it)
+     *        it). Where the code out of sight is a whole module rather than something in one, the
+     *        module's name is how it is reached — {@code lib.text} is what a reader here imports —
+     *        and the two answers coincide
      */
     public static WrittenAt outOfSight(String declaration) {
         return new StoodInFor(declaration);

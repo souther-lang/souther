@@ -80,6 +80,11 @@ public sealed interface ModuleMessage extends Message {
 
     record AddItToThisProjectsDependencies(String module) implements ModuleMessage, Supporting {}
 
+    /** Another import of this compilation that arrives at the same declaration. A finding and not an
+     * explanation: the two imports are not measured against each other, and the author of either
+     * file has the same thing to do about it. */
+    record ItIsReachedFromHereToo() implements ModuleMessage, FindingRegion {}
+
     @Code(DiagnosticCode.E1504)
     record TheClassCarryingTheDeclarationIsNotOnThePath(String name, String module) implements ModuleMessage, Reported {}
 
