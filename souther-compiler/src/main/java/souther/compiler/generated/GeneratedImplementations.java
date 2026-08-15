@@ -1,5 +1,7 @@
 package souther.compiler.generated;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
@@ -26,7 +28,11 @@ public record GeneratedImplementations(String module, Set<String> behaviors) {
 
     public GeneratedImplementations {
         Objects.requireNonNull(module, "a manifest says which module it is of");
-        behaviors = Set.copyOf(behaviors);
+        Objects.requireNonNull(behaviors, "a manifest says what it implemented, or that it is empty");
+        // In the order they were emitted. `Set.copyOf` would keep the members and not the order —
+        // its iteration order is salted per JVM run — so anything that came to print or compare this
+        // would read differently from one run to the next, for no change to the module.
+        behaviors = Collections.unmodifiableSet(new LinkedHashSet<>(behaviors));
     }
 
     /** Whether this compile generated an implementation for {@code behavior}. */
