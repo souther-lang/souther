@@ -695,12 +695,6 @@ public final class Bodies {
         return out;
     }
 
-    /** The names {@code from} publishes among {@code wanted}, of a module as it was written —
-     * {@link HelperInliner#publishedNames}, which is where the rule is. */
-    public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
-        return HelperInliner.publishedNames(from, wanted);
-    }
-
     /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec
      * 13.1), including the prelude ones it has taken on as its own. Answered in declaration order:
      * a check that reports one member of a mutual cycle reports the first, so the order is part of
