@@ -954,8 +954,9 @@ public final class Front {
             }
         }
         // A type reference a pass wrote before resolution names nothing written anywhere, and has
-        // no name to read a qualifier off. A `>->` stage and a `depends on` are always names the
-        // author wrote, which is what an `Ast.Var` is.
+        // no name to read a qualifier off. A `>->` stage and a `depends on` have one whatever wrote
+        // them: `Ast.Var`'s constructor reads its name, so there is no such thing as one without —
+        // the two are asked differently because the two answer differently, not by oversight.
         List<WrittenName> written = new ArrayList<>();
         for (Ast.TypeRef ref : Names.typeRefs(m)) {
             if (ref.written() != null) {
