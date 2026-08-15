@@ -256,10 +256,15 @@ public final class Db {
      * A report, the module it is about, and the source the key that found it names — either of which
      * may be null.
      *
-     * <p>Where the report is said is read off this rather than stored beside it, so there is one
-     * answer and not two that can come apart. A module named but no source is the last fallback, and
-     * only a caller holding the module layout can apply it —
-     * {@link Compilation#publishSourceIdsOf(Found)} is where the whole answer is worked out.
+     * <p>Which source the report is anchored in is read off this rather than stored beside it, so
+     * there is one answer and not two that can come apart. A module named but no source is the last
+     * fallback, and only a caller holding the module layout can apply it —
+     * {@link Compilation#sourceIdOf(Found)} is where that answer is finished.
+     *
+     * <p>Where the report is said is a further question and not this one. A problem written in more
+     * than one file is said in each, which the check that found it states about the regions it
+     * points at ({@link souther.compiler.diag.msg.FindingRegion}) and nothing here knows;
+     * {@link Compilation#publishSourceIdsOf(Found)} is what reads the two together.
      */
     public record Found(String module, String sourceId, Report report) {
 
@@ -274,8 +279,12 @@ public final class Db {
          * the line under the caret is quoted out of the file this names. Where the two disagree,
          * answering with the key's shows a reader a line they did not write — which is what a
          * question asked about a module whose rows were written in an attached {@code examples for}
-         * file did (issue #309). A report that belongs somewhere other than where its caret sits says
-         * so itself, which is what {@link Report.Delivery} is for, and that is why it comes first.
+         * file did. A report anchored somewhere other than where its caret sits says so itself,
+         * which is what {@link Report.Delivery} is for, and that is why it comes first.
+         *
+         * <p>Anchored, not owned. What this settles is the file the report is filed under and quoted
+         * from; whether the problem is also written in some other file is a question about the
+         * regions it points at, and is asked of them.
          */
         public String claimedSourceId() {
             String said = report.delivery().primarySourceId();

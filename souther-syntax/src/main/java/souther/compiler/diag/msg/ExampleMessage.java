@@ -199,11 +199,12 @@ public sealed interface ExampleMessage extends Message {
     /** The same, for a `with`. */
     record WhatTheRowSaysAndWhatTheWithSays(String row, String with) implements ExampleMessage, Supporting {}
 
-    /** Where the fake that disagrees is written. */
-    record TheFakeRowIsHere(String behavior) implements ExampleMessage, Supporting {}
+    /** Where the fake that disagrees is written — the other half of the disagreement, since neither
+     *  statement is the one the model is to be held to. */
+    record TheFakeRowIsHere(String behavior) implements ExampleMessage, FindingRegion {}
 
-    /** Where the `with` that disagrees is written. */
-    record TheWithIsHere(String behavior) implements ExampleMessage, Supporting {}
+    /** Where the `with` that disagrees is written, for the same reason. */
+    record TheWithIsHere(String behavior) implements ExampleMessage, FindingRegion {}
 
     // --- a table that could not be built, so nothing it states was checked ---
 

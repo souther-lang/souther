@@ -29,45 +29,34 @@ import java.util.List;
 public record Report(Diagnostic diagnostic, String legacyMessage, Delivery delivery) {
 
     /**
-     * Where a report is said, for the reports that cannot be left to their key.
+     * Which file a report is anchored in, for the reports that cannot be left to their key.
      *
      * <p>Nearly nothing needs this. A report's primary region was read from a file and says so, and
      * that file is the one whose line is quoted under the caret — so leaving it alone is right
-     * whenever the problem is where it points. What this is for is the case where it is not: where
-     * neither of two written statements is the one in the wrong, the problem is said at both, so the
-     * author reading either file is told, and neither region can settle that on its own.
+     * whenever the caret is where the key that found it was asked about. What this is for is a
+     * report anchored somewhere the key does not name.
      *
      * <p>{@code primarySourceId} is null for "wherever the report points", which is what a report
      * built any other way carries.
      *
-     * <p>{@code saidAtEveryRegion} says the second case, and says it as a property of the report
-     * rather than as a list of files. A list would let a report be delivered to a file it points at
-     * nothing in, and a marker in a file the problem has no region in lands on a line that has
-     * nothing to do with it — worse than not being shown. Read off the regions there is nowhere to
-     * deliver to that has nothing to show.
-     *
-     * <p>Not every second region wants a marker of its own. Pointing at a definition in another
-     * module to explain a mistake here does not make that module mistaken, so this is off unless a
-     * report says otherwise. What turns it on is the problem belonging to both places, which is a
-     * claim only the site that found it can make.
+     * <p>Where else a report is said is not here. That a problem is written in two files is
+     * something the check that found it says about the regions it points at
+     * ({@link souther.compiler.diag.msg.FindingRegion}), and it says it in the diagnostic, which
+     * reaches a reader however the diagnostic travelled — a warning handed over as a list, or an
+     * error thrown and caught. Carried here as well it would be a second answer, on a value only
+     * one of those two routes can set.
      *
      * <p>This is the declaration. What it resolves to against a particular key is
      * {@link Db.Found#claimedSourceId()} and {@link Compilation#publishSourceIdsOf(Db.Found)}.
      */
-    public record Delivery(String primarySourceId, boolean saidAtEveryRegion) {
+    public record Delivery(String primarySourceId) {
 
-        /** Said wherever the key that found it says: the ordinary report. */
-        public static final Delivery BY_KEY = new Delivery(null, false);
+        /** Anchored wherever the key that found it says: the ordinary report. */
+        public static final Delivery BY_KEY = new Delivery(null);
 
-        /** Anchored in {@code primarySourceId}, and said there. */
+        /** Anchored in {@code primarySourceId}. */
         public static Delivery at(String primarySourceId) {
-            return new Delivery(primarySourceId, false);
-        }
-
-        /** Anchored in {@code primarySourceId}, and said in every file it points into — for a
-         * problem that belongs to each of the places it names and to none of them more. */
-        public static Delivery atEveryRegionOf(String primarySourceId) {
-            return new Delivery(primarySourceId, true);
+            return new Delivery(primarySourceId);
         }
     }
 

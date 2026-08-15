@@ -586,18 +586,6 @@ public final class Compilation {
     }
 
     /**
-     * Whether {@code found}'s caret is in a file of some module other than the one it was found
-     * about.
-     *
-     * <p>Answered only where both are known, so this is yes when the compile can say the file is
-     * another module's, and never because it could not say whose it is.
-     */
-    private boolean pointsIntoAnotherModule(Db.Found found) {
-        String owner = moduleOf(locatedSourceIdOf(found));
-        return found.module() != null && owner != null && !owner.equals(found.module());
-    }
-
-    /**
      * Which source a report's primary region is in, as a caller holding its own list of files is
      * told — none, for a compile of one source, where that caller knows the file it handed over.
      */
@@ -613,13 +601,18 @@ public final class Compilation {
      * <p>Read off the regions rather than off a list of files, so every entry is somewhere the
      * report has something to show.
      *
-     * <p>A caret in another module's file is the second case whether or not the site that found it
-     * said so. A rule of this module is broken by code written in another — an invariant here
-     * reaching a construction in a helper declared there — and the caret belongs on that code, which
-     * is what has to change. Said only there, the module whose rule it is would be told nothing: its
-     * author would have a compile that fails and a clean file in front of them. Said only here, the
-     * author would be sent to a call that constructs nothing. It is written in two files, so it is
-     * said in both, which is what this already does for a report that asks.
+     * <p>Which of them those are is what the labels say ({@link LabeledRegion#belongsToFinding}),
+     * and is not worked out here. A rule of one module is broken by code written in another — an
+     * invariant here reaching a construction in a helper declared there — and neither place reads as
+     * the whole of it: an author sent only to the helper is looking at code that is fine to call
+     * from anywhere else, and one sent only to the clause is looking at a call that builds nothing.
+     * The check that found it is what knows the two are one problem, and a second region pointed at
+     * to explain a mistake written elsewhere is not that case and says so by not being labelled one.
+     *
+     * <p>Nothing here reads which module the compile was walking. A caret that left its module is a
+     * coordinate, and the same two regions are the same problem in the same two files whichever of
+     * them was being checked — reading the traversal would put a marker in front of one author and
+     * not the other for a difference neither of them wrote.
      */
     public List<String> publishSourceIdsOf(Db.Found found) {
         String primary = locatedSourceIdOf(found);
@@ -627,12 +620,13 @@ public final class Compilation {
         if (primary != null) {
             saidAt.add(primary);
         }
-        if (found.report().delivery().saidAtEveryRegion() || pointsIntoAnotherModule(found)) {
-            for (LabeledRegion label : found.report().diagnostic().secondary()) {
-                String where = label.sourceIdOr(primary);
-                if (where != null && !saidAt.contains(where)) {
-                    saidAt.add(where);
-                }
+        for (LabeledRegion label : found.report().diagnostic().secondary()) {
+            if (!label.belongsToFinding()) {
+                continue;
+            }
+            String where = label.sourceIdOr(primary);
+            if (where != null && !saidAt.contains(where)) {
+                saidAt.add(where);
             }
         }
         return List.copyOf(saidAt);
