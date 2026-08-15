@@ -55,9 +55,25 @@ public final class DeclarationAgreement {
      * Whether {@code theirs} declares {@code module}, and everything its declarations reach, as
      * {@code ours} does.
      *
+     * <p>What a build carries and this compiler cannot read is answered ({@link Agreement.Unreadable})
+     * rather than raised: an answer brings its classes from wherever it was built, and a run that let
+     * that out would stop evaluating a module over one behavior's jar. What is raised instead is this
+     * compiler failing to have decided something — a form of the grammar nothing classified, a
+     * composition arriving where only a signature can. Those are not facts about the two builds.
+     *
+     * <p>They cannot come from a build either, which is what makes raising them right. Both sides are
+     * read by this compiler's own front end, so the forms that arrive are the forms it parses; a
+     * module published by another boundary revision is refused before any of this
+     * ({@code Backend.BOUNDARY_VERSION}), and one published by this revision is parsed by this
+     * grammar. A form reaching those raises is a hole in what this class has been told, and a hole
+     * answered with "the two do not agree" would be this compiler reporting a stale build over its
+     * own gap.
+     *
      * @param module the module being evaluated, which is where the walk starts
      * @param ours   where the declarations the rows are written for are read from
      * @param theirs where the declarations the answer reads values by are read from
+     * @throws IllegalStateException where a declaration is made of something nothing here has been
+     *                               told how to compare
      */
     public static Agreement of(String module, PublishedModule.Classes ours,
                                PublishedModule.Classes theirs) {
@@ -207,12 +223,16 @@ public final class DeclarationAgreement {
      * the things being asked about, so it is answered rather than raised — a run that let it out
      * would stop evaluating a module because one behavior's answer brought classes it could not read.
      *
-     * <p>Every way of raising is the answer rather than a failure, which is why what is caught is
-     * as wide as it is. This compiler declining what a class says is one (a compile exception);
-     * the class file not being one this JVM reads is another — truncated bytes, a major version from
-     * a newer JDK, which the class-file reader raises as it sees fit. An answer brings its classes
-     * from wherever it was built, so both are ordinary things to meet here, and both mean the same:
-     * nothing about the two could be established.
+     * <p>Two ways of raising are the answer rather than a failure, and only those two. This compiler
+     * declining what a class says is one ({@link souther.compiler.diag.CompileException}); the bytes
+     * not being a class file this JVM reads is the other — truncated, or a major version from a newer
+     * JDK, which the class-file reader raises as {@code IllegalArgumentException} (measured, not
+     * assumed). An answer brings its classes from wherever it was built, so both are ordinary things
+     * to meet here, and both mean the same: nothing about the two could be established.
+     *
+     * <p>Nothing else is caught. A reader that failed some other way failed for a reason of its own,
+     * and reporting that as a build someone should rebuild would hand them a message they cannot act
+     * on about a fault that is not theirs.
      */
     private static Reading reading(String module, PublishedModule.Classes classes) {
         try {
@@ -220,7 +240,7 @@ public final class DeclarationAgreement {
             return published == null
                     ? new Reading(null, Agreement.Reason.NOTHING_PUBLISHED)
                     : new Reading(published, null);
-        } catch (RuntimeException _) {
+        } catch (souther.compiler.diag.CompileException | IllegalArgumentException _) {
             return new Reading(null, Agreement.Reason.NOT_READABLE_HERE);
         }
     }
