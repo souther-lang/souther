@@ -31,8 +31,8 @@ public sealed interface Origin permits Origin.Published, TheCompilesOwn {
      * arriving some way class files are not involved in. This holds the reader that exists today,
      * and a reader that replaces it replaces this without the seam meaning anything different.
      *
-     * @param classes where the declarations of the answer's module, and of the modules it imports,
-     *                are read from
+     * @param classes where the declarations of the answer's module, and of the modules its
+     *                declarations reach into, are read from
      */
     record Published(PublishedModule.Classes classes) implements Origin {}
 }

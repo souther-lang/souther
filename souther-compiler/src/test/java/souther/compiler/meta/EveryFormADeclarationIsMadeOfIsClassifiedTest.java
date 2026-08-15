@@ -61,6 +61,27 @@ class EveryFormADeclarationIsMadeOfIsClassifiedTest {
                         + " differently by it");
     }
 
+    /**
+     * And every form that writes a name has been told what the name is doing there.
+     *
+     * <p>A name is compared three ways — as the declaration it reaches, as a binding held to what the
+     * other side binds, or as the word it is — and which one is right is a fact about the form that
+     * writes it. Reaching a declaration is the one that cannot be defaulted to the others: a new form
+     * that reaches one, read as a word of its own, would call two builds agreed about a declaration
+     * neither of them reads the same way.
+     */
+    @Test
+    void everyFormThatWritesANameSaysWhatTheNameIsDoingThere() {
+        List<String> unsaid = new ArrayList<>(new TreeSet<>(reachableFromDeclarations().stream()
+                .filter(DeclarationAgreement::writesAName)
+                .filter(t -> DeclarationAgreement.whatTheNameSays(t) == null)
+                .map(Class::getName).toList()));
+
+        assertEquals(List.of(), unsaid,
+                "these write a name and nobody has said what the name is doing there: reaching a"
+                        + " declaration, binding one, or being one");
+    }
+
     /** The control: the walk can tell an undecided type from a decided one. */
     @Test
     void andTheWalkWouldSeeAnUndecidedTypeIfThereWereOne() {

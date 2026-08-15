@@ -40,10 +40,12 @@ import java.util.Set;
  * reporting a difference a crossing cannot see. So both sides are parsed and their declarations
  * compared as the forms they are, with where each was written left out of it.
  *
- * <p>It follows imports. A field of an imported type is read by that module's declarations, so a
- * module whose own declarations agree can still be read by an invariant from a build that has moved.
- * An import is the edge here rather than the thing compared — what is compared is the module it
- * reaches, on both sides, by the same rule.
+ * <p>It follows what the declarations reach. A field of an imported type is read by that module's
+ * declarations, so a module whose own declarations agree can still be read by an invariant from a
+ * build that has moved. Which modules those are is read off the names the compared declarations are
+ * written with rather than off the import lines: a type is reachable qualified whether or not it was
+ * imported, and a module may import what only an unread helper wanted. An import line is how a name
+ * is read here, not a thing compared.
  */
 public final class DeclarationAgreement {
 
@@ -156,6 +158,44 @@ public final class DeclarationAgreement {
         }
     }
 
+    /**
+     * The names one declaration binds, held to each other across the two builds.
+     *
+     * <p>What a binding is called is not something a value can be read differently by: a helper whose
+     * parameter is renamed, with every use of it renamed too, admits exactly what it admitted. So the
+     * two are compared as the same declaration when each name this side binds stands for one name
+     * that side binds, and every use of it is read through that.
+     *
+     * <p>Both ways round, because standing for is a pairing: two names this side binds may not both
+     * stand for one of theirs, and a use of the second would otherwise read as a use of the first.
+     * One of these per declaration compared — nothing a declaration binds is visible outside it.
+     */
+    private static final class Bound {
+
+        private final Map<String, String> theirs = new LinkedHashMap<>();
+        private final Map<String, String> ours = new LinkedHashMap<>();
+
+        /** Holds {@code ourName} and {@code theirName} to standing for each other. */
+        boolean bind(String ourName, String theirName) {
+            String already = theirs.put(ourName, theirName);
+            String alreadyOurs = ours.put(theirName, ourName);
+            return (already == null || already.equals(theirName))
+                    && (alreadyOurs == null || alreadyOurs.equals(ourName));
+        }
+
+        /**
+         * Whether two names are the same name: the one this side binds standing for the one that
+         * side binds, or — where neither is bound here — the same declaration reached.
+         */
+        boolean same(String ourName, String theirName, Names ourNames, Names theirNames) {
+            String stoodFor = theirs.get(ourName);
+            if (stoodFor != null || ours.containsKey(theirName)) {
+                return theirName.equals(stoodFor);
+            }
+            return ourNames.reaching(ourName).equals(theirNames.reaching(theirName));
+        }
+    }
+
     /** A module's published declarations, or why they could not be read. Exactly one is set. */
     private record Reading(PublishedModule published, Agreement.Reason why) {}
 
@@ -237,7 +277,8 @@ public final class DeclarationAgreement {
         for (Map.Entry<String, T> ourOwn : ours.entrySet()) {
             T theirOwn = theirs.get(ourOwn.getKey());
             if (theirOwn == null
-                    || !sameShape(parts.apply(ourOwn.getValue()), parts.apply(theirOwn), mine, yours)) {
+                    || !sameShape(parts.apply(ourOwn.getValue()), parts.apply(theirOwn), mine, yours,
+                            new Bound())) {
                 return new Agreement.Disagree(module, ourOwn.getKey());
             }
         }
@@ -381,8 +422,24 @@ public final class DeclarationAgreement {
         if (form == null || ERASED.contains(form.getClass()) || seen.put(form, Boolean.TRUE) != null) {
             return;
         }
-        if (form instanceof WrittenName name) {
-            into.add(name.canonical());
+        // The three forms that reach a declaration, and no others. What a field is called, what a
+        // binding is called and what a declaration is called are names of their own rather than names
+        // of something else, and a module is not reached by writing one of them.
+        if (form instanceof Ast.Var use) {
+            into.add(use.written().canonical());
+            return;
+        }
+        if (form instanceof Ast.Name type) {
+            into.add(type.name().canonical());
+            return;
+        }
+        if (form instanceof Ast.TypeRef ref) {
+            into.add(ref.written().canonical());
+            collectNames(ref.arg(), into, seen);
+            collectNames(ref.tupleElems(), into, seen);
+            return;
+        }
+        if (form instanceof WrittenName) {
             return;
         }
         if (form instanceof Optional<?> maybe) {
@@ -422,27 +479,52 @@ public final class DeclarationAgreement {
      * and a name is compared by what it is rather than by how it was spelled, because a spelling that
      * canonicalises to the same name is the same name to everything that resolves one.
      */
-    private static boolean sameShape(Object ours, Object theirs, Names ourNames, Names theirNames) {
+    private static boolean sameShape(Object ours, Object theirs, Names ourNames,
+                                     Names theirNames, Bound bound) {
         if (ours == null || theirs == null) {
             return ours == theirs;
         }
         if (ERASED.contains(ours.getClass())) {
             return ERASED.contains(theirs.getClass());
         }
+        // A binding introduces a name and nothing outside the declaration can see it, so what it is
+        // called is not something a value can be read differently by. The two are held to each other
+        // instead: the name this side binds stands for the name that side binds, and every use of it
+        // is compared through that.
+        if (ours instanceof Ast.Binder ourBinding && theirs instanceof Ast.Binder theirBinding) {
+            return bound.bind(ourBinding.written().canonical(), theirBinding.written().canonical());
+        }
+        // A name that reaches a declaration is compared as the declaration it reaches. A name a
+        // binding introduced reaches that binding, and is compared as the one it stands for.
+        if (ours instanceof Ast.Var ourUse && theirs instanceof Ast.Var theirUse) {
+            return bound.same(ourUse.written().canonical(), theirUse.written().canonical(),
+                    ourNames, theirNames);
+        }
+        if (ours instanceof Ast.Name ourType && theirs instanceof Ast.Name theirType) {
+            return ourNames.reaching(ourType.name().canonical())
+                    .equals(theirNames.reaching(theirType.name().canonical()));
+        }
+        if (ours instanceof Ast.TypeRef ourRef && theirs instanceof Ast.TypeRef theirRef) {
+            return ourNames.reaching(ourRef.written().canonical())
+                    .equals(theirNames.reaching(theirRef.written().canonical()))
+                    && sameShape(ourRef.arg(), theirRef.arg(), ourNames, theirNames, bound)
+                    && sameShape(ourRef.tupleElems(), theirRef.tupleElems(), ourNames, theirNames,
+                            bound);
+        }
         if (ours instanceof WrittenName ourName && theirs instanceof WrittenName theirName) {
-            // Which declaration each name reaches, rather than the spelling that reached it.
-            return ourNames.reaching(ourName.canonical())
-                    .equals(theirNames.reaching(theirName.canonical()));
+            // A name written where nothing is being named — what a field is called, what a
+            // declaration is called — is that word and nothing else. Compared as it is written.
+            return ourName.canonical().equals(theirName.canonical());
         }
         if (ours instanceof Optional<?> mine && theirs instanceof Optional<?> yours) {
-            return sameShape(mine.orElse(null), yours.orElse(null), ourNames, theirNames);
+            return sameShape(mine.orElse(null), yours.orElse(null), ourNames, theirNames, bound);
         }
         if (ours instanceof List<?> mine && theirs instanceof List<?> yours) {
             if (mine.size() != yours.size()) {
                 return false;
             }
             for (int i = 0; i < mine.size(); i++) {
-                if (!sameShape(mine.get(i), yours.get(i), ourNames, theirNames)) {
+                if (!sameShape(mine.get(i), yours.get(i), ourNames, theirNames, bound)) {
                     return false;
                 }
             }
@@ -463,7 +545,7 @@ public final class DeclarationAgreement {
             return mine.keySet().equals(yours.keySet())
                     && mine.entrySet().stream()
                             .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey()),
-                                    ourNames, theirNames));
+                                    ourNames, theirNames, bound));
         }
         if (ours.getClass() != theirs.getClass()) {
             return false;
@@ -494,12 +576,32 @@ public final class DeclarationAgreement {
         if (!isAFormOfTheGrammar(ours.getClass())) {
             throw new IllegalStateException(unclassified(ours.getClass()));
         }
+        if (writesAName(ours.getClass()) && whatTheNameSays(ours.getClass()) == null) {
+            throw new IllegalStateException(ours.getClass().getName()
+                    + " writes a name and this comparison does not know what the name is doing"
+                    + " there. Decide: does it reach a declaration (compared as the declaration it"
+                    + " reaches), bind a name of its own (held to what the other side binds), or is"
+                    + " it a name (compared as the word it is)?");
+        }
         for (RecordComponent part : ours.getClass().getRecordComponents()) {
-            if (!sameShape(read(part, ours), read(part, theirs), ourNames, theirNames)) {
+            if (!sameShape(read(part, ours), read(part, theirs), ourNames, theirNames, bound)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /** Whether a form writes a name of its own — as against holding forms that do. */
+    static boolean writesAName(Class<?> form) {
+        if (!form.isRecord()) {
+            return false;
+        }
+        for (RecordComponent part : form.getRecordComponents()) {
+            if (part.getType() == WrittenName.class) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -547,6 +649,52 @@ public final class DeclarationAgreement {
      * record from anywhere else is neither: it arrived with a declaration rather than being part of
      * one, and what to do about it is a decision rather than a default.
      */
+    /**
+     * The forms that write a name, and what the name is doing in each.
+     *
+     * <p>A name in a declaration is one of three things, and which one decides how two builds' copies
+     * of it are compared. It reaches a declaration — a type a field is of, a value an invariant calls
+     * — and is compared as the declaration it reaches. It binds a name nothing outside the
+     * declaration can see, and is held to whatever the other side binds there. Or it is a name of its
+     * own — what a field is called, what a declaration is called — and is that word.
+     *
+     * <p>Named form by form, and a form that writes a name and is not here stops the comparison. The
+     * default would be the last of the three, and it is the wrong one to default to: a new way of
+     * reaching a declaration read as a word of its own would compare {@code Title} against
+     * {@code Title} and call two builds agreed about a declaration neither of them reads the same way.
+     */
+    private static final Map<Class<?>, Says> WRITES_A_NAME = Map.ofEntries(
+            Map.entry(Ast.Var.class, Says.REACHES_A_DECLARATION),
+            Map.entry(Ast.Name.class, Says.REACHES_A_DECLARATION),
+            Map.entry(Ast.TypeRef.class, Says.REACHES_A_DECLARATION),
+            Map.entry(Ast.Binder.class, Says.BINDS_A_NAME),
+            Map.entry(Ast.Param.class, Says.BINDS_A_NAME),
+            Map.entry(Ast.Data.class, Says.IS_A_NAME),
+            Map.entry(Ast.SumData.class, Says.IS_A_NAME),
+            Map.entry(Ast.UnitData.class, Says.IS_A_NAME),
+            Map.entry(Ast.SpecBehavior.class, Says.IS_A_NAME),
+            Map.entry(Ast.PipeBehavior.class, Says.IS_A_NAME),
+            Map.entry(Ast.FnDef.class, Says.IS_A_NAME),
+            Map.entry(Ast.Field.class, Says.IS_A_NAME),
+            Map.entry(Ast.FieldInit.class, Says.IS_A_NAME),
+            Map.entry(Ast.FieldAccess.class, Says.IS_A_NAME),
+            Map.entry(Ast.ImportedName.class, Says.IS_A_NAME));
+
+    /** What a name written in {@code form} is doing there, or null where nobody has said. */
+    static Says whatTheNameSays(Class<?> form) {
+        return WRITES_A_NAME.get(form);
+    }
+
+    /** What a name written in a declaration is doing there. */
+    enum Says {
+        /** Naming something declared elsewhere: compared as the declaration it reaches. */
+        REACHES_A_DECLARATION,
+        /** Introducing a name of its own: held to whatever the other side binds there. */
+        BINDS_A_NAME,
+        /** Being a name: what a field is called, what a declaration is called. */
+        IS_A_NAME
+    }
+
     static boolean isAFormOfTheGrammar(Class<?> type) {
         if (!type.isRecord()) {
             return false;

@@ -145,6 +145,29 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             let settle (p) = p.of
             """;
 
+    /** A module publishing a value whose name a reader also uses as a field name. */
+    private static final String SHADOWING_SHARED = """
+            module example.shared exposing ( Title, note )
+
+            data Title = String
+                invariant String.length(value) > 0
+
+            let note = "shared"
+            """;
+
+    /** It imports that value and never writes it; `note` here is what a field is called. */
+    private static final String SHADOWING_MODEL = """
+            module example.shadowing
+            import example.shared ( Title, note )
+
+            data Todo = { title: Title, note: String }
+
+            behavior rename : (t: Todo) -> Todo
+                constructs Todo
+
+            let rename (t) = Todo { title = t.title, note = t.note }
+            """;
+
     /** A model whose invariant states a number, for what stating it another way is. */
     private static final String DECIMAL_MODEL = """
             module example.rates
@@ -508,6 +531,47 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
+     * A helper's parameter renamed, and every use of it with it.
+     *
+     * <p>What an invariant admits is what its helper computes, and what a parameter is called is not
+     * part of that: the two admit the same values. A comparison reading the spelling of a binding
+     * would report a stale build for renaming a local, which is a change a crossing cannot see.
+     */
+    @Test
+    void aHelpersParameterRenamedIsNotADisagreement() {
+        String renamed = EXPOSING_MODEL
+                .replace("let longEnough (s: String) : Bool = length(s) > 0",
+                        "let longEnough (text: String) : Bool = length(text) > 0");
+
+        Agreement held = DeclarationAgreement.of("example.published",
+                declarationsOf(renamed), declarationsOf(EXPOSING_MODEL));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "what a binding is called is not something a value can be read differently by");
+    }
+
+    /**
+     * A field named the same as something an import brings in.
+     *
+     * <p>A field's name is what it is called, not a name it reaches something by. Reading it as one
+     * would make an import look used where nothing uses it — and then dropping that import, which
+     * nothing compared is written with, reports a stale build.
+     */
+    @Test
+    void aFieldNamedLikeAnImportedValueIsNotAReferenceToIt() {
+        String withoutIt = SHADOWING_MODEL
+                .replace("import example.shared ( Title, note )\n",
+                        "import example.shared ( Title )\n");
+
+        Agreement held = DeclarationAgreement.of("example.shadowing",
+                declarationsOf(List.of(SHADOWING_SHARED, withoutIt)),
+                declarationsOf(List.of(SHADOWING_SHARED, SHADOWING_MODEL)));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "the field is called `note`; it does not name what the import brings in");
+    }
+
+    /**
      * A module reached through an import is held to as well.
      *
      * <p>A field of an imported type is read by that module's declarations, so a module whose own
@@ -604,9 +668,14 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         return new ClassFileDeclarations(classes::get);
     }
 
-    /** What a compile said, as codes — nothing, for every model measured here. */
+    /** What a compile refused, as codes — nothing, for every model measured here.
+     *
+     * <p>Refused, not said: a warning is what a build carries rather than what stops it, and a model
+     * measured here may carry one on purpose. An import nothing writes is exactly that, and is what
+     * one of these measures. */
     private static List<String> diagnosed(Compilation compiled) {
         return compiled.diagnostics().values().stream().flatMap(List::stream)
+                .filter(d -> d.diagnostic().severity() == souther.compiler.diag.Severity.ERROR)
                 .map(d -> String.valueOf(d.diagnostic().code())).toList();
     }
 }
