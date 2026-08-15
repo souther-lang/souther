@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Type;
 
@@ -118,8 +120,7 @@ public final class RowFixtures {
      * a run reads one file's rows out of a module that holds every file's, and a count over the
      * subset numbers them from zero while the methods were emitted over the whole.
      */
-    public record Emitted(Map<String, Hir.FnDef> defs, Map<Hir.Expr, String> methods,
-                          java.util.Set<String> stated) {
+    public record Emitted(Map<String, Hir.FnDef> defs, Map<Hir.Expr, String> methods) {
     }
 
     /**
@@ -133,7 +134,6 @@ public final class RowFixtures {
                                   Map<String, Sig> signatures) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         Map<Hir.Expr, String> methods = new java.util.IdentityHashMap<>();
-        java.util.Set<String> stated = new java.util.LinkedHashSet<>();
         List<Placed> placed = placed(module, signatures);
         for (int i = 0; i < placed.size(); i++) {
             Hir.Expr operand = placed.get(i).operand();
@@ -143,9 +143,6 @@ public final class RowFixtures {
             }
             String name = methodFor(i);
             methods.put(operand, name);
-            if (position.required() == null) {
-                stated.add(name);
-            }
             // Wrapped and then handed to the stage every definition of this module went through.
             // Which passes that is is the stage's to know: once a row's operand is a function, where
             // it came from stops mattering to the pipeline that reads functions, and a list of
@@ -161,16 +158,22 @@ public final class RowFixtures {
             // collection from it as an empty collection in any body takes its element type. For a
             // value the model is given the same type is also required, and the pipeline's own check
             // of a declared return holds it. An expectation contributes and requires nothing — a
-            // row may state what the behavior does not answer with — so its name goes into
-            // stated and the check is not made of it.
+            // row may state what the behavior does not answer with — so the check is not made of it.
+            //
+            // The position travels on the definition rather than beside it. Which of the two this
+            // is, and every other question a rule has about the position, is then asked of the
+            // definition the rule is holding; a set of names kept alongside is a second thing to
+            // keep in step, and the rule that forgot to consult one asked whether the name was
+            // authored instead — which is true of any definition another module wrote.
             Type given = position.contextual();
             Hir.RetType answers = given == null ? null : retTypeOf(given, operand.pos());
             Hir.FnDef wrapped = new Hir.FnDef(WrittenName.synthetic(name, operand.pos()),
                     module.name(), List.of(), answers, new Hir.FnBody.Written(operand),
-                    new Hir.Modifiers(true, true), operand.pos());
+                    new Hir.Modifiers(true, true), new DefinitionRole.RowValue(position),
+                    operand.pos());
             out.put(name, Desugared.Fn.desugar(wrapped, symbols).read());
         }
-        return new Emitted(out, methods, stated);
+        return new Emitted(out, methods);
     }
 
     private static Hir.RetType retTypeOf(Type type, souther.compiler.diag.SourcePos pos) {

@@ -130,11 +130,6 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1923)
     record TheEvaluationDidNotAnswer(String within) implements ExampleMessage, Reported {}
 
-    /** The same, naming what it was in when it stopped. */
-    @Code(DiagnosticCode.E1923)
-    record TheEvaluationDidNotAnswerWhileCalling(String within, String calling)
-            implements ExampleMessage, Reported {}
-
     /** What that says and what it does not. */
     record NotAnsweringIsNotNotTerminating() implements ExampleMessage, Supporting {}
 

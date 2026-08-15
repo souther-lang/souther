@@ -88,9 +88,10 @@ public final class ExampleStatements {
     /**
      * A reader for one written statement, held for as long as reading it lasts.
      *
-     * <p>Never shared between two of them. Building a fixture runs the helpers it applies (ADR-0077)
-     * and a {@code partial} one may not stop, so a reading that runs out of its budget is asked to
-     * stop and cannot be made to — and what it goes on writing to is this.
+     * <p>Never shared between two of them. Reading a fixture runs the method a row's operand was
+     * emitted as, and a {@code partial} helper compiled into it may not stop, so a reading that runs
+     * out of its budget is asked to stop and cannot be made to — and what it goes on writing to is
+     * this.
      */
     private FixtureReader newFixtureReader() {
         return new FixtureReader(module, symbols, values, loader);
@@ -280,8 +281,8 @@ public final class ExampleStatements {
     /**
      * One statement, read within its own share of the budget.
      *
-     * <p>Per statement rather than per module. Building a fixture runs the helpers it applies
-     * (ADR-0077), and a `partial` one may not stop — so a budget covering the whole reading is one a
+     * <p>Per statement rather than per module. Reading a fixture runs compiled code, and a `partial`
+     * helper in it may not stop — so a budget covering the whole reading is one a
      * single slow row can spend, and spending it would drop every other statement's reading with it:
      * a plain contradiction elsewhere in the module would go unsaid because of a row it has nothing
      * to do with. It is what {@link #checkRow} already does for a row it evaluates, and this reads

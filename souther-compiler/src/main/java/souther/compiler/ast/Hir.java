@@ -312,13 +312,14 @@ public interface Hir {
      * exposed names carry no signature (their type is at the definition).
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
-     * what the module took on to emit as methods of its own without having declared them, which is
-     * two kinds of helper: a recursive one it reaches, which cannot be inlined and has to be lowered
-     * somewhere, and a non-recursive one an {@code example} row applies, which a row runs rather than
-     * expands (ADR-0077). Either may be declared by the standard library or by a module that
-     * published it. Only {@code fns} is declared here, and no rule reads a name to tell the two apart
-     * — {@code List.foldFrom} is reached under the library's alias and declared in
-     * {@code souther.list}.
+     * what the module emits as methods of its own without having written them, which is two kinds of
+     * definition: a recursive helper it reaches, which cannot be inlined and has to be lowered
+     * somewhere, and a definition minted for what a row writes at a position, which has no call site
+     * to be inlined into. The first may be declared by the standard library or by a module that
+     * published it; the second is this module's own and is no {@code let}. Only {@code fns} is
+     * declared here, and no rule reads a name to tell any of them apart — {@code List.foldFrom} is
+     * reached under the library's alias and declared in {@code souther.list}, and a row's method is
+     * spelled in no source at all ({@link FnDef#role}).
      *
      * <p>Two components rather than one list a later pass appends to. Appended, every reader asking
      * what the module declared got what it declared before {@link
@@ -584,10 +585,35 @@ public interface Hir {
      * "from somewhere else": a helper this module took on to emit was written by some module and says
      * which, and every rule here reads that rather than the absence. Anything a later pass mints that
      * <em>is</em> a declaration says which module it belongs to, so that these stay one question.
+     *
+     * <p>{@code role} is what the definition was made as, and it is a second question from the one
+     * {@code declaredIn} answers: a wrapper minted for a row's operand is declared by this module
+     * and is not a {@code let} anybody wrote. Both are here because both are things a rule asks and
+     * neither can be read off a name — {@link #reachedAs} mints a name for a definition another
+     * module wrote, so a rule that went by whether a name was authored answered the same for the
+     * two. See {@link DefinitionRole}.
      */
     record FnDef(WrittenName written, String declaredIn, List<FnParam> params,
-                 RetType declaredReturn, FnBody body, Modifiers modifiers, SourcePos pos)
+                 RetType declaredReturn, FnBody body, Modifiers modifiers, DefinitionRole role,
+                 SourcePos pos)
             implements Hir {
+
+        public FnDef {
+            // Said rather than defaulted. What this definition is cannot be worked out from
+            // anything else here — a wrapper minted for a row's position and a definition another
+            // module wrote are both unspelled and both declared somewhere — so a rewrite that
+            // dropped it would be answering the question by losing it, which is the shape this
+            // component exists to remove. The forms below are where `Ordinary` is written.
+            Objects.requireNonNull(role, "a definition says what it was made as");
+        }
+
+        /** A fn read as a definition, which is every one a source wrote. */
+        public FnDef(WrittenName written, String declaredIn, List<FnParam> params,
+                     RetType declaredReturn, FnBody body, Modifiers modifiers, SourcePos pos) {
+            this(written, declaredIn, params, declaredReturn, body, modifiers,
+                    DefinitionRole.Ordinary.INSTANCE, pos);
+        }
+
         /** A fn with no modifier (the common case; totality-checked if recursive, published). */
         public FnDef(WrittenName written, String declaredIn, List<FnParam> params,
                      RetType declaredReturn, FnBody body, SourcePos pos) {
@@ -614,16 +640,30 @@ public interface Hir {
          * {@code souther.list}, so the module it came from cannot be read back out of it. Renaming
          * here carries {@link #declaredIn} across rather than restating it, so no caller is in a
          * position to pair a name with an origin that is not its own.
+         *
+         * <p>And it carries {@link #role} across, which is what says renaming is not a way to make
+         * something into a row's value: what comes back is what went in, reached under another name.
          */
         public FnDef reachedAs(String name) {
             return new FnDef(WrittenName.synthetic(name, pos), declaredIn, params, declaredReturn,
-                    body, modifiers, pos);
+                    body, modifiers, role, pos);
         }
 
         /** The same declaration with {@code replacement} in place of its body. */
         public FnDef withBody(FnBody replacement) {
             return new FnDef(written, declaredIn, params, declaredReturn, replacement, modifiers,
-                    pos);
+                    role, pos);
+        }
+
+        /**
+         * The position this definition stands at, or null where it stands at none.
+         *
+         * <p>The question every rule written for a row's operand is really asking. It reads the
+         * role rather than the shape of a name, which answered the same for a wrapper minted here
+         * and for a definition another module wrote.
+         */
+        public RowPosition standsAt() {
+            return role instanceof DefinitionRole.RowValue(RowPosition at) ? at : null;
         }
 
         /** What the fn is called. */
@@ -1340,7 +1380,7 @@ public interface Hir {
      *
      * <p>The position contributes a type here and constrains nothing. Which collection the brackets
      * are is the notation's question; whether the value that comes out belongs at the position is a
-     * separate one, asked of an input and not of an expectation ({@link souther.compiler.check.RowPosition}).
+     * separate one, asked of an input and not of an expectation ({@link RowPosition}).
      */
     record RowCollection(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
 

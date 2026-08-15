@@ -5,7 +5,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
-import souther.compiler.check.RowFixtures;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
 import souther.compiler.check.HelperTable;
@@ -796,11 +795,18 @@ public final class Bodies {
     }
 
     /**
-     * The helpers a module emits because an {@code example} row applies them (ADR-0077): a row is a
-     * fixture, and a helper written in one is run rather than expanded into it, so it needs a method.
-     * Read off the rows, which is where the reason is.
+     * The methods a module emits for its rows: one per operand, answering with the value that
+     * operand is.
+     *
+     * <p>The names come from the correspondence the preparation constructed, not from a count of the
+     * settled module's rows: a second count is a second numbering, and a row would run the operand
+     * beside the one it wrote.
+     *
+     * <p>Nothing else is here. A helper a row names is expanded into the operand's own definition,
+     * the way it is expanded into any body, so it needs no method of its own; a recursive one it
+     * reaches is a method already, for the reason every recursion is.
      */
-    public record ExampleHelpers(String name) implements Key<Set<String>> {
+    public record RowMethods(String name) implements Key<Set<String>> {
         @Override
         public String module() {
             return name;
@@ -808,26 +814,10 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Answer<Hir.Module> settled = db.ask(new Settled(name));
-            Answer<Map<String, Hir.FnDef>> helpers = db.ask(new ModuleDefinitions(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            if (!settled.present() || !helpers.present() || !scope.present()
-                    || !prepared.present()) {
-                return Answer.absent();
-            }
-            Set<String> emitted =
-                    new LinkedHashSet<>(HelperInliner.exampleHelpers(settled.value(), helpers.value()));
-            // The kernels too, under the names their methods are emitted with: this set is what
-            // decides which fns survive lowering, and what has to survive for a kernel is the method
-            // written for the instance the row settled.
-            emitted.addAll(HelperInliner.fixtureKernels(
-                    settled.value(), helpers.value(), scope.value()).keySet());
-            // and the operand methods, which exist for the rows and for nothing else. Their names
-            // come from the correspondence the preparation constructed, not from a count of the
-            // settled module's rows: a second count is a second numbering.
-            emitted.addAll(prepared.value().operandMethods().values());
-            return Answer.of(emitted);
+            return prepared.present()
+                    ? Answer.of(new LinkedHashSet<>(prepared.value().operandMethods().values()))
+                    : Answer.absent();
         }
     }
 
@@ -939,8 +929,8 @@ public final class Bodies {
         public Answer<Lower.Lowered> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(name));
-            Answer<Set<String>> examples = db.ask(new ExampleHelpers(name));
-            if (!settled.present() || !recursive.present() || !examples.present()) {
+            Answer<Set<String>> rowMethods = db.ask(new RowMethods(name));
+            if (!settled.present() || !recursive.present() || !rowMethods.present()) {
                 return Answer.absent();
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
@@ -957,12 +947,12 @@ public final class Bodies {
                     settled.value().fns(), settled.value().takenOn())) {
                 List<Hir.FnDef> fns = new ArrayList<>();
                 for (Hir.FnDef fn : component) {
-                    // A non-recursive helper is fully inlined at its call sites and never emitted —
-                    // it has no body of its own down here, so nothing asks for one. Unless an example
-                    // row applies it (ADR-0077): a row runs a helper rather than expanding it, so
-                    // that one is emitted.
+                    // A non-recursive helper is fully inlined at its call sites and never
+                    // emitted — it has no body of its own down here, so nothing asks for one. What
+                    // survives beside the behaviors is a recursion, which cannot be inlined, and a
+                    // method a row's operand is, which is the row's value and has no call site.
                     if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())
-                            && !examples.value().contains(fn.name())) {
+                            && !rowMethods.value().contains(fn.name())) {
                         continue;
                     }
                     if (!taken.add(fn.name())) {
@@ -1214,10 +1204,7 @@ public final class Bodies {
                         signatures.present() ? signatures.value() : null,
                         injected.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
-                        settled,
-                        prepared.present() ? prepared.value().statedReturns() : Set.of(),
-                        prepared.present()
-                                ? Set.copyOf(prepared.value().operandMethods().values()) : Set.of());
+                        settled);
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

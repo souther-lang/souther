@@ -23,14 +23,14 @@ import java.util.Set;
  *
  * <p>A row reaches that form two ways. From what the author wrote, which {@link ExampleVerifier} walks:
  * a literal, a record, a collection, a newtype application. And from a live value, which {@link #of}
- * re-materialises — what a helper answered with, on the way into a fixture (ADR-0077), and a value
+ * re-materialises — what a row's operand answered with, on the way into a fixture, and a value
  * this compile built, on the way to an answerer whose classes are not this compile's
  * ({@link Handed}). The rules that decide the form itself — which
  * discriminator a case of a sum carries, when a unit case travels as a bare name, which written list is
  * a map's entries — are the same rules whichever direction arrives at them, so they are here rather
  * than restated on one side and read from the other.
  *
- * <p>Running an example is {@link HelperInvoker}'s, and diagnostics are the row's: a form that cannot
+ * <p>Running an example is {@link OperandRunner}'s, and diagnostics are the row's: a form that cannot
  * be reached is a {@link FixtureException}, which the row reports. What is here is the one reading of
  * the classes a run answers with — {@link #typeOf} for which declaration a value is and
  * {@link #simpleName} for what a report quotes — because a live value's type is a question every
@@ -60,13 +60,13 @@ final class NeutralForm {
      * question. A {@code Date}'s neutral form is the parsed temporal while its encoder writes ISO text,
      * so a newtype over a date came back as text its own decoder refuses.
      *
-     * <p>Two things reach this. A value a helper answered with, on the way into a fixture (ADR-0077),
+     * <p>Two things reach this. A value a row's operand answered with, on the way into a fixture,
      * and a value this compile built, on the way to an answerer whose classes are not this compile's
      * ({@link Handed}). One walk, because the form is decided by the rules and not by which side asked.
      *
      * @param what a noun phrase naming the value, for the reason a row is given when it cannot be read
      *             back. Said by the caller because only the caller knows what the value is to the row —
-     *             what a helper answered with, or an input the row handed over
+     *             what an operand answered with, or an input the row handed over
      */
     Object of(Object live, Position position, String what) {
         if (live == null) {

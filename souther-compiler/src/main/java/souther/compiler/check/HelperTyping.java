@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.RowPosition;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -45,9 +46,7 @@ public final class HelperTyping {
     static void checkHelpers(HelperInliner inliner, Symbols symbols,
                                      Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
-                                     TypeChecker.Elaborated elaborated,
-                                     java.util.Set<String> statedReturns,
-                                     java.util.Set<String> rowOperands) {
+                                     TypeChecker.Elaborated elaborated) {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
@@ -56,13 +55,17 @@ public final class HelperTyping {
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
+            // Where this definition stands, or null where it stands nowhere: the one thing every
+            // rule below that is about a row's operand asks, read off the definition the rule is
+            // holding rather than off a set of names travelling beside it.
+            RowPosition standsAt = h.standsAt();
             // What a row operand may reach. A row supplies the values a behavior is applied to and
             // stands in for what that behavior depends on; it is not inside the application, so the
             // dependencies are not in force where it is computed — and the definition it is
             // compiled as is nullary and static, with nothing injected into it. Handed the same
             // requirement table a body gets, a call to a required behavior types here and reaches
             // no implementation at all.
-            Map<String, ReqSig> reachable = rowOperands.contains(h.name()) ? Map.of() : reqSigs;
+            Map<String, ReqSig> reachable = standsAt != null ? Map.of() : reqSigs;
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
             // values written through helpers reaches every link exactly as one written without them
@@ -93,9 +96,9 @@ public final class HelperTyping {
                 env = env.with(p.binder(), TypeOps.resolveParamType(p.type()));
             }
             Elaborator.rejectBuiltinShadowing(h.writtenBody());
-            // A helper the lowered module carries is one the backend emits — a recursive one, and one
-            // an example row applies (ADR-0077) — so it is typed on the tree the backend emits from,
-            // and the Core this check produces is what is emitted (issue #81). One that is only
+            // A definition the lowered module carries is one the backend emits — a recursive helper,
+            // and a row's operand — so it is typed on the tree the backend emits from, and the Core
+            // this check produces is what is emitted (issue #81). A helper that is only
             // inlined at its call sites has no body down there, so its standalone check expands its
             // body here; a recursive helper hides its own parameters from helper resolution while that
             // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
@@ -158,13 +161,18 @@ public final class HelperTyping {
                             .preserving(reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
-            // A definition no source names computes a row's operand, and an operand answers a value.
-            // One that answers none — `unreachable` on its own — is refused here, where the check
-            // fails the compile: the backend refuses the same shape when it emits, but what ships
-            // carries no method for a row's operand, so a refusal left to emission would surface in
-            // the evaluation build alone and fail nothing.
-            if (!h.written().authored() && bodyType instanceof Type.Never
-                    && (declaredReturn == null || statedReturns.contains(h.name()))) {
+            // A definition standing at a row's position computes what the row writes there, and a
+            // position holds a value. One that answers none — `unreachable` on its own — is refused
+            // here, where the check fails the compile: the backend refuses the same shape when it
+            // emits, but what ships carries no method for a row's operand, so a refusal left to
+            // emission would surface in the evaluation build alone and fail nothing.
+            //
+            // Asked of the position and not of whether a source spelled the name. A definition
+            // another module wrote is emitted here under the name this module reaches it by, which
+            // no source spells either, and this rule refused it — for what a row in this module
+            // said about it, at a line in a file that had written nothing wrong.
+            if (standsAt != null && bodyType instanceof Type.Never
+                    && (declaredReturn == null || standsAt.required() == null)) {
                 throw CompileException.of(Diagnostic.at(h.pos(), "unreachable".length())
                         .hint(new NameMessage.WriteItWhereTheTypeIsStated())
                         .say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
@@ -181,15 +189,19 @@ public final class HelperTyping {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
-            // match the body; a lying annotation is not silently ignored.
-            if (declaredReturn != null && !statedReturns.contains(h.name())) {
+            // match the body; a lying annotation is not silently ignored. What a row's operand
+            // answers with is the position's contribution and not a claim of its own where the
+            // position requires nothing: a row may state what the behavior does not answer with,
+            // and reporting that disagreement is what the row is for.
+            if (declaredReturn != null && (standsAt == null || standsAt.required() != null)) {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, symbols)) {
-                    // A definition no source names carries a claim its position made — a row's
-                    // operand, wrapped for emission — so what is said leans on the place, and
-                    // quotes no name the author never wrote.
+                    // A definition standing at a position carries a claim the position made, so
+                    // what is said leans on the place and quotes no name the author never wrote.
+                    // A definition is named, whoever wrote it: one this module took on is another
+                    // module's `let` and is named as one.
                     throw CompileException.of(Diagnostic.at(h.pos())
-                            .say(h.written().authored()
+                            .say(standsAt == null
                                     ? new HelperMessage.TheBodyIsNotWhatTheHelperDeclares(h.name(),
                                             Type.show(declared), Type.show(bodyType))
                                     : new HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes(

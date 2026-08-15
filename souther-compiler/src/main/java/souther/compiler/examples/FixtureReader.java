@@ -3,10 +3,7 @@ package souther.compiler.examples;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CallElaborator;
-import souther.compiler.check.FixtureApplication;
-import souther.compiler.check.FixtureArgumentTypes;
 import souther.compiler.check.FixtureEvidence;
-import souther.compiler.check.FixtureCallable;
 import souther.compiler.check.Prelude;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -44,13 +41,12 @@ import java.util.function.Supplier;
 /**
  * Reads a written fixture as the value it states, against the type of the position it is written in.
  *
- * <p>One reading, and only one. A fixture applies helpers (ADR-0077), and a {@code partial} one may
- * not stop — so a reading is held to a budget, and a worker that runs out of it is asked to stop and
- * cannot be made to: a fixture reaches no interrupt point, so it may still be inside
+ * <p>One reading, and only one. A row's operand runs as compiled code and a {@code partial} helper
+ * in it may not stop — so a reading is held to a budget, and a worker that runs out of it is asked
+ * to stop and cannot be made to: a fixture reaches no interrupt point, so it may still be inside
  * {@link #expandedValue} holding a binding or a half-walked expansion. An instance is therefore one
  * row's, or one written statement's, and is dropped when that reading ends. Nothing it can still
- * write to — {@link #bindings}, {@link #expanding}, the helper {@link HelperInvoker#running()} names
- * — is read by the reading after it.
+ * write to — {@link #bindings}, {@link #expanding} — is read by the reading after it.
  *
  * <p>What a reading cannot build, and what did not finish, are a {@link FixtureException} and a
  * {@link StackExhaustedException}. Which diagnostic either becomes, and what a budget is, are not
@@ -77,7 +73,7 @@ public final class FixtureReader {
     private final Map<String, Hir.FnDef> values;
     private final MemoryClassLoader loader;
     /** Runs a helper a fixture applies. One reading's, because what it is running is one reading's. */
-    private final HelperInvoker helpers;
+    private final OperandRunner operands;
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
     private final NeutralForm neutral;
 
@@ -87,7 +83,7 @@ public final class FixtureReader {
         this.symbols = symbols;
         this.values = values;
         this.loader = loader;
-        this.helpers = new HelperInvoker(module.name(), loader);
+        this.operands = new OperandRunner(module.name(), loader);
         this.neutral = new NeutralForm(symbols);
     }
 
@@ -125,20 +121,18 @@ public final class FixtureReader {
                 .refuse(at, fixture);
     }
 
-    /** The helper this reading is inside, for a budget to name when the reading does not finish. */
-    String runningHelper() {
-        return helpers.running();
-    }
-
     /** The method emitted for {@code operand}, or null where nothing emitted one — read off the
      *  correspondence the module's preparation constructed, which this reader already holds. */
     private String emittedFor(Hir.Expr operand) {
         return module.operandMethods().get(operand);
     }
 
-    Object ran(String emittedAs, Hir.Expr written) {
+    /** The value the method emitted under {@code emittedAs} answers with. What a failure inside it
+     *  is said of is the operand — the row's own account of itself — and not the method's name,
+     *  which no source spells. */
+    Object ran(String emittedAs) {
         try {
-            return helpers.run(emittedAs);
+            return operands.run(emittedAs);
         } catch (InvocationFailure f) {
             // The row's reading of it, said of the operand rather than of the method it was emitted
             // as: what a report names is what the author wrote.
@@ -149,7 +143,7 @@ public final class FixtureReader {
     Object built(Hir.Expr written, Type type) {
         String method = emittedFor(written);
         if (method != null) {
-            return ran(method, written);
+            return ran(method);
         }
         return built(written, FixtureShape.of(type, symbols));
     }
@@ -160,7 +154,7 @@ public final class FixtureReader {
     Object built(Hir.Expr written, BoundaryInput in) {
         String method = emittedFor(written);
         if (method != null) {
-            return ran(method, written);
+            return ran(method);
         }
         return built(written, FixtureShape.of(in));
     }
@@ -192,7 +186,7 @@ public final class FixtureReader {
         Type outType = out.type();
         String method = emittedFor(fixture);
         if (method != null) {
-            Object ran = ran(method, fixture);
+            Object ran = ran(method);
             TypeSymbol answered = caseOfValue(ran, outType);
             return new BuiltFixture(answered != null ? answered : constructedCase(written), ran);
         }
@@ -219,15 +213,6 @@ public final class FixtureReader {
             // type builds that type and is refused for being it, rather than being read as the
             // output and refused for how it is written.
             return admitted(built(written, FixtureShape.of(Type.ref(asserted), symbols)), out, whole);
-        }
-        Object answer = helperAnswer(written, new LinkedHashSet<>());
-        if (answer != null) {
-            // Already built. Reading it back through the output's decoder would state nothing for a
-            // stand-in written as an application, so what is left to ask of it is the form it is in
-            // and whether it is what the dependency answers with.
-            neutral.requireWrittenForm(answer,
-                    whole == null ? Position.UNREAD : Position.at(whole.type()));
-            return admitted(answer, out, whole);
         }
         if (whole != null) {
             // Read as the output is written rather than as itself, through the decode a row's input
@@ -429,7 +414,7 @@ public final class FixtureReader {
         // nothing of it.
         String method = emittedFor(expected);
         if (method != null) {
-            return assertedLive(ran(method, expected));
+            return assertedLive(ran(method));
         }
         // Every expectation that computes a value has a method — the correspondence is constructed
         // where the methods are emitted — and one written as a bare case name is read by caseOnly
@@ -437,10 +422,6 @@ public final class FixtureReader {
         throw new IllegalStateException("no method was emitted for the expected value at "
                 + expected.pos());
     }
-
-
-
-
 
     /** {@code Map.empty} / {@code Set.empty}, which say which collection they are, against {@code []},
      *  which does not and takes the position's answer. */
@@ -453,7 +434,6 @@ public final class FixtureReader {
                 ? new Asserted.Entries(false, List.of())
                 : new Asserted.Elements(Asserted.Container.UNSTATED, List.of());
     }
-
 
     /**
      * A construction's own invariant, over the value it states.
@@ -494,8 +474,6 @@ public final class FixtureReader {
         TypeSymbol built = constructs(c);
         return built != null && neutral.isNewtype(built);
     }
-
-
 
     private Hir.Data declared(TypeSymbol name) {
         return symbols.declarations().declaration(name.key()) instanceof Hir.Data data ? data : null;
@@ -609,7 +587,6 @@ public final class FixtureReader {
         return true;
     }
 
-
     /** Whether a type is one whose values have no parts, so a value of it is settled by the one value
      *  standing there and a decoder for it reads no position but its own. */
     private static boolean scalar(Type type) {
@@ -617,9 +594,6 @@ public final class FixtureReader {
         return open instanceof Type.Prim
                 || (open instanceof Type.Ref r && r.name().isPrimitive());
     }
-
-
-
 
     /**
      * What a row wrote, as the value it is, for asking whether two keys are one key.
@@ -704,36 +678,6 @@ public final class FixtureReader {
             return new Asserted.Built(type, fields);
         }
         return new Asserted.Value(structured(live));
-    }
-
-    /**
-     * The value a helper answered with, where a helper answered the whole expectation — written as the
-     * application, or named through the values that stand for it. Null where none did.
-     *
-     * <p>The value itself, not that value read back into the neutral form a fixture is written in. The
-     * neutral form is for what encloses a fixture, and nothing encloses this one: reading it back only to
-     * decode it again asks a decoder to recover what the helper already built, and which case the answer
-     * is — the thing a written construction says and an application does not — is in the value rather
-     * than in the text. So a newtype, a record and a case of a union answered by a helper were all
-     * compared against their own neutral form, and a row that was right was reported as a mismatch
-     * (issue #214).
-     */
-    private Object helperAnswer(Hir.Expr e, Set<String> followed) {
-        return switch (e) {
-            case Hir.Apply c when appliedHelper(c) instanceof Applied helper -> answered(c, helper);
-            case Hir.LetIn let -> helperAnswer(let.body(), followed);
-            // a binding holds what it was bound to; a value stands for the body it was defined as.
-            // A name that denotes a type is a case, and no helper answered it.
-            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Local local -> {
-                Hir.Expr held = bindings.get(local.id());
-                yield held == null ? null : helperAnswer(held, followed);
-            }
-            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.Helper -> {
-                Hir.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
-                yield body == null ? null : helperAnswer(body, followed);
-            }
-            case null, default -> null;
-        };
     }
 
     /** The arm an expected names, as it was written — what a row that names no case of the target is
@@ -1120,8 +1064,6 @@ public final class FixtureReader {
                 yield body == null ? projectedAtItsDeclaredType(v, below)
                         : expanding(denotes, () -> projectTarget(body, admission));
             }
-            case Hir.Apply c when appliedHelper(c) instanceof Applied helper ->
-                    new Projected.Live(answered(c, helper), c.written());
             default -> projectedAtItsDeclaredType(e, below);
         };
     }
@@ -1368,7 +1310,6 @@ public final class FixtureReader {
             case Hir.NewData nd when nd.typeName().answered() != null ->
                     new Stated.Name(nd.typeName().answered().type());
             case Hir.Var v -> statedByName(v);
-            case Hir.Apply c when appliedHelper(c) != null -> ELSEWHERE;
             case Hir.Apply c when constructsANewtype(c) -> caseNamed(constructs(c));
             // `Date("…")` is a temporal, and `Set.fromList([…])` a collection: values under no name.
             case Hir.Apply c when c.answered() != null
@@ -1595,7 +1536,7 @@ public final class FixtureReader {
      * What a name stands for: a binding in force, or the body a value — a {@code let} with no parameter
      * list — was defined as. Null where the name is neither.
      *
-     * <p>Read from the table {@link #helperDef} reads, and from nothing else. That table is the
+     * <p>Read from {@code values}, and from nothing else. That table is the
      * settled representation this whole reading is written against, and what it does not hold is not
      * a value a fixture may read. The written module is not a second way to the same answer: it
      * holds every definition, a behavior's implementation among them, and a behavior taking nothing
@@ -1665,56 +1606,7 @@ public final class FixtureReader {
             }
             return raw(c.args().get(0), at, admission);
         }
-        if (appliedHelper(c) instanceof Applied helper) {
-            return applied(c, helper, at, admission);
-        }
         return newtypeInner(c, at, admission);
-    }
-
-    /**
-     * A helper a fixture applies, and the name this module reached it by.
-     *
-     * <p>The two travel together because the declaration and the method have to be the same helper.
-     * Each was looked up on its own, and each looked up a spelling, so which declaration a fixture
-     * read and which method it ran were two answers that happened to agree.
-     */
-    private record Applied(String reached, Hir.FnDef def) {}
-
-    /** The helper an application applies, or null where the call is not one: a {@code fromList} is the
-     * fixture's own notation for a collection and a newtype application is a construction, so neither is
-     * a helper however it is spelled. Asked wherever an application has to be told from a construction,
-     * so the two readers of a call cannot come to different answers. */
-    private Applied appliedHelper(Hir.Apply c) {
-        if (isFromList(c) || constructsANewtype(c)) {
-            return null;
-        }
-        String reached = helperKey(c);
-        Hir.FnDef helper = reached == null ? null : helperDef(reached);
-        return helper == null ? null : new Applied(reached, helper);
-    }
-
-    /**
-     * The name this fixture looks {@code c}'s callee up by, or null where the call is not one a helper
-     * table may answer at all.
-     *
-     * <p>Two questions, and each is put to the thing that holds the answer. Whether this may be read as
-     * a helper is what the call denotes: a binding holds whatever it was given, a construction and a
-     * checker built-in stand for no declaration, and a behavior is not a helper — so a binding that
-     * shares a helper's spelling is still the binding. Under what name it is then looked up is the
-     * reach name the reference carries, settled at resolution and not worked out again here.
-     */
-    private String helperKey(Hir.Apply c) {
-        if (c.answered() == null) {
-            // what applying something that is not a name leaves, and what a name nothing declares
-            // leaves: neither reaches a declaration for a table to answer about
-            return null;
-        }
-        return switch (c.answered().denotes()) {
-            case ValueName.Helper _, ValueName.Stdlib _ -> c.answered().reaches();
-            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _,
-                    ValueName.Behavior _ -> null;
-            case null -> null;
-        };
     }
 
     /** Whether {@code c} is the collection notation a fixture writes as its elements — asked of what
@@ -1723,120 +1615,6 @@ public final class FixtureReader {
         return c.answered() != null
                 && ("Set.fromList".equals(c.answered().reaches())
                         || "Map.fromList".equals(c.answered().reaches()));
-    }
-
-    /**
-     * The helper a fixture may apply under the reach name {@code reached}, or null where nothing there
-     * is one: a definition written with a parameter list, read from the table that keys what this
-     * module holds — its own, the ones its imports publish, and the ones it took on to emit — as the
-     * emitted method is keyed. The types come from there rather than from the written module because
-     * that table is settled (ADR-0066), and an argument is decoded against the parameter's settled type.
-     *
-     * <p>A library function this module did not take on to emit is not in that table — one it did take
-     * on is there like any other — so where the table misses, the library itself is asked. Both
-     * readings answer the same question, which is what the declaration says a call to it takes.
-     *
-     * <p>Asked with what the call reaches and never with what it spells. An import lets a library name
-     * be written without its qualifier and nothing rewrites that spelling — the pass that writes
-     * imported names qualified reads what a name denotes, and a library name denotes something else —
-     * so a table keyed by reach names misses on it, silently, and the row is reported as having named
-     * a construction it cannot make.
-     */
-    private Hir.FnDef helperDef(String reached) {
-        Hir.FnDef helper = values.get(reached);
-        if (helper == null) {
-            // A library function this module did not take on to emit is written into no module, so
-            // the table above misses on it. Its declaration is what says whether a fixture may apply
-            // it — the arity it takes, whether a call has to settle one of its types — and that is the
-            // same question here as for a helper written in the module. Read from the library rather
-            // than answered by the table's silence (#680).
-            Prelude.PreludeEntry entry = Prelude.entry(reached);
-            helper = entry == null ? null : entry.declaration();
-        }
-        return helper != null && !helper.params().isEmpty() ? helper : null;
-    }
-
-    /** Whether the helper {@code reached} names is a function this example cannot run: nothing emitted
-     * a method for it. A helper that has one is applied; the one that never does is a helper whose body
-     * produces a function, and that reads as this. The reach name for the reason {@link #helperDef}
-     * takes one: this module's fns are keyed by the names it reaches them by. */
-    private boolean noMethod(String reached) {
-        for (souther.compiler.check.Desugared.Fn fn : module.fns()) {
-            if (fn.name().equals(reached) && !fn.read().params().isEmpty()) {
-                return true;
-            }
-        }
-        for (Hir.FnDef fn : module.takenOn()) {
-            if (fn.name().equals(reached) && !fn.params().isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * A helper applied inside a fixture: it is run, and the value it returns is re-materialised into the
-     * neutral form a fixture is written in — so what encloses the call goes on being built the one way,
-     * a field of a record and an element of a list alike. An application that encloses nothing is
-     * {@link #helperAnswer}: there the value itself is what the row asserts.
-     */
-    private Object applied(Hir.Apply c, Applied helper, Position at, Admission admission) {
-        Object answer = answered(c, helper);
-        // Before the value becomes a form. A neutral form is what its position reads, so a `Long`
-        // read as an `Amount` is a form nothing can tell from the one `Amount(1)` writes — which is
-        // the whole of what this holds the helper to.
-        if (admission == Admission.HELD) {
-            admitBuilt(answer, at, c.written());
-        }
-        return neutral.of(answer, at, answeredBy(c.written()));
-    }
-
-    /** What a message calls the value a helper answered with. */
-    private static String answeredBy(String helper) {
-        return "the value `" + helper + "` answered with";
-    }
-
-    /**
-     * The value a helper answers with, run as the method its module emits.
-     *
-     * <p>What the row applies is one instance of the declaration, settled from the arguments the row
-     * wrote ({@link FixtureApplication}). Its arguments are then fixtures built against that
-     * instance's parameter types — a `List<Int>` where the declaration wrote `List<'a>` — so an
-     * argument breaking one of those types' invariants is reported as the fixture it is.
-     */
-    private Object answered(Hir.Apply c, Applied helper) {
-        FixtureApplication.SettledCall settled = settled(c, helper);
-        List<Type> params = settled.params();
-        Object[] args = new Object[params.size()];
-        for (int i = 0; i < args.length; i++) {
-            args[i] = built(c.args().get(i), params.get(i));
-        }
-        return helpers.invoke(helper.reached(), FixtureCallable.resolve(settled).method(), args);
-    }
-
-    /**
-     * The one instance of {@code helper} that {@code c} applies, or the reason the call determines
-     * none.
-     *
-     * <p>The reason is the call's, not the declaration's. A helper being written with type variables
-     * is what lets a call have several instances; what a row is refused for is the variable its own
-     * arguments left open, which is the thing whoever wrote the row can do something about.
-     */
-    private FixtureApplication.SettledCall settled(Hir.Apply c, Applied helper) {
-        return switch (FixtureApplication.settle(helper.reached(), helper.def(),
-                FixtureArgumentTypes.of(c, evidence()), symbols)) {
-            case FixtureApplication.Settled(FixtureApplication.SettledCall call) -> call;
-            case FixtureApplication.Miscalled(int written, int declared) ->
-                    throw new FixtureException("`" + c.written() + "` takes " + declared
-                            + " argument(s) but is called with " + written);
-            case FixtureApplication.Undeclared(String parameter) ->
-                    throw new FixtureException("`" + c.written() + "` parameter `" + parameter
-                            + "` has no type a fixture can be built against");
-            case FixtureApplication.Open(Type.Var variable) ->
-                    throw new FixtureException("`" + c.written() + "` leaves " + Type.show(variable)
-                            + " open: a fixture applies the one instance the arguments it wrote"
-                            + " settle, and nothing written here settles this one");
-        };
     }
 
     private Object newtypeInner(Hir.Apply c, Position at, Admission admission) {
@@ -1851,13 +1629,6 @@ public final class FixtureReader {
             return CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt());
         }
         if (!constructsANewtype(c)) {
-            String reached = helperKey(c);
-            if (reached != null && noMethod(reached)) {
-                // A function this module cannot run: a helper whose body produces a function, which
-                // nothing emitted a method for. Said as that, so the rule that a fixture may apply a
-                // helper does not appear to have exceptions nothing explains (ADR-0077).
-                throw FixtureException.cannotBeCalled(c.written());
-            }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
         TypeSymbol built = constructs(c);

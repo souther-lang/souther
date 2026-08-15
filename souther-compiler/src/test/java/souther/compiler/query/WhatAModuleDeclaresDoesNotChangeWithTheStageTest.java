@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.Compiler;
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.meta.ModulePath;
@@ -14,7 +15,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -107,31 +108,46 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
     }
 
     /**
-     * Which of the two a fn is in is what the declaration says of it, at every stage.
+     * Which of the two a fn is in is what the fn says of itself, at every stage.
      *
-     * <p>Asked of {@link Hir.FnDef#declaredBy} and not of the names. A reach name carries a dot and a
-     * source identifier cannot, so the two key sets never meet whatever the components hold — a test
-     * written over the names would pass however wrongly a pass filed one.
+     * <p>Asked of {@link Hir.FnDef#declaredBy} and {@link Hir.FnDef#role}, not of the names. A reach
+     * name carries a dot and a source identifier cannot, so the two key sets never meet whatever the
+     * components hold — a test written over the names would pass however wrongly a pass filed one.
+     *
+     * <p>Two things are taken on and only one of them is another module's. A method minted for a
+     * row's operand is emitted into this module's own program and is declared by it, so the
+     * declaring module does not tell that one from a declaration; what it is does.
      */
     @Test
-    void eachComponentHoldsWhatItsNameSays() {
+    void eachComponentHoldsWhatItsFnsSayTheyAre() {
         Db db = db();
         stagesOf(db, "app").forEach((stage, module) -> {
-            module.fns().forEach(fn -> assertTrue(fn.declaredBy("app"),
-                    "the " + stage + " tree of `app` has `" + fn.name() + "` among its declarations,"
-                            + " and " + fn.declaredIn() + " declared it"));
-            module.takenOn().forEach(fn -> assertFalse(fn.declaredBy("app"),
-                    "the " + stage + " tree of `app` took on `" + fn.name() + "`, which it declared"));
+            module.fns().forEach(fn -> {
+                assertTrue(fn.declaredBy("app"),
+                        "the " + stage + " tree of `app` has `" + fn.name() + "` among its"
+                                + " declarations, and " + fn.declaredIn() + " declared it");
+                assertInstanceOf(DefinitionRole.Ordinary.class, fn.role(),
+                        "the " + stage + " tree of `app` declares `" + fn.name() + "`");
+            });
+            module.takenOn().forEach(fn -> assertTrue(
+                    !fn.declaredBy("app") || fn.role() instanceof DefinitionRole.RowValue,
+                    "the " + stage + " tree of `app` took on `" + fn.name() + "`, which it declared"
+                            + " and which is not one of its rows' values"));
         });
     }
 
     /**
-     * A row applies a published helper that does not recurse. It is taken on for that reason alone —
-     * a row runs a helper rather than expanding it (ADR-0077) — so what a module takes on is not only
-     * what it reaches recursively, and a component holding only the recursive ones would drop it.
+     * What a module takes on is a method per row operand, and the helper the row names is not among
+     * them: the operand is a definition of this module and the call in it is expanded into it, the
+     * way a call in a body is.
+     *
+     * <p>The two are told apart by what each was made as. A row's method is declared by this module
+     * and is no {@code let} anybody wrote, so {@link Hir.FnDef#declaredIn} does not separate it from
+     * a declaration and the shape of its name does not separate it from a definition another module
+     * wrote — which is the confusion this axis exists to remove.
      */
     @Test
-    void aHelperOnlyARowAppliesIsTakenOnToo() {
+    void whatIsTakenOnForARowIsTheRowsOwnMethodAndNotTheHelperItNames() {
         Db db = Compilation.ofDocuments(Map.of("rules.sou", """
                 module rules exposing ( doubled )
 
@@ -155,19 +171,22 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
         Hir.Module prepared = state.tree();
         // `run` implements a behavior, which is not a helper and is lowered on its own.
         assertEquals(Set.of(), HelperInliner.helpersOf(prepared).keySet());
-        // The module also takes on a method per row operand — the row's input and its expected value
-        // each run as one — so the expected set is read off the correspondence the preparation
-        // constructed, not spelled here.
+        // A method per row operand — the row's input and its expected value each run as one — read
+        // off the correspondence the preparation constructed rather than spelled here.
         Set<String> rowMethods = Set.copyOf(state.operandMethods().values());
         assertEquals(2, rowMethods.size(), "one input and one expectation, each emitted for the row");
-        Set<String> takenOn = new java.util.LinkedHashSet<>(rowMethods);
-        takenOn.add("rules.doubled");
-        assertEquals(takenOn, HelperInliner.takenOnBy(prepared).keySet());
+        assertEquals(rowMethods, HelperInliner.takenOnBy(prepared).keySet(),
+                "`rules.doubled` is expanded into the operand, not taken on beside it");
         assertEquals(Set.of(), db.ask(new Bodies.RecursiveHelpers("app")).value(),
-                "nothing here recurses, so this is the row's doing and not a recursion's");
-        assertEquals(takenOn,
+                "and nothing here recurses, so nothing else needs a method");
+        assertEquals(rowMethods,
                 db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()
                         .map(Hir.FnDef::name).collect(java.util.stream.Collectors.toSet()));
+        // Each of them says what it is. The declaration cannot: this module is what declared them.
+        HelperInliner.takenOnBy(prepared).values().forEach(fn -> {
+            assertTrue(fn.declaredBy("app"), fn.name() + " is emitted into `app`'s own program");
+            assertInstanceOf(DefinitionRole.RowValue.class, fn.role(), fn.name());
+        });
     }
 
     /**
