@@ -73,28 +73,52 @@ public sealed interface DiagnosticPlace {
      * coordinate's own provenance. A copy spliced into a caller answers yes to the first and stands
      * in all the same, which is why the first cannot be read off the second.
      *
-     * @throws IllegalArgumentException where the region names no source and its coordinate says the
-     *         code is written at it. That is a position somebody made by hand and did not place, and
-     *         it used to mean "read it in the diagnostic's file" — a reading that made this defect
-     *         possible and is gone. A caller reaching here has a place to name and has not named it
+     * @throws NotAPlace where there is no region, where it has no ends, or where it names no source
+     *         and its coordinate says the code is written at it. The last is a position somebody made
+     *         by hand and did not place, and it used to mean "read it in the diagnostic's file" — a
+     *         reading that made this defect possible and is gone
+     * @throws NotOnePlace where the ends were read from two sources
      */
     static DiagnosticPlace of(Region region) {
-        Objects.requireNonNull(region, "a label points at a region");
+        if (region == null) {
+            throw new NotAPlace("a label is about a region and was given none");
+        }
         SourcePos start = region.start();
         SourcePos end = region.end();
-        if (start != null && end != null
-                && !Objects.equals(start.sourceId(), end.sourceId())) {
+        if (start == null || end == null) {
+            throw new NotAPlace("a region a label is about has two ends: " + region);
+        }
+        if (!Objects.equals(start.sourceId(), end.sourceId())) {
             throw new NotOnePlace(start.sourceId(), end.sourceId());
         }
-        if (start != null && start.sourceId() != null) {
+        if (start.sourceId() != null) {
             return new InSource(start.sourceId(), region);
         }
-        if (start != null && Citation.of(start) instanceof Citation.OutOfSight out) {
+        if (Citation.of(start) instanceof Citation.OutOfSight out) {
             return new Unavailable(out.provenance());
         }
-        throw new IllegalArgumentException(
+        throw new NotAPlace(
                 "a region naming no source is a place nobody settled, and a report may not settle it"
                         + " from where it happens to be shown: " + region);
+    }
+
+    /**
+     * A region that is no place: none at all, one with an end missing, or one nobody placed.
+     *
+     * <p>Marked like {@link NotOnePlace}, and for the reason that type gives. What raises one of
+     * these runs inside an analysis that falls open, and a refusal that arrived as an ordinary
+     * {@link IllegalArgumentException} would be swallowed there — turning a label this could not
+     * place into a whole subject reported as having nothing wrong with it, which is what a subject
+     * that passed looks like. Dropping one label was the old behaviour and was already the defect;
+     * dropping the analysis around it is worse.
+     */
+    final class NotAPlace extends IllegalArgumentException implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        NotAPlace(String message) {
+            super(message);
+        }
     }
 
     /**

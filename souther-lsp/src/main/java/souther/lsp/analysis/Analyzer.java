@@ -1927,6 +1927,11 @@ public final class Analyzer {
         // location, and there is no location — the clause is in a module this workspace has no file
         // for. It used to be given `publishedUri` and the numbers it was read at, which made a link
         // the author could follow into an unrelated line of their own file.
+        //
+        // What an unlabelled related entry says stays the message as it was. Those sentences are
+        // about code somewhere else, and an entry that borrowed them would show them as the note on
+        // a location they say nothing about.
+        String aboutTheDiagnostic = message;
         for (LabeledRegion label : view.unquotable()) {
             message = message + " " + DiagnosticRenderer.saidAbout(label,
                     (DiagnosticPlace.Unavailable) label.place(), EDITOR_LANGUAGE);
@@ -1942,7 +1947,7 @@ public final class Analyzer {
                             ? DiagnosticRenderer.qualified(
                                     Messages.render(other.said(), EDITOR_LANGUAGE),
                                     other.region().start(), EDITOR_LANGUAGE)
-                            : message));
+                            : aboutTheDiagnostic));
         }
         Range range = view.anchor().region() != null
                 ? rangeOfRegion(view.anchor().region())

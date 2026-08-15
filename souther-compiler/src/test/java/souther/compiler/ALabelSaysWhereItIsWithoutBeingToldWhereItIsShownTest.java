@@ -53,6 +53,15 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
                 invariant atLeastOne = value >= 1
             """;
 
+    /** The same, with two clauses — two things to say and one place to say them about. */
+    private static final String DECLARING_TWO = """
+            module lib.rule exposing ( Code )
+
+            data Code = Int
+                invariant atLeastOne = value >= 1
+                invariant atMostTen = value <= 10
+            """;
+
     private static final String IN_ONE_COMPILE = """
             module app.own exposing ( mk )
 
@@ -105,6 +114,29 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
                 () -> "the clause is quoted: " + out);
     }
 
+    /**
+     * Two clauses of one module out of sight are one label, not the same sentence twice.
+     *
+     * <p>A label is a sentence about a place, and where there is nothing to point at the place is
+     * the whole of what a label has: what told two of them apart was the caret. Said once per clause
+     * they come out identical, which reads as a repeat rather than as two clauses. Which clauses
+     * they are is in the message, which names them.
+     */
+    @Test
+    void twoClausesOfOneModuleOutOfSightAreSaidOnce() {
+        Compilation c = Compilation.ofSources(List.of(CONSTRUCTING),
+                Compiler.compile(DECLARING_TWO)::get);
+        c.answerEverything();
+        Diagnostic d = theWarning(c);
+
+        assertEquals(1, d.secondary().size(),
+                () -> "one place, said once: " + d.secondary());
+        assertTrue(d.values().toString().contains("atLeastOne"),
+                () -> "and both clauses are named in the message: " + d.values());
+        assertTrue(d.values().toString().contains("atMostTen"),
+                () -> "and both clauses are named in the message: " + d.values());
+    }
+
     // --- acceptance 3: told apart by what the label carries -------------------------------------
 
     /**
@@ -123,6 +155,17 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
         assertThrowsIllegalArgument(() -> building.secondary(
                 souther.compiler.diag.Region.ofWidth(new souther.compiler.diag.SourcePos(3, 3), 4),
                 new souther.compiler.diag.msg.NameMessage.WriteItOnItsOwn("x")));
+    }
+
+    /** And a region with an end missing is refused where it is made a place, rather than reaching
+     *  a renderer and failing there. */
+    @Test
+    void aRegionWithNoEndIsRefusedWhereItIsMadeAPlace() {
+        org.junit.jupiter.api.Assertions.assertThrows(DiagnosticPlace.NotAPlace.class,
+                () -> DiagnosticPlace.of(new souther.compiler.diag.Region(
+                        new souther.compiler.diag.SourcePos(3, 3, "0"), null)));
+        org.junit.jupiter.api.Assertions.assertThrows(DiagnosticPlace.NotAPlace.class,
+                () -> DiagnosticPlace.of(null));
     }
 
     /** A report is said where its labels can be read, and a label nobody can be sent to adds no

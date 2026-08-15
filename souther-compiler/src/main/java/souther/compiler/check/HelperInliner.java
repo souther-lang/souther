@@ -1832,10 +1832,15 @@ public final class HelperInliner {
      * wrote is in the caller's file, and one written in a body from elsewhere was given the call site
      * when that body was copied. Either way its positions are the ones already decided for the body
      * holding it, and asking again would answer about the wrong thing.
+     *
+     * <p>Nor is a declaration with no position of its own — one the compiler minted rather than read.
+     * It carries no provenance to read, so there is nothing to say about where its body came from,
+     * and a copy of it keeps whatever positions it has.
      */
     private WrittenAt whereTheBodyIs(Hir.Apply call, Hir.FnDef helper) {
         if (call.answered() == null
                 || call.answered().denotes() instanceof ValueName.Local
+                || helper.pos() == null
                 || !helper.pos().isOutOfSight()) {
             return WrittenAt.HERE;
         }

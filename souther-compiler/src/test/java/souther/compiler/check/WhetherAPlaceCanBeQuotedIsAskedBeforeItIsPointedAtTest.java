@@ -107,6 +107,15 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
      * two layers and one question ({@code TheCompilerDisagreesWithItself}).
      */
     @Test
+    void aRefusalToPlaceARegionIsNotSomethingTheCheckMayGiveUpOn() {
+        DiagnosticPlace.NotAPlace refused = assertThrows(DiagnosticPlace.NotAPlace.class,
+                () -> DiagnosticPlace.of(in(null)));
+
+        assertThrows(DiagnosticPlace.NotAPlace.class,
+                () -> InvariantChecker.gaveUp("a test", refused));
+    }
+
+    @Test
     void aRegionThatIsNotOnePlaceIsNotSomethingTheCheckMayGiveUpOn() {
         DiagnosticPlace.NotOnePlace broken = assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(new SourcePos(1, 1, "a.sou"),

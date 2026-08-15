@@ -1789,7 +1789,17 @@ public final class InvariantChecker {
             Diagnostic.Builder said, SourcePos at, SequencedMap<Clause.Id, Clause> clauses,
             M label) {
         said.at(at);
+        // One label per place, and the clauses are what there are several of. A label is a sentence
+        // about a place, and where two clauses are written in one module this compile has no file
+        // for, the place is all either of them has: what told the two labels apart was the caret,
+        // and there is no caret. Said once each they come out as the same sentence twice, which
+        // reads as a repeat rather than as two clauses. Which clauses they are is in the message,
+        // which names them.
+        java.util.Set<souther.compiler.diag.DiagnosticPlace> already = new java.util.LinkedHashSet<>();
         Judgment.pointsTo(clauses).forEach(place -> {
+            if (!already.add(place)) {
+                return;
+            }
             switch (place) {
                 case souther.compiler.diag.DiagnosticPlace.InSource in ->
                         said.secondary(in.region(), label);
