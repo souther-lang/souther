@@ -437,13 +437,6 @@ final class Predicates {
         if (under != null) {
             return assumeCond(under, k, at, !positive);
         }
-        // A condition no case of what it is written over can satisfy is one this branch is never
-        // entered under, however little is known of the call itself. Asked of what held on the way
-        // in, before any of the condition is taken as holding, and asked here rather than left to
-        // the construction below: a value the program never builds is not one to report about.
-        if (noCaseSatisfies(cond, k, at, positive)) {
-            return k.reachingNothing();
-        }
         Known out = k;
         // What holds of the sizes the condition names, and of what the operations in it answer,
         // whichever way the condition itself is read.
@@ -454,6 +447,15 @@ final class Predicates {
             // A size is never negative whether or not the condition holds, so this holds of the value
             // and not of the path — the condition is only where the container got named.
             out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
+        }
+        // A condition no case of what it is written over can satisfy is one this branch is never
+        // entered under, and a value the program never builds is not one to report about. Asked of
+        // everything the condition itself established and not only of what held on the way in: a
+        // size and what an operation answers hold of the value however the condition comes out, and
+        // a case read without them is one this would call reachable where the construction below,
+        // which is handed the same facts, would not.
+        if (noCaseSatisfies(cond, out, at, positive)) {
+            return out.reachingNothing();
         }
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());

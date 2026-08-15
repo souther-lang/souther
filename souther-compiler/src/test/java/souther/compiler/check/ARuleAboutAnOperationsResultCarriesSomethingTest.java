@@ -1,6 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.Compiler;
+import souther.compiler.check.InvariantChecker.GaveUp;
+import souther.compiler.check.InvariantChecker.Said;
+import souther.compiler.check.InvariantChecker.Verdict;
 import souther.compiler.diag.Severity;
 
 import org.junit.jupiter.api.Test;
@@ -195,9 +198,12 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
                 .collect(Collectors.toCollection(TreeSet::new));
     }
 
+    /** One program per row, counted: a table gaining a second bound for an operation it already has
+     * a program for fails this until the new end gets one of its own. */
     @Test
     void everyBoundHasAConstructionThatFiresIt() {
-        assertEquals(new TreeSet<>(DischargeRules.boundedNames()), namesOf(BOUNDED));
+        assertEquals(DischargeRules.boundedRows().stream().sorted().toList(),
+                BOUNDED.stream().map(Discharges::operation).sorted().toList());
     }
 
     @Test
@@ -215,6 +221,15 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
         assertEquals(new TreeSet<>(DischargeRules.formNames()), namesOf(READ_AS_THEIR_ARGUMENT));
     }
 
+    /**
+     * Each program, read for what the check actually did rather than for what it did not say.
+     *
+     * <p>An analysis that fell over reports nothing, and a construction that discharged reports
+     * nothing, and the two are one silence at the boundary ({@link InvariantChecker#GAVE_UP}). So a
+     * program is held to three things: nothing was given up on, a construction was reached at all,
+     * and every construction reached came out proven. Counting warnings alone would pass on a rule
+     * that threw on its first call.
+     */
     @Test
     void eachRuleDischargesWhatItsProgramNeeds() {
         List<String> carriedNothing = new ArrayList<>();
@@ -223,10 +238,28 @@ class ARuleAboutAnOperationsResultCarriesSomethingTest {
         all.addAll(SHIFTING);
         all.addAll(READ_AS_THEIR_ARGUMENT);
         for (Discharges one : all) {
-            long warnings = Compiler.compileWithWarnings(one.module()).warnings().stream()
-                    .filter(d -> d.severity() == Severity.WARNING).count();
-            if (warnings > 0) {
-                carriedNothing.add(one.operation());
+            List<Said> said = new ArrayList<>();
+            List<GaveUp> gaveUp = new ArrayList<>();
+            InvariantChecker.WATCHING = said;
+            InvariantChecker.GAVE_UP = gaveUp;
+            long warnings;
+            try {
+                warnings = Compiler.compileWithWarnings(one.module()).warnings().stream()
+                        .filter(d -> d.severity() == Severity.WARNING).count();
+            } finally {
+                InvariantChecker.WATCHING = null;
+                InvariantChecker.GAVE_UP = null;
+            }
+            if (!gaveUp.isEmpty()) {
+                carriedNothing.add(one.operation() + " — the analysis stopped at "
+                        + gaveUp.get(0).where() + ": " + gaveUp.get(0).why());
+            } else if (said.isEmpty()) {
+                carriedNothing.add(one.operation() + " — no construction was reached");
+            } else if (!said.stream().allMatch(s -> s.verdict() == Verdict.PROVED)) {
+                carriedNothing.add(one.operation() + " — " + said.stream()
+                        .map(s -> s.type() + " " + s.verdict()).toList());
+            } else if (warnings > 0) {
+                carriedNothing.add(one.operation() + " — " + warnings + " warnings");
             }
         }
         assertEquals(List.of(), carriedNothing,

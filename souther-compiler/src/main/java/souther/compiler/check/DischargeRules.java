@@ -864,12 +864,19 @@ final class DischargeRules {
         return e instanceof Core.PreservedCall call ? Bound.CHOICES.get(call.operation()) : null;
     }
 
-    /** Those of them the bounding table has, by name, for the test that holds each to a construction
-     * it discharges. */
-    static Set<String> boundedNames() {
-        Set<String> names = new LinkedHashSet<>();
-        boundedOperations().forEach(operation -> names.add(operation.toString()));
-        return names;
+    /**
+     * The bounding table's rows, by the name of the operation each is about — one entry per row, so
+     * an operation bounded at both ends appears twice.
+     *
+     * <p>For the test that holds each row to a construction it discharges. By row and not by
+     * operation: one program needs one of an operation's rows, so a set of names would be satisfied
+     * by a rule that had been written for one end and never fired for the other.
+     */
+    static List<String> boundedRows() {
+        List<String> rows = new ArrayList<>();
+        Bound.BOUNDS.forEach((operation, bounds) ->
+                bounds.forEach(bound -> rows.add(operation.toString())));
+        return rows;
     }
 
     /**

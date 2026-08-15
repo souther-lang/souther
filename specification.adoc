@@ -1570,6 +1570,8 @@ let score (raw) = Pct(Int.clamp(0, 100, raw)) // discharged: every case is insid
 
 A case is reached where its condition, the equality saying the call answered that argument, and what the path already establishes can hold at once. What the path knows can put a case out of reach: a value the guards put above four and below six is neither below zero nor above ten, so `+Int.clamp(0, 10, n)+` answers `+n+` and the clause is read there and nowhere else.
 
+A clause reads one such operation. Where it names two — `+Int.min(a, b) + Int.min(c, d) >= 0+` — the cases are not multiplied out, and the clause is left to the run-time check however much is known of the four arguments.
+
 Over the cases that are reached, the clause is established where every one of them establishes it and refused where every one of them refuses it — `+AboveTen(Int.min(0, x))+` is neither of two numbers above ten, and is reported as a violation the values decide. Where no case is reached at all the guards cannot all hold, and this says nothing: a value the program never builds establishes nothing, and what a guard said about the call itself is what answers there.
 
 *A shift stated through a measure.* An operation that moves a value by an amount says how far through the operation that counts two such values apart, which is what an invariant over a pair of them is written in.

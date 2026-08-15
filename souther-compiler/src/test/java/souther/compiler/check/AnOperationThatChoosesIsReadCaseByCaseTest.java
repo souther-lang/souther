@@ -204,6 +204,39 @@ class AnOperationThatChoosesIsReadCaseByCaseTest {
                 """));
     }
 
+    /**
+     * A guard is read against everything the condition itself establishes, not only against what
+     * held on the way in. Neither absolute value is negative, so neither of the two the smaller of
+     * them can be is either, and the guard asking for one below zero is never taken. Reading the
+     * cases before what the operations under them answer would call both cases reachable, and the
+     * construction beyond a guard that cannot hold would be reported.
+     */
+    @Test
+    void aGuardIsReadAgainstWhatTheOperationsInsideItAnswer() {
+        assertEquals(List.of(), codesOf(TYPES + """
+                behavior nearest : (a: Int, b: Int) -> NonNeg | Bad constructs NonNeg, Bad
+                let nearest (a, b) = {
+                    guard Int.min(Int.abs(a), Int.abs(b)) < 0
+                        else Bad
+                    NonNeg(Int.min(Int.abs(a), Int.abs(b)))
+                }
+                """));
+    }
+
+    /** The same for what a size answers, which is known the same way and read at the same point. */
+    @Test
+    void aGuardIsReadAgainstTheSizesInsideItToo() {
+        assertEquals(List.of(), codesOf(TYPES + """
+                behavior shorter : (xs: List<Int>, ys: List<Int>) -> NonNeg | Bad
+                    constructs NonNeg, Bad
+                let shorter (xs, ys) = {
+                    guard Int.min(List.length(xs), List.length(ys)) < 0
+                        else Bad
+                    NonNeg(Int.min(List.length(xs), List.length(ys)))
+                }
+                """));
+    }
+
     @Test
     void aChoiceEveryCaseOfWhichFailsIsRefused() {
         String module = TYPES + """
