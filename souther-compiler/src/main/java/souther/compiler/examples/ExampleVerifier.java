@@ -308,9 +308,14 @@ public final class ExampleVerifier {
      * Whether a behavior of {@code module} has no implementation to run — an injected one (spec
      * {@code injected-behavior}).
      *
-     * <p>Asked here by the row evaluation and by the adequacy report, which decides what it can measure
-     * from the same answer. Two statements of it would let a report say a behavior is implemented while
-     * its rows are being recorded rather than run.
+     * <p>Asked here by the row evaluation and by the adequacy report, which says of each behavior
+     * which of the two it is. Two statements of it would let a report say a behavior is implemented
+     * while its rows are being recorded rather than run.
+     *
+     * <p>This is how the behavior is written, and it answers no question about what a run saw. What
+     * the rows observed is theirs to say ({@code OutputCaseEvidence}), and a measure decided from
+     * here would be a measure that stops being right as soon as something other than this compile
+     * can apply a behavior.
      */
     public static boolean isPending(List<Hir.BehaviorDef> behaviors, Collection<String> defined,
                                     String name) {
