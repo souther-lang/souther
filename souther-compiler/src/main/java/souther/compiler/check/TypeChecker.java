@@ -76,7 +76,7 @@ public final class TypeChecker {
                                        Map<String, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
                                        Map<String, Hir.FnDef> imported, Set<String> settled,
-                                       Set<String> statedReturns) {
+                                       Set<String> statedReturns, Set<String> rowOperands) {
         Elaborated elaborated = new Elaborated();
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
@@ -84,7 +84,7 @@ public final class TypeChecker {
         try {
             checkRecovering(module, symbols, sigs, importedInjected, lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported, settled,
-                    statedReturns);
+                    statedReturns, rowOperands);
         } catch (Unanswerable e) {
             abandoned.add(e);
             stopped = true;
@@ -181,7 +181,8 @@ public final class TypeChecker {
                                         Map<String, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<String, Hir.FnDef> publishedToHere,
-                                        Set<String> settled, Set<String> statedReturns) {
+                                        Set<String> settled, Set<String> statedReturns,
+                                        Set<String> rowOperands) {
         // Both components, because what reads this walks both: a helper is checked whether the module
         // declared it or took it on to emit, and one missing here is a helper checked against a body
         // it does not have.
@@ -396,7 +397,7 @@ public final class TypeChecker {
         // declares, which is the same check every other definition of this module gets. There is
         // nothing left here for a reading of its own to ask.
         collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns,
-                loweredBodies, elaborated, statedReturns));
+                loweredBodies, elaborated, statedReturns, rowOperands));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
         collect(errors, abandoned, () -> TotalityChecker.check(inliner));

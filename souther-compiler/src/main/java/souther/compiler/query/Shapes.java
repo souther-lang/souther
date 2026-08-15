@@ -348,6 +348,12 @@ public final class Shapes {
             Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
             Answer<Symbols> scope = db.ask(new Scope(name));
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            // What each behavior takes and answers with, from the one place that settles it: a
+            // composition's shape is worked out there and nowhere else, and a dependency another
+            // module declares is in it too. Where they could not be made, a row's positions
+            // contribute nothing rather than being guessed at from the forms written here.
+            Answer<Map<String, souther.compiler.check.Sig>> signatures =
+                    db.ask(new Bodies.Signatures(name));
             if (!desugared.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -356,7 +362,8 @@ public final class Shapes {
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
                 return Answer.of(souther.compiler.check.Prepared.prepare(
-                        desugared.value(), scope.value(), published));
+                        desugared.value(), scope.value(), published,
+                        signatures.present() ? signatures.value() : Map.of()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

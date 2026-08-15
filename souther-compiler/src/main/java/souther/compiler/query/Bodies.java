@@ -1215,7 +1215,9 @@ public final class Bodies {
                         injected.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
                         settled,
-                        prepared.present() ? prepared.value().statedReturns() : Set.of());
+                        prepared.present() ? prepared.value().statedReturns() : Set.of(),
+                        prepared.present()
+                                ? Set.copyOf(prepared.value().operandMethods().values()) : Set.of());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

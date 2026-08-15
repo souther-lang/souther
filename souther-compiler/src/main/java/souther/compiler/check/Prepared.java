@@ -67,7 +67,9 @@ public final class Prepared {
      *
      * <p>{@code published} is what the modules this one imports offer it, which is what a row
      * applying one of their helpers is answered from. {@code scope} is what a name in it means,
-     * which is what the definitions are held to after they are rewritten.
+     * which is what the definitions are held to after they are rewritten. {@code signatures} is
+     * what each behavior takes and answers with, which says where a row's values stand — asked of
+     * the one place that settles it rather than read back off the forms this module wrote.
      *
      * <p>The rewriting is done a part at a time, and each part's state is established of what came
      * out rather than carried over it. A definition is handed to
@@ -84,7 +86,8 @@ public final class Prepared {
      * @throws CompileException where a helper this module reaches cannot be read
      */
     public static Prepared prepare(Desugared.Module desugared, Symbols scope,
-                                   Map<String, Hir.FnDef> published) {
+                                   Map<String, Hir.FnDef> published,
+                                   Map<String, Sig> signatures) {
         // An imported definition is written here bare and denotes the module that declares it.
         // Spelling it out, once, settles the name this module reaches it by, which is what the table
         // a call expands against is keyed by and what the method a recursive helper becomes is
@@ -117,7 +120,7 @@ public final class Prepared {
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the module: it is decided here and read wherever a row is run, never counted out again.
-        RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope);
+        RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope, signatures);
         rows.defs().forEach(injected::putIfAbsent);
         // Beside what the module declared, not among it. Both are emitted and only the first was
         // written here, and a reader asking which is which asks the component it is in rather than

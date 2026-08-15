@@ -160,7 +160,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                         + "proves the proposition again of what came out, and refuses where the "
                         + "rewrite would have changed it");
         assertEquals(Set.of("assemble(Module, Map)"), waysInto(Desugared.Module.class));
-        assertEquals(Set.of("prepare(Module, Symbols, Map)"), waysInto(Prepared.class));
+        assertEquals(Set.of("prepare(Module, Symbols, Map, Map)"), waysInto(Prepared.class),
+                "the second map is what each behavior takes and answers with, which the rung that "
+                        + "settles it worked out: a row's positions are read from it rather than "
+                        + "off the forms this module wrote");
         assertEquals(Set.of(), waysInto(Prepared.Rows.class),
                 "an example block is projected from the module it is one of");
         assertEquals(Set.of(), waysInto(Prepared.FakeTable.class),

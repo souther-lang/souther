@@ -50,64 +50,62 @@ public final class RowFixtures {
      * question, and it is not this change's.
      */
     static boolean computesNothing(Placed placed) {
-        return assertsAnArm(placed.operand());
+        return placed.position() instanceof RowPosition.Asserts
+                && assertsAnArm(placed.operand());
     }
 
     /**
      * Every operand a module's rows write, with the position each stands at.
+     *
+     * <p>{@code signatures} is what each behavior takes and answers with, as the one place that
+     * settles it ({@code PipelineSigs}) worked it out: a composition has no parameter list to read
+     * and a dependency another module declares has no declaration here, so a walk over this
+     * module's own {@code behavior} forms answers for neither. Reading the shapes back off the
+     * syntax is the derivation this change exists to remove, one rung further out.
      *
      * <p>The walk, and the only one. What is emitted and what a row runs both come from here, and
      * they come from here together: {@link #emitted} pairs each operand with its method as it goes,
      * so nothing downstream counts the rows a second time. Two counts would be two orders, and a row
      * would run the value beside the one it wrote.
      */
-    public static List<Placed> placed(Hir.Module module) {
-        Map<String, Hir.SpecBehavior> declared = new LinkedHashMap<>();
-        for (Hir.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Hir.SpecBehavior spec) {
-                declared.put(spec.name(), spec);
-            }
-        }
+    public static List<Placed> placed(Hir.Module module, Map<String, Sig> signatures) {
         List<Placed> out = new java.util.ArrayList<>();
         for (Hir.Example ex : module.examples()) {
-            Hir.SpecBehavior sig = declared.get(ex.target());
+            Sig sig = signatures.get(ex.target());
             for (Hir.ExampleRow row : ex.rows()) {
                 for (int i = 0; i < row.inputs().size(); i++) {
                     out.add(new Placed(row.inputs().get(i), supplies(sig, i)));
                 }
                 for (Hir.With w : row.withs()) {
-                    Hir.SpecBehavior dep = declared.get(w.dep());
-                    out.add(new Placed(w.value(), new RowPosition.Supplies(
-                            dep == null ? null : answersWith(dep))));
+                    out.add(new Placed(w.value(),
+                            new RowPosition.Supplies(answersWith(signatures.get(w.dep())))));
                 }
-                out.add(new Placed(row.expected(), new RowPosition.Asserts(
-                        sig == null ? null : answersWith(sig))));
+                out.add(new Placed(row.expected(), new RowPosition.Asserts(answersWith(sig))));
             }
         }
         for (Hir.Fake fake : module.fakes()) {
-            Hir.SpecBehavior sig = declared.get(fake.target());
+            Sig sig = signatures.get(fake.target());
             for (Hir.FakeRow row : fake.rows()) {
                 if (row.inputs() != null) {
                     for (int i = 0; i < row.inputs().size(); i++) {
                         out.add(new Placed(row.inputs().get(i), supplies(sig, i)));
                     }
                 }
-                out.add(new Placed(row.output(), new RowPosition.Supplies(
-                        sig == null ? null : answersWith(sig))));
+                out.add(new Placed(row.output(), new RowPosition.Supplies(answersWith(sig))));
             }
         }
         return out;
     }
 
-    private static RowPosition supplies(Hir.SpecBehavior sig, int i) {
-        return new RowPosition.Supplies(sig == null || i >= sig.params().size() ? null
-                : TypeOps.resolveParamType(sig.params().get(i).type()));
+    /** What a behavior takes at its {@code i}th input, or null where nothing says. */
+    private static RowPosition supplies(Sig sig, int i) {
+        return new RowPosition.Supplies(sig == null || i >= sig.inputTypes().size() ? null
+                : sig.inputTypes().get(i));
     }
 
-    /** What a behavior is declared to answer with, as a type. Read from the declaration the module
-     *  wrote, which is what says where a row's value stands. */
-    private static Type answersWith(Hir.SpecBehavior sig) {
-        return sig.ret() == null ? null : TypeOps.successType(sig.ret());
+    /** What a behavior answers with, as a type, or null where nothing says. */
+    private static Type answersWith(Sig sig) {
+        return sig == null ? null : sig.outputType();
     }
 
     /**
@@ -130,11 +128,12 @@ public final class RowFixtures {
      * <p>An expectation written as a bare case name has none: it asserts which arm the behavior
      * answered with and nothing under it, so there is no value to compute and nothing to emit.
      */
-    public static Emitted emitted(Hir.Module module, Symbols symbols) {
+    public static Emitted emitted(Hir.Module module, Symbols symbols,
+                                  Map<String, Sig> signatures) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         Map<Hir.Expr, String> methods = new java.util.IdentityHashMap<>();
         java.util.Set<String> stated = new java.util.LinkedHashSet<>();
-        List<Placed> placed = placed(module);
+        List<Placed> placed = placed(module, signatures);
         for (int i = 0; i < placed.size(); i++) {
             Hir.Expr operand = placed.get(i).operand();
             RowPosition position = placed.get(i).position();
