@@ -56,7 +56,7 @@ public final class JsonRenderer implements DiagnosticRenderer {
                 s.put("region", region(other.region()));
                 s.put("label", DiagnosticRenderer.qualified(
                         Messages.render(other.said(), locale),
-                        other.region() == null ? null : other.region().start(), locale));
+                        other.region().start(), locale));
                 // A label is a message like the line above it and carries values of its own — the
                 // type an operand has, the clause a construction reaches — so a tool reads them by
                 // name here too. Written for one of the three and not the others is how a reader of

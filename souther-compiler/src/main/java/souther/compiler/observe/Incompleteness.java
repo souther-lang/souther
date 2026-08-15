@@ -2,6 +2,7 @@ package souther.compiler.observe;
 
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 
 import java.util.List;
@@ -134,9 +135,12 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
     }
 
-    public static Incompleteness at(Code code, Scope scope, String subject, SourceRef where) {
+    /** A reason about a place. The coordinate and not a reference over one: a reference holds a
+     *  source beside the one the coordinate has, this reads the coordinate's, and a signature that
+     *  still asked for the pair would let a caller write a half nothing reads. */
+    public static Incompleteness at(Code code, Scope scope, String subject, SourcePos where) {
         return new Incompleteness(code, Target.of(scope, subject),
-                Optional.ofNullable(where).map(SourceRef::pos).map(Citation::of));
+                Optional.ofNullable(where).map(Citation::of));
     }
 
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose

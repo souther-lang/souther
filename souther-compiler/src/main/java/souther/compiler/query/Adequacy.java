@@ -430,12 +430,6 @@ public final class Adequacy {
             }
             return Answer.of(Ordered.map(out));
         }
-
-        private static String sourceIdOf(Db db, String module) {
-            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
-        }
-
     }
 
     /**
@@ -1740,11 +1734,20 @@ public final class Adequacy {
                     // Where the rule has a place rather than a name, the place is a second region
                     // and not words in the sentence: a renderer resolves what to call its file,
                     // and a body written out of sight says so off its own coordinate.
+                    //
+                    // Pointed at only where this compile can quote it. A region naming no source is
+                    // resolved against the file the diagnostic is in, so a label on one would sit on
+                    // whatever happens to be at those numbers in a file the code is not in — which
+                    // is the thing this branch is about, and the reason a place is asked before it
+                    // is pointed at rather than after.
                     rule(said).citation().ifPresent(cited -> {
                         souther.compiler.diag.SourceRef where = switch (cited) {
                             case souther.compiler.diag.Citation.Written w -> w.at();
                             case souther.compiler.diag.Citation.OutOfSight o -> o.reachedFrom();
                         };
+                        if (where.sourceId() == null) {
+                            return;
+                        }
                         built.secondaryIn(where.sourceId(),
                                 souther.compiler.diag.Region.point(where.pos()),
                                 new ExampleMessage.TheGuardThatDrawsTheLine());

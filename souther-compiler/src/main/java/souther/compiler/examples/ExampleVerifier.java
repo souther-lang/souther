@@ -150,8 +150,7 @@ public final class ExampleVerifier {
                 // was observed, and a measure that read the empty result as "no row covers this"
                 // would report a gap nobody left.
                 incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
-                        Incompleteness.Scope.BEHAVIOR, ex.target(),
-                        new SourceRef(sourceId, ex.pos())));
+                        Incompleteness.Scope.BEHAVIOR, ex.target(), ex.pos()));
             }
         }
         // A row that could not be decided is read here rather than restated at each place it happens,

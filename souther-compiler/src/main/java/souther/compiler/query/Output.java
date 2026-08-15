@@ -349,11 +349,6 @@ public final class Output {
             return checked == null ? CoverageSites.Plan.NONE
                     : CoverageSites.of(checked.behaviorBodies());
         }
-
-        static String sourceIdOf(Db db, String module) {
-            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
-        }
     }
 
     /**

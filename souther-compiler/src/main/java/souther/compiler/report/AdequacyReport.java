@@ -914,11 +914,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case Citation.Written written -> written.at();
             case Citation.OutOfSight out -> out.reachedFrom();
         };
-        // A place this document points at names a source. Nothing produces one that does
-        // not, and the schema requires the field, so a citation with no source is a
-        // defect to find rather than a document to write.
-        at.put("sourceId", sources.written(java.util.Objects.requireNonNull(
-                ref.sourceId(), "a place a document points at names a source")));
+        at.put("sourceId", sources.written(ref.sourceId()));
         at.put("line", ref.pos().line());
         at.put("column", ref.pos().column());
         ObjectNode writtenAt = at.putObject("writtenAt");
