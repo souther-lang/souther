@@ -115,12 +115,12 @@ public sealed interface FixtureShape {
             case Type.Union u -> throw new FixtureException(
                     "`" + Type.show(u) + "` names several types, and a fixture supplies a value of"
                             + " one; write the case it is");
-            // Not a refusal, and not a sentence to give an author. A variable reaching here would
-            // mean a settled call carried one, which is what `FixtureApplication` answers no to
-            // before anything is built — so this is the compiler disagreeing with itself, and a
-            // diagnostic here would state a rule the language no longer has: that a fixture cannot
-            // apply what a declaration wrote a variable in. It can, at the instance the row settled.
-            // Turning this back into a `FixtureException` would put that rule back.
+            // Not a refusal, and not a sentence to give an author. A row's operand is elaborated
+            // as any body is, so a variable reaching here would mean that elaboration left one open
+            // and emitted anyway — the compiler disagreeing with itself. A diagnostic here would
+            // state a rule the language no longer has: that a fixture cannot apply what a
+            // declaration wrote a variable in. It can, at the instance the row settled. Turning this
+            // back into a `FixtureException` would put that rule back.
             case Type.Var _, Type.MetaVar _ -> throw new IllegalStateException(
                     Type.show(t) + " reached a fixture, which is built at settled types only");
             case Type.Nothing _, Type.Never _, Type.Erroneous _ -> throw new FixtureException(

@@ -409,10 +409,10 @@ final class CodegenContext {
         return typePackage.getOrDefault(behavior, pkg);
     }
 
-    /** The {@code $Fns} method name for a helper the module emits. A module-own helper keeps its bare
-     * name; one reached under a qualified name ({@code List.foldFrom}) has the dot mangled to
-     * {@code $}, since a JVM method name cannot contain a dot. Public because an {@code example} that
-     * applies a helper looks the method up by this name (ADR-0077), and the name is decided here. */
+    /** The {@code $Fns} method name for a definition the module emits. A module-own helper keeps its
+     * bare name; one reached under a qualified name ({@code List.foldFrom}) has the dot mangled to
+     * {@code $}, since a JVM method name cannot contain a dot. Public because an {@code example} run
+     * looks its operand's method up by this name, and the name is decided here. */
     public static String helperMethod(String name) {
         return name.replace('.', '$');
     }

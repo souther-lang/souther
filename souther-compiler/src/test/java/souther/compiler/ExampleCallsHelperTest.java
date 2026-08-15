@@ -370,9 +370,9 @@ class ExampleCallsHelperTest {
     }
 
     /**
-     * A kernel's method is emitted under a name no source can spell, and that name is where the method
-     * went — not what the row applied. A report about a helper that did not answer names the helper,
-     * so the wrapper's address does not reach the author (#680).
+     * A row's operand runs as a method emitted under a name no source can spell, and that name is
+     * where the method went — not what the row wrote. A report about a call that did not answer
+     * names the call, so the method's address does not reach the author (#680).
      */
     @Test
     void aKernelThatDoesNotAnswerIsNamedAsTheKernel() {
@@ -449,9 +449,9 @@ class ExampleCallsHelperTest {
     }
 
     /**
-     * The other thing that reaches the same refusal. A helper whose body produces a function is not a
-     * standard-library function, so it is not told to write the helper it already is — the sentence
-     * this row holds is the one the intrinsic row above must not be given.
+     * A helper whose body produces a function, applied by a row. It is refused by the language's own
+     * rule about where a block may go, and not by a sentence about library functions — which is what
+     * a row that names one must not be told either.
      */
     @Test
     void aHelperWhoseBodyProducesAFunctionIsRefusedByItsOwnReason() {

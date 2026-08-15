@@ -13,17 +13,19 @@ import java.util.Map;
  * denote, and the helpers its artifact must carry taken on as its own definitions.
  *
  * <p>Two things and one reason. A name an import brought in is written qualified because that is the
- * spelling the table a call expands against is keyed by, and a helper is taken on because the class
- * this module emits has to hold a method for it. What is taken on is not one kind of thing: a
- * recursive helper cannot be inlined, and a helper an example row applies is run rather than expanded
- * into the row (ADR-0077). They arrive for different reasons and leave as the same list, because
- * every reader of it — the expansion table, the check, the backend, the fixture reader — wants the
- * same thing of them, which is that the artifact carries them.
+ * spelling the table a call expands against is keyed by, and a definition is taken on because the
+ * class this module emits has to hold a method for it. What is taken on is not one kind of thing: a
+ * recursive helper another module declared, which cannot be inlined into whoever calls it, and a
+ * definition minted here for what a row writes at a position, which has no call site to be inlined
+ * into. They arrive for different reasons and leave as the same list, because every reader of it —
+ * the expansion table, the check, the backend, the fixture reader — wants the same thing of them,
+ * which is that the artifact carries them. Which of the two one is, the definition says
+ * ({@link Hir.FnDef#role}).
  *
  * <p>Scoped to the module and not to an output. The classes are emitted once per module
  * ({@code Output.Classes}), and every example row attached to it — from its own file and from every
- * {@code examples for} file naming it — runs against those classes. So the helpers a row applies are
- * gathered over all of them, and which rows are reported on is a question asked later, by
+ * {@code examples for} file naming it — runs against those classes. So what is emitted for a row is
+ * emitted over all of them, and which rows are reported on is a question asked later, by
  * {@code Output.Examples}, which carries the source file in its key. A state that took one would be
  * pulling an output's concern up into what the module is.
  *
@@ -44,22 +46,18 @@ public final class Prepared {
      *  emission constructed, held so the reader that invokes a method never counts the rows for
      *  itself. Keyed on operand identity, over the very nodes {@link Rows#read} answers with. */
     private final Map<Hir.Expr, String> operandMethods;
-    /** The operand methods whose declared return is the position's contribution and not the
-     *  definition's claim — an expectation's, which a row is free to disagree with. */
-    private final java.util.Set<String> statedReturns;
     /** Worked out once, as the rungs below work theirs out. */
     private volatile Hir.Module projected;
 
     private Prepared(Desugared.Module desugared, List<Desugared.Fn> fns, List<Rows> examples,
                      List<FakeTable> fakes, List<Hir.FnDef> takenOn,
-                     Map<Hir.Expr, String> operandMethods, java.util.Set<String> statedReturns) {
+                     Map<Hir.Expr, String> operandMethods) {
         this.desugared = desugared;
         this.fns = List.copyOf(fns);
         this.examples = List.copyOf(examples);
         this.fakes = List.copyOf(fakes);
         this.takenOn = List.copyOf(takenOn);
         this.operandMethods = operandMethods;
-        this.statedReturns = statedReturns;
     }
 
     /**
@@ -107,16 +105,13 @@ public final class Prepared {
         for (Hir.Fake table : desugared.module().fakes()) {
             fakes.add(new FakeTable(HelperNames.qualifyImportsIn(table, self)));
         }
-        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of(), Map.of(),
-                java.util.Set.of());
+        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of(), Map.of());
         HelperInliner inliner = HelperInliner.forModule(written.module(), published);
+        // What this module emits and did not declare: a recursive helper it reaches, which cannot
+        // be expanded into whoever calls it. A row names no more than a body does — its operands are
+        // definitions of this module and the helpers they call are expanded into them — so a row
+        // adds nothing here beyond the recursion any of its calls reaches.
         Map<String, Hir.FnDef> injected = new LinkedHashMap<>(inliner.injectedRecursiveHelpers());
-        // A helper an example row applies is emitted for that reason (ADR-0077); one this module
-        // does not declare is taken on here, as a recursive one it reaches is.
-        inliner.injectedExampleHelpers().forEach(injected::putIfAbsent);
-        // A kernel a row applies is emitted at the instance the row settled, which is why this is
-        // read off the calls rather than off the helpers a row names.
-        inliner.fixtureKernels(written.module(), scope).forEach(injected::putIfAbsent);
         // What each row operand computes, emitted beside the module's own so a row runs its operand
         // in the program the behavior it is about is applied in. Which method is whose is kept with
         // the module: it is decided here and read wherever a row is run, never counted out again.
@@ -127,7 +122,7 @@ public final class Prepared {
         // the shape of a name.
         return injected.isEmpty() ? written
                 : new Prepared(desugared, fns, examples, fakes, List.copyOf(injected.values()),
-                        rows.methods(), rows.stated());
+                        rows.methods());
     }
 
     /** What the module is called. */
@@ -189,19 +184,6 @@ public final class Prepared {
      */
     public Map<Hir.Expr, String> operandMethods() {
         return operandMethods;
-    }
-
-    /**
-     * The operand methods whose declared return is the position's contribution and not the
-     * definition's claim.
-     *
-     * <p>An expectation's. A row may state what the behavior does not answer with — reporting that
-     * disagreement is what the row is for — so the type its position contributes says what its
-     * notation means and requires nothing of the value. The check that holds a declared return to
-     * the body reads this to know which declarations make no claim to hold.
-     */
-    public java.util.Set<String> statedReturns() {
-        return statedReturns;
     }
 
     /**
@@ -322,9 +304,9 @@ public final class Prepared {
      * The rows an example run reads, and the artifact they are evaluated in.
      *
      * <p>Its own type because that pairing is what an example run needs and neither half is enough:
-     * the rows say what to try and the artifact says what is there to try it against — the helpers
-     * a row applies are methods because this module took them on, and a run that was handed the rows
-     * alone would be looking for them in a class that does not carry them.
+     * the rows say what to try and the artifact says what is there to try it against — a row's
+     * operand is a method because this module emitted one for it, and a run that was handed the rows
+     * alone would be looking for it in a class that does not carry it.
      *
      * <p>What it claims is about its input and not about its outcome. Nothing here says a row
      * agreed with anything; that is what running them answers.

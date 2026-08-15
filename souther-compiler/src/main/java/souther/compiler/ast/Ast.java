@@ -197,12 +197,11 @@ public interface Ast {
      * exposed names carry no signature (their type is at the definition).
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
-     * what the module took on to emit as methods of its own without having declared them, which is
-     * two kinds of helper: a recursive one it reaches, which cannot be inlined and has to be lowered
-     * somewhere, and a non-recursive one an {@code example} row applies, which a row runs rather than
-     * expands (ADR-0077). Either may be declared by the standard library or by a module that
-     * published it. Only {@code fns} is declared here, and no rule reads a name to tell the two apart
-     * — {@code List.foldFrom} is reached under the library's alias and declared in
+     * what the module emits as methods of its own without having written them, which is two kinds of
+     * definition: a recursive helper it reaches, which cannot be inlined and has to be lowered
+     * somewhere, and a definition minted for what a row writes at a position, which has no call site
+     * to be inlined into. Only {@code fns} is declared here, and no rule reads a name to tell them
+     * apart — {@code List.foldFrom} is reached under the library's alias and declared in
      * {@code souther.list}.
      *
      * <p>Two components rather than one list a later pass appends to. Appended, every reader asking

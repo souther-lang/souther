@@ -63,11 +63,12 @@ import java.util.Set;
  * declaration (an input-keyed function dependency). What the fake answers is read here; making it
  * something the behavior can be constructed with is the answerer's ({@link DependencyStandin}).
  * Inputs, expected values, and fake entries are fixtures — literals, newtype constructions, record
- * constructions, and helpers applied to those (ADR-0077).
+ * constructions, and helpers applied to those (ADR-0077), each compiled as a definition of the
+ * module and run as one.
  *
  * <p>Two things a row needs are not here, because they are not about what an example means:
  * {@link FixtureReader} reads what a fixture states as the value it states — through
- * {@link NeutralForm} for the form a decoder reads and {@link HelperInvoker} for a helper run as the
+ * {@link NeutralForm} for the form a decoder reads and {@link OperandRunner} for an operand run as the
  * method its module emits — and {@link RowEvaluation} owns the state one row builds up while it is
  * evaluated.
  *
@@ -391,11 +392,9 @@ public final class ExampleVerifier {
      * the diagnostics it produces are its own list, handed to the caller only when it finishes. A late
      * result is dropped rather than landing among another row's.
      *
-     * <p>One reader for the whole row, and that is what makes the reader the right thing to isolate.
-     * The inputs, the expectation, each {@code with} and every fake table the row resolves are read
-     * through this one — so a row that does not finish inside a fake table's helper is still a row
-     * inside a helper, and the budget can name it ({@link #helper()}). Two readers would have put that
-     * answer where nothing reporting the timeout could see it.
+     * <p>One reader for the whole row. The inputs, the expectation, each {@code with} and every fake
+     * table the row resolves are read through this one, so what a row spent is one row's whatever
+     * part of it was being read.
      */
     private static final class RowEvaluation implements java.util.concurrent.Callable<List<Diagnostic>> {
 
@@ -447,11 +446,6 @@ public final class ExampleVerifier {
                 Probe.end();
             }
             return mine;
-        }
-
-        /** The helper this row is inside, for the budget to name when the row does not finish. */
-        String helper() {
-            return fixtures.runningHelper();
         }
     }
 
@@ -566,9 +560,9 @@ public final class ExampleVerifier {
     }
 
     /**
-     * One row, evaluated within the budget: building its fixtures, running the helpers they apply,
-     * applying the behavior and comparing the result are one evaluation, so a row cannot buy more time
-     * by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
+     * One row, evaluated within the budget: running the methods its operands were emitted as,
+     * applying the behavior and comparing the result are one evaluation, so a row cannot buy more
+     * time by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
      * {@link RowEvaluation} for why the row's own worker must not.
      */
     private void checkRow(ExampleTarget target, Sig sig, Set<TypeSymbol> outCases, Hir.ExampleRow row,
@@ -582,10 +576,6 @@ public final class ExampleVerifier {
                 rows.add(outcomeOf(target, row, evaluation.state));
             }
             case Deadline.Outcome.Overran(Runnable abandon) -> {
-                // Read what the row was doing before abandoning it: giving up interrupts the worker,
-                // which may let it leave the helper it is in, and then the reason would depend on
-                // which thread got there first.
-                String helper = evaluation.helper();
                 // Only what the worker publishes: the rest of its state is still being written. How
                 // far it got is the difference between a fixture's helper that will not stop and a
                 // behavior that will not stop, which is what the author has to know, and what entered
@@ -598,11 +588,8 @@ public final class ExampleVerifier {
                 // put a diagnostic on a model that may be right, and send its author to make
                 // something structural that already is.
                 out.add(Diagnostic.at(row.pos())
-                        .say(helper == null
-                                ? new ExampleMessage.TheEvaluationDidNotAnswer(
-                                        Long.toString(deadline.budgetMs()))
-                                : new ExampleMessage.TheEvaluationDidNotAnswerWhileCalling(
-                                        Long.toString(deadline.budgetMs()), helper))
+                        .say(new ExampleMessage.TheEvaluationDidNotAnswer(
+                                Long.toString(deadline.budgetMs())))
                         .hint(new ExampleMessage.NotAnsweringIsNotNotTerminating()).build());
                 // No spend is read: the worker is still writing to its state, and a count taken
                 // while it runs would be some of what it spent rather than what it spent. That is
@@ -638,9 +625,7 @@ public final class ExampleVerifier {
                     return;
                 }
                 if (cause instanceof StackOverflowError) {
-                    String helper = evaluation.helper();
-                    out.add(stackRanOut(row, helper == null ? "the evaluation overflowed the stack"
-                            : "`" + helper + "` overflowed the stack"));
+                    out.add(stackRanOut(row, "the evaluation overflowed the stack"));
                     evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
                     rows.add(outcomeOf(target, row, evaluation.state));
                     return;

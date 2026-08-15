@@ -1,4 +1,4 @@
-package souther.compiler.check;
+package souther.compiler.ast;
 
 import souther.compiler.types.Type;
 

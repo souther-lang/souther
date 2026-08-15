@@ -199,7 +199,7 @@ final class HelperParams {
                             p.typeFromPattern()));
         }
         return new Hir.FnDef(h.written(), h.declaredIn(), params, h.declaredReturn(), h.body(),
-                h.modifiers(), h.pos());
+                h.modifiers(), h.role(), h.pos());
     }
 
     /**

@@ -330,9 +330,6 @@ public final class HelperInliner {
      */
     private final Set<String> takenOnRecursive = new java.util.LinkedHashSet<>();
 
-    /** The helpers this module's example rows apply, which need a method for that reason alone. */
-    private final Set<String> exampleHelpers = new java.util.LinkedHashSet<>();
-
     /**
      * Walks everything the module writes — its fn bodies, its data invariants, its rows — collecting
      * the recursive helpers it reaches and does not declare. Those it must emit as methods of its own.
@@ -364,9 +361,6 @@ public final class HelperInliner {
                 takenOnRecursive.add(name);
             }
         }
-        exampleHelpers.addAll(exampleHelpers(module, table.reachable()));
-        exampleHelpers.removeAll(takenOnRecursive);
-        exampleHelpers.removeIf(graph::recurses);   // already emitted as a recursive helper
     }
 
     /** Every expression an {@code example} or a {@code fake} of {@code module} writes: a row's inputs,
@@ -392,126 +386,6 @@ public final class HelperInliner {
         }
     }
 
-    /**
-     * The helpers an {@code example} row of {@code module} applies, keyed as {@code table} keys them.
-     *
-     * <p>A row is a fixture and a helper is run rather than expanded into it (ADR-0077), so each of
-     * these needs a method to apply — which is the one reason a non-recursive helper is emitted. What
-     * such a helper reaches is expanded into it before it is emitted, so this is what a row names and
-     * not its transitive closure; a recursive helper it reaches is a method already.
-     *
-     * <p>A helper whose body produces a function is not here: it has no value to hand back, and a row
-     * applying one is refused where it is evaluated, by that reason. An intrinsic has no body either,
-     * and is collected below rather than here — it is emitted from a body written for it (#680).
-     */
-    public static Set<String> exampleHelpers(Hir.Module module, Map<String, Hir.FnDef> table) {
-        Set<String> called = new LinkedHashSet<>();
-        Deque<Hir.Expr> work = new ArrayDeque<>();
-        forEachExampleExpr(module, work::add);
-        // What a row applies, so a helper it merely names is not one: a row is a fixture and holds no
-        // function, and the reason a method is emitted here is that the row runs the helper.
-        followingValues(work, table, e -> helperCallsIn(e, table, called));
-        Set<String> out = new LinkedHashSet<>();
-        for (String name : called) {
-            Hir.FnDef helper = table.get(name);
-            if (helper != null && helper.body() instanceof Hir.FnBody.Written w
-                    && !helper.params().isEmpty() && !Elaborator.producesFunction(w.expr())) {
-                out.add(name);
-            }
-        }
-        return out;
-    }
-
-    /**
-     * The methods the kernels a row applies are emitted as, under the name each is emitted with.
-     *
-     * <p>Collected on their own because the table has none of them: it holds what may be expanded
-     * into a body, and a kernel is lowered at its call site instead. A row applying one asks the same
-     * thing of it as a row applying any other library function (ADR-0077), and what makes that
-     * answerable is a body written for it here.
-     *
-     * <p>One per instance the rows settled, which is why this reads the calls and not the
-     * declarations: what is emitted for {@code List.length([ 1, 2 ])} is a method taking a
-     * {@code List<Int>}, and a row summing decimals elsewhere in the module gets a method of its own.
-     */
-    public static Map<String, Hir.FnDef> fixtureKernels(Hir.Module module,
-                                                        Map<String, Hir.FnDef> table,
-                                                        Symbols symbols) {
-        Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-        Deque<Hir.Expr> kernels = new ArrayDeque<>();
-        forEachExampleExpr(module, kernels::add);
-        FixtureEvidence evidence = new FixtureEvidence(symbols, table);
-        followingValues(kernels, table, e -> kernelCallsIn(e, evidence, out));
-        return out;
-    }
-
-    /** As above, over the module this inliner reads. */
-    public Map<String, Hir.FnDef> fixtureKernels(Hir.Module module, Symbols symbols) {
-        return fixtureKernels(module, table.reachable(), symbols);
-    }
-
-    /**
-     * Adds the method each kernel application in {@code e} is emitted as, where the row's arguments
-     * settle the call.
-     *
-     * <p>Kept apart from {@link #helperCallsIn}, which feeds the recursion graph. What recurses is
-     * decided from calls between bodies that have one; a kernel has no body and belongs to neither
-     * that question nor that answer.
-     *
-     * <p>Whether the call is one a fixture may apply is not asked here: it is
-     * {@link FixtureApplication}'s, and the witness it answers with is what this hands on. A kernel
-     * whose call settles nothing is not emitted, and the row is told which variable stayed open by
-     * the reading that found it — so nothing is admitted here and refused there, or the other way
-     * about.
-     */
-    private static void kernelCallsIn(Hir.Expr e, FixtureEvidence evidence,
-                                      Map<String, Hir.FnDef> out) {
-        if (e instanceof Hir.Apply call
-                && call.answered() instanceof Hir.Var.Denoting callee
-                && callee.denotes() instanceof ValueName.Stdlib) {
-            Prelude.PreludeEntry entry = Prelude.entry(callee.reaches());
-            if (entry != null && entry.declaration().body() instanceof Hir.FnBody.Intrinsic
-                    && !entry.declaration().params().isEmpty()
-                    && FixtureApplication.settle(callee.reaches(), entry.declaration(),
-                            FixtureArgumentTypes.of(call, evidence), evidence.symbols())
-                            instanceof FixtureApplication.Settled(var settled)) {
-                FixtureCallable.Realization realization = FixtureCallable.resolve(settled);
-                if (realization.synthesized() != null) {
-                    out.put(realization.method(), realization.synthesized());
-                }
-            }
-        }
-        // A `let` is entered with what it binds in force, as the reading that builds the row enters
-        // it: a call under one settles from what its name stands for there, and a walk that did not
-        // carry the binding would settle fewer calls than the row does — leaving one with no method.
-        if (e instanceof Hir.LetIn let) {
-            FixtureEvidence inside = evidence.with(let.binder().id(), let.value());
-            kernelCallsIn(let.value(), evidence, out);
-            kernelCallsIn(let.body(), inside, out);
-            return;
-        }
-        Hir.forEachChild(e, c -> kernelCallsIn(c, evidence, out));
-    }
-
-    /** As {@link #exampleHelpers(Hir.Module, Map)}, for the module this inliner reads: the ones it must
-     * emit as methods, without those a recursion already emits. */
-    public Set<String> exampleHelpers() {
-        return exampleHelpers;
-    }
-
-    /** The example-applied helpers this module does not declare — a published one, or a prelude one —
-     * renamed to the qualified name they are reached by, so the module takes them on as its own fns and
-     * emits them beside its own, as it does for a recursive one it reaches. */
-    public Map<String, Hir.FnDef> injectedExampleHelpers() {
-        Map<String, Hir.FnDef> out = new java.util.LinkedHashMap<>();
-        for (String name : exampleHelpers) {
-            if (table.held().containsKey(name)) {
-                continue;
-            }
-            out.put(name, table.reached(name).reachedAs(name));
-        }
-        return out;
-    }
 
     /** The recursive helpers this module emits as methods: the ones it declares, plus the ones it
      * reaches and took on to emit — a library one, or one another module published (spec §fn-declaration). A

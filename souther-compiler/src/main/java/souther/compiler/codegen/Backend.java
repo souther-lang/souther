@@ -495,9 +495,9 @@ public final class Backend {
         return null;
     }
 
-    /** The {@code $Fns} method a helper is emitted as, for a caller outside this package: an
-     * {@code example} that applies a helper looks the method up by name (ADR-0077), and the name is
-     * decided in one place. */
+    /** The {@code $Fns} method a definition is emitted as, for a caller outside this package: an
+     * {@code example} run looks its operand's method up by name, and the name is decided in one
+     * place. */
     public static String helperMethod(String helper) {
         return CodegenContext.helperMethod(helper);
     }
