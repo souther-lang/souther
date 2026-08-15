@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
+import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.observe.Applied;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -15,11 +16,13 @@ import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -147,6 +150,49 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 "it emitted an implementation for the behavior with a body");
         assertEquals(Set.of("double"), generated.behaviors(),
                 "and for nothing else: a behavior with no `let` is not implemented here");
+    }
+
+    /**
+     * A run over one module's rows, handed another module's artifact.
+     *
+     * <p>Refused where both are in hand. The manifest is what says which module's implementations an
+     * answerer applies, so past this point the module the rows belong to is gone: a behavior of this
+     * module would be looked up in that one, and a name it has one of would be applied — a row
+     * answered by an implementation of something else.
+     */
+    @Test
+    void anArtifactOfAnotherModuleIsRefusedWhereTheRunIsMade() {
+        Compilation mine = compiled();
+        Compilation other = Compilation.ofSource("""
+                module example.elsewhere
+
+                data Amount = Int
+
+                behavior double : (a: Amount) -> Amount
+                    constructs Amount
+
+                let double (a) = Amount(a.value * 99)
+                """, "Main");
+        other.db().ask(new Output.All());
+        String name = mine.modules().get(0);
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> ExampleVerifier.check(
+                        mine.db().ask(new Shapes.Prepared(name)).value().forExamples(),
+                        mine.db().ask(new Shapes.Scope(name)).value(),
+                        mine.db().ask(new Bodies.Signatures(name)).value(),
+                        artifactOf(other, "example.elsewhere"),
+                        mine.db().ask(new Bodies.Requirements(name)).value(),
+                        ExampleVerifier.class.getClassLoader(),
+                        mine.db().ask(new Bodies.ModuleDefinitions(name)).value(),
+                        "Main",
+                        Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                        EvaluationPolicy.DEFAULT,
+                        Answering.generatedHere()));
+
+        assertTrue(refused.getMessage().contains("example.applying")
+                        && refused.getMessage().contains("example.elsewhere"),
+                "the refusal names both: " + refused.getMessage());
     }
 
     /**

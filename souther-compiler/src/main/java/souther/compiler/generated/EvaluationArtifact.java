@@ -11,8 +11,12 @@ import java.util.Objects;
  * compile's classes beside another's manifest — and the pair would not disagree anywhere a reader
  * could see it, because a row asks the manifest whether anything applies its behavior and then asks
  * the loader for the class, so the mismatch arrives as a class that is not there or, worse, as a row
- * recorded against a behavior that had something to run it. Made and passed as one, that pairing
- * cannot be stated.
+ * recorded against a behavior that had something to run it. Made and passed as one, no caller has to
+ * keep the two together.
+ *
+ * <p>Which module it is of is not settled here. A run is over one module's rows and this says nothing
+ * about those, so the two being of one module is checked where both are in hand
+ * ({@code ExampleVerifier.check}) rather than claimed by this type.
  *
  * <p>The two halves are not of the same extent, and that is the contract:
  * {@link #implementations}{@code .module()} is the module being evaluated, and {@link #classes} holds

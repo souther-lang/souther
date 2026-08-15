@@ -105,6 +105,15 @@ public final class ExampleVerifier {
      * <p>{@code artifact} is taken whole rather than as its classes and what they implement. Both are
      * of one compile and a run has no use for a pairing of two, so the loader is built from one half
      * of it and the other half goes to {@code answering} from the same value.
+     *
+     * <p>And it has to be of the module whose rows these are, which is checked here because here is
+     * where both are in hand. Past this point the module the rows belong to is gone: an answerer is
+     * given a manifest and a loader, and the manifest is what says which module's implementations it
+     * applies. A run handed another module's artifact would look that module's behaviors up by name —
+     * and a name it has one of would be applied, so a row would be answered by an implementation of
+     * something else rather than failing to find anything.
+     *
+     * @throws IllegalArgumentException where the artifact is of another module
      */
     public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
                                      Symbols symbols, Map<String, Sig> sigs,
@@ -113,6 +122,11 @@ public final class ExampleVerifier {
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      String sourceId, Deadline deadline, EvaluationPolicy policy,
                                      Answering answering) {
+        if (!artifact.implementations().module().equals(module.name())) {
+            throw new IllegalArgumentException("the rows are `" + module.name()
+                    + "`'s and the artifact is `" + artifact.implementations().module()
+                    + "`'s; what applies a behavior would be looked up in the wrong module");
+        }
         if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
