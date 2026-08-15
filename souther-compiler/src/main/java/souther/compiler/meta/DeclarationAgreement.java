@@ -76,20 +76,84 @@ public final class DeclarationAgreement {
             if (!(said instanceof Agreement.Agree)) {
                 return said;
             }
-            // The imports of the module as it is being evaluated are the ones followed: what the rows
-            // are written for is what a value crossing has to be readable by. An import only the
-            // other side has is a declaration of theirs nothing here reaches.
-            for (Ast.Import imported : mine.published().module().imports()) {
-                // The standard library is not published by anyone: it is what a compiler has, and
-                // whether two builds have the same one is what the boundary revision on each of them
-                // says. There is nothing here to read on either side, and a walk that read the
-                // absence as a failure would refuse every module that imports `String`.
-                if (!Prelude.isQualifier(imported.module()) && read.add(imported.module())) {
-                    toRead.addLast(imported.module());
+            // What is followed is the modules the compared declarations reach into, of the module as
+            // it is being evaluated: what the rows are written for is what a value crossing has to be
+            // readable by. Not the import lines — a module may import what only an unread helper
+            // wanted, and may reach a declaration written out in full with no import at all, so the
+            // lines and the modules a crossing depends on are two different sets.
+            //
+            // The standard library is in neither: nobody publishes it, and whether two builds have
+            // the same one is what the boundary revision on each of them says.
+            for (String reached : modulesReached(mine.published().module())) {
+                if (read.add(reached)) {
+                    toRead.addLast(reached);
                 }
             }
         }
         return new Agreement.Agree();
+    }
+
+    /**
+     * What the names written in one module mean: which declaration each of them reaches.
+     *
+     * <p>A declaration is compared by what it says, and what a name says is which declaration it
+     * names — not how it was spelled to get there. The language settles a bare name brought in by an
+     * import, a name written under an alias, and one written out in full to the same declaration
+     * (spec {@code modules}), so all three read alike here.
+     *
+     * <p>What this is not is the compiler's resolution. It is the part of it a published declaration
+     * carries with it: the import lines are on the module, and a qualified name says its module in
+     * itself. That is enough to say which declaration a name reaches, which is the whole of what a
+     * crossing depends on about one.
+     *
+     * @param moduleOfImportedName which module a bare name was brought in from
+     * @param moduleOfAlias        which module a qualifier stands for
+     */
+    private record Names(Map<String, String> moduleOfImportedName, Map<String, String> moduleOfAlias) {
+
+        static Names of(Ast.Module module) {
+            Map<String, String> byName = new LinkedHashMap<>();
+            Map<String, String> byAlias = new LinkedHashMap<>();
+            for (Ast.Import imported : module.imports()) {
+                for (Ast.ImportedName name : imported.importedNames()) {
+                    byName.put(name.written().canonical(), imported.module());
+                }
+                if (imported.alias() != null) {
+                    byAlias.put(imported.alias(), imported.module());
+                }
+            }
+            return new Names(byName, byAlias);
+        }
+
+        /**
+         * {@code written} as which declaration it reaches: the module that declares it and the name
+         * it is declared under.
+         *
+         * <p>A name this module declares itself, and a standard-library one, are left as they are —
+         * the first is the same on both sides by being the same module's, and the second is what a
+         * compiler has rather than what a build published.
+         */
+        String reaching(String written) {
+            int dot = written.lastIndexOf('.');
+            if (dot < 0) {
+                String from = moduleOfImportedName.get(written);
+                return from == null ? written : from + "." + written;
+            }
+            String qualifier = written.substring(0, dot);
+            String from = moduleOfAlias.get(qualifier);
+            return from == null ? written : from + written.substring(dot);
+        }
+
+        /** The module a name reaches into, where it reaches out of this one at all. */
+        String moduleReached(String written) {
+            String reaching = reaching(written);
+            int dot = reaching.lastIndexOf('.');
+            if (dot < 0) {
+                return null;
+            }
+            String qualifier = reaching.substring(0, dot);
+            return Prelude.isQualifier(qualifier) ? null : qualifier;
+        }
     }
 
     /** A module's published declarations, or why they could not be read. Exactly one is set. */
@@ -123,15 +187,18 @@ public final class DeclarationAgreement {
 
     /** Whether two readings of one module say the same thing about what a crossing depends on. */
     private static Agreement agreed(String module, PublishedModule ours, PublishedModule theirs) {
+        Names mine = Names.of(ours.module());
+        Names yours = Names.of(theirs.module());
         Agreement types = held(module, byName(ours.module().defs(), Ast.Def::name),
-                byName(theirs.module().defs(), Ast.Def::name), DeclarationAgreement::crossingParts);
+                byName(theirs.module().defs(), Ast.Def::name), DeclarationAgreement::crossingParts,
+                mine, yours);
         if (!(types instanceof Agreement.Agree)) {
             return types;
         }
         Agreement behaviors = held(module,
                 byName(ours.module().behaviors(), Ast.BehaviorDef::name),
                 byName(theirs.module().behaviors(), Ast.BehaviorDef::name),
-                DeclarationAgreement::crossingParts);
+                DeclarationAgreement::crossingParts, mine, yours);
         if (!(behaviors instanceof Agreement.Agree)) {
             return behaviors;
         }
@@ -144,7 +211,7 @@ public final class DeclarationAgreement {
         Agreement helpers = held(module,
                 byName(publishedHelpers(ours.module(), readThrough), fn -> fn.written().canonical()),
                 byName(publishedHelpers(theirs.module(), readThrough), fn -> fn.written().canonical()),
-                DeclarationAgreement::crossingParts);
+                DeclarationAgreement::crossingParts, mine, yours);
         if (!(helpers instanceof Agreement.Agree)) {
             return helpers;
         }
@@ -154,15 +221,6 @@ public final class DeclarationAgreement {
         if (!ours.injectedBehaviors().equals(theirs.injectedBehaviors())) {
             return new Agreement.Disagree(module, first(difference(ours.injectedBehaviors(),
                     theirs.injectedBehaviors())));
-        }
-        // An import binds names, and a name bound to another module is another declaration under the
-        // same spelling. The modules themselves are compared by following them; what is compared here
-        // is what each import brings into scope and under which qualifier — of the names the
-        // declarations compared above are actually written with.
-        Set<String> written = namesWritten(compared(ours.module(), readThrough));
-        if (!sameShape(bindings(ours.module(), written),
-                bindings(theirs.module(), namesWritten(compared(theirs.module(), readThrough))))) {
-            return new Agreement.Disagree(module, "import");
         }
         return new Agreement.Agree();
     }
@@ -174,11 +232,13 @@ public final class DeclarationAgreement {
      * removed. It is named as the declaration that differs, which is what it is.
      */
     private static <T> Agreement held(String module, Map<String, T> ours, Map<String, T> theirs,
-                                      java.util.function.Function<T, List<Object>> parts) {
-        for (Map.Entry<String, T> mine : ours.entrySet()) {
-            T yours = theirs.get(mine.getKey());
-            if (yours == null || !sameShape(parts.apply(mine.getValue()), parts.apply(yours))) {
-                return new Agreement.Disagree(module, mine.getKey());
+                                      java.util.function.Function<T, List<Object>> parts,
+                                      Names mine, Names yours) {
+        for (Map.Entry<String, T> ourOwn : ours.entrySet()) {
+            T theirOwn = theirs.get(ourOwn.getKey());
+            if (theirOwn == null
+                    || !sameShape(parts.apply(ourOwn.getValue()), parts.apply(theirOwn), mine, yours)) {
+                return new Agreement.Disagree(module, ourOwn.getKey());
             }
         }
         for (String name : theirs.keySet()) {
@@ -218,12 +278,14 @@ public final class DeclarationAgreement {
     private static List<Object> crossingParts(Ast.BehaviorDef behavior) {
         return switch (behavior) {
             case Ast.SpecBehavior b -> List.of(b.params(), b.ret(), b.constructs(), b.dependsOn());
-            // A composition publishes the signature its stages compute, so this is what a reader of
-            // the published declarations sees rather than what it was written as. Its stages are the
-            // module's own business and are not carried. Its declared output is optional, like a
-            // helper's, and stands for itself when it is not written.
-            case Ast.PipeBehavior p -> List.of(p.stages(),
-                    p.declaredOut() == null ? "" : p.declaredOut());
+            // A composition does not arrive here. What a module publishes for one is the signature
+            // its stages compute (`ModuleMetadata.signatureOf`), so what comes back from a jar is a
+            // declared behavior like any other, and its stages are the module's own business. Said
+            // as a refusal rather than as a comparison of the stages, because a comparison written
+            // for a form that never arrives is a rule nobody can read the truth of.
+            case Ast.PipeBehavior p -> throw new IllegalStateException(
+                    "`" + p.name() + "` is published as the signature its stages compute, so a"
+                            + " composition is not a form a published declaration is read back as");
         };
     }
 
@@ -281,56 +343,31 @@ public final class DeclarationAgreement {
     }
 
     /**
-     * What each import brings into scope, by the module it brings it from — of the names something
-     * compared here is written with.
+     * The modules the declarations of {@code module} reach into.
      *
-     * <p>A module publishes more than a crossing is read through, and its import lines are what all
-     * of it needed. An import only an unread helper wanted is not part of what a declaration says
-     * any more than that helper is, and comparing it would report a build that changed nothing but
-     * the thing this just decided not to compare.
-     *
-     * <p>The names as a set, since an import list is which names it brings in and not the order they
-     * are written in. By what each name is rather than how it was spelled, for the reason every other
-     * name here is compared that way.
+     * <p>From the names those declarations are written with, read as the declarations they reach
+     * ({@link Names}). That is the same projection the comparison itself is over, so what is followed
+     * and what is compared cannot come apart: a module reached is one some compared declaration
+     * names, and a module named by nothing compared is not followed however it was imported.
      */
-    private static Map<String, List<Object>> bindings(Ast.Module module, Set<String> written) {
-        Map<String, List<Object>> bound = new LinkedHashMap<>();
-        for (Ast.Import imported : module.imports()) {
-            Set<String> brought = new LinkedHashSet<>();
-            for (Ast.ImportedName name : imported.importedNames()) {
-                if (written.contains(name.written().canonical())) {
-                    brought.add(name.written().canonical());
-                }
-            }
-            String alias = imported.alias() == null ? "" : imported.alias();
-            if (brought.isEmpty() && !reachedUnder(alias, written)
-                    && !reachedUnder(imported.module(), written)) {
-                continue;   // nothing compared here is written with anything this brings in
-            }
-            bound.put(imported.module(), List.of(alias, brought));
-        }
-        return bound;
-    }
-
-    /** Whether any name written here is qualified by {@code qualifier}. */
-    private static boolean reachedUnder(String qualifier, Set<String> written) {
-        if (qualifier.isEmpty()) {
-            return false;
-        }
-        for (String name : written) {
-            if (name.startsWith(qualifier + ".")) {
-                return true;
+    private static Set<String> modulesReached(Ast.Module module) {
+        Names names = Names.of(module);
+        Set<String> reached = new LinkedHashSet<>();
+        for (String written : namesWritten(compared(module, readThrough(module)))) {
+            String from = names.moduleReached(written);
+            if (from != null && !from.equals(module.name())) {
+                reached.add(from);
             }
         }
-        return false;
+        return reached;
     }
 
     /**
-     * Every name written in the declarations being compared.
+     * Every name written in the declarations compared.
      *
-     * <p>Over the same forms the comparison walks, so what an import is held to bringing in is
-     * exactly what those forms are written with. A name that appears only in something not compared
-     * is not here, which is the point.
+     * <p>Names, and not every word a form holds as text. What a clause is called, what a tag is
+     * spelled, what a literal says — none of them is a name a declaration is read through, and
+     * reading one as a name makes a module look reached that nothing reaches.
      */
     private static Set<String> namesWritten(List<?> forms) {
         Set<String> written = new LinkedHashSet<>();
@@ -365,11 +402,6 @@ public final class DeclarationAgreement {
             }
             return;
         }
-        if (form instanceof String spelled) {
-            // A name a form holds as text — what a call is written as, what a type names.
-            into.add(spelled);
-            return;
-        }
         if (!form.getClass().isRecord()) {
             return;
         }
@@ -390,25 +422,27 @@ public final class DeclarationAgreement {
      * and a name is compared by what it is rather than by how it was spelled, because a spelling that
      * canonicalises to the same name is the same name to everything that resolves one.
      */
-    private static boolean sameShape(Object ours, Object theirs) {
+    private static boolean sameShape(Object ours, Object theirs, Names ourNames, Names theirNames) {
         if (ours == null || theirs == null) {
             return ours == theirs;
         }
         if (ERASED.contains(ours.getClass())) {
             return ERASED.contains(theirs.getClass());
         }
-        if (ours instanceof WrittenName mine && theirs instanceof WrittenName yours) {
-            return mine.canonical().equals(yours.canonical());
+        if (ours instanceof WrittenName ourName && theirs instanceof WrittenName theirName) {
+            // Which declaration each name reaches, rather than the spelling that reached it.
+            return ourNames.reaching(ourName.canonical())
+                    .equals(theirNames.reaching(theirName.canonical()));
         }
         if (ours instanceof Optional<?> mine && theirs instanceof Optional<?> yours) {
-            return sameShape(mine.orElse(null), yours.orElse(null));
+            return sameShape(mine.orElse(null), yours.orElse(null), ourNames, theirNames);
         }
         if (ours instanceof List<?> mine && theirs instanceof List<?> yours) {
             if (mine.size() != yours.size()) {
                 return false;
             }
             for (int i = 0; i < mine.size(); i++) {
-                if (!sameShape(mine.get(i), yours.get(i))) {
+                if (!sameShape(mine.get(i), yours.get(i), ourNames, theirNames)) {
                     return false;
                 }
             }
@@ -428,7 +462,8 @@ public final class DeclarationAgreement {
         if (ours instanceof Map<?, ?> mine && theirs instanceof Map<?, ?> yours) {
             return mine.keySet().equals(yours.keySet())
                     && mine.entrySet().stream()
-                            .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey())));
+                            .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey()),
+                                    ourNames, theirNames));
         }
         if (ours.getClass() != theirs.getClass()) {
             return false;
@@ -460,7 +495,7 @@ public final class DeclarationAgreement {
             throw new IllegalStateException(unclassified(ours.getClass()));
         }
         for (RecordComponent part : ours.getClass().getRecordComponents()) {
-            if (!sameShape(read(part, ours), read(part, theirs))) {
+            if (!sameShape(read(part, ours), read(part, theirs), ourNames, theirNames)) {
                 return false;
             }
         }

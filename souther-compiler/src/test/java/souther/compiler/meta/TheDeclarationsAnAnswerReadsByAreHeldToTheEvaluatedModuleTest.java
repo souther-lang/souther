@@ -87,6 +87,64 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             let rename (t) = Title(t.value)
             """;
 
+    /** The same model reaching the shared type qualified, with no import line at all. */
+    private static final String QUALIFYING_ROOT = """
+            module example.root
+
+            data Todo = { title: example.shared.Title, done: Bool }
+
+            behavior rename : (t: Todo) -> Todo
+                constructs Todo
+
+            let rename (t) = Todo { title = t.title, done = t.done }
+            """;
+
+    /** And the same again, reaching it through an alias. */
+    private static final String ALIASING_ROOT = """
+            module example.root
+            import example.shared as S
+
+            data Todo = { title: S.Title, done: Bool }
+
+            behavior rename : (t: Todo) -> Todo
+                constructs Todo
+
+            let rename (t) = Todo { title = t.title, done = t.done }
+            """;
+
+    /** A model where a word that is also an imported name is written as something other than a
+     *  name: the name of an invariant clause. */
+    private static final String LITERAL_MODEL = """
+            module example.literal
+            import String ( trim )
+
+            data Tag = String
+                invariant trim = String.length(value) > 0
+
+            let keep (t: Tag) : String = trim(t.value)
+            """;
+
+    /** A model whose behavior is a composition, for what a published one is read back as. */
+    private static final String COMPOSING_MODEL = """
+            module example.composing
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Priced = { of: Amount }
+
+            behavior price : (a: Amount) -> Priced
+                constructs Priced
+
+            behavior settle : (p: Priced) -> Amount
+
+            behavior priceAndSettle = price >-> settle
+
+            let price (a) = Priced { of = a }
+
+            let settle (p) = p.of
+            """;
+
     /** A model whose invariant states a number, for what stating it another way is. */
     private static final String DECIMAL_MODEL = """
             module example.rates
@@ -359,6 +417,94 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 declarationsOf(raised), declarationsOf(DECIMAL_MODEL));
 
         assertInstanceOf(Agreement.Disagree.class, held);
+    }
+
+    /**
+     * A module a declaration reaches without importing it is held to as well.
+     *
+     * <p>A type is reachable qualified whether or not it was imported, so a field may be declared
+     * {@code example.shared.Title} with no import line at all. What reads that field's value is that
+     * module's declarations either way, and a walk that followed import lines would take the one
+     * spelling and not the other — the same narrowed invariant reported for a module that wrote
+     * {@code import}, and passed over for one that did not.
+     */
+    @Test
+    void aModuleReachedWithoutAnImportIsHeldToo() {
+        String narrowed = SHARED.replace("invariant length(value) > 0",
+                "invariant length(value) > 3");
+
+        Agreement held = DeclarationAgreement.of("example.root",
+                declarationsOf(List.of(SHARED, QUALIFYING_ROOT)),
+                declarationsOf(List.of(narrowed, QUALIFYING_ROOT)));
+
+        Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
+                "what the field's type is declared by moved, and nothing imported it");
+        assertEquals("example.shared", said.module());
+        assertEquals("Title", said.declaration());
+    }
+
+    /**
+     * A name spelled through an alias and one spelled in full are one name.
+     *
+     * <p>What a field's type is is which declaration it names, and two builds may reach it by
+     * different spellings — the language settles both to the same declaration. A comparison that read
+     * the spellings would report a stale build over how a name was written, which is the thing it is
+     * written not to do.
+     */
+    @Test
+    void aNameReachedThroughAnAliasIsTheNameItReaches() {
+        Agreement held = DeclarationAgreement.of("example.root",
+                declarationsOf(List.of(SHARED, ALIASING_ROOT)),
+                declarationsOf(List.of(SHARED, QUALIFYING_ROOT)));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "both name the same declaration, however each was written");
+    }
+
+    /**
+     * A word written as something other than a name does not make an import relevant.
+     *
+     * <p>An import is held to what the compared declarations are written *with*, and what a clause is
+     * called is not a name it uses. Reading one as a name makes an import look needed where it is
+     * not, and dropping that import then reports a stale build.
+     */
+    @Test
+    void aWordThatIsNotANameDoesNotMakeAnImportRelevant() {
+        String withoutIt = LITERAL_MODEL
+                .replace("import String ( trim )\n", "")
+                .replace("trim(t.value)", "String.trim(t.value)");
+
+        Agreement held = DeclarationAgreement.of("example.literal",
+                declarationsOf(withoutIt), declarationsOf(LITERAL_MODEL));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "nothing compared here is written with `trim`; a literal saying so is not writing it");
+    }
+
+    /**
+     * A composition is compared as what it publishes, which is a signature.
+     *
+     * <p>A module publishes what a composition's stages compute rather than the stages, so what comes
+     * back is a signature like any other behavior's. This is what says so: the comparison refuses a
+     * composition outright, and a build whose behavior is one goes through here without meeting that
+     * refusal. A day when a composition does arrive is a day this fails rather than a day the stages
+     * are quietly compared by a rule nobody could read the truth of.
+     */
+    @Test
+    void aCompositionIsComparedAsTheSignatureItPublishes() {
+        String moved = COMPOSING_MODEL.replace("data Priced = { of: Amount }",
+                "data Priced = { of: Amount, twice: Amount }")
+                .replace("let price (a) = Priced { of = a }",
+                        "let price (a) = Priced { of = a, twice = a }");
+
+        assertInstanceOf(Agreement.Agree.class,
+                DeclarationAgreement.of("example.composing",
+                        declarationsOf(COMPOSING_MODEL), declarationsOf(COMPOSING_MODEL)),
+                "two builds of one composition agree");
+        assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.composing",
+                        declarationsOf(moved), declarationsOf(COMPOSING_MODEL)),
+                "and what its stages answer with having moved is a disagreement");
     }
 
     /**
