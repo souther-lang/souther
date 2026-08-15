@@ -103,9 +103,12 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
         };
     }
 
+    /** Never handed a null: both arms require the place they are about. The tolerance the report's
+     *  own writer used to have is gone rather than carried over, and a fallback standing in for it
+     *  would read as a case somebody had thought about. */
     private static String place(SourceRef ref, SourceNameResolver names, String sectionSource) {
-        if (ref == null || ref.sourceId() == null || ref.sourceId().equals(sectionSource)) {
-            return ref == null ? "?" : String.valueOf(ref.pos());
+        if (ref.sourceId() == null || ref.sourceId().equals(sectionSource)) {
+            return String.valueOf(ref.pos());
         }
         return names.nameOf(ref.sourceId()) + ":" + ref.pos();
     }

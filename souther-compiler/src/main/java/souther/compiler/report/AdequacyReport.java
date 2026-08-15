@@ -3,7 +3,6 @@ package souther.compiler.report;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;

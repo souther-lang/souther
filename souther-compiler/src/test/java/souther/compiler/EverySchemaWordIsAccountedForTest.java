@@ -341,7 +341,15 @@ class EverySchemaWordIsAccountedForTest {
      * against.
      */
     private static Set<String> wordsOf(Class<?> source) {
-        return Arrays.stream(source.getEnumConstants())
+        Object[] constants = source.getEnumConstants();
+        if (constants == null) {
+            // The type stopped saying this when a field turned up whose words are a writer's and
+            // not an enum's. Said here instead, because the alternative was a vocabulary with
+            // neither an enum nor a written set failing as a null somewhere inside a stream.
+            throw new IllegalArgumentException(source.getSimpleName()
+                    + " is not an enum, so a vocabulary over it has to write its words out");
+        }
+        return Arrays.stream(constants)
                 .map(constant -> AdequacyReport.word((Enum<?>) constant))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

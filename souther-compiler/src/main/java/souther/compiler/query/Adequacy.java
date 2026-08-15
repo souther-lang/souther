@@ -1455,6 +1455,10 @@ public final class Adequacy {
                           Citation at, List<Object> args) {
 
         public Finding {
+            // A finding is about somewhere. A place-less one used to become a warning with no
+            // caret, which nothing produced and nothing wanted; now the reading of the citation
+            // rests on there being one, so the type says so rather than the reader finding out.
+            java.util.Objects.requireNonNull(at, "a finding is about a place");
             args = List.copyOf(args);
         }
 

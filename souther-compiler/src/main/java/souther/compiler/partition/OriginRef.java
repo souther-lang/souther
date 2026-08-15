@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.TypeSymbol;
 
@@ -61,12 +62,14 @@ public sealed interface OriginRef {
      */
     record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
                        souther.compiler.coverage.CoverageSites.Obligation comparison,
-                       SourceRef at, boolean valueBelongsBelow, Witness witness,
+                       Citation at, boolean valueBelongsBelow,
+                       Witness witness,
                        boolean holdsAtTheValue, boolean singles) implements OriginRef {
 
         public GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
                            souther.compiler.coverage.CoverageSites.Obligation comparison,
-                           SourceRef at, boolean valueBelongsBelow, Witness witness,
+                           Citation at, boolean valueBelongsBelow,
+                           Witness witness,
                            boolean holdsAtTheValue) {
             this(guard, site, comparison, at, valueBelongsBelow, witness, holdsAtTheValue, false);
         }
@@ -150,12 +153,29 @@ public sealed interface OriginRef {
         };
     }
 
-    /** Where this came from, for a report to print. */
+    /**
+     * Where this came from, for a report to print.
+     *
+     * <p>A guard says where it is written and not where this compile met it. The two are the same
+     * guard for everything read from a source this compile holds, and are a call in the caller's
+     * file for one inlined from a body it has no source for — a report handed the place said the
+     * caller had written a guard it had not, two lines under an arm of the same body saying it
+     * properly.
+     *
+     * <p>Both spellings keep {@code guard}, since that word is how a reader tells a line a guard
+     * drew from one a type's invariant did.
+     */
     default String describe() {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
-            case GuardOrigin g -> "guard@" + g.at().pos();
+            case GuardOrigin g -> switch (g.at()) {
+                case Citation.Written written ->
+                        "guard@" + written.at().pos();
+                case Citation.OutOfSight out ->
+                        "guard in `" + out.declaration() + "`, reached at "
+                                + out.reachedFrom().pos();
+            };
             case NarrowedOrigin n -> n.bound().describe() + " within "
                     + n.within().stream().map(TypeSymbol::name)
                             .collect(java.util.stream.Collectors.joining(" or "));

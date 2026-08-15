@@ -378,7 +378,10 @@
           "type": "string",
           "description": "The name a reader of the file the position is in reaches that code by — `List.filter`. Written where `kind` is `outOfSight` and never otherwise. How it is reached and not which module declares it: a name reached from out of sight is qualified, so it is already enough to look the code up by."
         }
-      }
+      },
+      "if": { "properties": { "kind": { "const": "outOfSight" } } },
+      "then": { "required": ["declaration"] },
+      "else": { "not": { "required": ["declaration"] } }
     }
   }
 }

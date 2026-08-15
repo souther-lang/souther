@@ -1,0 +1,322 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.JsonRenderer;
+import souther.compiler.diag.SourceContext;
+import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Db;
+import souther.compiler.report.AdequacyReport;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * One compile, every place it names, and each of them saying whether it is where the code is.
+ *
+ * <p>A body spliced in from out of sight is read against the caller's file, so everything a report
+ * says about code inside it points at a call. The warning a build reads said so; the report a person
+ * reads, the report a build reads and the JSON a diagnostic is read from printed the place and left
+ * it at that. Nothing held them against each other, and each was written believing the place was the
+ * place.
+ *
+ * <p>Two subjects rather than one, because there were two. An unreached arm is what was reported
+ * — of {@code List.filter}, in the model this was found on. A line a guard drew is the other, and it
+ * was found by looking for the first one's shape somewhere else: the same compile said
+ * {@code guard@7:22} two lines above an arm of the same body saying where it was written.
+ *
+ * <p>Held together rather than one assertion per rendering. Four renderings that each say something
+ * true separately can still disagree, and disagreeing is the defect: a reader moving between a
+ * terminal, a JSON report and an editor is reading one compile.
+ *
+ * <p>No module path is needed. The standard library is out of sight of every compile, so this is what
+ * any model that calls into it looks like.
+ */
+class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /**
+     * {@code Int.abs} is written in {@code souther.int}, and this compile has no source for it.
+     *
+     * <p>One call, two subjects. Its {@code then} arm is owed a row and the one row here is
+     * positive, so nothing goes through it; the comparison it forks on draws lines on {@code n} that
+     * no row is at. Both are reported at the call on line 7.
+     */
+    private static final String OUT_OF_SIGHT = """
+            module demo
+
+            data Size = Int
+
+            behavior sized : (n: Int) -> Size
+                constructs Size
+            let sized (n) = Size(Int.abs(n))
+
+            example sized
+                | "a positive one" : (5) -> Size(5)
+            """;
+
+    /** The control: the same two gaps with the fork written in the module's own source. Whatever the
+     *  renderings gain above, they must not gain it here. */
+    private static final String IN_SIGHT = """
+            module demo
+
+            data Size = Int
+
+            behavior sized : (n: Int) -> Size
+                constructs Size
+            let sized (n) = if n >= 10 then Size(n) else Size(0)
+
+            example sized
+                | "a big one" : (50) -> Size(50)
+            """;
+
+    private static final String DECLARATION = "Int.abs";
+
+    // --- the arm, in each of the four renderings that say where it is -------------------------------
+
+    @Test
+    void theWarningNamesTheDeclarationTheArmIsWrittenIn() {
+        Said said = saidAbout(OUT_OF_SIGHT);
+        assertTrue(said.warning().contains("`" + DECLARATION + "`"),
+                () -> "the warning says where the arm is written: " + said.warning());
+    }
+
+    @Test
+    void theReportAPersonReadsNamesIt() {
+        Said said = saidAbout(OUT_OF_SIGHT);
+        assertTrue(said.armLine().contains("`" + DECLARATION + "`"),
+                () -> "the line says where the arm is written: " + said.armLine());
+    }
+
+    @Test
+    void theReportABuildReadsNamesIt() {
+        JsonNode writtenAt = saidAbout(OUT_OF_SIGHT).writtenAt();
+        assertNotNull(writtenAt, "the place says whether it is where the code is");
+        assertEquals("outOfSight", writtenAt.get("kind").asString(),
+                "the document says the place is a stand-in");
+        assertEquals(DECLARATION, writtenAt.get("declaration").asString(),
+                "and what it stands in for");
+    }
+
+    /**
+     * The fourth, which the other three do not reach.
+     *
+     * <p>A diagnostic is rendered for a tool by {@link JsonRenderer} and for a person by the human
+     * one, and only the second of those goes through anything the adequacy report also uses. Left to
+     * the other three, taking {@code writtenAt} back out of the JSON a diagnostic is read from
+     * changed nothing anybody could see.
+     */
+    @Test
+    void theJsonADiagnosticIsReadFromNamesIt() {
+        JsonNode region = JSON.readTree(saidAbout(OUT_OF_SIGHT).diagnosticJson()).get("region");
+        assertNotNull(region, "the diagnostic points somewhere");
+        JsonNode writtenAt = region.get("writtenAt");
+        assertNotNull(writtenAt, "and says whether that is where the code is");
+        assertEquals("outOfSight", writtenAt.get("kind").asString());
+        assertEquals(DECLARATION, writtenAt.get("declaration").asString());
+    }
+
+    /**
+     * The four against each other, which is the property none of them has on its own.
+     *
+     * <p>A rendering that stopped saying it would still pass its own test if the others were the
+     * ones read. What has to hold is that a reader moving between them is told the same thing.
+     *
+     * <p>Of one compile. Renderings read from four runs agree because the compiler is deterministic,
+     * and determinism was never what was wrong: what was wrong is that one run said four things and
+     * three of them were different from the fourth.
+     */
+    @Test
+    void theFourSayTheSameThingAboutOneArm() {
+        Said said = saidAbout(OUT_OF_SIGHT);
+        assertNotNull(said.writtenAt(), "the document says where the arm is written");
+        String named = said.writtenAt().get("declaration").asString();
+
+        assertTrue(said.warning().contains("`" + named + "`"), () -> "the warning: " + said.warning());
+        assertTrue(said.armLine().contains("`" + named + "`"), () -> "the line: " + said.armLine());
+        assertTrue(said.diagnosticJson().contains("\"declaration\":\"" + named + "\""),
+                () -> "the diagnostic document: " + said.diagnosticJson());
+    }
+
+    // --- and the line the guard drew, which is the same question one measure over -------------------
+
+    /**
+     * A guard inlined from out of sight draws its line where it is written, not where it was reached.
+     *
+     * <p>Found by asking the first subject's question of the next report-facing value along. The
+     * origin of a boundary is a string a report prints and a document carries, and it was built from
+     * the place — so one compile said {@code guard@7:22} two lines above an arm of that same body
+     * saying it properly.
+     */
+    @Test
+    void theLineAGuardDrewNamesWhereTheGuardIs() {
+        Said said = saidAbout(OUT_OF_SIGHT);
+        assertFalse(said.boundaryOrigins().isEmpty(), "the comparison drew lines");
+        for (String origin : said.boundaryOrigins()) {
+            assertTrue(origin.contains("`" + DECLARATION + "`"),
+                    () -> "the origin says where the guard is written: " + origin);
+        }
+        for (String line : said.boundaryLines()) {
+            assertTrue(line.contains("`" + DECLARATION + "`"),
+                    () -> "and so does the line a person reads: " + line);
+        }
+    }
+
+    // --- the controls -------------------------------------------------------------------------------
+
+    @Test
+    void anArmWrittenHereGainsNoneOfIt() {
+        Said said = saidAbout(IN_SIGHT);
+
+        assertFalse(said.warning().contains("no source for"),
+                () -> "nothing to qualify, the arm being in a file the reader holds: "
+                        + said.warning());
+        assertFalse(said.armLine().contains("reached at"),
+                () -> "the place is the place, so it is printed as one: " + said.armLine());
+        assertNotNull(said.writtenAt(), "the place says whether it is where the code is");
+        assertEquals("here", said.writtenAt().get("kind").asString());
+        assertFalse(said.writtenAt().has("declaration"),
+                "there is no declaration to name where the place is the place");
+    }
+
+    @Test
+    void aGuardWrittenHereGainsNoneOfIt() {
+        Said said = saidAbout(IN_SIGHT);
+        assertFalse(said.boundaryOrigins().isEmpty(), "the comparison drew lines");
+        for (String origin : said.boundaryOrigins()) {
+            assertTrue(origin.startsWith("guard@"),
+                    () -> "the guard is where the report says it is: " + origin);
+        }
+    }
+
+    /**
+     * The document answers whichever it is, everywhere it points.
+     *
+     * <p>Absence is what a report written before the key existed carries, so an emitter that wrote it
+     * only where the answer was interesting would put "the code is here" and "nobody asked yet" under
+     * one silence.
+     */
+    @Test
+    void everyPositionTheDocumentWritesAnswersTheQuestion() {
+        for (String model : List.of(OUT_OF_SIGHT, IN_SIGHT)) {
+            List<JsonNode> places = new ArrayList<>();
+            collectAt(saidAbout(model).document(), places);
+            assertFalse(places.isEmpty(), "the document points somewhere");
+            for (JsonNode at : places) {
+                assertTrue(at.has("writtenAt"),
+                        () -> "every place says whether it is where the code is: " + at);
+            }
+        }
+    }
+
+    // --- reading one compile ------------------------------------------------------------------------
+
+    /**
+     * What one compile says about where code is, in each rendering that says it.
+     *
+     * @param warning        the body of the {@code E1918} it reports, as every reader of a
+     *                       diagnostic reads it — the terminal, an editor and the text an exception
+     *                       carries all come from here
+     * @param diagnosticJson that same diagnostic as a tool reads it, which comes from somewhere else
+     * @param armLine        the line the human report prints under {@code branch}
+     * @param at             where the machine-readable report puts the arm
+     * @param boundaryLines  the lines it prints for edges no row is at
+     * @param boundaryOrigins what that document says drew each of them
+     * @param document       the report whole, for what is asked of every place in it
+     */
+    private record Said(String warning, String diagnosticJson, String armLine, JsonNode at,
+                        List<String> boundaryLines, List<String> boundaryOrigins,
+                        JsonNode document) {
+
+        /** What the document says about where the arm is written, or null where it says nothing.
+         *  Read and not asserted: whether it is there at all is one of the things under test, and a
+         *  reader that demanded it would fail every test in this class over one rendering. */
+        JsonNode writtenAt() {
+            return at.get("writtenAt");
+        }
+    }
+
+    /**
+     * One compile per model, whatever asks.
+     *
+     * <p>Held rather than recompiled because the property under test is about one compile: renderings
+     * taken from separate runs are compared by way of the compiler answering the same thing twice,
+     * which is a different claim and not the one that was broken.
+     */
+    private static final Map<String, Said> SAID = new ConcurrentHashMap<>();
+
+    private static Said saidAbout(String model) {
+        return SAID.computeIfAbsent(model,
+                EveryPlaceAReportNamesSaysWhereTheCodeIsTest::readEveryRenderingOnce);
+    }
+
+    private static Said readEveryRenderingOnce(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+
+        List<Diagnostic> arms = new ArrayList<>();
+        for (Db.Found found : compilation.db().allReports()) {
+            Diagnostic d = found.report().diagnostic();
+            if ("E1918".equals(d.code())) {
+                arms.add(d);
+            }
+        }
+        assertEquals(1, arms.size(), () -> "one arm is unreached: " + arms.size());
+        Diagnostic arm = arms.get(0);
+
+        List<String> human = report.human(SourceNameResolver.identity()).lines()
+                .map(String::strip).toList();
+        List<String> armLines = human.stream()
+                .filter(line -> line.startsWith("· no row goes through")).toList();
+        assertEquals(1, armLines.size(), () -> "one arm is unreached: " + armLines);
+        List<String> boundaryLines = human.stream()
+                .filter(line -> line.startsWith("· no row is at")).toList();
+
+        JsonNode document = JSON.readTree(report.json(SourceNameResolver.identity()));
+        JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);
+        JsonNode unreached = behavior.get("branch").get("unreached");
+        assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
+        List<String> origins = new ArrayList<>();
+        behavior.get("partition").get("boundaries")
+                .forEach(each -> origins.add(each.get("origin").asString()));
+
+        return new Said(
+                DiagnosticRenderer.body(arm, Locale.ENGLISH),
+                new JsonRenderer().render(arm, new SourceContext("m.sou", model), Locale.ENGLISH),
+                armLines.get(0), unreached.get(0).get("at"),
+                boundaryLines, origins, document);
+    }
+
+    /** Every {@code at} the document holds, wherever it sits. */
+    private static void collectAt(JsonNode node, List<JsonNode> into) {
+        if (node.isObject()) {
+            JsonNode at = node.get("at");
+            if (at != null && at.isObject()) {
+                into.add(at);
+            }
+            node.propertyStream().forEach(entry -> collectAt(entry.getValue(), into));
+            return;
+        }
+        if (node.isArray()) {
+            node.forEach(each -> collectAt(each, into));
+        }
+    }
+}

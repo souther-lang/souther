@@ -96,8 +96,9 @@ public interface DiagnosticRenderer {
     }
 
     /** What this report's caret cites, or null where it points at nothing at all, there being no
-     *  claim about a place to qualify. */
-    static Citation citedBy(Diagnostic d) {
+     *  claim about a place to qualify. Private: a projection every reader can reach is a second
+     *  way to the declaration, and the point of {@link Citation} is that there is one. */
+    private static Citation citedBy(Diagnostic d) {
         return d.pos() == null ? null : Citation.of(d.pos());
     }
 }
