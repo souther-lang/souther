@@ -193,18 +193,18 @@ final class Terms {
 
     /** The affine form of an expression: a numeric atom, a newtype construct's wrapped value, or
      * {@code null}. */
-    LinearForm<Term> affineOf(Core e, Denotations at, Known k) {
+    LinearForm<Term> affineOf(Core e, Denotations at) {
         return affine(e, at, n -> {
             // A newtype built around a number is that number here. What makes it one is the
             // declaration, which `affineScalarBase` asks; a construction of it has the one field the
             // declaration gives it.
             if (n instanceof Core.Construct nd
                     && affineScalarBase(Type.ref(nd.typeName())) != null) {
-                return affineOf(nd.values().get(0).value(), at, k);
+                return affineOf(nd.values().get(0).value(), at);
             }
             Core written = writtenValue(n, at);
             if (written != null && written != n) {
-                return affineOf(written, at, k);
+                return affineOf(written, at);
             }
             // An operation answering a number it was given is that number here, whatever type it
             // answers it in: `Decimal.fromInt(n)` is `n`, so a guard about `n` is about the call as
@@ -212,7 +212,7 @@ final class Terms {
             // unrelated and the guard saying nothing about the construction.
             Core answered = DischargeRules.answersItsArgument(n);
             if (answered != null) {
-                return affineOf(answered, at, k);
+                return affineOf(answered, at);
             }
             // A list written out has as many elements as it is written with, whatever they are.
             BigDecimal counted = writtenSize(n, at);
@@ -223,7 +223,7 @@ final class Terms {
             // §invariant-discharge-terms). Read through it, as the `let` node above is read through:
             // the name and the expression it was given are one value, and reading one as an atom of
             // its own leaves a guard on the name saying nothing about the value it was built from.
-            LinearForm<Term> given = givenForm(n, at, k);
+            LinearForm<Term> given = givenForm(n, at);
             if (given != null) {
                 return given;
             }
@@ -237,13 +237,13 @@ final class Terms {
      * given is arithmetic this can read. A name given a location is not this — {@link #atomOf}
      * answers that with the location, which is what the seeding wrote about.
      */
-    private LinearForm<Term> givenForm(Core e, Denotations at, Known k) {
+    private LinearForm<Term> givenForm(Core e, Denotations at) {
         if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Computed)
                 || affineScalarBase(e.type()) == null) {
             return null;
         }
         Core given = at.valueOf(r.binding());
-        return given == null || given == e ? null : affineOf(given, at, k);
+        return given == null || given == e ? null : affineOf(given, at);
     }
 
     /**
@@ -782,7 +782,7 @@ final class Terms {
         Term term = named.term();
         // Readable where there is something to say of it: a form the numeric domain built, or a rule
         // about how it was made. This is asked of the expression, so a name for it answers the same.
-        return new Denotes.Computed(term, affineOf(e, at, k) != null || namedByRule(e, at));
+        return new Denotes.Computed(term, affineOf(e, at) != null || namedByRule(e, at));
     }
 
     /**

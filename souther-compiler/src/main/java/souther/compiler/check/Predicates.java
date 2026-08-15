@@ -377,8 +377,8 @@ final class Predicates {
         Piecewise piecewise = null;
         if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
             Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
-            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at, k);
-            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at, k);
+            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at);
+            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at);
             if (la != null && ra != null) {
                 numeric = new Constraint(la.minus(ra), eff);
                 // The same clause read as the cases of whatever chooses inside it. Both readings are
@@ -460,8 +460,8 @@ final class Predicates {
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
             Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at, out);
-            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at, out);
+            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at);
+            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at);
             if (la != null && ra != null) {
                 LinearForm compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
@@ -624,7 +624,7 @@ final class Predicates {
                     : DischargeRules.boundsOn(call, arg -> constantOf(arg, at, k))) {
                 LinearForm<Term> against = bound.against() == null
                         ? LinearForm.constant(bound.offset())
-                        : addTo(terms.affineOf(bound.against().of(call), at, k), bound.offset());
+                        : addTo(terms.affineOf(bound.against().of(call), at), bound.offset());
                 if (against != null) {
                     out.add(new Constraint(LinearForm.atom(result).minus(against), bound.rel()));
                 }
@@ -651,8 +651,8 @@ final class Predicates {
             return false;
         }
         Rel stated = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
-        LinearForm<Term> la = stated == null ? null : terms.affineOf(b.left(), at, k);
-        LinearForm<Term> ra = stated == null ? null : terms.affineOf(b.right(), at, k);
+        LinearForm<Term> la = stated == null ? null : terms.affineOf(b.left(), at);
+        LinearForm<Term> ra = stated == null ? null : terms.affineOf(b.right(), at);
         if (la == null || ra == null) {
             return false;
         }
@@ -682,7 +682,7 @@ final class Predicates {
         BigDecimal coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
         for (DischargeRules.Choice one : DischargeRules.chosenBy(call).cases()) {
-            LinearForm<Term> answered = terms.affineOf(one.answers().of(call), at, k);
+            LinearForm<Term> answered = terms.affineOf(one.answers().of(call), at);
             if (answered == null) {
                 return null;
             }
@@ -698,8 +698,8 @@ final class Predicates {
             given.add(new Constraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
             for (DischargeRules.ArgumentsStand stands : one.given()) {
-                LinearForm<Term> left = terms.affineOf(stands.left().of(call), at, k);
-                LinearForm<Term> right = terms.affineOf(stands.right().of(call), at, k);
+                LinearForm<Term> left = terms.affineOf(stands.left().of(call), at);
+                LinearForm<Term> right = terms.affineOf(stands.right().of(call), at);
                 if (left == null || right == null) {
                     return null;
                 }
@@ -744,7 +744,7 @@ final class Predicates {
         }
         Term from = terms.bodyKey(shift.of().of(call), at);
         Term to = terms.bodyKey(call, at);
-        LinearForm<Term> amount = terms.affineOf(shift.amount().of(call), at, k);
+        LinearForm<Term> amount = terms.affineOf(shift.amount().of(call), at);
         if (from == null || to == null || amount == null) {
             return;
         }
@@ -761,7 +761,7 @@ final class Predicates {
 
     /** The constant {@code e} reads as, or null where it reads as none. */
     private BigDecimal constantOf(Core e, Denotations at, Known k) {
-        LinearForm<Term> form = terms.affineOf(e, at, k);
+        LinearForm<Term> form = terms.affineOf(e, at);
         return form == null || !form.coefs().isEmpty() ? null : form.constant();
     }
 
