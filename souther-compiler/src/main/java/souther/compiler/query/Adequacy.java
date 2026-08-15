@@ -1501,7 +1501,8 @@ public final class Adequacy {
 
         /** What the rows say about the cases of the signature. Carried at the measurement's own status:
          *  a case nothing here claims is, where some row could not be read, a case nothing *seen*
-         *  claims. */
+         *  claims — which is why these are said at {@code PARTIAL} rather than withheld until every
+         *  row could be read. Which of them are said at all is each measure's own question below. */
         private static void signatureFindings(Hir.BehaviorDef behavior, SignatureEvidence signature,
                                               List<Finding> out) {
             if (signature == null || !signature.status().counted()) {
@@ -1513,13 +1514,19 @@ public final class Adequacy {
                 out.add(new Finding(Kind.OUTPUT_CASE_UNSPECIFIED, behavior.name(), status,
                         behavior.pos(), List.of(missing.name(), behavior.name())));
             }
-            // Where no row saw the behavior answer, every case is unverified and naming each of them
-            // adds nothing to that. Asked of the rows rather than of the declaration: the two agree
-            // only while the one thing that applies a behavior is the compile that generated it, and
-            // a run that did observe an injected behavior's cases would go on saying nothing about
-            // them. Left out here rather than at the printing, so that what a report shows and what a
-            // build is told come from one list.
-            if (output.hasObservedCase()) {
+            // Where the behavior answered for no row, every case is unverified and naming each of
+            // them adds nothing to that. Asked of the rows rather than of the declaration: the two
+            // agree only while the one thing that applies a behavior is the compile that generated
+            // it, and a run that did apply an injected behavior would go on saying nothing about the
+            // cases it was never seen to produce.
+            //
+            // How many rows were answered for, rather than whether any case was observed. A run whose
+            // answers are of a type nothing here names observed no case and produced answers all the
+            // same, and the cases it did not confirm are worth naming exactly as anywhere else.
+            //
+            // Left out here rather than at the printing, so that what a report shows and what a build
+            // is told come from one list.
+            if (output.answeredRows() > 0) {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
                         out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,
@@ -1791,6 +1798,7 @@ public final class Adequacy {
         Set<TypeSymbol> observed = new LinkedHashSet<>();
         Set<TypeSymbol> verified = new LinkedHashSet<>();
         int unreadableOut = 0;
+        int answered = 0;
 
         List<Type> ins = sig.inputTypes();
         List<Set<TypeSymbol>> declaredIn = new ArrayList<>(ins.size());
@@ -1821,7 +1829,10 @@ public final class Adequacy {
             } else if (!declaredOut.isEmpty()) {
                 unreadableOut++;   // an expectation whose case the text does not say
             }
-            if (row.resultArm() != null) {
+            if (row.answered()) {
+                answered++;
+            }
+            if (row.observed()) {
                 observed.add(row.resultArm());
                 if (held) {
                     verified.add(row.resultArm());
@@ -1849,7 +1860,8 @@ public final class Adequacy {
         }
 
         OutputCaseEvidence output = declaredOut.isEmpty() ? OutputCaseEvidence.none()
-                : new OutputCaseEvidence(declaredOut, specified, observed, verified, unreadableOut);
+                : new OutputCaseEvidence(declaredOut, specified, observed, verified, unreadableOut,
+                        answered);
         List<InputCaseEvidence> inputs = new ArrayList<>(ins.size());
         boolean partial = output.status() == MeasurementStatus.PARTIAL;
         for (int i = 0; i < ins.size(); i++) {

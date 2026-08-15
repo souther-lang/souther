@@ -109,9 +109,17 @@ public record RowOutcome(SourceRef at,
         }
     }
 
+    /** Whether the behavior answered for this row — it was applied and a value came back, which is
+     * what {@link Stage#COMPARED} is reached by. Whether that answer can be named as a case is
+     * {@link #observed}: a value of a type no declaration of the module's names is an answer all the
+     * same, and a run that got one is not a run that produced nothing. */
+    public boolean answered() {
+        return stage.reached(Stage.COMPARED);
+    }
+
     /** Whether this row is evidence that the behavior can answer with {@link #resultArm}. A row that
      * disagreed still saw what it saw. */
     public boolean observed() {
-        return stage.reached(Stage.INVOKED) && resultArm != null;
+        return answered() && resultArm != null;
     }
 }

@@ -130,9 +130,39 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
         assertEquals(List.of(), unverified(source, "greet"),
                 "a row that never applied the behavior saw nothing, and a let does not make it a "
                         + "row that did");
-        assertTrue(codes(source).contains("E1908"),
+        List<String> codes = codes(source);
+        assertTrue(codes.contains("E1908"),
                 "why the row stopped is reported at the row, which is what the reader is owed here: "
-                        + codes(source));
+                        + codes);
+    }
+
+    /**
+     * A run that answered with a value no declaration here names. The behavior was applied and gave
+     * something back, so which cases it was not seen to produce is worth naming — and no case can be
+     * read off such an answer, so the evidence has an empty {@code observed} and is no measure of
+     * whether anything ran.
+     *
+     * <p>{@code String} is left out of the naming for the reason any unspecified case is: no row asks
+     * for it, so it is reported as unspecified instead.
+     */
+    @Test
+    void anAnswerNoDeclarationNamesIsStillAnAnswer() {
+        String source = """
+                module example.name
+
+                data Missing = { why: String }
+
+                behavior name : (n: Int) -> String | Missing
+                    constructs Missing
+                let name (n) = if n > 0 then "yes" else Missing { why = "no" }
+
+                example name
+                    | "wants Missing, is answered with a String" : (1) -> Missing { why = "no" }
+                """;
+
+        assertEquals(List.of("Missing"), unverified(source, "name"),
+                "the row ran and was answered; that this compile cannot place the answer is not a "
+                        + "reason to stop saying which case nothing confirmed");
     }
 
     private static List<String> unverified(String source, String behavior) {
