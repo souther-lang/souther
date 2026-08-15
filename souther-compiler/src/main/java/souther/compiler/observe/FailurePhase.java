@@ -45,6 +45,13 @@ public enum FailurePhase {
      * the model — how many frames a stack holds is decided by how large they are. */
     STACK_EXHAUSTED,
 
-    /** Something the host was supposed to provide was not there. */
+    /**
+     * Something the host was supposed to provide was not there.
+     *
+     * <p>What produces it is a row that could not be handed to what was to apply it: the value the
+     * row built could not be put in the form an answerer of other classes reads. Nothing about the
+     * row was established, so it is recorded as undecided and not as a failure — the model may be
+     * right, and nothing here saw enough to say.
+     */
     INFRASTRUCTURE
 }

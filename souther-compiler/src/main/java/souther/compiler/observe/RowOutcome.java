@@ -39,12 +39,15 @@ import java.util.Set;
  * it held                    COMPARED            HELD          NONE
  * a fixture's helper hung    NONE                INCOMPLETE    TIMEOUT
  * the behavior hung          INVOKED             INCOMPLETE    TIMEOUT
+ * it could not be handed on  FIXTURES_VALIDATED  INCOMPLETE    INFRASTRUCTURE
  * </pre>
  *
- * <p>{@link FailurePhase#INFRASTRUCTURE} is not among them. Nothing writes it: what a host was
- * supposed to provide and did not — the runtime off the classpath, so the generated classes will not
- * link — is said of the module rather than of a row ({@link Incompleteness}). A row-level phase for
- * it waits for something that produces one.
+ * <p>{@link FailurePhase#INFRASTRUCTURE} is one row that cannot be handed to what was to apply it:
+ * the value it built could not be put in the form an answerer of other classes reads. It is
+ * {@code FIXTURES_VALIDATED}/{@code INCOMPLETE}, because nothing about the row was established and
+ * nothing applied it. What a host was supposed to provide and did not — the runtime off the
+ * classpath, so the generated classes will not link — is still said of the module rather than of a
+ * row ({@link Incompleteness}).
  *
  * <p>Whether the behavior was applied is the {@link Stage} column: everything at {@code INVOKED} or
  * past it says what applied it ({@link Run#applied()}), and everything before it says nothing did.
