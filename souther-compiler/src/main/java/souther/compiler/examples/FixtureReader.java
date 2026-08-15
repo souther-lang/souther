@@ -1195,7 +1195,7 @@ public final class FixtureReader {
                 if (admission == Admission.HELD) {
                     admitBuilt(value, at, written);
                 }
-                yield neutral.of(value, at, written);
+                yield neutral.of(value, at, answeredBy(written));
             }
         };
     }
@@ -1754,7 +1754,12 @@ public final class FixtureReader {
         if (admission == Admission.HELD) {
             admitBuilt(answer, at, c.written());
         }
-        return neutral.of(answer, at, c.written());
+        return neutral.of(answer, at, answeredBy(c.written()));
+    }
+
+    /** What a message calls the value a helper answered with. */
+    private static String answeredBy(String helper) {
+        return "the value `" + helper + "` answered with";
     }
 
     /**
@@ -2111,6 +2116,21 @@ public final class FixtureReader {
             }
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * A value this compile built, in the form a derived decoder reads.
+     *
+     * <p>What an answerer whose classes are not this compile's puts through its own decoders
+     * ({@link Handed}). The same walk a helper's answer goes through on the way into a fixture, because
+     * the form is decided by the rules and not by which side is asking — an answerer reading a value
+     * this way is not a second reading of what a value is.
+     *
+     * @param what a noun phrase naming the value, for the reason a row is given when it cannot be
+     *             read back
+     */
+    NeutralValue neutral(Object built, BoundaryInput at, String what) {
+        return new NeutralValue(neutral.of(built, Position.at(FixtureShape.of(at).type()), what));
     }
 
     /** Where what a row asserted and what came back differ, or null where they are the same value. */

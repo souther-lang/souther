@@ -22,8 +22,10 @@ import java.util.Set;
  * fixture is written in, and the one thing both directions of a row have to agree on.
  *
  * <p>A row reaches that form two ways. From what the author wrote, which {@link ExampleVerifier} walks:
- * a literal, a record, a collection, a newtype application. And from a value a helper returned
- * (ADR-0077), which {@link #of} re-materialises. The rules that decide the form itself — which
+ * a literal, a record, a collection, a newtype application. And from a live value, which {@link #of}
+ * re-materialises — what a helper answered with, on the way into a fixture (ADR-0077), and a value
+ * this compile built, on the way to an answerer whose classes are not this compile's
+ * ({@link Handed}). The rules that decide the form itself — which
  * discriminator a case of a sum carries, when a unit case travels as a bare name, which written list is
  * a map's entries — are the same rules whichever direction arrives at them, so they are here rather
  * than restated on one side and read from the other.
@@ -45,7 +47,7 @@ final class NeutralForm {
     // --- a live value, re-materialised -------------------------------------------------------------
 
     /**
-     * A value a helper returned, in the neutral form a fixture is written in.
+     * A live value, in the neutral form a fixture is written in.
      *
      * <p>The inverse of writing the fixture, directed by the declared types: a scalar and a temporal are
      * already their own neutral form, a collection is re-materialised element by element, and a data is
@@ -58,10 +60,15 @@ final class NeutralForm {
      * question. A {@code Date}'s neutral form is the parsed temporal while its encoder writes ISO text,
      * so a newtype over a date came back as text its own decoder refuses.
      *
-     * @param helper the helper that produced the value, for the reason a row is given when it cannot be
-     *               read back
+     * <p>Two things reach this. A value a helper answered with, on the way into a fixture (ADR-0077),
+     * and a value this compile built, on the way to an answerer whose classes are not this compile's
+     * ({@link Handed}). One walk, because the form is decided by the rules and not by which side asked.
+     *
+     * @param what a noun phrase naming the value, for the reason a row is given when it cannot be read
+     *             back. Said by the caller because only the caller knows what the value is to the row —
+     *             what a helper answered with, or an input the row handed over
      */
-    Object of(Object live, Position position, String helper) {
+    Object of(Object live, Position position, String what) {
         if (live == null) {
             return live;
         }
@@ -82,7 +89,7 @@ final class NeutralForm {
                     ? Position.at(map.value()) : Position.UNREAD;
             Map<Object, Object> out = new LinkedHashMap<>();
             for (Map.Entry<?, ?> e : m.entrySet()) {
-                out.put(of(e.getKey(), key, helper), of(e.getValue(), value, helper));
+                out.put(of(e.getKey(), key, what), of(e.getValue(), value, what));
             }
             return out;
         }
@@ -90,7 +97,7 @@ final class NeutralForm {
             Position element = opened.element();
             List<Object> out = new ArrayList<>();
             for (Object e : it) {
-                out.add(of(e, element, helper));
+                out.add(of(e, element, what));
             }
             return out;
         }
@@ -101,11 +108,11 @@ final class NeutralForm {
             return null;
         }
         if (name.equals("Option$Some")) {
-            return of(field(live, "value", helper), opened, helper);
+            return of(field(live, "value", what), opened, what);
         }
         TypeSymbol caseName = typeOf(live);
         if (caseName == null) {
-            throw new FixtureException("`" + helper + "` returned a " + name
+            throw new FixtureException(what + " is a " + name
                     + ", which is not a type this example can read");
         }
         if (!(symbols.declarations().declaration(caseName.key()) instanceof Hir.Data data)) {
@@ -120,13 +127,13 @@ final class NeutralForm {
         if (data.newtype()) {
             Position base = Position.declaredBy(newtypeBaseType(caseName));
             return newtypeAt(position, caseName,
-                    shaped(of(field(live, "value", helper), base, helper), base));
+                    shaped(of(field(live, "value", what), base, what), base));
         }
         Map<String, Hir.TypeRef> declared = fieldTypes(caseName);
         Map<String, Object> out = new LinkedHashMap<>();
         for (Map.Entry<String, Hir.TypeRef> f : declared.entrySet()) {
             Position at = Position.declaredBy(f.getValue());
-            Object value = shaped(of(field(live, f.getKey(), helper), at, helper), at);
+            Object value = shaped(of(field(live, f.getKey(), what), at, what), at);
             // an absent optional is left out, the same neutral form a fixture writes for `None`
             if (value != null) {
                 out.put(f.getKey(), value);
@@ -138,14 +145,14 @@ final class NeutralForm {
 
     /** One field of a live data, read through the accessor every data has (ADR-0065). Its class may be
      * package-private, so the declared method is taken and opened, as a codec is. */
-    private Object field(Object live, String name, String helper) {
+    private Object field(Object live, String name, String what) {
         try {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
             accessor.setAccessible(true);
             return accessor.invoke(live);
         } catch (ReflectiveOperationException _) {
-            throw new FixtureException("the value `" + helper + "` returned cannot be read back as a"
-                    + " fixture: `" + simpleName(live) + "` has no `" + name + "` to read");
+            throw new FixtureException(what + " cannot be read back as a fixture: `"
+                    + simpleName(live) + "` has no `" + name + "` to read");
         }
     }
 

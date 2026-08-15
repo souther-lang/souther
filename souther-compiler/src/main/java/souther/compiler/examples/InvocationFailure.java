@@ -16,13 +16,17 @@ package souther.compiler.examples;
  *
  * <p>Not everything a reflective call can end with is one of these. A class that will not load, a
  * method that is not there and an access that is refused are this compiler failing to reach its own
- * output rather than the output failing, and they keep the reading they had.
+ * output rather than the output failing; where a behavior is applied that is
+ * {@link ImplementationNotReached}, and where a fixture's helper is run it keeps the reading it had.
+ *
+ * <p>Public because what applies a behavior is given to a run ({@link Answerer}), and an answerer
+ * outside this package carries what it applied out the same way.
  */
-final class InvocationFailure extends RuntimeException {
+public final class InvocationFailure extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    InvocationFailure(Throwable cause) {
+    public InvocationFailure(Throwable cause) {
         super(cause == null ? "the invocation ended with no cause" : cause.toString(), cause);
     }
 }

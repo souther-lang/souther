@@ -924,7 +924,11 @@ public final class Output {
                     souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
                             requirements, evaluationLoader(db),
                             values == null ? Map.of() : values, sourceId, deadlineOf(db),
-                            policyOf(db));
+                            policyOf(db),
+                            // What applies a behavior here is what this compile emitted. A compile has
+                            // nothing else to run a row against; something supplied from outside one
+                            // arrives through the same seam and brings its own classes.
+                            souther.compiler.examples.Answering.generatedHere());
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }
