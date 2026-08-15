@@ -14,6 +14,7 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * What the command line stops for and what an editor marks are the same problems, read once.
@@ -36,10 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class EverySurfaceReadsTheSameReportsTest {
 
-    /** Where the raw collection belongs: the store that answers it, and the one reading of it. */
-    private static final Set<String> READS_IT = Set.of(
-            "souther/compiler/query/Db.java",
-            "souther/compiler/query/Compilation.java");
+    /** The store that answers the raw collection. */
+    private static final String ANSWERS_IT = "souther/compiler/query/Db.java";
+
+    /** The one reading of it. */
+    private static final String READS_IT = "souther/compiler/query/Compilation.java";
 
     @Test
     void nothingOutsideTheOneReadingCollectsTheRawReports() throws IOException {
@@ -49,7 +51,7 @@ class EverySurfaceReadsTheSameReportsTest {
         Set<String> reading = new TreeSet<>();
         for (Path source : sources) {
             String within = source.toString().replace('\\', '/').replaceAll(".*/src/main/java/", "");
-            if (READS_IT.contains(within)) {
+            if (within.equals(ANSWERS_IT) || within.equals(READS_IT)) {
                 continue;
             }
             // A call and not a mention: a reference in prose writes `Db#allReports()`, and saying
@@ -62,5 +64,32 @@ class EverySurfaceReadsTheSameReportsTest {
                 "the reports a reader is shown are the ones Compilation.reports() answers, read for"
                         + " where a reader can be sent to them; ask through failure, errors,"
                         + " warnings or diagnostics");
+    }
+
+    /**
+     * The one reading is one call.
+     *
+     * <p>Naming a file as the place the raw collection is read leaves every other method in it able
+     * to read it too, which is the arrangement this exists to end — the two outputs were two
+     * readings inside one class before they were two classes.
+     */
+    @Test
+    void theOneReadingReadsItOnce() throws IOException {
+        Path reading = null;
+        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            if (source.toString().replace('\\', '/').endsWith(READS_IT)) {
+                reading = source;
+            }
+        }
+        assertNotNull(reading, "the one reading is not where this test looks for it");
+
+        String text = Files.readString(reading, StandardCharsets.UTF_8);
+        int read = 0;
+        for (int at = text.indexOf(".allReports("); at >= 0;
+                at = text.indexOf(".allReports(", at + 1)) {
+            read++;
+        }
+        assertEquals(1, read, "every surface reads what Compilation.reports() answers, and that"
+                + " reads the raw collection once");
     }
 }

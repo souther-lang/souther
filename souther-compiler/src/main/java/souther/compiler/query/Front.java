@@ -368,23 +368,27 @@ public final class Front {
             if (layout == null || path == null) {
                 return Answer.of(new Of(Map.of()));
             }
+            // Read the graph, work out where each of its modules is reached from, and only then say
+            // anything. Each of the three needs the one before it finished: a module is read once
+            // and a route to it may turn up long after, so a place written down as it was read is
+            // the places it had by then — with two dependencies of a project both reaching a third,
+            // which of them was read first decided whether the second's importer was told anything.
             PublishedModule.Classes classes = path.declarations();
-            Map<String, OnThePath> found = new LinkedHashMap<>();
+            Map<String, Exposing.Checked> read = new LinkedHashMap<>();
+            Map<String, Set<String>> injected = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
-            // What is waiting to be read, and — for one a module off the path needs — which module
-            // needs it, so an incomplete path is reported as that rather than as an import nobody
-            // wrote.
+            // Where a source of this compile names each module it reaches, and which modules each
+            // module off the path reaches in turn.
+            Map<String, List<SourcePos>> named = new LinkedHashMap<>();
+            Map<String, List<String>> edges = new LinkedHashMap<>();
             Deque<String> pending = new ArrayDeque<>();
-            Map<String, String> neededBy = new LinkedHashMap<>();
-            // Where a source of this compile named each of them. A module reached only through
-            // another off the path inherits that one's place: the import line naming the dependency
-            // is the nearest thing a reader here holds, and there is no line naming the rest.
-            Map<String, List<SourcePos>> reachedFrom = new LinkedHashMap<>();
             for (String declared : layout.idOfModule().keySet()) {
                 Ast.Module m = db.ask(new Exposed(declared)).value();
                 if (m != null) {
                     reaches(m).forEach((reach, where) -> {
-                        alsoReachedFrom(reachedFrom, reach, where == null ? List.of() : List.of(where));
+                        if (where != null) {
+                            named.computeIfAbsent(reach, k -> new ArrayList<>()).add(where);
+                        }
                         pending.add(reach);
                     });
                 }
@@ -392,26 +396,12 @@ public final class Front {
             Set<String> tried = new HashSet<>();
             while (!pending.isEmpty()) {
                 String name = pending.poll();
-                if (layout.idOfModule().containsKey(name) || found.containsKey(name)
-                        || !tried.add(name)) {
+                if (layout.idOfModule().containsKey(name) || !tried.add(name)) {
                     continue;
                 }
                 PublishedModule published = PublishedModule.read(name, classes);
                 if (published == null) {
-                    if (neededBy.containsKey(name) && !Prelude.isQualifier(name)) {
-                        // Said where the module that needs it was reached from, the same as anything
-                        // else found about a module off the path. This walk is one question about
-                        // the whole compilation, so it cannot name the module each of its reports is
-                        // about the way a question about one module does — it says so itself
-                        // instead, and a report that said neither reached no file at all.
-                        List<SourcePos> here = reachedFrom.getOrDefault(name, List.of());
-                        reports.add(Report.of(here.isEmpty()
-                                ? needs(name, neededBy.get(name))
-                                : needs(name, neededBy.get(name)).reachedFrom(here,
-                                        neededBy.get(name),
-                                        new ModuleMessage.ItIsReachedFromHereToo())));
-                    }
-                    continue;   // written in a source being compiled: still that import's own error
+                    continue;   // absent; which of its importers minds is worked out below
                 }
                 Report reserved = reservedNamespace(published.module().name(),
                         published.module().pos());
@@ -420,13 +410,38 @@ public final class Front {
                     continue;
                 }
                 Exposing.Checked checked = Exposing.check(published.module());
-                List<SourcePos> here = reachedFrom.getOrDefault(name, List.of());
-                found.put(name, new OnThePath(checked.module(), published.injectedBehaviors(),
-                        checked.exposed(), here));
-                for (String reach : reaches(checked.module()).keySet()) {
-                    neededBy.putIfAbsent(reach, name);
-                    alsoReachedFrom(reachedFrom, reach, here);
-                    pending.add(reach);
+                read.put(name, checked);
+                injected.put(name, published.injectedBehaviors());
+                List<String> reaches = List.copyOf(reaches(checked.module()).keySet());
+                edges.put(name, reaches);
+                pending.addAll(reaches);
+            }
+            Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
+            Map<String, OnThePath> found = new LinkedHashMap<>();
+            read.forEach((name, checked) -> found.put(name, new OnThePath(checked.module(),
+                    injected.get(name), checked.exposed(),
+                    reachedFrom.getOrDefault(name, List.of()))));
+            // An incomplete path is one module needing another, and not a module being absent. Two
+            // dependencies of a project may each need a third that is not there, and those are two
+            // things to be told: they are missing from two places, an author reaching one of them
+            // has not reached the other, and a report saying the first while pointing at an import
+            // that arrives at the second says where the code is and is wrong about it.
+            for (Map.Entry<String, List<String>> reaching : edges.entrySet()) {
+                List<SourcePos> here = reachedFrom.getOrDefault(reaching.getKey(), List.of());
+                for (String needed : reaching.getValue()) {
+                    if (read.containsKey(needed) || layout.idOfModule().containsKey(needed)
+                            || Prelude.isQualifier(needed)) {
+                        continue;
+                    }
+                    // Said where the module that needs it was reached from — that being where the
+                    // import nobody here wrote is written. This walk is one question about the whole
+                    // compilation and cannot name the module each of its reports is about the way a
+                    // question about one module does, so it says so itself; a report that said
+                    // neither reached no file at all.
+                    reports.add(Report.of(here.isEmpty()
+                            ? needs(needed, reaching.getKey())
+                            : needs(needed, reaching.getKey()).reachedFrom(here, reaching.getKey(),
+                                    new ModuleMessage.ItIsReachedFromHereToo())));
                 }
             }
             return Answer.of(new Of(Ordered.map(found)), reports);
@@ -519,25 +534,53 @@ public final class Front {
     }
 
     /**
-     * {@code where} added to the places a source of this compilation reaches {@code module} from,
-     * each place once.
+     * Every place a source of this compilation reaches each module from: the lines that name it,
+     * and — for one no line here names — the lines naming whichever module off the path led there.
      *
-     * <p>A module reached through another off the path inherits that one's places: there is no line
-     * naming it anywhere a reader here can look, and the lines naming the dependency that led there
-     * are the nearest there are. Reached again by a different route, it keeps both — the two routes
-     * are two files whose authors each wrote an import that arrives at it.
+     * <p>Worked out over the whole graph rather than as it is walked. A module is read once and a
+     * route to it may be found after that, so a place written down when it was read is the places
+     * it had by then; where two dependencies of a project both reach a third, which of them was
+     * read first would decide whether the second's importer is told anything. The walk gathers what
+     * names what, and this answers.
+     *
+     * <p>A closure and not a step, for the same reason. What reaches a module reaches everything
+     * that module reaches, however far down, and each place is kept once — the answer grows and
+     * stops growing, whatever order the edges arrive in.
      */
-    private static void alsoReachedFrom(Map<String, List<SourcePos>> reachedFrom, String module,
-                                        List<SourcePos> where) {
-        if (where.isEmpty()) {
-            return;
-        }
-        List<SourcePos> places = reachedFrom.computeIfAbsent(module, k -> new ArrayList<>());
-        for (SourcePos one : where) {
-            if (!places.contains(one)) {
-                places.add(one);
+    private static Map<String, List<SourcePos>> reachedFrom(Map<String, List<SourcePos>> named,
+                                                            Map<String, List<String>> edges) {
+        Map<String, List<SourcePos>> places = new LinkedHashMap<>();
+        Deque<String> pending = new ArrayDeque<>();
+        named.forEach((module, where) -> {
+            if (alsoReachedFrom(places, module, where)) {
+                pending.add(module);
+            }
+        });
+        while (!pending.isEmpty()) {
+            String module = pending.poll();
+            List<SourcePos> here = List.copyOf(places.get(module));
+            for (String reach : edges.getOrDefault(module, List.of())) {
+                if (!reach.equals(module) && alsoReachedFrom(places, reach, here)) {
+                    pending.add(reach);
+                }
             }
         }
+        return places;
+    }
+
+    /** {@code where} added to the places {@code module} is reached from, each place once. Whether
+     *  any of them was new, which is what says there is anything further to carry on. */
+    private static boolean alsoReachedFrom(Map<String, List<SourcePos>> places, String module,
+                                           List<SourcePos> where) {
+        List<SourcePos> held = places.computeIfAbsent(module, k -> new ArrayList<>());
+        boolean added = false;
+        for (SourcePos one : where) {
+            if (!held.contains(one)) {
+                held.add(one);
+                added = true;
+            }
+        }
+        return added;
     }
 
     /** A module off the path needing one that is not there. */
@@ -910,6 +953,9 @@ public final class Front {
                 aliases.put(imp.alias(), imp.module());
             }
         }
+        // A type reference a pass wrote before resolution names nothing written anywhere, and has
+        // no name to read a qualifier off. A `>->` stage and a `depends on` are always names the
+        // author wrote, which is what an `Ast.Var` is.
         List<WrittenName> written = new ArrayList<>();
         for (Ast.TypeRef ref : Names.typeRefs(m)) {
             if (ref.written() != null) {

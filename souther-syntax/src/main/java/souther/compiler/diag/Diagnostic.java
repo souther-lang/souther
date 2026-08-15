@@ -148,7 +148,7 @@ public final class Diagnostic {
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
         WrittenAt out = WrittenAt.outOfSight(declaration);
-        List<LabeledRegion> also = new ArrayList<>(citableSecondary());
+        List<LabeledRegion> also = new ArrayList<>(secondaryThatSurvivesTheMove());
         for (SourcePos other : where.subList(1, where.size())) {
             also.add(new LabeledRegion(Region.point(other.standingInFor(out)), null, alsoHere));
         }
@@ -158,28 +158,19 @@ public final class Diagnostic {
     }
 
     /**
-     * The same finding with any second region a reader cannot be sent to left off.
+     * The second regions that survive the caret moving.
      *
-     * <p>A label is a sentence about the place it points at, so one read from text this compile has
-     * no file for says it of whatever sits at those numbers in the file the report is filed under —
-     * a line the author did write and that the label says nothing about. It is the defect
-     * {@link #reachedFrom} moves a caret for, one region over, and it reaches a report whose own
-     * caret is fine: a body spliced in from out of sight is given the call site, and a label built
-     * over the body it came from is not.
+     * <p>A label naming no source of its own is read in the diagnostic's
+     * ({@link LabeledRegion#sourceIdOr}), and that is what a hand-made position is for. It stops
+     * being true when the caret moves: the file it would be read in is no longer the file it was
+     * built against, and the label would say what it says of whatever sits at those numbers in a
+     * file the author wrote. So it is dropped here and nowhere else — a report whose caret stays put
+     * keeps every label it had, whatever any of them names.
      */
-    public Diagnostic saidOnlyWhereAReaderCanBeSent() {
-        List<LabeledRegion> kept = citableSecondary();
-        return kept.size() == secondary.size() ? this
-                : new Diagnostic(severity, code, region, List.copyOf(kept), literalMessage, diff,
-                        notes, suggestion, said);
-    }
-
-    /** The second regions read from a source, which are the ones a reader can be shown. */
-    private List<LabeledRegion> citableSecondary() {
+    private List<LabeledRegion> secondaryThatSurvivesTheMove() {
         List<LabeledRegion> kept = new ArrayList<>();
         for (LabeledRegion label : secondary) {
-            if (label.region() == null || label.region().start() == null
-                    || label.region().start().sourceId() != null) {
+            if (label.sourceId() != null) {
                 kept.add(label);
             }
         }

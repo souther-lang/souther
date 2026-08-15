@@ -525,38 +525,26 @@ public final class Compilation {
      * ({@link souther.compiler.diag.WrittenAt}), so a coordinate left naming no source is one read
      * from a declaration this compile never had a file for.
      *
-     * <p>The English a raised report carried is dropped with the move. It was rendered with the old
-     * coordinate written into it, and a message that says one place beside a caret at another is the
-     * defect twice.
+     * <p>What a raised report carried as the text its pass threw it with is dropped with the move
+     * ({@link Report#legacyMessage}). That text was rendered with the old coordinate written into
+     * it, and a message naming one place beside a caret at another is the defect twice. The body of
+     * a {@link Diagnostic#literal} is not that and is not dropped: it is the whole of what such a
+     * diagnostic says, there being no message under it to render again.
      */
     private Db.Found citable(Db.Found found) {
         Diagnostic said = found.report().diagnostic();
-        Diagnostic sendable = reachable(said, found.module());
-        return sendable == said ? found
-                : new Db.Found(found.module(), found.sourceId(),
-                        Report.saidAt(sendable, found.report().delivery()));
-    }
-
-    /**
-     * {@code said} where a reader can be sent to every place it points at.
-     *
-     * <p>Its caret first, where that was read from a text this compile has no file for. Then its
-     * second regions, whatever its caret turned out to be: a body spliced in from out of sight is
-     * given the call site, so a report about one has a caret a reader can be sent to and may still
-     * carry a label built over the body it was copied from — pointed at a file that does not have
-     * it, which is the same defect a region over.
-     */
-    private Diagnostic reachable(Diagnostic said, String module) {
         SourcePos at = said.pos();
-        if (at == null || at.sourceId() != null || module == null) {
-            return said.saidOnlyWhereAReaderCanBeSent();
+        if (at == null || at.sourceId() != null || found.module() == null) {
+            return found;
         }
-        Front.FromPath.OnThePath onThePath = Front.onThePath(db, module);
+        Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
         if (onThePath == null || onThePath.reachedFrom().isEmpty()) {
-            return said.saidOnlyWhereAReaderCanBeSent();
+            return found;
         }
-        return said.reachedFrom(onThePath.reachedFrom(), module,
-                new ModuleMessage.ItIsReachedFromHereToo());
+        return new Db.Found(found.module(), found.sourceId(), Report.saidAt(
+                said.reachedFrom(onThePath.reachedFrom(), found.module(),
+                        new ModuleMessage.ItIsReachedFromHereToo()),
+                found.report().delivery()));
     }
 
     /** The one failure these sources have, or null when they have none. */

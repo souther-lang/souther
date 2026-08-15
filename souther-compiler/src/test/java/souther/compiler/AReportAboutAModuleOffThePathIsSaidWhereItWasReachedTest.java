@@ -1,6 +1,10 @@
 package souther.compiler;
 
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
+import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Compilation;
@@ -45,6 +49,17 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         Compilation compilation = Compilation.ofSources(List.of(source), path::get);
         compilation.answerEverything();
         return compilation;
+    }
+
+    /** A module holding one thing out of another, as its own project's build produced it. */
+    private static Map<String, byte[]> holding(String name, String type, String from,
+                                               String imported, Map<String, byte[]> path) {
+        return built("""
+                module %s exposing ( %s )
+                import %s ( %s )
+
+                data %s = { x: %s }
+                """.formatted(name, type, from, imported, type, imported), path);
     }
 
     /** The classes of {@code lib.deep}, which every path here leaves out. */
@@ -206,6 +221,129 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     }
 
     /**
+     * A route found after the module it leads to was read counts as much as the one found before.
+     *
+     * <p>The walk reads each module once, and a place written down when it was read is the places it
+     * had by then. Here one source names the shared dependency outright and the other reaches it
+     * through a dependency of its own, so the second route arrives after the shared module has been
+     * read and everything under it settled — and the author of the second file was told nothing
+     * about a missing dependency their import reaches. Which file that is comes down to nothing
+     * either author wrote.
+     */
+    @Test
+    void aRouteFoundAfterTheModuleWasReadCountsToo() {
+        Map<String, byte[]> shared = built("""
+                module lib.shared exposing ( Shared )
+                import lib.deep ( Deep )
+
+                data Shared = { deep: Deep }
+                """, deep());
+        Map<String, byte[]> between = built("""
+                module lib.between exposing ( Between )
+                import lib.shared ( Shared )
+
+                data Between = { shared: Shared }
+                """, and(shared, deep()));
+
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.a exposing ( A )
+                import lib.shared ( Shared )
+
+                data A = { shared: Shared }
+                """, """
+                module app.b exposing ( B )
+                import lib.between ( Between )
+
+                data B = { between: Between }
+                """), and(shared, between)::get);
+        compilation.answerEverything();
+
+        Map<String, List<Located>> byId = compilation.diagnostics();
+        assertEquals(byId.get("0").size(), byId.get("1").size(),
+                "the file that reaches it the long way round is told the same things");
+    }
+
+    /**
+     * Two routes of different lengths meeting at one module carry both origins on down.
+     *
+     * <p>{@code app.a} reaches the meeting point through one module and {@code app.b} through two,
+     * so the meeting point is read while only the short route is known and everything under it is
+     * settled from that. What the long route adds arrives afterwards and has to travel the rest of
+     * the way — reaching a module is reaching everything it reaches, and where the two routes happen
+     * to be the same length is not what decides it.
+     */
+    @Test
+    void routesOfDifferentLengthsBothReachWhatTheyMeetOver() {
+        Map<String, byte[]> leaf = Compiler.compile("""
+                module lib.leaf exposing ( Leaf )
+                data Leaf = String
+                """);
+        Map<String, byte[]> meeting = holding("lib.meeting", "Meeting", "lib.leaf", "Leaf", leaf);
+        Map<String, byte[]> shortWay = holding("lib.short", "Short", "lib.meeting", "Meeting",
+                and(meeting, leaf));
+        Map<String, byte[]> middle = holding("lib.middle", "Middle", "lib.meeting", "Meeting",
+                and(meeting, leaf));
+        Map<String, byte[]> longWay = holding("lib.long", "Long", "lib.middle", "Middle",
+                and(middle, and(meeting, leaf)));
+
+        // everything but the leaf, so what is missing is under the module the two routes meet at
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.a exposing ( A )
+                import lib.short ( Short )
+
+                data A = { x: Short }
+                """, """
+                module app.b exposing ( B )
+                import lib.long ( Long )
+
+                data B = { x: Long }
+                """), and(and(meeting, shortWay), and(middle, longWay))::get);
+        compilation.answerEverything();
+
+        Map<String, List<Located>> byId = compilation.diagnostics();
+        assertEquals(byId.get("0").size(), byId.get("1").size(),
+                "the file that reaches the meeting point the long way round is told the same things");
+    }
+
+    /**
+     * Two modules each needing the same absent one are two things to be told.
+     *
+     * <p>They are missing from two places. An author who reaches one of them has not reached the
+     * other, so one report pointing at both imports would say the code is written in a module that
+     * import never arrives at — a statement about a place, and false. What is absent is the edge and
+     * not the module.
+     */
+    @Test
+    void twoModulesNeedingTheSameAbsentOneAreTwoFindings() {
+        Map<String, byte[]> left = holding("lib.left", "Left", "lib.deep", "Deep", deep());
+        Map<String, byte[]> right = holding("lib.right", "Right", "lib.deep", "Deep", deep());
+
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.a exposing ( A )
+                import lib.left ( Left )
+
+                data A = { x: Left }
+                """, """
+                module app.b exposing ( B )
+                import lib.right ( Right )
+
+                data B = { x: Right }
+                """), and(left, right)::get);
+        compilation.answerEverything();
+
+        for (Db.Found found : compilation.reports()) {
+            SourcePos at = found.report().diagnostic().pos();
+            if (at == null || !at.isOutOfSight()) {
+                continue;
+            }
+            String stands = ((Citation.OutOfSight) Citation.of(at)).declaration();
+            String reachedIn = at.sourceId();
+            assertEquals("lib.left".equals(stands) ? "0" : "1", reachedIn,
+                    "`" + stands + "` is not reached from the other file at all");
+        }
+    }
+
+    /**
      * Two findings that differed only in where they were written are said once.
      *
      * <p>Reading a report for where it may be said is what makes them one. Their coordinates are in
@@ -240,6 +378,34 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 "two findings, at the two places the module writes the name");
         assertEquals(1, compilation.diagnostics().get("0").size(),
                 "one thing to be told, said once");
+    }
+
+    /**
+     * A report whose caret stays put keeps every label it had.
+     *
+     * <p>A label naming no source of its own is read in the diagnostic's, which is what a hand-made
+     * position is for and is a contract older than any of this. Only moving the caret takes that
+     * away — the file the label would be read in stops being the file it was built against — so a
+     * reading that dropped such a label from every report would be reading "no file of its own" as
+     * "no file at all", which is a different thing and is already answered.
+     */
+    @Test
+    void anOrdinaryReportKeepsALabelThatNamesNoSourceOfItsOwn() {
+        Diagnostic said = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
+                .at(new SourcePos(1, 1, "0"))
+                .secondary(Region.ofWidth(new SourcePos(3, 3), 4),
+                        new NameMessage.WriteItOnItsOwn("x"))
+                .build();
+
+        assertEquals(1, said.secondary().size(), "the label is there to begin with");
+        assertEquals("0", said.secondary().get(0).sourceIdOr("0"),
+                "and is read in the file the diagnostic is in");
+
+        Diagnostic moved = said.reachedFrom(List.of(new SourcePos(2, 1, "0")), "lib.held",
+                new ModuleMessage.ItIsReachedFromHereToo());
+
+        assertEquals(List.of(), moved.secondary(),
+                "moving the caret is what takes the label's file away");
     }
 
     /** Where the report about {@code module} is said. */
