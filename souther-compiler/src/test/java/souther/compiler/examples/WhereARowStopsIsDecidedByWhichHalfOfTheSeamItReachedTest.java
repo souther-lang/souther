@@ -162,7 +162,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         Map<String, Applied> perBehavior = new LinkedHashMap<>();
         Answerer resolving = behavior -> {
             Applied its = perBehavior.computeIfAbsent(behavior, _ -> new Applied.GeneratedHere());
-            Answerer.Answer.Something something = _ -> new Answerer.Applying() {
+            return ofThisCompile(_ -> new Answerer.Applying() {
 
                 @Override
                 public Applied applied() {
@@ -173,8 +173,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 public Object to(List<Handed> arguments) {
                     throw new InvocationFailure(new IllegalStateException("stopped by the test"));
                 }
-            };
-            return something;
+            });
         };
 
         List<RowOutcome> rows = evaluated(TWO_BEHAVIORS, resolving).rows();
@@ -241,10 +240,29 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     }));
 
     /** An answerer that has something for every behavior it is asked about, built from what that
-     * something does with the row's stand-ins. */
+     * something does with the row's stand-ins. What it crosses into is this compile's own
+     * declarations: these answerers apply nothing of any other build, and what they are written to
+     * hold is where a row stops. */
     private static Answerer something(
-            Function<String, Answerer.Answer.Something> per) {
-        return per::apply;
+            Function<String, Function<List<DependencyStandin>, Answerer.Applying>> per) {
+        return behavior -> ofThisCompile(per.apply(behavior));
+    }
+
+    /** An answer applying this compile's classes, which does {@code applies} with the stand-ins. */
+    private static Answerer.Answer.Something ofThisCompile(
+            Function<List<DependencyStandin>, Answerer.Applying> applies) {
+        return new Answerer.Answer.Something() {
+
+            @Override
+            public Origin origin() {
+                return new TheCompilesOwn();
+            }
+
+            @Override
+            public Answerer.Applying applying(List<DependencyStandin> standins) {
+                return applies.apply(standins);
+            }
+        };
     }
 
     /** An application that says this compile's classes entered the behavior, and runs {@code body}. */

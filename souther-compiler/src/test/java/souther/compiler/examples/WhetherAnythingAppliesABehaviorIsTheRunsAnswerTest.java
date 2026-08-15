@@ -245,30 +245,47 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 if (!behavior.equals("doubleFromOutside")) {
                     return new Answerer.Answer.Nothing();
                 }
-                Answerer.Answer.Something something = standins ->
-                        ((Answerer.Answer.Something) own.of("double")).applying(standins);
-                return something;
+                return new Answerer.Answer.Something() {
+
+                    @Override
+                    public Origin origin() {
+                        return new TheCompilesOwn();
+                    }
+
+                    @Override
+                    public Answerer.Applying applying(List<DependencyStandin> standins) {
+                        return ((Answerer.Answer.Something) own.of("double")).applying(standins);
+                    }
+                };
             };
         };
     }
 
     /** An answerer claiming an implementation for every behavior and reaching none of them. */
     private static Answering claimingEverythingAndReachingNothing() {
-        return (generated, compiled) -> behavior -> {
-            Answerer.Answer.Something something = _ -> new Answerer.Applying() {
+        return (generated, compiled) -> behavior -> new Answerer.Answer.Something() {
 
-                @Override
-                public Applied applied() {
-                    return new Applied.GeneratedHere();
-                }
+            @Override
+            public Origin origin() {
+                return new TheCompilesOwn();
+            }
 
-                @Override
-                public Object to(List<Handed> arguments) {
-                    throw new ImplementationNotReached("no class of that name (said by the test)",
-                            new ClassNotFoundException(behavior));
-                }
-            };
-            return something;
+            @Override
+            public Answerer.Applying applying(List<DependencyStandin> standins) {
+                return new Answerer.Applying() {
+
+                    @Override
+                    public Applied applied() {
+                        return new Applied.GeneratedHere();
+                    }
+
+                    @Override
+                    public Object to(List<Handed> arguments) {
+                        throw new ImplementationNotReached("no class of that name (said by the test)",
+                                new ClassNotFoundException(behavior));
+                    }
+                };
+            }
         };
     }
 

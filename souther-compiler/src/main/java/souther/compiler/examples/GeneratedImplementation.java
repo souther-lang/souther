@@ -46,14 +46,28 @@ final class GeneratedImplementation implements Answerer {
      * can be loaded. Loading is applying, and an implementation that was generated and cannot be
      * reached is {@link ImplementationNotReached} — a failure, and not this run having nothing to
      * apply.
+     *
+     * <p>What it crosses into is this compile's own declarations. The classes it applies are the ones
+     * this compile emitted from the module the rows are written for, so there is no second build here
+     * for a run to hold the first against.
      */
     @Override
     public Answer of(String behavior) {
         if (!generated.has(behavior)) {
             return new Answer.Nothing();
         }
-        Answer.Something something = standins -> applying(behavior, standins);
-        return something;
+        return new Answer.Something() {
+
+            @Override
+            public Origin origin() {
+                return new TheCompilesOwn();
+            }
+
+            @Override
+            public Applying applying(List<DependencyStandin> standins) {
+                return GeneratedImplementation.this.applying(behavior, standins);
+            }
+        };
     }
 
     /**

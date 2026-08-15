@@ -139,8 +139,18 @@ class AnAnswererInAnotherLoaderRunsARowTest {
 
         @Override
         public Answer of(String behavior) {
-            Answer.Something something = standins -> applying(behavior, standins);
-            return something;
+            return new Answer.Something() {
+
+                @Override
+                public Origin origin() {
+                    return new TheCompilesOwn();
+                }
+
+                @Override
+                public Applying applying(List<DependencyStandin> standins) {
+                    return Crossed.this.applying(behavior, standins);
+                }
+            };
         }
 
         private Applying applying(String behavior, List<DependencyStandin> standins) {
