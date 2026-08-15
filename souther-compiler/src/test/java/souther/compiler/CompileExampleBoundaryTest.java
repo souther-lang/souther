@@ -99,7 +99,7 @@ class CompileExampleBoundaryTest {
         BoundaryAssessment zero = at(away, "0").get(0);
         assertFalse(zero.coverage().hit());
         assertEquals(MeasurementStatus.COMPLETE, zero.status());
-        assertTrue(zero.origin().startsWith("invariant"), zero.origin());
+        assertTrue(zero.rule().named().startsWith("invariant"), zero.rule().named());
 
         PartitionEvidence edge = evidence(MODEL + """
 
@@ -121,7 +121,7 @@ class CompileExampleBoundaryTest {
         BoundaryAssessment hundred = at(evidence, "100").get(0);
         assertEquals(MeasurementStatus.COMPLETE, hundred.status());
         assertTrue(hundred.coverage().hit(), "the row wrote 100 and the guard compared it");
-        assertTrue(hundred.origin().startsWith("guard"), hundred.origin());
+        assertTrue(hundred.rule().isAGuard(), hundred.rule().named());
     }
 
     /**
@@ -158,7 +158,7 @@ class CompileExampleBoundaryTest {
                 """);
 
         BoundaryAssessment first = at(evidence, "0").stream()
-                .filter(b -> b.origin().startsWith("guard")).findFirst().orElseThrow();
+                .filter(b -> b.rule().isAGuard()).findFirst().orElseThrow();
         BoundaryAssessment second = at(evidence, "100").get(0);
 
         assertEquals(MeasurementStatus.COMPLETE, second.status(), "the arms were measured");

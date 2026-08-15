@@ -40,9 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * was found by looking for the first one's shape somewhere else: the same compile said
  * {@code guard@7:22} two lines above an arm of the same body saying where it was written.
  *
- * <p>Held together rather than one assertion per rendering. Four renderings that each say something
- * true separately can still disagree, and disagreeing is the defect: a reader moving between a
- * terminal, a JSON report and an editor is reading one compile.
+ * <p>Of one compile, and every rendering held to the same declaration. Renderings read from separate
+ * runs are compared by way of the compiler answering the same thing twice, which is a different
+ * claim; and four tests each pinned to the same name agree by construction, so a fifth comparing
+ * them to one another could not fail on its own.
  *
  * <p>No module path is needed. The standard library is out of sight of every compile, so this is what
  * any model that calls into it looks like.
@@ -163,28 +164,6 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         assertEquals(DECLARATION, writtenAt.get("declaration").asString());
     }
 
-    /**
-     * The four against each other, which is the property none of them has on its own.
-     *
-     * <p>A rendering that stopped saying it would still pass its own test if the others were the
-     * ones read. What has to hold is that a reader moving between them is told the same thing.
-     *
-     * <p>Of one compile. Renderings read from four runs agree because the compiler is deterministic,
-     * and determinism was never what was wrong: what was wrong is that one run said four things and
-     * three of them were different from the fourth.
-     */
-    @Test
-    void theFourSayTheSameThingAboutOneArm() {
-        Said said = saidAbout(OUT_OF_SIGHT);
-        assertNotNull(said.writtenAt(), "the document says where the arm is written");
-        String named = said.writtenAt().get("declaration").asString();
-
-        assertTrue(said.warning().contains("`" + named + "`"), () -> "the warning: " + said.warning());
-        assertTrue(said.armLine().contains("`" + named + "`"), () -> "the line: " + said.armLine());
-        assertTrue(said.diagnosticJson().contains("\"declaration\":\"" + named + "\""),
-                () -> "the diagnostic document: " + said.diagnosticJson());
-    }
-
     // --- and the line the guard drew, which is the same question one measure over -------------------
 
     /**
@@ -229,6 +208,23 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 "and the document points at that source, not at the one being reported on");
         assertEquals("here", said.writtenAt().get("kind").asString(),
                 "the copy kept its own positions, so the place is the place");
+    }
+
+    /**
+     * And so is a line drawn by a guard that module wrote.
+     *
+     * <p>The same question one measure over. A guard has no name, so what identifies it is where it
+     * is written — and a report that printed the numbers bare named the section's file by omission.
+     */
+    @Test
+    void aGuardAnotherSourceOfThisCompileWroteIsNamedWithItsFile() {
+        Elsewhere said = fromAnotherSource();
+
+        assertFalse(said.boundaryLines().isEmpty(), "the comparison drew lines");
+        for (String line : said.boundaryLines()) {
+            assertTrue(line.contains("guard@up.sou:"),
+                    () -> "the line names the file the guard is written in: " + line);
+        }
     }
 
     // --- the controls -------------------------------------------------------------------------------
@@ -365,7 +361,8 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     }
 
     /** What the two renderings say about an arm written in another source of this compile. */
-    private record Elsewhere(String armLine, String sourceOfTheArm, JsonNode writtenAt) {}
+    private record Elsewhere(String armLine, String sourceOfTheArm, JsonNode writtenAt,
+                             List<String> boundaryLines) {}
 
     /**
      * A compile of two sources, so that the section a report is about and the file an arm is written
@@ -398,9 +395,11 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         JsonNode unreached = down.get("behaviors").get(0).get("branch").get("unreached");
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         JsonNode at = unreached.get(0).get("at");
+        List<String> edges = report.human(names).lines().map(String::strip)
+                .filter(line -> line.startsWith("· no row is at")).toList();
         return new Elsewhere(lines.get(0),
                 document.get("sources").get(at.get("sourceId").asString()).asString(),
-                at.get("writtenAt"));
+                at.get("writtenAt"), edges);
     }
 
     /** Every {@code at} the document holds, wherever it sits. */

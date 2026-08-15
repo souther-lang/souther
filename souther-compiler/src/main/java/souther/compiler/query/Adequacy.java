@@ -1590,7 +1590,7 @@ public final class Adequacy {
                 if (boundary.isUnmetGap()) {
                     out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
                             MeasurementStatus.COMPLETE, Citation.of(behavior.pos()),
-                            List.of(boundary.axis(), boundary.value(), boundary.origin())));
+                            List.of(boundary.axis(), boundary.value(), boundary.rule())));
                 }
             }
             // What the model divides this position no way at all, which is the classes question and
@@ -1722,8 +1722,12 @@ public final class Adequacy {
                                 text(said, 0), text(said, 1));
                         case INPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowAppliesItToThatCase(
                                 text(said, 0), text(said, 1), text(said, 2));
+                        // The rule named without a place. Nothing here knows what to call a
+                        // source, so a line and a column written into the sentence would be read
+                        // against whichever file the reader has in mind. Where the rule is a
+                        // guard, the place is pointed at rather than said.
                         case BOUNDARY_UNMET -> new ExampleMessage.NoRowIsAtThatBoundary(
-                                text(said, 0), text(said, 1), text(said, 2));
+                                text(said, 0), text(said, 1), rule(said).named());
                         case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
                                 text(said, 0), text(said, 1));
                         default -> throw new IllegalArgumentException(
@@ -1732,8 +1736,21 @@ public final class Adequacy {
             switch (finding.kind()) {
                 case OUTPUT_CASE_UNSPECIFIED ->
                         built.hint(new ExampleMessage.WriteARowExpectingThatCase(text(said, 0)));
-                case BOUNDARY_UNMET ->
-                        built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                case BOUNDARY_UNMET -> {
+                    built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                    // Where the rule has a place rather than a name, the place is a second region
+                    // and not words in the sentence: a renderer resolves what to call its file,
+                    // and a body written out of sight says so off its own coordinate.
+                    rule(said).citation().ifPresent(cited -> {
+                        souther.compiler.diag.SourceRef where = switch (cited) {
+                            case souther.compiler.diag.Citation.Written w -> w.at();
+                            case souther.compiler.diag.Citation.OutOfSight o -> o.reachedFrom();
+                        };
+                        built.secondaryIn(where.sourceId(),
+                                souther.compiler.diag.Region.point(where.pos()),
+                                new ExampleMessage.TheGuardThatDrawsTheLine());
+                    });
+                }
                 case ARM_UNREACHED ->
                         built.hint(new ExampleMessage.EitherARowIsMissingOrNothingReachesIt());
                 default -> { }   // the message says all there is to say
@@ -1754,6 +1771,13 @@ public final class Adequacy {
                 case Citation.Written written -> written.at().pos();
                 case Citation.OutOfSight out -> out.reachedFrom().pos();
             };
+        }
+
+        /** The rule a boundary finding is about, which it carries as itself rather than as words:
+         *  what to say about it differs between a report, which can name a file, and a diagnostic,
+         *  which cannot. */
+        private static souther.compiler.partition.OriginRef rule(List<Object> said) {
+            return (souther.compiler.partition.OriginRef) said.get(2);
         }
 
         /** What a finding put at {@code at}, as the text a message carries. */

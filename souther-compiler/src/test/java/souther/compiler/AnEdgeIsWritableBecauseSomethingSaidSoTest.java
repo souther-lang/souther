@@ -287,7 +287,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 compilation.db().ask(new Adequacy.Boundaries("example.waiting")).value();
 
         List<BoundaryAssessment> guards = boundaries.get("f").stream()
-                .filter(b -> b.origin().startsWith("guard")).toList();
+                .filter(b -> b.rule().isAGuard()).toList();
         assertFalse(guards.isEmpty(), "the comparison draws lines: " + boundaries.get("f"));
         for (BoundaryAssessment at : guards) {
             assertEquals(BoundaryAssessment.Coverage.Reason.ARMS_NOT_ASKED,

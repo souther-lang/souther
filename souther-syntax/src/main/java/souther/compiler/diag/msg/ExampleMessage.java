@@ -173,6 +173,10 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1916)
     record NoRowIsAtThatBoundary(String at, String value, String rule) implements ExampleMessage, Reported {}
 
+    /** Said beside the guard a line was drawn by, the sentence naming the rule without a place —
+     *  a guard has no name, and where it is written is a place a renderer resolves a file for. */
+    record TheGuardThatDrawsTheLine() implements ExampleMessage, Supporting {}
+
     /** What a row on the line tells apart. */
     record ARowOnTheLineTellsTwoRulesApart() implements ExampleMessage, Supporting {}
 

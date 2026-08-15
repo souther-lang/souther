@@ -412,7 +412,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                 behavior.injected() ? "injected" : "implemented", 13),
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
-                partition(out, behavior);
+                partition(out, behavior, module.declaredIn(), names);
                 branch(out, behavior, module.declaredIn(), names);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
@@ -537,7 +537,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
      * more than writing the value — the comparison has to have run — and nothing counts that yet.
      */
-    private static void partition(StringBuilder out, BehaviorReport behavior) {
+    private static void partition(StringBuilder out, BehaviorReport behavior,
+                                  String declaredIn, SourceNameResolver names) {
         PartitionEvidence partition = behavior.partition();
         if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
                 && partition.notDerivable().isEmpty())) {
@@ -607,8 +608,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
+            // The rule as this report writes it. The finding carries the rule and not words about
+            // it, because what to say differs between here — where a file has a name — and the
+            // warning built from the same finding, where nothing knows what to call one.
             out.append(String.format("      · no row is at %s = %s (%s)%n",
-                    f.args().get(0), f.args().get(1), f.args().get(2)));
+                    f.args().get(0), f.args().get(1),
+                    ((souther.compiler.partition.OriginRef) f.args().get(2))
+                            .describe(names, declaredIn)));
         }
         // Said and not counted. Nothing has shown a row can be written at these — the projection
         // could not read every rule of the value, and nothing built one either — so they are not
@@ -620,7 +626,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // two models that differ here is looking at what the compiler could establish — and
             // without this line the difference reads as the tool being arbitrary.
             out.append(String.format("      · not known to be writable: %s = %s (%s)%s%n",
-                    b.axis(), b.value(), b.origin(), whatWasTried(b.attempt())));
+                    b.axis(), b.value(), b.origin(names, declaredIn),
+                    whatWasTried(b.attempt())));
         }
     }
 
@@ -874,7 +881,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
                 signature(b, behavior.signature());
-                partition(b, behavior.partition());
+                partition(b, behavior.partition(), module.declaredIn(), names);
                 branch(b, behavior.branch(), sources);
             }
         }
@@ -938,7 +945,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
     }
 
-    private static void partition(ObjectNode behavior, PartitionEvidence partition) {
+    private static void partition(ObjectNode behavior, PartitionEvidence partition,
+                                  String declaredIn, SourceNameResolver names) {
         if (partition == null) {
             return;
         }
@@ -972,7 +980,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (BoundaryAssessment boundary : partition.boundaries()) {
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
-            b.put("origin", boundary.origin());
+            b.put("origin", boundary.origin(names, declaredIn));
             b.put("side", word(boundary.side()));
             // What the line is a line at, said rather than left to be inferred from the text beside
             // it. A line between two positions writes the other position where a line at a count

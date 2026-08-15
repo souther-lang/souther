@@ -260,9 +260,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aWrappersRuleReachesAPositionInsideARecord() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped (min)", lines.get("onHeld/v.w.n = 1").origin());
+        assertEquals("invariant Wrapped (min)", lines.get("onHeld/v.w.n = 1").rule().named());
         assertEquals("invariant NonEmptyBag (min)",
-                lines.get("onHeldBag/List.length(v.b.xs) = 1").origin());
+                lines.get("onHeldBag/List.length(v.b.xs) = 1").rule().named());
     }
 
     /** And through as many names as are worn, since a name wrapped round a value is not a step. */
@@ -270,7 +270,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aWrappersRuleReachesThroughAStackOfNames() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant W2 (min)", lines.get("onStacked/v.w.n = 2").origin());
+        assertEquals("invariant W2 (min)", lines.get("onStacked/v.w.n = 2").rule().named());
     }
 
     /**
@@ -289,9 +289,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aNameWrappedRoundARecordReachesItsPositions() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped (min)", lines.get("onWrapped/v.n = 1").origin());
+        assertEquals("invariant Wrapped (min)", lines.get("onWrapped/v.n = 1").rule().named());
         assertEquals("invariant NonEmptyBag (min)",
-                lines.get("onNonEmpty/List.length(v.xs) = 1").origin());
+                lines.get("onNonEmpty/List.length(v.xs) = 1").rule().named());
     }
 
     /**
@@ -634,7 +634,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         assertTrue(lines.containsKey("onWrapped/v.a = 9"),
                 "and one step lower under the wrapper's clause: " + lines.keySet());
         assertEquals("invariant A (max) within Wrapped",
-                lines.get("onWrapped/v.a = 9").origin(),
+                lines.get("onWrapped/v.a = 9").rule().named(),
                 "the wrapper moved the edge `A` drew and did not draw one");
     }
 
@@ -652,7 +652,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
 
         assertEquals("invariant A (max) within Wrapped",
-                lines.get("onHeld/v.w.a = 9").origin(),
+                lines.get("onHeld/v.w.a = 9").rule().named(),
                 "the clause is `Wrapped`'s wherever a `Wrapped` is held: " + lines.keySet());
     }
 
@@ -715,7 +715,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRelationThatMovedNoEndDoesNotNameOne() {
         Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant A (max) within Inner", lines.get("onOuter/v.a = 7").origin(),
+        assertEquals("invariant A (max) within Inner", lines.get("onOuter/v.a = 7").rule().named(),
                 "`Outer`'s clause reaches nothing `a` had not already passed");
     }
 
@@ -735,7 +735,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
         assertEquals("invariant A (max) within Again or Twice",
-                lines.get("onIdle/v.a = 7").origin(),
+                lines.get("onIdle/v.a = 7").rule().named(),
                 "`Idle`'s clause moves this end nowhere");
     }
 
@@ -744,8 +744,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void eachEndIsHeldByWhicheverDeclarationHoldsIt() {
         Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant N (min) within Both", lines.get("onBoth/v.n = 3").origin());
-        assertEquals("invariant N (max) within Upper", lines.get("onBoth/v.n = 7").origin());
+        assertEquals("invariant N (min) within Both", lines.get("onBoth/v.n = 3").rule().named());
+        assertEquals("invariant N (max) within Upper", lines.get("onBoth/v.n = 7").rule().named());
     }
 
     /** A length floor over an element type nothing inhabits. Its own module, since a declaration that
