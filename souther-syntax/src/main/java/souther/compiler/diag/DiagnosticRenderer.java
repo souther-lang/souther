@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.WrittenAtMessage;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -69,12 +71,33 @@ public interface DiagnosticRenderer {
         return said.toString();
     }
 
-    /** The message body, from what it says or the compatibility literal. */
+    /**
+     * The message body, from what it says or the compatibility literal, with what its caret stands
+     * in for said after it.
+     *
+     * <p>Here because this is what every reader reads: the terminal, the JSON, an editor, and the
+     * text an exception carries. A caret that stands in for code written out of sight is in the
+     * caller's file and is not where the code is, and a body that did not say so reads as a claim
+     * about the line under it — which is what {@code E2011} made of a call that constructs nothing.
+     * Said off the caret rather than at the sites that report one, so a rule checked on a copied body
+     * says it without being written to.
+     */
     static String body(Diagnostic d, Locale locale) {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
-        if (d.literalMessage() != null) {
-            return d.literalMessage();
+        String said = d.literalMessage() != null ? d.literalMessage()
+                : d.said() == null ? "" : Messages.render(d.said(), locale);
+        if (!(caretStandsInFor(d) instanceof WrittenAt.OutOfSight out)) {
+            return said;
         }
-        return d.said() == null ? "" : Messages.render(d.said(), locale);
+        String about = Messages.render(
+                new WrittenAtMessage.TheCodeIsWrittenOutOfSight(out.declaration()),
+                locale);
+        return said.isEmpty() ? about : said + " " + about;
+    }
+
+    /** What this report's caret stands in for, or {@link WrittenAt#HERE} where it is at the code —
+     *  and where it points at nothing at all, there being no claim about a place to qualify. */
+    private static WrittenAt caretStandsInFor(Diagnostic d) {
+        return d.pos() == null ? WrittenAt.HERE : d.pos().writtenAt();
     }
 }
