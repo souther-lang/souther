@@ -4,7 +4,6 @@ package souther.compiler.query;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
@@ -1385,8 +1384,9 @@ public final class Adequacy {
         BOUNDARY_UNMET(DiagnosticCode.E1916, true),
         /** An arm of the body no row goes through. */
         ARM_UNREACHED(DiagnosticCode.E1918, true),
-        /** A case some row expects and nothing was seen to produce. Not asked of an injected
-         *  behavior, which has no body to produce anything. */
+        /** A case some row expects and nothing was seen to produce. Said only of a behavior some row
+         *  saw answer with a case: where nothing was observed at all, this is true of every case and
+         *  is what the rows say of themselves. */
         OUTPUT_CASE_UNVERIFIED(null, false),
         /** A class of an axis no row is in. */
         AXIS_CLASS_UNCOVERED(null, false),
@@ -1486,7 +1486,7 @@ public final class Adequacy {
             Map<String, List<Finding>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 List<Finding> found = new ArrayList<>();
-                signatureFindings(behavior, prepared.value(),
+                signatureFindings(behavior,
                         signatures == null ? null : signatures.get(behavior.name()), found);
                 partitionFindings(behavior,
                         partitions == null ? null : partitions.get(behavior.name()), found);
@@ -1502,9 +1502,8 @@ public final class Adequacy {
         /** What the rows say about the cases of the signature. Carried at the measurement's own status:
          *  a case nothing here claims is, where some row could not be read, a case nothing *seen*
          *  claims. */
-        private static void signatureFindings(Hir.BehaviorDef behavior,
-                                              souther.compiler.check.Prepared module,
-                                              SignatureEvidence signature, List<Finding> out) {
+        private static void signatureFindings(Hir.BehaviorDef behavior, SignatureEvidence signature,
+                                              List<Finding> out) {
             if (signature == null || !signature.status().counted()) {
                 return;
             }
@@ -1514,11 +1513,13 @@ public final class Adequacy {
                 out.add(new Finding(Kind.OUTPUT_CASE_UNSPECIFIED, behavior.name(), status,
                         behavior.pos(), List.of(missing.name(), behavior.name())));
             }
-            // An injected behavior produces nothing, so every case of its output is unverified and
-            // saying so of each says nothing. Left out here rather than at the printing, so that what
-            // a report shows and what a build is told come from one list.
-            if (!ExampleVerifier.isPending(module.behaviors(),
-                    ExampleVerifier.definedNames(module.fns()), behavior.name())) {
+            // Where no row saw the behavior answer, every case is unverified and naming each of them
+            // adds nothing to that. Asked of the rows rather than of the declaration: the two agree
+            // only while the one thing that applies a behavior is the compile that generated it, and
+            // a run that did observe an injected behavior's cases would go on saying nothing about
+            // them. Left out here rather than at the printing, so that what a report shows and what a
+            // build is told come from one list.
+            if (output.hasObservedCase()) {
                 for (TypeSymbol missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
                         out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,

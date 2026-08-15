@@ -49,6 +49,11 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> speci
         return Evidence.missingFrom(declared, verified);
     }
 
+    /** Whether any row observed the behavior produce an output case. */
+    public boolean hasObservedCase() {
+        return !observed.isEmpty();
+    }
+
     public MeasurementStatus status() {
         return Evidence.status(declared, unclassifiedRows);
     }
