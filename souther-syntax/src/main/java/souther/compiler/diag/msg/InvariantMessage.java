@@ -70,6 +70,17 @@ public sealed interface InvariantMessage extends Message {
      */
     record ThisClauseRejectsThisValue() implements InvariantMessage, Supporting {}
 
+    /**
+     * A clause a path reaching this construction fails, where the paths fail different clauses.
+     *
+     * <p>What E2010 points at when no one clause is failed on every path. The invariant is refused
+     * whichever way the value comes, which is what the error says; which clause refuses it depends
+     * on the path, so saying of any of them that the value fails it would be untrue of the value
+     * that comes down the other.
+     */
+    record ThisClauseRejectsTheValueOnSomeOfThePathsHere()
+            implements InvariantMessage, Supporting {}
+
     /** The value being built is one the invariant rejects, whatever the path. */
     @Code(DiagnosticCode.E2010)
     record TheValueIsOneTheInvariantRejects(String data, String unsettled)

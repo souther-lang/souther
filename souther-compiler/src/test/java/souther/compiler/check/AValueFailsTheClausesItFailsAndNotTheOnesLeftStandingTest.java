@@ -163,20 +163,27 @@ class AValueFailsTheClausesItFailsAndNotTheOnesLeftStandingTest {
 
     /**
      * One rung above what this fixes. The sentence is untrue of a clause that merely stands, and it
-     * would be untrue of the whole diagnostic if E2010 could be raised where no clause is refuted at
+     * would be untrue of the whole diagnostic if E2010 could be raised where nothing was refused at
      * all — including in the spelling that names nothing, which would then say a value is rejected
      * by an invariant that rejects it nowhere.
+     *
+     * <p>What is held is that a path was read on which the value fails a clause. Not that some one
+     * clause is failed on all of them: the branches above a construction may fail different clauses,
+     * and then every path violates the invariant while none of the clauses is one the value fails —
+     * which is what {@code REFUTED_SOMEWHERE} is, and what
+     * {@link AnErrorSaysWhatEveryPathFailsAndNotWhatOneOfThemDoesTest} is about.
      */
     @Test
-    void nothingIsReportedAsRejectedWhereNoClauseIsRefused() {
+    void nothingIsReportedAsRejectedWhereNoClauseIsRefusedOnAnyPath() {
         for (String source : List.of(REFUTED_AND_UNKNOWN, REFUTED_UNNAMED_UNKNOWN_NAMED,
                 REFUTED_ONLY)) {
             Judgment judgment = judgmentOn(source);
             if (judgment.verdict() == Verdict.REFUTED_ALONE
                     || judgment.verdict() == Verdict.REFUTED_NOT_ALONE) {
-                assertFalse(judgment.refuted().isEmpty(),
-                        "E2010 is raised on this verdict, so a clause the value fails is what it"
-                                + " is about: " + judgment.found());
+                assertTrue(judgment.found().values().stream()
+                                .anyMatch(one -> one.status().refusedSomewhere()),
+                        "E2010 is raised on this verdict, so a clause the value fails somewhere is"
+                                + " what it is about: " + judgment.found());
             }
         }
     }

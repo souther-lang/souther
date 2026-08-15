@@ -1182,6 +1182,11 @@ public final class InvariantChecker {
             return new Judged(Clause.merge(a.clause(), b.clause()),
                     ClauseStatus.of(a.status(), b.status()));
         }
+
+        /** The same, where the other reading did not read this clause. */
+        Judged whereTheOtherReadingSaysNothing() {
+            return new Judged(clause, status.whereTheOtherReadingSaysNothing());
+        }
     }
 
     /** One obligation and the clause it was owed by. */
@@ -1238,12 +1243,12 @@ public final class InvariantChecker {
                 if (also != null) {
                     found.put(id, Judged.merge(one, also));
                 } else if (one.status().unsettled()) {
-                    found.put(id, one);
+                    found.put(id, one.whereTheOtherReadingSaysNothing());
                 }
             });
             b.found().forEach((id, one) -> {
                 if (!a.found().containsKey(id) && one.status().unsettled()) {
-                    found.put(id, one);
+                    found.put(id, one.whereTheOtherReadingSaysNothing());
                 }
             });
             return new Judgment(Verdict.of(a.verdict(), b.verdict()), found);
@@ -1260,10 +1265,22 @@ public final class InvariantChecker {
             return where(status -> status == ClauseStatus.SETTLED);
         }
 
-        /** The clauses the value being built fails, which is what E2010 is about — and not every
-         * clause left standing beside them. */
+        /** The clauses the value being built fails wherever it is built, which is what E2010 is
+         * about — and not every clause left standing beside them. */
         SequencedMap<Clause.Id, Clause> refuted() {
             return where(status -> status == ClauseStatus.REFUTED);
+        }
+
+        /**
+         * The clauses a path read here fails, where no clause is failed on all of them.
+         *
+         * <p>What E2010 is about when the branches above a construction fail different clauses. The
+         * invariant is refused whichever way the value comes, so the error stands; which clause it
+         * is depends on the path, so none of them is one the value fails and the reader is sent to
+         * each of them under what is true of it.
+         */
+        SequencedMap<Clause.Id, Clause> refutedSomewhere() {
+            return where(status -> status == ClauseStatus.REFUTED_SOMEWHERE);
         }
 
         private SequencedMap<Clause.Id, Clause> where(Predicate<ClauseStatus> which) {
@@ -1723,8 +1740,17 @@ public final class InvariantChecker {
      * a guard. */
     private void reportViolation(Hir.Data type, SourcePos pos, Judgment judgment,
                                  boolean onAPath) {
-        errors.add(CompileException.of(finish(rejects(type, judgment, onAPath), pos,
-                judgment.refuted(), new InvariantMessage.ThisClauseRejectsThisValue())));
+        Diagnostic.Builder said = rejects(type, judgment, onAPath);
+        // What the message names and what it points at are the one set, so a reader is not shown a
+        // clause the sentence does not cover or told of one they cannot find. Where no clause is
+        // failed on every path, that set is empty and the clauses each path fails are pointed at
+        // instead — under what is true of them, which is less than the sentence above says of a
+        // value that fails one clause wherever it is built.
+        errors.add(CompileException.of(judgment.refuted().isEmpty()
+                ? finish(said, pos, judgment.refutedSomewhere(),
+                        new InvariantMessage.ThisClauseRejectsTheValueOnSomeOfThePathsHere())
+                : finish(said, pos, judgment.refuted(),
+                        new InvariantMessage.ThisClauseRejectsThisValue())));
     }
 
     /**

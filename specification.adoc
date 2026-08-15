@@ -5648,7 +5648,9 @@ value, or guard the path so the violating case cannot reach here.
 
 Neither names what decided it: the check knows the values alone did not, and not which of the things known there did.
 
-The secondary regions identify only the invariant clauses shown to reject the value. A clause the check could settle neither way is a clause the guards did not establish, which is what <<e2011>> reports; it is not presented here as one the value fails.
+The secondary regions identify only the invariant clauses shown to reject the value wherever it is built. A clause the check could settle neither way is a clause the guards did not establish, which is what <<e2011>> reports; it is not presented here as one the value fails.
+
+Where the paths reaching a construction fail different clauses, every path violates the invariant and no clause is one every path fails. The message then names no clause — there is none to name — and the regions identify the clauses a path here fails, saying that of them and not that the value fails them.
 
 [#e2011]
 === A construction is not shown to satisfy its invariant
