@@ -60,6 +60,13 @@ final class Terms {
      * terms equal ({@link Term}).
      */
     private final Term.Interner interned = new Term.Interner();
+    /** How each atom outside the affine fragment was computed. */
+    private final Map<Term, Derivation> derivations = new HashMap<>();
+
+    /** What each atom this named outside the affine fragment was computed from. */
+    Map<Term, Derivation> derivations() {
+        return derivations;
+    }
 
     Terms(Symbols symbols) {
         this.symbols = symbols;
@@ -308,7 +315,119 @@ final class Terms {
         if (affineScalarBase(e.type()) == null) {
             return null;
         }
-        return named(bodyKey(e, at), granularityOf(e.type()));
+        Term atom = named(bodyKey(e, at), granularityOf(e.type()));
+        if (atom != null) {
+            recording(atom, e, at);
+        }
+        return atom;
+    }
+
+    /**
+     * Records how {@code atom} was computed, where it stands for arithmetic the affine fragment
+     * cannot carry.
+     *
+     * <p>Here because this is where such an atom is named, and the name is what everything else
+     * about it is filed under: a second place deciding which expressions are products would be a
+     * second answer to keep in step with this one. It is the same reason the spacing of an atom is
+     * recorded here ({@link #named}).
+     *
+     * <p>What is recorded is how the value was computed and not what it lies between. What it lies
+     * between depends on what the path assumed, and the path is not something the naming of an
+     * expression knows — which is why the walk that reads the operands is not handed one.
+     */
+    private void recording(Term atom, Core e, Denotations at) {
+        if (!(asOperator(e) instanceof Core.Binary b)) {
+            return;
+        }
+        Derivation made = switch (b.op()) {
+            case MUL -> product(b, at);
+            case DIV -> quotient(b, at);
+            default -> null;
+        };
+        if (made == null) {
+            return;
+        }
+        Derivation had = derivations.putIfAbsent(atom, made);
+        if (had != null && !sameDerivation(had, made)) {
+            throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` was computed as "
+                    + had + " and as " + made);
+        }
+    }
+
+    /** The product {@code b} is, or null where either factor is a value nothing can be said of. A
+     * factor that is a written constant is not this: that product is a scalar multiply and the
+     * fragment carries it ({@link #scale}). */
+    private Derivation product(Core.Binary b, Denotations at) {
+        LinearForm<Term> left = affineOf(b.left(), at);
+        LinearForm<Term> right = affineOf(b.right(), at);
+        return left == null || right == null ? null : new Derivation.Product(left, right);
+    }
+
+    /**
+     * The quotient {@code b} is, or null where there is no rule about it.
+     *
+     * <p>Only over whole numbers, and only by a divisor that is a whole number other than zero.
+     * {@code /} on {@code Int} truncates toward zero, which is a step nothing about the divisor
+     * changes; on {@code Decimal} it rounds to a precision the run time sets (spec §stdlib-decimal),
+     * and what that rounding does to an end is not something this reads. A divisor the path only
+     * bounds away from zero is not read either — it is the sign and the magnitude of a written
+     * number that the rule is about.
+     */
+    private Derivation quotient(Core.Binary b, Denotations at) {
+        if (granularityOf(b.type()) != Granularity.DISCRETE) {
+            return null;
+        }
+        LinearForm<Term> numerator = affineOf(b.left(), at);
+        LinearForm<Term> divisor = affineOf(b.right(), at);
+        if (numerator == null || divisor == null || !divisor.coefs().isEmpty()) {
+            return null;
+        }
+        BigDecimal written = divisor.constant();
+        if (written.signum() == 0 || written.stripTrailingZeros().scale() > 0) {
+            return null;
+        }
+        return new Derivation.Quotient(numerator, written.longValueExact());
+    }
+
+    /**
+     * Whether two readings computed a value the same way.
+     *
+     * <p>Asked of the numbers and not of how they are written: a coefficient of {@code 0.10} and one
+     * of {@code 0.1} are one number, and a record's own equality says they are two. What this is for
+     * is catching the check naming two values alike, and a difference in scale is not that.
+     */
+    private static boolean sameDerivation(Derivation a, Derivation b) {
+        return switch (a) {
+            case Derivation.Product one -> b instanceof Derivation.Product other
+                    && sameForm(one.left(), other.left())
+                    && sameForm(one.right(), other.right());
+            case Derivation.Quotient one -> b instanceof Derivation.Quotient other
+                    && one.divisor() == other.divisor()
+                    && sameForm(one.numerator(), other.numerator());
+        };
+    }
+
+    private static boolean sameForm(LinearForm<Term> a, LinearForm<Term> b) {
+        if (a.constant().compareTo(b.constant()) != 0 || !a.coefs().keySet().equals(b.coefs().keySet())) {
+            return false;
+        }
+        return a.coefs().entrySet().stream()
+                .allMatch(one -> one.getValue().compareTo(b.coefs().get(one.getKey())) == 0);
+    }
+
+    /**
+     * One atom this said was computed two ways.
+     *
+     * <p>Beside {@link OneTermTwoKinds} and for its reason. A term is a value, and a value is
+     * computed by whatever computes it — so an atom recorded as two different pieces of arithmetic
+     * is the naming and the reading disagreeing about which value the atom is, and every bound
+     * derived under that name is about neither of them.
+     */
+    static final class OneTermTwoDerivations extends IllegalStateException {
+
+        OneTermTwoDerivations(String message) {
+            super(message);
+        }
     }
 
     /** The atom of the size {@code e} takes of a container {@code key} can name, or null where it
