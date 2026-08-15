@@ -62,6 +62,10 @@ public final class FixtureArgumentTypes {
                 Type element = agreedOn(l.elements(), evidence);
                 yield element == null ? null : Type.list(element);
             }
+            case Hir.RowCollection row -> {
+                Type element = agreedOn(row.elements(), evidence);
+                yield element == null ? null : Type.list(element);
+            }
             case null, default -> null;
         };
     }

@@ -116,13 +116,16 @@ public final class NewtypeDesugar {
                 for (Hir.FieldInit fi : nd.inits()) {
                     inits.add(fi.withValue(go(fi.value(), symbols)));
                 }
-                yield new Hir.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.pos(), nd.region());
+                yield new Hir.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.fields(),
+                        nd.pos(), nd.region());
             }
             case Hir.Neg neg -> new Hir.Neg(go(neg.operand(), symbols), neg.pos(), neg.region());
             case Hir.Binary bin ->
                     new Hir.Binary(bin.op(), go(bin.left(), symbols), go(bin.right(), symbols),
                             bin.origin(), bin.pos(), bin.region());
             case Hir.FieldAccess fa -> fa.withTarget(go(fa.target(), symbols));
+            case Hir.RowCollection row -> new Hir.RowCollection(mapExprs(row.elements(), symbols),
+                    row.pos(), row.region());
             case Hir.ListLit lit -> new Hir.ListLit(mapExprs(lit.elements(), symbols), lit.pos(),
                     lit.region());
             case Hir.ListComp comp ->

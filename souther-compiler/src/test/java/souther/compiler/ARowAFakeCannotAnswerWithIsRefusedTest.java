@@ -200,21 +200,34 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
      */
     @Test
     void whatAnUnreachableRowAnswersIsNotBuilt() {
-        String source = model("""
+        // The output that fails is one that fails when it runs — an invariant its construction
+        // breaks — because a spelling the language refuses statically is refused wherever it is
+        // written, reachable or not, and would answer this question with the wrong rule.
+        String source = BASE_WITH_AN_INVARIANT + """
+
                 fake findMember
                     | (MemberId("m-1")) -> Found { id = MemberId("m-1") }
-                    | (MemberId("m-1")) -> Missing { why = String.repeat("x", 0 - 1) }
-                """, "Placed { by = MemberId(\"m-1\") }");
+                    | (MemberId("m-1")) -> Found { id = MemberId("") }
+
+                example place
+                    | "what the table answers" : (Order { by = MemberId("m-1") })
+                        -> Placed { by = MemberId("m-1") }
+                """;
 
         List<Diagnostic> said = diagnosticsOf(source);
 
         assertEquals(List.of("E1926"), said.stream().map(Diagnostic::code).toList(),
                 "the row is unreachable, and what it would have answered was never asked for");
 
-        String reachable = model("""
+        String reachable = BASE_WITH_AN_INVARIANT + """
+
                 fake findMember
-                    | (MemberId("m-1")) -> Missing { why = String.repeat("x", 0 - 1) }
-                """, "Refused { why = \"\" }");
+                    | (MemberId("m-1")) -> Found { id = MemberId("") }
+
+                example place
+                    | "what the table answers" : (Order { by = MemberId("m-1") })
+                        -> Refused { why = "" }
+                """;
 
         assertTrue(diagnosticsOf(reachable).stream().anyMatch(d -> "E1908".equals(d.code())),
                 "and the same output in a row the table can reach is the error it is: "
@@ -233,7 +246,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
 
                 fake findMember
                     | (MemberId("m-1")) -> Found { id = MemberId("") }
-                    | (MemberId(String.repeat("in", 0 - 1))) -> Missing { why = "b" }
+                    | (MemberId(String.slice(0, 99, "in"))) -> Missing { why = "b" }
 
                 example place
                     | "one" : (Order { by = MemberId("m-1") }) -> Refused { why = "" }
@@ -242,8 +255,10 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         List<Diagnostic> said = diagnosticsOf(source);
 
         assertEquals(1, said.size(), "the first row that cannot be read is what the table is refused for");
-        assertEquals("id: must be at least 1 characters", said.get(0).values().get("why"),
-                "which is the answer of the row written first, not the arguments of the one below it");
+        assertTrue(String.valueOf(said.get(0).values().get("why"))
+                        .contains("invariant violated on example.members.MemberId"),
+                "which is the answer of the row written first — the invariant its construction"
+                        + " breaks — not the arguments of the one below it: " + said);
     }
 
     // --- what is not ---------------------------------------------------------------------------

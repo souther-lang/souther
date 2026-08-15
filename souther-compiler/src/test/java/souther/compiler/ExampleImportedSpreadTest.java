@@ -9,6 +9,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A row spreads a value another module published, the same way it spreads one of its own.
@@ -146,6 +147,8 @@ class ExampleImportedSpreadTest {
                 example run
                     | "a helper is not a value" : (Deal { ...notAValue, amount = 1 }) -> Out { m = 1 }
                 """));
-        assertEquals("E1903", e.diagnostic().code());
+        assertEquals("E1024", e.diagnostic().code());
+        assertTrue(e.getMessage().contains("is a function, and cannot be held as a value here"),
+                e.getMessage());
     }
 }

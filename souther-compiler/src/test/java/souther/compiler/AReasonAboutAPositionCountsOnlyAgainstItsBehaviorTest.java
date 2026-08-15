@@ -29,18 +29,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
 
-    /** One behavior whose row writes more than an observation keeps, and one whose rows are read. */
+    /** One behavior whose row writes more than an observation keeps, and one whose rows are read.
+     *  The big value is computed rather than spelled: a literal this size is a method past the
+     *  JVM's code-size limit (E2102), and what this measures is the observation's limit, not the
+     *  emission's. */
     private static String source() {
-        StringBuilder inner = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            inner.append(i == 0 ? "" : ", ")
-                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
-                    .append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ").append("Group { items = [ ").append(inner).append(" ] }");
-        }
+        String groups = "someGroups(64)";
         return """
                 module example.split
 
@@ -65,8 +59,14 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
 
                 let cancel (request) = Ok { n = 1 }
 
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], flag = Yes }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, flag = Yes }) -> Ok { n = 0 }
 
                 example cancel
                     | (Small { flag = Yes }) -> Ok { n = 1 }

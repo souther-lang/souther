@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.RowFixtures;
 import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
 import souther.compiler.check.HelperTable;
@@ -810,7 +811,9 @@ public final class Bodies {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<Map<String, Hir.FnDef>> helpers = db.ask(new ModuleDefinitions(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            if (!settled.present() || !helpers.present() || !scope.present()) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            if (!settled.present() || !helpers.present() || !scope.present()
+                    || !prepared.present()) {
                 return Answer.absent();
             }
             Set<String> emitted =
@@ -820,6 +823,10 @@ public final class Bodies {
             // written for the instance the row settled.
             emitted.addAll(HelperInliner.fixtureKernels(
                     settled.value(), helpers.value(), scope.value()).keySet());
+            // and the operand methods, which exist for the rows and for nothing else. Their names
+            // come from the correspondence the preparation constructed, not from a count of the
+            // settled module's rows: a second count is a second numbering.
+            emitted.addAll(prepared.value().operandMethods().values());
             return Answer.of(emitted);
         }
     }
@@ -1201,11 +1208,14 @@ public final class Bodies {
                         settled.add(def.name());
                     }
                 }
+                Answer<souther.compiler.check.Prepared> prepared =
+                        db.ask(new Shapes.Prepared(name));
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         signatures.present() ? signatures.value() : null,
                         injected.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value(),
-                        settled);
+                        settled,
+                        prepared.present() ? prepared.value().statedReturns() : Set.of());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

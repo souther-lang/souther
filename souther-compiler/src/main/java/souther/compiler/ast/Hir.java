@@ -1166,8 +1166,8 @@ public interface Hir {
 
     sealed interface Expr extends Written
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
-                    NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Expansion, Block,
-                    Tuple, TupleGet, Unreachable {
+                    NewData, Match, If, IfConstructed, ListLit, RowCollection, ListComp, LetIn,
+                    Expansion, Block, Tuple, TupleGet, Unreachable {
     }
 
     /**
@@ -1311,6 +1311,23 @@ public interface Hir {
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type). */
     record ListLit(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
 
+    /**
+     * {@code [ … ]} written in an {@code example} or {@code fake} row, where the brackets are the
+     * notation for whichever collection the position declares — a list, a set, or a map of the
+     * entry pairs written in it (spec §example-evaluable).
+     *
+     * <p>Its own node because which collection it is has not been decided. A row's brackets and a
+     * body's brackets are different questions with different answers, and the same node for both is
+     * a reading that answers the row's question with the body's: a list, whatever the position says.
+     * Elaboration is what decides it, from the type the position contributes, and every reader that
+     * would have to know is a reader the compiler names rather than one that quietly reads a list.
+     *
+     * <p>The position contributes a type here and constrains nothing. Which collection the brackets
+     * are is the notation's question; whether the value that comes out belongs at the position is a
+     * separate one, asked of an input and not of an expectation ({@link souther.compiler.check.RowPosition}).
+     */
+    record RowCollection(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
+
     /** A guard-only comprehension {@code [element | guard, ...]}: the element is included when
      * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation).
      *
@@ -1447,17 +1464,43 @@ public interface Hir {
      * dropping it and turning a carried construction back into the reader's own.
      */
     record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
-                   ConstructionOrigin origin, SourcePos pos, Region region) implements Expr {
+                   ConstructionOrigin origin, Fields fields, SourcePos pos, Region region)
+            implements Expr {
+
+        /** A construction written where every field of it is written out. */
+        public NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
+                       ConstructionOrigin origin, SourcePos pos, Region region) {
+            this(typeName, inits, spreads, origin, Fields.EVERY_ONE_WRITTEN, pos, region);
+        }
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
         public NewData publishedBy(String module) {
-            return new NewData(typeName, inits, spreads, origin.publishedIn(module), pos, region);
+            return new NewData(typeName, inits, spreads, origin.publishedIn(module), fields, pos,
+                    region);
         }
 
         /** The same construction, carried into a body by a value that body named. */
         public NewData carriedByValue() {
-            return new NewData(typeName, inits, spreads, origin.carriedByValue(), pos, region);
+            return new NewData(typeName, inits, spreads, origin.carriedByValue(), fields, pos,
+                    region);
         }
+    }
+
+    /**
+     * Whether a construction has to write out every field it has.
+     *
+     * <p>One rule reads this, and it is the one that reports a field with no value. A row writes a
+     * value the way it is read back rather than the way a body builds one, and there an unwritten
+     * optional field is the absent value it would otherwise spell out (spec §example-evaluable);
+     * everywhere else a construction says what each of its fields is, which is the rule a body is
+     * held to. Named for what it permits rather than for where it came from, so nothing else can
+     * come to rest on "this was written in a row".
+     */
+    enum Fields {
+        /** Every field of the construction is written or spread — what a body writes. */
+        EVERY_ONE_WRITTEN,
+        /** A field the construction does not write is {@code None} where it declares an optional. */
+        OPTIONALS_MAY_BE_OMITTED
     }
 
     record IntLit(long value, SourcePos pos, Region region) implements Expr {}
@@ -1984,11 +2027,12 @@ public interface Hir {
                     x.declaredReturn(), x.body(), x.pos(), region);
             case Block x -> new Block(x.params(), x.body(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.pos(), region);
+            case RowCollection x -> new RowCollection(x.elements(), x.pos(), region);
             case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
             case Tuple x -> new Tuple(x.elements(), x.pos(), region);
             case TupleGet x -> new TupleGet(x.tuple(), x.index(), x.arity(), x.pos(), region);
-            case NewData x ->
-                    new NewData(x.typeName(), x.inits(), x.spreads(), x.origin(), x.pos(), region);
+            case NewData x -> new NewData(x.typeName(), x.inits(), x.spreads(), x.origin(),
+                    x.fields(), x.pos(), region);
             case Match x -> new Match(x.scrutinee(), x.cases(), x.origin(), x.pos(), region);
         };
     }
@@ -2068,6 +2112,11 @@ public interface Hir {
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);
                 yield elements == l.elements() ? l : new ListLit(elements, l.pos(), l.region());
+            }
+            case RowCollection l -> {
+                List<Expr> elements = each(l.elements(), atExpr);
+                yield elements == l.elements() ? l
+                        : new RowCollection(elements, l.pos(), l.region());
             }
             case ListComp comp -> {
                 Expr element = atExpr.apply(comp.element());

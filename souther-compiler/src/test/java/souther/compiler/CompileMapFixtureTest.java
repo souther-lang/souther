@@ -145,6 +145,10 @@ class CompileMapFixtureTest {
                 example run
                     | "not pairs" : (In { counts = [ "a", "b" ] }) -> Out { n = 2 }
                 """));
-        assertTrue(e.getMessage().contains("(key, value)"), e.getMessage());
+        // The brackets lower to `Map.fromList`, so the refusal is that call's: the elements are not
+        // the pairs a map is made from.
+        assertTrue(e.getMessage().contains("Map.fromList"), e.getMessage());
+        assertTrue(e.getMessage().contains("List<String>") && e.getMessage().contains("('k, 'a)"),
+                e.getMessage());
     }
 }

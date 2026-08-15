@@ -40,16 +40,26 @@ public final class Prepared {
     private final List<Rows> examples;
     private final List<FakeTable> fakes;
     private final List<Hir.FnDef> takenOn;
+    /** Which method each row operand's value runs as, by the operand — the correspondence the
+     *  emission constructed, held so the reader that invokes a method never counts the rows for
+     *  itself. Keyed on operand identity, over the very nodes {@link Rows#read} answers with. */
+    private final Map<Hir.Expr, String> operandMethods;
+    /** The operand methods whose declared return is the position's contribution and not the
+     *  definition's claim — an expectation's, which a row is free to disagree with. */
+    private final java.util.Set<String> statedReturns;
     /** Worked out once, as the rungs below work theirs out. */
     private volatile Hir.Module projected;
 
     private Prepared(Desugared.Module desugared, List<Desugared.Fn> fns, List<Rows> examples,
-                     List<FakeTable> fakes, List<Hir.FnDef> takenOn) {
+                     List<FakeTable> fakes, List<Hir.FnDef> takenOn,
+                     Map<Hir.Expr, String> operandMethods, java.util.Set<String> statedReturns) {
         this.desugared = desugared;
         this.fns = List.copyOf(fns);
         this.examples = List.copyOf(examples);
         this.fakes = List.copyOf(fakes);
         this.takenOn = List.copyOf(takenOn);
+        this.operandMethods = operandMethods;
+        this.statedReturns = statedReturns;
     }
 
     /**
@@ -94,7 +104,8 @@ public final class Prepared {
         for (Hir.Fake table : desugared.module().fakes()) {
             fakes.add(new FakeTable(HelperNames.qualifyImportsIn(table, self)));
         }
-        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of());
+        Prepared written = new Prepared(desugared, fns, examples, fakes, List.of(), Map.of(),
+                java.util.Set.of());
         HelperInliner inliner = HelperInliner.forModule(written.module(), published);
         Map<String, Hir.FnDef> injected = new LinkedHashMap<>(inliner.injectedRecursiveHelpers());
         // A helper an example row applies is emitted for that reason (ADR-0077); one this module
@@ -103,11 +114,17 @@ public final class Prepared {
         // A kernel a row applies is emitted at the instance the row settled, which is why this is
         // read off the calls rather than off the helpers a row names.
         inliner.fixtureKernels(written.module(), scope).forEach(injected::putIfAbsent);
+        // What each row operand computes, emitted beside the module's own so a row runs its operand
+        // in the program the behavior it is about is applied in. Which method is whose is kept with
+        // the module: it is decided here and read wherever a row is run, never counted out again.
+        RowFixtures.Emitted rows = RowFixtures.emitted(written.module(), scope);
+        rows.defs().forEach(injected::putIfAbsent);
         // Beside what the module declared, not among it. Both are emitted and only the first was
         // written here, and a reader asking which is which asks the component it is in rather than
         // the shape of a name.
         return injected.isEmpty() ? written
-                : new Prepared(desugared, fns, examples, fakes, List.copyOf(injected.values()));
+                : new Prepared(desugared, fns, examples, fakes, List.copyOf(injected.values()),
+                        rows.methods(), rows.stated());
     }
 
     /** What the module is called. */
@@ -157,6 +174,31 @@ public final class Prepared {
             }
         }
         return packages;
+    }
+
+    /**
+     * Which method each row operand's value runs as, by the operand.
+     *
+     * <p>The correspondence {@link #prepare} constructed when it emitted the methods, keyed on
+     * operand identity. Every reader that needs to know which method is whose reads this; nothing
+     * re-derives it by counting rows, because a count over anything but the whole walk is a
+     * different numbering.
+     */
+    public Map<Hir.Expr, String> operandMethods() {
+        return operandMethods;
+    }
+
+    /**
+     * The operand methods whose declared return is the position's contribution and not the
+     * definition's claim.
+     *
+     * <p>An expectation's. A row may state what the behavior does not answer with — reporting that
+     * disagreement is what the row is for — so the type its position contributes says what its
+     * notation means and requires nothing of the value. The check that holds a declared return to
+     * the body reads this to know which declarations make no claim to hold.
+     */
+    public java.util.Set<String> statedReturns() {
+        return statedReturns;
     }
 
     /**
@@ -332,6 +374,13 @@ public final class Prepared {
          * round. */
         public List<FakeTable> fakes() {
             return module.fakes;
+        }
+
+        /** Which method each row operand runs as, whole-module like the fakes: the methods were
+         * emitted over every file's rows, so a run over one file's reads the correspondence the
+         * emission constructed rather than numbering its own subset from zero. */
+        public Map<Hir.Expr, String> operandMethods() {
+            return module.operandMethods();
         }
 
         /** The artifact the rows run in. */

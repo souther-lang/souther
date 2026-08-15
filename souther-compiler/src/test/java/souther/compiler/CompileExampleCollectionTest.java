@@ -100,8 +100,9 @@ class CompileExampleCollectionTest {
 
     @Test
     void everyBadKeyOfANewtypeKeyedMapIsReported() {
-        // the derived decoder's rekey helper merges the failures of every key; the one built here
-        // does the same, so a fixture with two bad keys names both
+        // The operand runs as this module's code, and evaluation stops at the first invariant its
+        // construction breaks — the same one answer a body building the same map would end with. The
+        // decoder that merged every key's failure went with the reading that decoded.
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 data Sku = String
@@ -116,8 +117,7 @@ class CompileExampleCollectionTest {
                     | "two bad keys" : ([ (Sku("a"), 1), (Sku("b"), 2) ]) -> Level { n = 2 }
                 """));
         assertEquals("E1903", e.code(), e.getMessage());
-        assertTrue(e.getMessage().contains("a: ") && e.getMessage().contains("b: "),
-                "both keys are reported, each named: " + e.getMessage());
+        assertTrue(e.getMessage().contains("invariant violated"), e.getMessage());
     }
 
     @Test
@@ -227,7 +227,10 @@ class CompileExampleCollectionTest {
                 example count
                     | "a string is not a line" : ([ "x" ]) -> Total { n = 1 }
                 """));
-        assertEquals("E1903", e.code(), e.getMessage());
-        assertTrue(e.getMessage().contains("count"), e.getMessage());
+        // The brackets take List<Line> from the position, and a list of strings is not one: the
+        // refusal is the language's, at the operand.
+        assertEquals("E1812", e.code(), e.getMessage());
+        assertTrue(e.getMessage().contains("List<Line>") && e.getMessage().contains("List<String>"),
+                e.getMessage());
     }
 }

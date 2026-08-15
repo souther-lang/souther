@@ -898,15 +898,13 @@ public final class Adequacy {
          * evaluated leaves no row to find — the rows it holds may cover anything, and a measure over
          * the rows that remain is a measure over some of them with nothing in it to say so.
          *
-         * <p>Two codes say it, and they are the two ways rows go unobserved: a source that produced
-         * no observation at all, and an example block whose classes would not load. What this asks is
-         * the state and not the cause, so it reads both rather than one standing in for the other —
-         * which is what it did while one code carried them both.
+         * <p>Which codes say it is each code's own answer ({@link Incompleteness.Code#leftNoRowRead}).
+         * Listed here they were two, and the module whose classes could not be made was a third
+         * — measured: it read as rows-all-seen, and the generator offered work for a behavior whose
+         * rows nothing had read.
          */
         public boolean someRowsUnseen() {
-            return incompleteness.stream()
-                    .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT
-                            || gap.code() == Incompleteness.Code.LINKAGE_FAILED);
+            return incompleteness.stream().anyMatch(gap -> gap.code().leftNoRowRead());
         }
 
         /** The status a measure over these rows takes before its own reading is considered. */

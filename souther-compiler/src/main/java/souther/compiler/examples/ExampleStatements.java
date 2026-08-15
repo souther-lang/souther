@@ -137,7 +137,19 @@ public final class ExampleStatements {
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy);
-        return v.collectDisagreements(exampleOrigins, fakeOrigins, contested);
+        try {
+            return v.collectDisagreements(exampleOrigins, fakeOrigins, contested);
+        } catch (LinkageError e) {
+            // Comparing what two statements answer runs the generated values' own equality, and on a
+            // host with no runtime that is the first thing here to touch it: a row's fixtures build
+            // without it, so the reading gets as far as the comparison. What ends it is not about any
+            // fake — every one in every module would say the same thing — and it is recorded once,
+            // where the rows are evaluated, as `within` answers for a build that could not start.
+            if (runtimeAbsent(e)) {
+                return Readings.NONE;
+            }
+            throw e;
+        }
     }
 
     /**

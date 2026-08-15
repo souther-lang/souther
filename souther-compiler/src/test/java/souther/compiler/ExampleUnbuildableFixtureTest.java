@@ -62,9 +62,12 @@ class ExampleUnbuildableFixtureTest {
                   | (Amount(1)) -> Receipt { total = Amount("x") }
                 """);
 
-        assertEquals("E1903", d.code(), "an expected value that cannot be built is a fixture error");
-        assertInstanceOf(ExampleMessage.TheExpectedValueCouldNotBeBuilt.class, d.said());
-        assertEquals(null, d.diff(), "there is no value to show against the behavior's result");
+        assertEquals("E1317", d.code(), "an expected value that cannot be stated is refused as code");
+        assertInstanceOf(souther.compiler.diag.msg.DataMessage.AFieldExpectsAnotherType.class, d.said());
+        // The two types the field is between are the refusal's own diff — the language's, not a
+        // comparison against anything the behavior answered.
+        assertEquals("Int", d.diff().expectedType(), "what the field takes");
+        assertEquals("String", d.diff().actualType(), "what the row wrote");
     }
 
     @Test
@@ -74,9 +77,9 @@ class ExampleUnbuildableFixtureTest {
                   | (Amount(1)) with quote = Amount("x") -> Receipt { total = Amount(1) }
                 """);
 
-        assertEquals("E1908", d.code());
-        assertInstanceOf(ExampleMessage.TheFakeValueCouldNotBeBuilt.class, d.said(),
-                "the row supplies a fake; what failed is building its value");
+        assertEquals("E1317", d.code());
+        assertInstanceOf(souther.compiler.diag.msg.DataMessage.AFieldExpectsAnotherType.class, d.said(),
+                "the row supplies a fake, and the value it writes states no value at all");
     }
 
     @Test
@@ -100,9 +103,9 @@ class ExampleUnbuildableFixtureTest {
                   | (Amount(1)) -> Receipt { total = Amount(1) }
                 """);
 
-        assertEquals("E1908", d.code());
-        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, d.said(),
-                "the module supplies a fake table; what failed is building one of its rows");
+        assertEquals("E1317", d.code());
+        assertInstanceOf(souther.compiler.diag.msg.DataMessage.AFieldExpectsAnotherType.class, d.said(),
+                "the module supplies a fake table, and a row of it states no value at all");
     }
 
     @Test

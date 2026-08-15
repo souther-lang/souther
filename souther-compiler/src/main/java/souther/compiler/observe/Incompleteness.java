@@ -36,14 +36,21 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
         POSITION
     }
 
+    /**
+     * Why a measure could not be made, and whether the rows it was to be made from were read.
+     *
+     * <p>Each code answers {@link #leftNoRowRead()} for itself. A reader asking whether anything
+     * was read asks that rather than listing the codes that mean it: a list is a copy of this one,
+     * and the copy is what a code added later is missing from.
+     */
     public enum Code {
         /** A value could not be read back into an observed form at all. */
-        VALUE_UNREADABLE,
+        VALUE_UNREADABLE(false),
         /** A value was larger than the limits allow, so only its shape was kept. */
-        VALUE_TRUNCATED,
+        VALUE_TRUNCATED(false),
         /** A row could not be decided — it spent its budget, or the evaluation did not answer — so
          * what it would have covered is unknown. */
-        ROW_UNDECIDED,
+        ROW_UNDECIDED(false),
         /**
          * The generated classes would not link.
          *
@@ -60,9 +67,9 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
          * generator's to report and say so in the generator's own words. What a reader of this code
          * knows is the linking failed and that the rows behind it did not run.
          */
-        LINKAGE_FAILED,
+        LINKAGE_FAILED(true),
         /** Nothing was observed from here, so what its rows cover is unknown. */
-        OBSERVATION_ABSENT,
+        OBSERVATION_ABSENT(true),
         /**
          * The classes an arm-measuring evaluation needs were not made.
          *
@@ -74,7 +81,26 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
          * <p>Its one producer takes this branch only where arm coverage was asked for, and returns
          * no rows with it. So the request and the empty result are both part of what this says.
          */
-        INSTRUMENTATION_ABSENT
+        INSTRUMENTATION_ABSENT(true);
+
+        private final boolean leftNoRowRead;
+
+        Code(boolean leftNoRowRead) {
+            this.leftNoRowRead = leftNoRowRead;
+        }
+
+        /**
+         * Whether nothing behind this was read at all, as against read and not finished.
+         *
+         * <p>The difference decides who has to notice. A row that ran out of time is there and says
+         * so; where nothing was read there is no row to find, and a measure over the rows that
+         * remain is a measure over some of them with nothing in it to say so. A generated row is a
+         * specific piece of work handed to a person, so it may not be offered from here — it may
+         * already be sitting in what was not read.
+         */
+        public boolean leftNoRowRead() {
+            return leftNoRowRead;
+        }
     }
 
     public Incompleteness {

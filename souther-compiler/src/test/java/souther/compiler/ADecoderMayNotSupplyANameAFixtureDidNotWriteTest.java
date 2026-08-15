@@ -2,22 +2,21 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A fixture supplies a value of the type the position is written under, and says so itself.
  *
- * <p>A derived decoder reads the form its base reads and wraps what it read in its own name, so the
- * name a position is written under is one the decoder supplies: another name over the same base, and
- * no name at all, reach it as the one form. What holds a row to that name is read before anything
- * reaches a decoder — the name the row wrote, or, where a helper answered, the value it answered
- * with.
+ * <p>What holds a row to the position's name is the one elaboration every definition goes through:
+ * a row's operand is compiled as this module's code, against the type its position requires, so
+ * another name over the same base, and no name at all, are refused the way they are refused in any
+ * body — by the language's own type rules, at the position that mismatches. No decoder stands
+ * between a row and the value it states, so there is nothing left that could supply a name the row
+ * did not write.
  *
  * <p>Both ways round. A nominal position takes one of the names it holds; a primitive or a
  * collection takes a value under no name, since an `AmountN` is one wherever it is written and its
@@ -161,18 +160,19 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
         return e.diagnostics().get(0);
     }
 
-    /** What the row was told, where an input could not be built. */
-    private static String refuses(String rows) {
-        Diagnostic d = only(rows);
-        assertEquals("E1903", d.code(), d.said().toString());
-        return assertInstanceOf(ExampleMessage.AnInputCouldNotBeBuilt.class, d.said()).why();
-    }
-
-    /** Both names, so the row is told which one it is written under and which one it wrote. */
-    private static void names(String why, String position, String written) {
-        assertTrue(why.contains("`" + position + "`"),
-                "the name the position is written under: " + why);
-        assertTrue(why.contains("`" + written + "`"), "the name the row wrote: " + why);
+    /**
+     * The one diagnostic, held to the code the language answers with and to the names the row is
+     * told. The code is the same rule's at the same position in a body — a row's operand is compiled
+     * as this module's code, and the refusal is the type rule's, not a fixture reading's.
+     */
+    private static void refused(String rows, String code, String... names) {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(BASE + rows),
+                "the row states no value of the position it is written at");
+        assertEquals(1, e.diagnostics().size(), "one row, one diagnostic: " + e.getMessage());
+        assertEquals(code, e.diagnostics().get(0).code(), e.getMessage());
+        for (String name : names) {
+            assertTrue(e.getMessage().contains(name), "`" + name + "` is said: " + e.getMessage());
+        }
     }
 
     @Test
@@ -193,19 +193,18 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
 
     @Test
     void aNewtypePositionRefusesAValueWithNoNameOverIt() {
-        String why = refuses("""
+        refused("""
                 example takesAmount
                     | (1) -> Ok
-                """);
-        assertTrue(why.contains("`AmountN`"), why);
+                """, "E1812", "AmountN", "Int");
     }
 
     @Test
     void aNewtypePositionRefusesAnotherNameOverTheSameBase() {
-        names(refuses("""
+        refused("""
                 example takesAmount
                     | (OtherAmountN(1)) -> Ok
-                """), "AmountN", "OtherAmountN");
+                """, "E1812", "AmountN", "OtherAmountN");
     }
 
     @Test
@@ -218,18 +217,18 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
 
     @Test
     void aHelperAnsweringWithTheBaseDoesNot() {
-        assertTrue(refuses("""
+        refused("""
                 example takesAmount
                     | (bare(1)) -> Ok
-                """).contains("`AmountN`"));
+                """, "E1812", "AmountN", "Int");
     }
 
     @Test
     void aHelperAnsweringWithAnotherNameDoesNot() {
-        names(refuses("""
+        refused("""
                 example takesAmount
                     | (otherWrapped(1)) -> Ok
-                """), "AmountN", "OtherAmountN");
+                """, "E1812", "AmountN", "OtherAmountN");
     }
 
     @Test
@@ -238,10 +237,10 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesAmount
                     | (inferredWrapped(1)) -> Ok
                 """);
-        assertTrue(refuses("""
+        refused("""
                 example takesAmount
                     | (inferredBare(1)) -> Ok
-                """).contains("`AmountN`"));
+                """, "E1812", "AmountN", "Int");
     }
 
     @Test
@@ -254,14 +253,14 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
 
     @Test
     void aNestedNewtypeRefusesALayerLeftOff() {
-        names(refuses("""
+        refused("""
                 example takesNested
                     | (AmountN(1)) -> Ok
-                """), "AmountNN", "AmountN");
-        assertTrue(refuses("""
+                """, "E1812", "AmountNN", "AmountN");
+        refused("""
                 example takesNested
                     | (1) -> Ok
-                """).contains("`AmountNN`"));
+                """, "E1812", "AmountNN", "Int");
     }
 
     @Test
@@ -270,14 +269,14 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesOrder
                     | (Order { amount = AmountN(1) }) -> Ok
                 """);
-        assertTrue(refuses("""
+        refused("""
                 example takesOrder
                     | (Order { amount = 1 }) -> Ok
-                """).contains("`AmountN`"));
-        names(refuses("""
+                """, "E1317", "AmountN", "Int");
+        refused("""
                 example takesOrder
                     | (Order { amount = OtherAmountN(1) }) -> Ok
-                """), "AmountN", "OtherAmountN");
+                """, "E1317", "AmountN", "OtherAmountN");
     }
 
     @Test
@@ -286,10 +285,10 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesMany
                     | ([AmountN(1), AmountN(2)]) -> Ok
                 """);
-        assertTrue(refuses("""
+        refused("""
                 example takesMany
                     | ([AmountN(1), 2]) -> Ok
-                """).contains("`AmountN`"));
+                """, "E1318", "AmountN");
     }
 
     @Test
@@ -298,10 +297,10 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesAmount
                     | (identity(AmountN(1))) -> Ok
                 """);
-        assertTrue(refuses("""
+        refused("""
                 example takesAmount
                     | (identity(1)) -> Ok
-                """).contains("`AmountN`"));
+                """, "E1317", "AmountN", "Int");
     }
 
     @Test
@@ -310,10 +309,10 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesA
                     | (A { id = 1 }) -> Ok
                 """);
-        names(refuses("""
+        refused("""
                 example takesA
                     | (B { id = 1 }) -> Ok
-                """), "A", "B");
+                """, "E1812", "A", "B");
     }
 
     @Test
@@ -331,10 +330,10 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesDecision
                     | (DecisionN(Approved { id = 1 })) -> Ok
                 """);
-        names(refuses("""
+        refused("""
                 example takesDecision
                     | (Approved { id = 1 }) -> Ok
-                """), "DecisionN", "Approved");
+                """, "E1812", "DecisionN", "Approved");
     }
 
     @Test
@@ -369,18 +368,18 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
     void aPositionThatWearsNoNameRefusesOne() {
         // The rule read the other way. A `data AmountN = Int` is an `AmountN` wherever it is written,
         // and its representation reading as an `Int` does not make it one.
-        names(refuses("""
+        refused("""
                 example takesInt
                     | (AmountN(1)) -> Ok
-                """), "Int", "AmountN");
-        names(refuses("""
+                """, "E1812", "Int", "AmountN");
+        refused("""
                 example takesIntList
                     | (IntList([1])) -> Ok
-                """), "List<Int>", "IntList");
-        names(refuses("""
+                """, "E1812", "List<Int>", "IntList");
+        refused("""
                 example takesAmount
                     | (AmountN(OtherAmountN(1))) -> Ok
-                """), "Int", "OtherAmountN");
+                """, "E1317", "Int", "OtherAmountN");
     }
 
     @Test
@@ -389,18 +388,18 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesMany
                     | ([AmountN(1)]) -> Ok
                 """);
-        assertTrue(refuses("""
+        refused("""
                 example takesMany
                     | (ints(1)) -> Ok
-                """).contains("`List<AmountN>`"));
-        assertTrue(refuses("""
+                """, "E1812", "List<AmountN>", "List<Int>");
+        refused("""
                 example takesSet
                     | (intSet(1)) -> Ok
-                """).contains("`Set<AmountN>`"));
-        assertTrue(refuses("""
+                """, "E1812", "Set<AmountN>", "Set<Int>");
+        refused("""
                 example takesMap
                     | (intMap(1)) -> Ok
-                """).contains("`Map<String, AmountN>`"));
+                """, "E1812", "Map<String, AmountN>", "Map<String, Int>");
     }
 
     @Test
@@ -412,28 +411,29 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                     | (Held { amount = pickAmount(full) }) -> Ok
                     | (Held { amount = pickAmount(empty) }) -> Ok
                 """);
-        assertTrue(refuses("""
+        refused("""
                 example takesHeld
                     | (Held { amount = 1 }) -> Ok
-                """).contains("`AmountN`"));
+                """, "E1317", "AmountN");
     }
 
     @Test
     void absenceStandsWhereAnOptionalMakesRoomForItAndNowhereElse() {
-        // A unit case is what this is written for: its decoder reads nothing, so it reads a missing
-        // value as readily as any other and would answer with the case the row never wrote.
-        assertTrue(refuses("""
+        // `None` is the empty value of a `?` position, and none of these is one. The refusal is the
+        // language's (E1303), whose sentence is about where absence may stand — it does not need to
+        // name the position's type to refuse standing anywhere else.
+        refused("""
                 example takesOk
                     | (None) -> Ok
-                """).contains("`Ok`"));
-        assertTrue(refuses("""
+                """, "E1303");
+        refused("""
                 example takesAmount
                     | (None) -> Ok
-                """).contains("`AmountN`"));
-        assertTrue(refuses("""
+                """, "E1303");
+        refused("""
                 example takesInt
                     | (None) -> Ok
-                """).contains("`Int`"));
+                """, "E1303");
     }
 
     @Test
@@ -460,9 +460,9 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
 
     @Test
     void aFieldWrittenBesideASpreadIsStillAPosition() {
-        assertTrue(refuses("""
+        refused("""
                 example takesFiled
                     | (Filed { ...doc, amount = 1, filedOn = Date("2026-01-01") }) -> Ok
-                """).contains("`AmountN`"));
+                """, "E1317", "AmountN", "Int");
     }
 }
