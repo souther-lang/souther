@@ -69,6 +69,17 @@ public sealed interface SourceProvenance {
     }
 
     /**
+     * The same provenance as the declaration knows it, with no reader's route in it.
+     *
+     * <p>What a value keyed on the declaration holds. {@link #reachedBy()} is a fact about a reading
+     * — two readings of one clause reach it by two names as easily as one — so a value that is meant
+     * to be the same for the same declaration cannot carry it and be the same.
+     */
+    default SourceProvenance asDeclared() {
+        return reachedBy(module());
+    }
+
+    /**
      * The same provenance, reached by {@code name} instead — what a splice writes when it learns
      * the name the call reaches, the parse having known only the module.
      *

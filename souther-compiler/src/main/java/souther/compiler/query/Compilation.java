@@ -722,9 +722,13 @@ public final class Compilation {
             // of what is found wrong and is in a file this compile does not have, so there is no
             // author here to tell and no marker to place; what it has to say is said wherever the
             // report is already said.
-            if (label.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
-                    && !saidAt.contains(in.source())) {
-                saidAt.add(in.source());
+            switch (label.place()) {
+                case souther.compiler.diag.DiagnosticPlace.InSource in -> {
+                    if (!saidAt.contains(in.source())) {
+                        saidAt.add(in.source());
+                    }
+                }
+                case souther.compiler.diag.DiagnosticPlace.Unavailable _ -> { }
             }
         }
         return List.copyOf(saidAt);

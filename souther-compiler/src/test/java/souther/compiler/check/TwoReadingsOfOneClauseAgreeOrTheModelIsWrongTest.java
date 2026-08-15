@@ -55,6 +55,28 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
                 "and the reading that can point is what survives either way");
     }
 
+    /**
+     * Commutativity, held where the two readings differ only in how each of them got there.
+     *
+     * <p>Where the clause is written is a fact about the declaration and the same for every reading;
+     * the name a reading reached the code by is a fact about that reading, and two readings of one
+     * clause reach it by two names as easily as one. Carried into what a clause holds, the two are
+     * different values and merging them answers differently each way round — a first-wins union
+     * wearing the name of a join. A clause takes the declaration's own form, so there is nothing
+     * left to differ in.
+     */
+    @org.junit.jupiter.api.Test
+    void twoReadingsThatReachedTheSameClauseByTwoNamesAreOneReading() {
+        Clause viaOne = clause(FIRST, "ordered", new DiagnosticPlace.Unavailable(
+                new SourceProvenance.APublishedModule("lib.rule", "A.Code")));
+        Clause viaTwo = clause(FIRST, "ordered", new DiagnosticPlace.Unavailable(
+                new SourceProvenance.APublishedModule("lib.rule", "B.Code")));
+
+        assertEquals(viaOne, viaTwo, "a clause holds where it is written, not how it was reached");
+        assertEquals(Clause.merge(viaOne, viaTwo), Clause.merge(viaTwo, viaOne),
+                "so which reading is asked first is not something a reader can see");
+    }
+
 
     private static final TypeSymbol BOUND = TypeSymbols.declared(new TypeKey("demo", "Bound"));
     private static final TypeSymbol OTHER = TypeSymbols.declared(new TypeKey("demo", "Other"));

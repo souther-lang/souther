@@ -12,11 +12,12 @@ import java.util.Objects;
  * file. So there is no arm for "wherever this is put": whoever builds one of these knows which
  * source it is in, and a caller that does not know has not finished answering.
  *
- * <p>Built one way, from a region ({@link #of}), so the classification is made once. Every reader is
- * then a switch over two arms and gains a compile error the day a third is added — where before each
- * of them read {@code sourceId == null} and answered a different question with it: the renderer read
- * it as "the diagnostic's file", the clause reader as "drop this", the adequacy warning as "drop
- * this", and moving a caret as "drop this".
+ * <p>A region is classified one way, through {@link #of}, so the reading of a region is made once.
+ * A site holding no region builds an {@link Unavailable} outright, having nothing to classify — what
+ * it has is where the code came from. Every reader is a switch over the two arms and gains a compile
+ * error the day a third is added, where before each of them read {@code sourceId == null} and
+ * answered a different question with it: the renderer read it as "the diagnostic's file", the clause
+ * reader as "drop this", the adequacy warning as "drop this", and moving a caret as "drop this".
  *
  * <p>{@link Unavailable} is not the absence of a place. It carries where the code came from, which
  * is what a reader is told instead of being pointed somewhere — and is the fact a drop threw away.

@@ -8,6 +8,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.check.Exposing;
 import souther.compiler.frontend.CstFrontend;
@@ -454,7 +455,7 @@ public final class Front {
                 List<SourcePos> here = reachedFrom.getOrDefault(taken.getKey(), List.of());
                 reports.add(Report.of(here.isEmpty() ? taken.getValue()
                         : taken.getValue().reachedFrom(here,
-                                new SourceProvenance.APublishedModule(taken.getKey()),
+                                whereItIsWritten(taken.getValue().pos()),
                                 new ModuleMessage.ItIsReachedFromHereToo())));
             }
             for (Map.Entry<String, List<String>> reaching : edges.entrySet()) {
@@ -475,7 +476,7 @@ public final class Front {
                     reports.add(Report.of(here.isEmpty()
                             ? needs(needed, reaching.getKey())
                             : needs(needed, reaching.getKey()).reachedFrom(here,
-                                    new SourceProvenance.APublishedModule(reaching.getKey()),
+                                    whereItIsWritten(read.get(reaching.getKey()).module().pos()),
                                     new ModuleMessage.ItIsReachedFromHereToo())));
                 }
             }
@@ -617,6 +618,24 @@ public final class Front {
             }
         }
         return added;
+    }
+
+    /**
+     * Where the code a coordinate names is written, read off the coordinate.
+     *
+     * <p>Rather than built again from the name this walk filed the module under. The answer was
+     * settled when the module's text became positions ({@code WrittenAt}), by the one caller that
+     * knew what that text was; a second one here is a second authority, and the two agree only for
+     * as long as provenance is a module name and nothing else. The day it carries where the
+     * published source is, the copy made here carries none of it and nothing says so.
+     */
+    private static SourceProvenance whereItIsWritten(SourcePos at) {
+        if (Citation.of(at) instanceof Citation.OutOfSight out) {
+            return out.provenance();
+        }
+        throw new IllegalStateException(
+                "a module off the path is written where this compile has no file, and " + at
+                        + " says otherwise");
     }
 
     /** A module off the path needing one that is not there. */

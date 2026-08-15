@@ -69,7 +69,7 @@ public record DiagnosticView(Spot anchor, List<Spot> others, List<Unquotable> un
         for (LabeledRegion label : d.secondary()) {
             switch (label.place()) {
                 case DiagnosticPlace.InSource in ->
-                        spots.add(new Spot(in.source(), in.region(), label.said()));
+                        spots.add(Spot.secondary(in, label.said()));
                 case DiagnosticPlace.Unavailable out ->
                         unquotable.add(new Unquotable(out, label.said()));
             }

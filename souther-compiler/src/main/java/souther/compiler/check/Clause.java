@@ -32,6 +32,13 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
         Objects.requireNonNull(id, "a clause is one clause");
         Objects.requireNonNull(name, "a clause was written with a name or without one");
         Objects.requireNonNull(at, "a clause is written somewhere, quotable here or not");
+        // As the declaration knows it, with no reader's route in it. Where the clause is written is
+        // a fact about the declaration and the same for every reading of it; the name a reading
+        // reached the code by is a fact about that reading. Carried, two readings of one clause are
+        // two values, and `merge` stops being the same operation whichever way round it is asked.
+        if (at instanceof DiagnosticPlace.Unavailable out) {
+            at = new DiagnosticPlace.Unavailable(out.provenance().asDeclared());
+        }
     }
 
     /**
@@ -88,13 +95,22 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
         // the id names, and the ids were held against each other above; what an unpointable reading
         // carries beyond that is the name that reading reached the code by, which is a fact about
         // the reading and not about the clause.
-        boolean aPoints = a.at instanceof DiagnosticPlace.InSource;
-        boolean bPoints = b.at instanceof DiagnosticPlace.InSource;
+        boolean aPoints = points(a.at);
+        boolean bPoints = points(b.at);
         if (aPoints && bPoints && !a.at.equals(b.at)) {
             throw new NotOneClause("clause " + a.id + " is written at " + a.at
                     + " in one reading and at " + b.at + " in another");
         }
         return aPoints ? a : b;
+    }
+
+    /** Whether this compile can send a reader to the clause. A switch, so an arm added to
+     *  {@link DiagnosticPlace} is a compile error here rather than a silent no. */
+    private static boolean points(DiagnosticPlace at) {
+        return switch (at) {
+            case DiagnosticPlace.InSource _ -> true;
+            case DiagnosticPlace.Unavailable _ -> false;
+        };
     }
 
     /**
