@@ -10,6 +10,7 @@ import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.query.Bodies;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
+import souther.compiler.query.Front;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -40,7 +41,8 @@ public final class PublishedUniverse {
     private final PublishedModule.Classes classes;
     private final Map<String, Ast.Module> written = new LinkedHashMap<>();
     private final Map<String, Exposing.Checked> checked = new LinkedHashMap<>();
-    private final Map<String, Hir.Module> resolved = new LinkedHashMap<>();
+    private final Map<String, Set<String>> injected = new LinkedHashMap<>();
+    private final Map<String, Read> resolved = new LinkedHashMap<>();
     private final Set<String> unreadable = new LinkedHashSet<>();
 
     private PublishedUniverse(PublishedModule.Classes classes) {
@@ -60,8 +62,8 @@ public final class PublishedUniverse {
      * one reads the ones it names — and the modules those name, since a type of an imported type is
      * reached the same way.
      */
-    public Hir.Module resolved(String module) {
-        Hir.Module already = resolved.get(module);
+    public Read resolved(String module) {
+        Read already = resolved.get(module);
         if (already != null || unreadable.contains(module)) {
             return already;
         }
@@ -79,7 +81,8 @@ public final class PublishedUniverse {
             if (hir == null) {
                 unreadable.add(each.getKey());
             } else {
-                resolved.put(each.getKey(), hir);
+                resolved.put(each.getKey(),
+                        new Read(hir, injected.getOrDefault(each.getKey(), Set.of())));
             }
         }
         return resolved.get(module);
@@ -113,17 +116,25 @@ public final class PublishedUniverse {
             if (written.containsKey(name) || unreadable.contains(name)) {
                 continue;
             }
-            Exposing.Checked read = read(name);
-            if (read == null) {
+            PublishedModule published = published(name);
+            if (published == null) {
+                unreadable.add(name);
+                continue;
+            }
+            Exposing.Checked read;
+            try {
+                read = Exposing.check(published.module());
+            } catch (CompileException | IllegalArgumentException _) {
                 unreadable.add(name);
                 continue;
             }
             written.put(name, read.module());
             checked.put(name, read);
+            injected.put(name, published.injectedBehaviors());
             // Which modules a module's declarations name, answered where the compiler answers it:
             // an import line names one, and so does a type or a behavior written with a qualifier,
             // which needs no import at all.
-            for (String reaches : souther.compiler.query.Front.reaches(read.module()).keySet()) {
+            for (String reaches : Front.reaches(read.module()).keySet()) {
                 if (tried.add(reaches)) {
                     toRead.addLast(reaches);
                 }
@@ -139,14 +150,24 @@ public final class PublishedUniverse {
      * or not be class files this JVM reads. What a reader of this does about any of them is the
      * same, and it is the reader's to decide rather than this walk's to impose.
      */
-    private Exposing.Checked read(String module) {
+    private PublishedModule published(String module) {
         try {
-            PublishedModule published = PublishedModule.read(module, classes);
-            return published == null ? null : Exposing.check(published.module());
+            return PublishedModule.read(module, classes);
         } catch (CompileException | IllegalArgumentException _) {
             return null;
         }
     }
+
+    /**
+     * A module as the front end reads it, with what its declarations do not say.
+     *
+     * <p>Which behaviors are left to be injected is not written in a declaration and does not
+     * survive as source, so it travels beside the module ({@link PublishedModule}). It decides
+     * whether an implementation may be supplied for a behavior at all, which is as much a fact about
+     * a crossing as the behavior's signature is — so it travels this far too, rather than being
+     * dropped where a reading turns into declarations.
+     */
+    public record Read(Hir.Module module, Set<String> injectedBehaviors) {}
 
     /** {@code module} with every name it writes answered, or null where a name could not be. */
     private Hir.Module resolve(Ast.Module module, Registry<Ast.Def> registry,

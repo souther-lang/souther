@@ -70,12 +70,12 @@ public final class DeclarationAgreement {
         // Read the whole closure before comparing any of it. What a declaration is read through may
         // be a helper another module published, so which helpers are part of a declaration is not
         // settled until every module a declaration reaches has been read.
-        Map<String, Hir.Module> ourSide = new LinkedHashMap<>();
+        Map<String, PublishedUniverse.Read> ourSide = new LinkedHashMap<>();
         Deque<String> toRead = new ArrayDeque<>(List.of(module));
         Set<String> read = new LinkedHashSet<>(List.of(module));
         while (!toRead.isEmpty()) {
             String name = toRead.removeFirst();
-            Hir.Module here = mine.resolved(name);
+            PublishedUniverse.Read here = mine.resolved(name);
             if (here == null) {
                 return unreadable(name, mine, Agreement.Side.THE_MODULE_BEING_EVALUATED);
             }
@@ -86,15 +86,15 @@ public final class DeclarationAgreement {
             //
             // The standard library is in neither. Nobody publishes it, and whether two builds have
             // the same one is what the boundary revision on each of them says.
-            for (String reached : modulesReached(here)) {
+            for (String reached : modulesReached(here.module())) {
                 if (read.add(reached)) {
                     toRead.addLast(reached);
                 }
             }
         }
-        Map<String, Hir.Module> theirSide = new LinkedHashMap<>();
+        Map<String, PublishedUniverse.Read> theirSide = new LinkedHashMap<>();
         for (String name : ourSide.keySet()) {
-            Hir.Module there = yours.resolved(name);
+            PublishedUniverse.Read there = yours.resolved(name);
             if (there == null) {
                 return unreadable(name, yours, Agreement.Side.THE_ANSWER);
             }
@@ -103,16 +103,56 @@ public final class DeclarationAgreement {
         // What a declaration is read through, of both builds. A helper only one side's declarations
         // reach is one side's answer about what its values are, and leaving it out would compare the
         // two builds by what only one of them says is part of a declaration.
-        Set<ValueName.Helper> readThrough = new LinkedHashSet<>(readThrough(ourSide.values()));
-        readThrough.addAll(readThrough(theirSide.values()));
-        for (Map.Entry<String, Hir.Module> each : ourSide.entrySet()) {
-            Agreement said = agreed(each.getKey(), each.getValue(),
-                    theirSide.get(each.getKey()), readThrough);
+        Set<ValueName.Helper> readThrough = new LinkedHashSet<>(readThrough(modulesOf(ourSide)));
+        readThrough.addAll(readThrough(modulesOf(theirSide)));
+        // Reading widely and comparing widely are two different things. A name is resolved against
+        // every module the text reaches, because that is what resolution needs to answer it; what a
+        // crossing depends on is narrower — the declarations, the signatures, and the helpers those
+        // are read through. A module only an unread helper reaches was read so that helper's names
+        // could be answered, and holding two builds to it would report one as moved over something
+        // no value crossing meets.
+        for (String name : comparedModules(module, ourSide, readThrough)) {
+            Agreement said = agreed(name, ourSide.get(name), theirSide.get(name), readThrough);
             if (!(said instanceof Agreement.Agree)) {
                 return said;
             }
         }
         return new Agreement.Agree();
+    }
+
+    /**
+     * The modules whose declarations a crossing depends on, from {@code module} outwards.
+     *
+     * <p>What is followed is what the compared declarations reach: a module's own declarations, its
+     * behaviors' signatures, and the helpers those are read through. A module reached only by
+     * something not compared is not among them, however it was read.
+     */
+    private static Set<String> comparedModules(String module,
+                                               Map<String, PublishedUniverse.Read> read,
+                                               Set<ValueName.Helper> readThrough) {
+        Deque<String> toWalk = new ArrayDeque<>(List.of(module));
+        Set<String> compared = new LinkedHashSet<>(List.of(module));
+        while (!toWalk.isEmpty()) {
+            PublishedUniverse.Read here = read.get(toWalk.removeFirst());
+            if (here == null) {
+                continue;
+            }
+            for (String reached : modulesReached(here.module(), readThrough)) {
+                if (read.containsKey(reached) && compared.add(reached)) {
+                    toWalk.addLast(reached);
+                }
+            }
+        }
+        return compared;
+    }
+
+    /** The modules of what was read, for the walks that are about declarations alone. */
+    private static List<Hir.Module> modulesOf(Map<String, PublishedUniverse.Read> read) {
+        List<Hir.Module> modules = new ArrayList<>();
+        for (PublishedUniverse.Read each : read.values()) {
+            modules.add(each.module());
+        }
+        return modules;
     }
 
     /** Which of the two ways a module could not be read it was. */
@@ -125,8 +165,25 @@ public final class DeclarationAgreement {
     }
 
     /** Whether two readings of one module say the same thing about what a crossing depends on. */
-    private static Agreement agreed(String module, Hir.Module ours, Hir.Module theirs,
+    private static Agreement agreed(String module, PublishedUniverse.Read read,
+                                    PublishedUniverse.Read theirRead,
                                     Set<ValueName.Helper> readThrough) {
+        Hir.Module ours = read.module();
+        Hir.Module theirs = theirRead.module();
+        // Which behaviors are left to be injected is not in a declaration and does not survive as
+        // source, so it travels beside the module. It decides whether an implementation may be
+        // supplied for a behavior at all, which is as much a fact about the crossing as a
+        // behavior's signature is: two builds that disagree about it disagree about whether
+        // anything may be handed in there.
+        if (!read.injectedBehaviors().equals(theirRead.injectedBehaviors())) {
+            Set<String> only = new LinkedHashSet<>(read.injectedBehaviors());
+            only.removeAll(theirRead.injectedBehaviors());
+            if (only.isEmpty()) {
+                only = new LinkedHashSet<>(theirRead.injectedBehaviors());
+                only.removeAll(read.injectedBehaviors());
+            }
+            return new Agreement.Disagree(module, only.iterator().next());
+        }
         Agreement types = held(module, byName(ours.defs(), Hir.Def::name),
                 byName(theirs.defs(), Hir.Def::name), DeclarationAgreement::crossingParts);
         if (!(types instanceof Agreement.Agree)) {
@@ -325,9 +382,20 @@ public final class DeclarationAgreement {
      * imported.
      */
     private static Set<String> modulesReached(Hir.Module module) {
+        return modulesReached(module, null);
+    }
+
+    /**
+     * The modules {@code module}'s declarations reach, of the parts of it {@code readThrough} says
+     * are compared — or of all of it, where nothing has been settled yet and the answer is what has
+     * to be read for a name to be resolved at all.
+     */
+    private static Set<String> modulesReached(Hir.Module module,
+                                              Set<ValueName.Helper> readThrough) {
         List<Object> compared = new ArrayList<>(module.defs());
         compared.addAll(module.behaviors());
-        compared.addAll(module.fns());
+        compared.addAll(readThrough == null ? module.fns()
+                : publishedHelpers(module, readThrough));
         Set<String> reached = new LinkedHashSet<>();
         walk(compared, new IdentityHashMap<>(), part -> {
             if (part instanceof TypeSymbol type) {
@@ -369,14 +437,26 @@ public final class DeclarationAgreement {
         if (ours instanceof ValueName.Local ourUse && theirs instanceof ValueName.Local theirUse) {
             return bound.bind(ourUse.id(), theirUse.id());
         }
-        // A name that reaches something is what it reaches. The front end put that beside the
-        // spelling it was written with and beside how it was reached; both of those are records of
-        // the writing, and reading either would be reading how something was written.
+        // Where the front end put the answer beside the spelling, the answer is what is compared.
+        // These are the forms that carry both, and each is compared by what it was settled to be:
+        // the spelling beside it is how the author reached it, which two builds may write
+        // differently and mean the same.
         if (ours instanceof Hir.Var.Denoting ourUse && theirs instanceof Hir.Var.Denoting theirUse) {
             return sameShape(ourUse.denotes(), theirUse.denotes(), bound);
         }
         if (ours instanceof Hir.Name.Denoting ourType
                 && theirs instanceof Hir.Name.Denoting theirType) {
+            return sameShape(ourType.type(), theirType.type(), bound);
+        }
+        if (ours instanceof Hir.Binder ourBinding && theirs instanceof Hir.Binder theirBinding) {
+            return sameShape(ourBinding.binding(), theirBinding.binding(), bound);
+        }
+        if (ours instanceof Hir.TypeRef ourRef && theirs instanceof Hir.TypeRef theirRef) {
+            return sameShape(ourRef.type(), theirRef.type(), bound)
+                    && sameShape(ourRef.arg(), theirRef.arg(), bound)
+                    && sameShape(ourRef.tupleElems(), theirRef.tupleElems(), bound);
+        }
+        if (ours instanceof ValueName.OfType ourType && theirs instanceof ValueName.OfType theirType) {
             return sameShape(ourType.type(), theirType.type(), bound);
         }
         if (ours instanceof Optional<?> mine && theirs instanceof Optional<?> yours) {
@@ -451,13 +531,22 @@ public final class DeclarationAgreement {
      * numbered as: each a record of how a declaration came to be where it is, kept for questions this
      * compile answers about itself.
      *
-     * <p>A written name is here too, and that is what became of comparing spellings. What a
-     * declaration is called is the key it is compared under ({@link #byName}); what a name reaches is
-     * the symbol the front end resolved it to; the occurrence itself says nothing further, and
-     * reading it would be reading how something was written rather than what it means.
+     * <p>A name is not here, and the rule about names is one rule rather than a list. Where the
+     * front end settled what a name means and put the answer beside it — a use with its
+     * {@link ValueName}, a type with its {@link TypeSymbol} — the answer is what is compared and the
+     * spelling is passed over, which is what makes an alias and a name written out in full one name.
+     * Everywhere else the spelling <em>is</em> the meaning: which field a value is read under is that
+     * word, and a decoder reads it by that word.
+     *
+     * <p>Which way round to default matters. A spelling read where the front end had already
+     * answered is a build reported as moved over how a name was written — noisy, and answered by
+     * naming the settled form. A spelling passed over where nothing else says what it means is two
+     * rules called one rule: {@code r.min} and {@code r.max} agreeing, and a row handed to an answer
+     * that refuses what this model admits. So the spelling is read unless something beside it says
+     * what it means.
      */
     private static final Set<Class<?>> ERASED = Set.of(
-            SourcePos.class, Region.class, WrittenName.class,
+            SourcePos.class, Region.class,
             ConstructionOrigin.class, CoverageOrigin.class);
 
     /**

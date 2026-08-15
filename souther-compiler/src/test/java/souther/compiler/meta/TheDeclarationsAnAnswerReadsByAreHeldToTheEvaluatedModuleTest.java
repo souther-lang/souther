@@ -191,6 +191,51 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             let price (l) = Line { amount = l.amount }
             """;
 
+    /** A module reached only by a helper nothing is read through. */
+    private static final String FORMATTING = """
+            module example.format exposing ( decorate, Style )
+            import String ( length )
+
+            data Style = String
+                invariant length(value) > 0
+
+            let decorate (s: String) : String = s
+            """;
+
+    private static final String USING_FORMAT = """
+            module example.model exposing ( Title, describe )
+            import String ( length )
+            import example.format ( decorate )
+
+            data Title = String
+                invariant length(value) > 0
+
+            let describe (t: Title) : String = decorate(t.value)
+            """;
+
+    /** A model with a behavior nothing implements, which is therefore one an implementation may be
+     *  supplied for. */
+    private static final String INJECTING = """
+            module example.injecting
+
+            data Amount = Int
+
+            behavior charge : (a: Amount) -> Amount
+                constructs Amount
+            """;
+
+    /** A model whose invariant reads a field of what it is given. */
+    private static final String READING_A_FIELD = """
+            module example.range
+
+            data Range = { min: Int, max: Int }
+
+            data Checked = { range: Range }
+                invariant valid(range)
+
+            let valid (r: Range) : Bool = r.min >= 0
+            """;
+
     /** A model whose invariant states a number, for what stating it another way is. */
     private static final String DECIMAL_MODEL = """
             module example.rates
@@ -614,6 +659,65 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "the rule the reader's invariant is read through admits something else now");
         assertEquals("example.money", said.module());
         assertEquals("atLeast", said.declaration());
+    }
+
+    /**
+     * A helper reading another field of the same value.
+     *
+     * <p>Which field a rule reads is what the rule says: one that admits every value whose `min` is
+     * positive admits a different set from one that admits every value whose `max` is. A comparison
+     * that read a field access as the access it is, without which field, would call the two one
+     * rule — and hand a row to an answer that refuses a value this model admits.
+     */
+    @Test
+    void aHelperReadingAnotherFieldIsADisagreement() {
+        String other = READING_A_FIELD.replace("r.min >= 0", "r.max >= 0");
+
+        Agreement held = DeclarationAgreement.of("example.range",
+                declarationsOf(other), declarationsOf(READING_A_FIELD));
+
+        assertInstanceOf(Agreement.Disagree.class, held,
+                "the two admit different values, so the declaration reading them moved");
+    }
+
+    /**
+     * A behavior with the same signature, which one build implements and the other leaves open.
+     *
+     * <p>Whether a behavior is one an implementation may be supplied for is a fact about the
+     * crossing and not about the signature: the two builds disagree about whether anything may be
+     * handed in there at all. It does not survive as source, so it travels beside the module.
+     */
+    @Test
+    void aBehaviorLeftOpenInOneBuildAndImplementedInTheOtherIsADisagreement() {
+        String implemented = INJECTING + "\nlet charge (a) = Amount(a.value)\n";
+
+        Agreement held = DeclarationAgreement.of("example.injecting",
+                declarationsOf(implemented), declarationsOf(INJECTING));
+
+        assertInstanceOf(Agreement.Disagree.class, held,
+                "one of them may have an implementation supplied for it and the other may not");
+    }
+
+    /**
+     * A module only an unread helper reaches is not held to.
+     *
+     * <p>It has to be read — a name in that helper is answered against it, and resolution answers
+     * every name or none. It is not compared: nothing a value crossing meets is declared there, so
+     * a build where it moved, or where it is not there at all, has not moved anything a row depends
+     * on. Reading and comparing are two closures and this is where they differ.
+     */
+    @Test
+    void aModuleOnlyAnUnreadHelperReachesIsNotHeldTo() {
+        // Its own declaration moved, which is what would be reported if it were held to at all.
+        String moved = FORMATTING.replace("invariant length(value) > 0",
+                "invariant length(value) > 3");
+
+        Agreement held = DeclarationAgreement.of("example.model",
+                declarationsOf(List.of(FORMATTING, USING_FORMAT)),
+                declarationsOf(List.of(moved, USING_FORMAT)));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "nothing a declaration is read through is declared there");
     }
 
     /**

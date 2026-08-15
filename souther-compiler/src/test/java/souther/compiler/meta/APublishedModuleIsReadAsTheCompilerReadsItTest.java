@@ -46,7 +46,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     /** A bare name an import brought in is read as what it stands for. */
     @Test
     void aBareNameAnImportBroughtInIsReadAsWhatItStandsFor() {
-        Hir.Module read = universeOf(LIB).resolved("lib.text");
+        Hir.Module read = universeOf(LIB).resolved("lib.text").module();
 
         assertNotNull(read, "the module is published and this compiler reads it");
         ValueName calls = calledByTheInvariantOf(read, "Title");
@@ -67,7 +67,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         Map<String, byte[]> both = Compiler.compileModules(List.of(LIB, QUALIFYING));
         PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(both::get));
 
-        Hir.Module uses = universe.resolved("app.uses");
+        PublishedUniverse.Read uses = universe.resolved("app.uses");
 
         assertNotNull(uses);
         assertNotNull(universe.resolved("lib.text"),
