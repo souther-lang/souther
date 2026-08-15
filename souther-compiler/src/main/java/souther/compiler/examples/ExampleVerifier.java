@@ -36,8 +36,6 @@ import souther.compiler.observe.Stage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
@@ -300,58 +298,18 @@ public final class ExampleVerifier {
                 continue;
             }
             return new ExampleTarget(name, requirements.getOrDefault(name, List.of()),
-                    isPending(module.behaviors(), defined(), name));
+                    module.injected(b));
         }
         return null;
     }
 
-    /**
-     * Whether a behavior of {@code module} has no implementation to run — an injected one (spec
-     * {@code injected-behavior}).
-     *
-     * <p>Asked here by the row evaluation and by the adequacy report, which says of each behavior
-     * which of the two it is. Two statements of it would let a report say a behavior is implemented
-     * while its rows are being recorded rather than run.
-     *
-     * <p>This is how the behavior is written, and it answers no question about what a run saw. What
-     * the rows observed is theirs to say ({@code OutputCaseEvidence}), and a measure decided from
-     * here would be a measure that stops being right as soon as something other than this compile
-     * can apply a behavior.
-     */
-    public static boolean isPending(List<Hir.BehaviorDef> behaviors, Collection<String> defined,
-                                    String name) {
-        for (Hir.BehaviorDef b : behaviors) {
-            if (b.name().equals(name)) {
-                return b instanceof Hir.SpecBehavior && !defined.contains(name);
-            }
-        }
-        return false;
-    }
-
-    /** The names the module's definitions are written under. What this asks of them is that there
-     * is one, so it is handed the names and not the definitions: a reader taking the desugared
-     * definitions would be asking for a claim it has no use for. */
-    public static Set<String> definedNames(List<souther.compiler.check.Desugared.Fn> fns) {
-        Set<String> names = new LinkedHashSet<>();
-        for (souther.compiler.check.Desugared.Fn fn : fns) {
-            names.add(fn.name());
-        }
-        return names;
-    }
-
-    private Collection<String> defined() {
-        return definedNames(module.fns());
-    }
-
-    private boolean hasFn(String name) {
-        return defined().contains(name);
-    }
-
-    /** The injected behavior named {@code name} in this module (a SpecBehavior with no {@code let}),
-     * i.e. a valid target for a fake; null if not found or not injected. */
+    /** The injected behavior named {@code name} in this module — a valid target for a fake; null if
+     * not found or not injected. How a behavior is written is the module's to say, so the rule is
+     * read from there rather than spelled again here. */
     private Hir.SpecBehavior injectedSpec(String name) {
         for (Hir.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Hir.SpecBehavior spec && spec.name().equals(name) && !hasFn(name)) {
+            if (b instanceof Hir.SpecBehavior spec && spec.name().equals(name)
+                    && module.injected(spec)) {
                 return spec;
             }
         }

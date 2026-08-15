@@ -31,6 +31,22 @@ public final class Requirements {
     private Requirements() {}
 
     /**
+     * Whether {@code behavior} is written with no implementation to run — an injected one, supplied
+     * from Java (spec §injected-behavior).
+     *
+     * <p>How the behavior is written, and nothing else. It answers no question about what a compile
+     * emitted for it or about what a run can apply: those are settled where they happen, and a reader
+     * asking one of them from here would be reading a declaration for a fact about a run.
+     *
+     * <p>Asked of the declaration and not of a name. What is being asked about is the behavior the
+     * module wrote, so a caller hands it over rather than a spelling to look one up by — and there is
+     * then no answer to give for a name that names no behavior.
+     */
+    public static boolean injected(Hir.Module module, Hir.BehaviorDef behavior) {
+        return bodyless(behavior, definedNames(module));
+    }
+
+    /**
      * The injection targets a module builds against: its own behaviors written with no body, and the imported
      * ones it names, whose base lives in the module that declares them (spec §injected-behavior,
      * §composition-with-requirements).
@@ -40,17 +56,30 @@ public final class Requirements {
      * disagree about one behavior.
      */
     public static Set<String> injectedNames(Hir.Module module, Set<String> importedInjected) {
+        Set<String> fns = definedNames(module);
+        Set<String> injected = new LinkedHashSet<>(importedInjected);
+        for (Hir.BehaviorDef bd : module.behaviors()) {
+            if (bodyless(bd, fns)) {
+                injected.add(bd.name());
+            }
+        }
+        return injected;
+    }
+
+    /** The one rule, so the set above and the question about a single behavior cannot come apart: a
+     *  behavior stating only its specification, with no {@code let} of its name to implement it. A
+     *  {@code >->} composition is its own implementation and is never this. */
+    private static boolean bodyless(Hir.BehaviorDef bd, Set<String> fns) {
+        return bd instanceof Hir.SpecBehavior spec && !fns.contains(spec.name());
+    }
+
+    /** The names the module's definitions are written under. */
+    private static Set<String> definedNames(Hir.Module module) {
         Set<String> fns = new LinkedHashSet<>();
         for (Hir.FnDef fn : module.fns()) {
             fns.add(fn.name());
         }
-        Set<String> injected = new LinkedHashSet<>(importedInjected);
-        for (Hir.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Hir.SpecBehavior spec && !fns.contains(spec.name())) {
-                injected.add(spec.name());
-            }
-        }
-        return injected;
+        return fns;
     }
 
     /**
