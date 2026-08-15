@@ -453,6 +453,30 @@ public final class Output {
      * branch. One loader, one version of every type, and a row that loops inside a dependency spends
      * the budget there rather than running until the wait ends.
      */
+    /**
+     * Where this compilation reads declarations of a module from — its own generated classes first,
+     * then the path.
+     *
+     * <p>The same two places the evaluation loader draws classes from, and in the same order, because
+     * they are answers to one question: which module a name means here. A reader with only what this
+     * compilation generated would find nothing for a module that arrived compiled, which is the
+     * ordinary shape of a project rather than an edge of one.
+     *
+     * <p>Its own first, for the reason the loader has: a module being compiled here wins over one of
+     * the same name on the path.
+     */
+    static ClassFileDeclarations declarationsRead(Db db) {
+        Map<String, byte[]> generated = db.ask(new All()).value();
+        ModulePath path = db.ask(new Front.Path()).value();
+        return new ClassFileDeclarations(binaryName -> {
+            byte[] here = generated == null ? null : generated.get(binaryName);
+            if (here != null || path == null) {
+                return here;
+            }
+            return path.bytes(binaryName);
+        });
+    }
+
     static ClassLoader evaluationLoader(Db db) {
         ModulePath path = db.ask(new Front.Path()).value();
         ClassLoader compiler = Output.class.getClassLoader();
@@ -945,11 +969,11 @@ public final class Output {
             souther.compiler.examples.ExampleVerifier.Observations observed =
                     souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
                             artifact,
-                            // What this compile declares, for holding an answer's own declarations
+                            // What this compile can read declarations of, for holding an answer's own
                             // against. Asked for only if something has to be held: a compile's own
                             // answers are of the module being evaluated by being of this compile of
                             // it, and every answer this run has is one of those today.
-                            () -> new ClassFileDeclarations(db.ask(new All()).value()::get),
+                            () -> declarationsRead(db),
                             requirements, evaluationLoader(db),
                             values == null ? Map.of() : values, sourceId, deadlineOf(db),
                             policyOf(db),

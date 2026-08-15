@@ -150,6 +150,10 @@ public sealed interface ExampleMessage extends Message {
     /** Declarations were published and this compiler does not read them. */
     record WhatItPublishedCannotBeReadHere(String module) implements ExampleMessage, Supporting {}
 
+    /** The side that could not be read is the one the rows are written for, not the answer's. */
+    record ThisCompileCannotReadItsOwnDeclarationsOf(String module)
+            implements ExampleMessage, Supporting {}
+
     // --- what the evaluation could not finish ---
 
     /** The evaluation did not answer in time. */

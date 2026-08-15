@@ -36,8 +36,21 @@ public sealed interface Agreement {
      * <p>Not a disagreement. The classes may well be of exactly the module being evaluated; what is
      * known is that nothing here can say so, and a run that went ahead would be running rows against
      * something it was unable to check.
+     *
+     * @param side which of the two could not be read, because what a reader does about it is not the
+     *             same. Declarations the answer brings are the answer's build to fix; declarations
+     *             this compile reads are its own path, and reporting that as the answer's would send
+     *             someone to rebuild the one thing that is not in question
      */
-    record Unreadable(String module, Reason reason) implements Agreement {}
+    record Unreadable(String module, Reason reason, Side side) implements Agreement {}
+
+    /** Whose declarations could not be read. */
+    enum Side {
+        /** The ones the answer brings. */
+        THE_ANSWER,
+        /** The ones the module being evaluated is read by — this compile's own, or its path's. */
+        THE_MODULE_BEING_EVALUATED
+    }
 
     /** Why declarations could not be read back. */
     enum Reason {

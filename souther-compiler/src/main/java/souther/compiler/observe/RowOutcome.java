@@ -40,14 +40,22 @@ import java.util.Set;
  * a fixture's helper hung    NONE                INCOMPLETE    TIMEOUT
  * the behavior hung          INVOKED             INCOMPLETE    TIMEOUT
  * it could not be handed on  FIXTURES_VALIDATED  INCOMPLETE    INFRASTRUCTURE
+ * the answer was not this
+ *   model's to hand it to    FIXTURES_VALIDATED  INCOMPLETE    ANSWERER_ESTABLISHMENT
  * </pre>
  *
- * <p>{@link FailurePhase#INFRASTRUCTURE} is one row that cannot be handed to what was to apply it:
- * the value it built could not be put in the form an answerer of other classes reads. It is
- * {@code FIXTURES_VALIDATED}/{@code INCOMPLETE}, because nothing about the row was established and
- * nothing applied it. What a host was supposed to provide and did not — the runtime off the
- * classpath, so the generated classes will not link — is still said of the module rather than of a
- * row ({@link Incompleteness}).
+ * <p>The last two share a stage and a disposition and are not the same thing, which is what the
+ * phase is for. {@link FailurePhase#INFRASTRUCTURE} is a row that could not be handed on: the value
+ * it built could not be put in the form an answerer of other classes reads, and whether the answer
+ * is of this model was never in question. {@link FailurePhase#ANSWERER_ESTABLISHMENT} is that
+ * question answered badly: nothing could establish that what answers the behavior was built against
+ * the module the row is written for, so the row was not handed on at all. Both are
+ * {@code FIXTURES_VALIDATED}/{@code INCOMPLETE}, because in both nothing about the model was
+ * established and nothing applied the row.
+ *
+ * <p>What a host was supposed to provide and did not — the runtime off the classpath, so the
+ * generated classes will not link — is still said of the module rather than of a row
+ * ({@link Incompleteness}).
  *
  * <p>Whether the behavior was applied is the {@link Stage} column: everything at {@code INVOKED} or
  * past it says what applied it ({@link Run#applied()}), and everything before it says nothing did.

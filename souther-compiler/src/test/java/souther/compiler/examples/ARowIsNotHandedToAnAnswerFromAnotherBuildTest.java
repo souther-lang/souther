@@ -113,6 +113,45 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     }
 
     /**
+     * Still one diagnostic where the behavior's rows are written in more than one block.
+     *
+     * <p>A behavior's rows may be written wherever they belong, and what is being reported is not a
+     * fact about a block. One answer and one module disagree, and a reader told so twice is being
+     * told one thing and counting two.
+     */
+    @Test
+    void theDisagreementIsReportedOncePerBehaviorAcrossBlocks() {
+        String twoBlocks = MODEL.replace("""
+                example shout
+                  | "one"   : (Title("aaaa")) -> Title("aaaa")
+                  | "again" : (Title("bbbb")) -> Title("bbbb")
+                """, """
+                example shout
+                  | "one"   : (Title("aaaa")) -> Title("aaaa")
+
+                example shout
+                  | "again" : (Title("bbbb")) -> Title("bbbb")
+                """);
+
+        ExampleVerifier.Observations observed =
+                evaluated(twoBlocks, answeringFrom(NARROWED.replace("""
+                        example shout
+                          | "one"   : (Title("aaaa")) -> Title("aaaa")
+                          | "again" : (Title("bbbb")) -> Title("bbbb")
+                        """, """
+                        example shout
+                          | "one"   : (Title("aaaa")) -> Title("aaaa")
+
+                        example shout
+                          | "again" : (Title("bbbb")) -> Title("bbbb")
+                        """)));
+
+        assertEquals(2, observed.rows().size(), "both blocks' rows were recorded");
+        assertEquals(1, observed.failures().size(),
+                "and the answer disagreeing with the module is one thing to say");
+    }
+
+    /**
      * What a measure is told: the rows were read and could not be decided.
      *
      * <p>Not that nothing was read. The rows are there and say what they were built from, so a

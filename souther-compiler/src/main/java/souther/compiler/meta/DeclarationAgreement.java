@@ -67,10 +67,11 @@ public final class DeclarationAgreement {
             Reading mine = reading(name, ours);
             Reading yours = reading(name, theirs);
             if (mine.why() != null) {
-                return new Agreement.Unreadable(name, mine.why());
+                return new Agreement.Unreadable(name, mine.why(),
+                        Agreement.Side.THE_MODULE_BEING_EVALUATED);
             }
             if (yours.why() != null) {
-                return new Agreement.Unreadable(name, yours.why());
+                return new Agreement.Unreadable(name, yours.why(), Agreement.Side.THE_ANSWER);
             }
             Agreement said = agreed(name, mine.published(), yours.published());
             if (!(said instanceof Agreement.Agree)) {
@@ -128,8 +129,15 @@ public final class DeclarationAgreement {
         if (!(behaviors instanceof Agreement.Agree)) {
             return behaviors;
         }
-        Agreement helpers = held(module, byName(ours.module().fns(), fn -> fn.written().canonical()),
-                byName(theirs.module().fns(), fn -> fn.written().canonical()),
+        // A module publishes more `let`s than a declaration is read through: what it exposes travels
+        // too, because a reader substitutes a value where it is named and expands a helper where it
+        // is called. Those are read by whatever calls them, and a row's values crossing into an
+        // answer never do — what they meet is what a declaration says, so what is compared is the
+        // helpers a declaration cannot be read without.
+        Set<String> readThrough = readThrough(ours.module());
+        Agreement helpers = held(module,
+                byName(publishedHelpers(ours.module(), readThrough), fn -> fn.written().canonical()),
+                byName(publishedHelpers(theirs.module(), readThrough), fn -> fn.written().canonical()),
                 DeclarationAgreement::crossingParts);
         if (!(helpers instanceof Agreement.Agree)) {
             return helpers;
@@ -203,8 +211,10 @@ public final class DeclarationAgreement {
             case Ast.SpecBehavior b -> List.of(b.params(), b.ret(), b.constructs(), b.dependsOn());
             // A composition publishes the signature its stages compute, so this is what a reader of
             // the published declarations sees rather than what it was written as. Its stages are the
-            // module's own business and are not carried.
-            case Ast.PipeBehavior p -> List.of(p.stages(), p.declaredOut());
+            // module's own business and are not carried. Its declared output is optional, like a
+            // helper's, and stands for itself when it is not written.
+            case Ast.PipeBehavior p -> List.of(p.stages(),
+                    p.declaredOut() == null ? "" : p.declaredOut());
         };
     }
 
@@ -221,12 +231,53 @@ public final class DeclarationAgreement {
                 fn.body(), fn.modifiers());
     }
 
-    /** What each import brings into scope, by the module it brings it from. */
+    /**
+     * The helpers a declaration of {@code module} cannot be read without.
+     *
+     * <p>Reached by the same walk that decided what to publish, rather than by a second reading of
+     * the same question. A helper this misses is one a declaration is compared without the thing
+     * that says what it admits.
+     */
+    private static Set<String> readThrough(Ast.Module module) {
+        Map<String, Ast.FnDef> own = byName(module.fns(), fn -> fn.written().canonical());
+        Set<String> reached = new LinkedHashSet<>();
+        for (Ast.Def def : module.defs()) {
+            if (def instanceof Ast.Data data) {
+                for (Ast.InvariantClause clause : data.invariants()) {
+                    ModuleMetadata.reach(clause.expr(), own, reached);
+                }
+            }
+        }
+        return reached;
+    }
+
+    /** The published helpers of {@code module} that are among {@code readThrough}. */
+    private static List<Ast.FnDef> publishedHelpers(Ast.Module module, Set<String> readThrough) {
+        List<Ast.FnDef> kept = new ArrayList<>();
+        for (Ast.FnDef fn : module.fns()) {
+            if (readThrough.contains(fn.written().canonical())) {
+                kept.add(fn);
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * What each import brings into scope, by the module it brings it from.
+     *
+     * <p>The names as a set, since an import list is which names it brings in and not the order they
+     * are written in. By what each name is rather than how it was spelled, for the reason every other
+     * name here is compared that way.
+     */
     private static Map<String, List<Object>> bindings(Ast.Module module) {
         Map<String, List<Object>> bound = new LinkedHashMap<>();
         for (Ast.Import imported : module.imports()) {
+            Set<String> brought = new LinkedHashSet<>();
+            for (Ast.ImportedName name : imported.importedNames()) {
+                brought.add(name.written().canonical());
+            }
             bound.put(imported.module(),
-                    List.of(imported.alias() == null ? "" : imported.alias(), imported.names()));
+                    List.of(imported.alias() == null ? "" : imported.alias(), brought));
         }
         return bound;
     }
@@ -247,8 +298,8 @@ public final class DeclarationAgreement {
         if (ours == null || theirs == null) {
             return ours == theirs;
         }
-        if (ours instanceof SourcePos || ours instanceof Region) {
-            return theirs instanceof SourcePos || theirs instanceof Region;
+        if (ERASED.contains(ours.getClass())) {
+            return ERASED.contains(theirs.getClass());
         }
         if (ours instanceof WrittenName mine && theirs instanceof WrittenName yours) {
             return mine.canonical().equals(yours.canonical());
@@ -267,6 +318,17 @@ public final class DeclarationAgreement {
             }
             return true;
         }
+        if (ours instanceof Set<?> mine && theirs instanceof Set<?> yours) {
+            // What an import brings in, and anything else whose members are the whole of it. Its
+            // members are values — a set of forms would need each matched to one of the others,
+            // which is a different comparison than this and is not one anything here asks for.
+            for (Object member : mine) {
+                if (member != null && !comparedAsAValue(member.getClass())) {
+                    throw new IllegalStateException(unclassified(member.getClass()));
+                }
+            }
+            return mine.equals(yours);
+        }
         if (ours instanceof Map<?, ?> mine && theirs instanceof Map<?, ?> yours) {
             return mine.keySet().equals(yours.keySet())
                     && mine.entrySet().stream()
@@ -276,6 +338,9 @@ public final class DeclarationAgreement {
             return false;
         }
         if (!ours.getClass().isRecord()) {
+            if (!comparedAsAValue(ours.getClass())) {
+                throw new IllegalStateException(unclassified(ours.getClass()));
+            }
             return ours.equals(theirs);
         }
         for (RecordComponent part : ours.getClass().getRecordComponents()) {
@@ -284,6 +349,53 @@ public final class DeclarationAgreement {
             }
         }
         return true;
+    }
+
+    /**
+     * Where something is written, which two builds of one declaration differ in for no reason a
+     * value can be read differently by.
+     *
+     * <p>Everything else a declaration is made of is compared. A form added to the language is
+     * therefore compared by default, and something added that is <em>not</em> part of what a
+     * declaration means has to be put here — which is a decision, made by whoever adds it, rather
+     * than a silence.
+     */
+    private static final Set<Class<?>> ERASED = Set.of(SourcePos.class, Region.class);
+
+    /** Whether the comparison erases {@code type}. Asked by what holds this rule to covering every
+     *  form a declaration can be made of, so that the two cannot come to disagree. */
+    static boolean erases(Class<?> type) {
+        return ERASED.contains(type);
+    }
+
+    /**
+     * The types a declaration bottoms out in, compared as themselves.
+     *
+     * <p>Named rather than left to {@code equals}, so that a type reached here and classified by
+     * nobody stops the comparison instead of being compared by whatever equality it happens to
+     * have. That is the whole of the rule this walk is: a form is a record and is compared part by
+     * part, a form is one of these and is compared as a value, or a person decides which it is.
+     */
+    static boolean comparedAsAValue(Class<?> type) {
+        return type == String.class || type == Boolean.class || type == Integer.class
+                || type == Long.class || type == Character.class || type == Double.class
+                // A number a declaration states — the bound of an invariant, a default. Compared as
+                // it was written, scale and all: two builds stating it differently have written two
+                // declarations, and which of them a value is admitted by is the question here.
+                || type == java.math.BigDecimal.class
+                // Which declaration a name means, by the module and name that declare it rather than
+                // by the object standing for it. A field's type is this, and a field whose type is
+                // another declaration is read by another decoder.
+                || type == souther.compiler.types.TypeSymbol.class
+                || type.isEnum();
+    }
+
+    /** What a reader of the failure is being asked to decide. */
+    private static String unclassified(Class<?> type) {
+        return type.getName() + " is part of a declaration and this comparison does not know what it"
+                + " is. Decide whether what a value crossing between two builds is read by depends on"
+                + " it: if it does, it is compared as a value (add it to `comparedAsAValue`); if it"
+                + " cannot, it is where something is written or the like, and belongs in `ERASED`.";
     }
 
     private static Object read(RecordComponent part, Object of) {

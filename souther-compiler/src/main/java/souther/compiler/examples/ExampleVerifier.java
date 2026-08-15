@@ -40,6 +40,7 @@ import souther.compiler.meta.PublishedModule;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -280,6 +281,10 @@ public final class ExampleVerifier {
      * answered.
      */
     private final Map<PublishedModule.Classes, Agreement> agreements = new IdentityHashMap<>();
+    /** The behaviors an answer could not be established for have already been reported about. A
+     * behavior's rows may be written in more than one block, and what is reported is about neither
+     * the block nor the row. */
+    private final Set<String> said = new LinkedHashSet<>();
 
     private ExampleVerifier(souther.compiler.check.Prepared.ExampleExecution module,
                             Symbols symbols, Map<String, Sig> sigs,
@@ -320,9 +325,11 @@ public final class ExampleVerifier {
             out.add(notRunnable(ex));
             return;
         }
-        // Said once for the behavior and not once for each of its rows. One answer and one module
-        // disagreeing is one fact, and the rows waiting on it did not stop for reasons of their own.
-        if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)) {
+        // Said once for the behavior: not once for each of its rows, and not once for each block they
+        // are written in. One answer and one module disagreeing is one fact, and a behavior's rows may
+        // be written in as many places as they belong in.
+        if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)
+                && said.add(target.name())) {
             out.add(cannotBeHeldTo(ex, target.name(), target.agreement()));
         }
         Sig sig = sigs.get(target.name());
@@ -342,8 +349,7 @@ public final class ExampleVerifier {
      * <p>Which kind of behavior it is does not survive to here. A row applies the class the module
      * emitted, and that class is reached the same way whichever way the behavior was written — the
      * name says which, and the requirements say what to hand it.
-     */
-    /**
+     *
      * @param agreement what holding the answer's declarations against this module's said, or null
      *                  where there was nothing to hold — the answer is this compile's own, or
      *                  nothing answers the behavior at all
@@ -433,11 +439,19 @@ public final class ExampleVerifier {
             case Agreement.Unreadable unreadable -> Diagnostic.at(ex.pos())
                     .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(target,
                             unreadable.module()))
-                    .hint(switch (unreadable.reason()) {
-                        case NOTHING_PUBLISHED ->
-                                new ExampleMessage.ItsClassesCarryNoDeclarations(unreadable.module());
-                        case NOT_READABLE_HERE ->
-                                new ExampleMessage.WhatItPublishedCannotBeReadHere(unreadable.module());
+                    // Which side could not be read decides what the reader is to do about it, so the
+                    // hint says whose declarations they are. Naming the answer's build for what this
+                    // compile could not read would send someone to rebuild what is not in question.
+                    .hint(switch (unreadable.side()) {
+                        case THE_ANSWER -> switch (unreadable.reason()) {
+                            case NOTHING_PUBLISHED ->
+                                    new ExampleMessage.ItsClassesCarryNoDeclarations(unreadable.module());
+                            case NOT_READABLE_HERE ->
+                                    new ExampleMessage.WhatItPublishedCannotBeReadHere(unreadable.module());
+                        };
+                        case THE_MODULE_BEING_EVALUATED ->
+                                new ExampleMessage.ThisCompileCannotReadItsOwnDeclarationsOf(
+                                        unreadable.module());
                     })
                     .build();
         };

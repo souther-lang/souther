@@ -45,23 +45,46 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
     /** A model spread over two modules: what a field's type is declared by is imported. */
     private static final String SHARED = """
-            module example.shared exposing ( Title )
+            module example.shared exposing ( Title, Note )
             import String ( length )
 
             data Title = String
                 invariant length(value) > 0
+
+            data Note = String
             """;
 
     private static final String ROOT = """
             module example.root
-            import example.shared ( Title )
+            import example.shared ( Title, Note )
 
-            data Todo = { title: Title, done: Bool }
+            data Todo = { title: Title, note: Note, done: Bool }
 
             behavior rename : (t: Todo, to: Title) -> Todo
                 constructs Todo
 
-            let rename (t, to) = Todo { title = to, done = t.done }
+            let rename (t, to) = Todo { title = to, note = t.note, done = t.done }
+            """;
+
+    /**
+     * A module publishing two kinds of helper: one an invariant is read through, and one that is
+     * exposed and nothing declares its way to.
+     */
+    private static final String EXPOSING_MODEL = """
+            module example.published exposing ( Title, describe )
+            import String ( length )
+
+            data Title = String
+                invariant longEnough(value)
+
+            behavior rename : (t: Title) -> Title
+                constructs Title
+
+            let longEnough (s: String) : Bool = length(s) > 0
+
+            let describe (t: Title) : String = t.value
+
+            let rename (t) = Title(t.value)
             """;
 
     /** The same model with a behavior that answers with a union, for what a case being added is. */
@@ -223,6 +246,58 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /**
+     * A published helper no declaration is read through is not part of a crossing.
+     *
+     * <p>A module publishes the helpers its invariants call — a reader cannot read what a value is
+     * without them — and it publishes what it exposes, because a reader substitutes a value where it
+     * is named and expands a helper where it is called. Only the first is read by anything a value
+     * crossing into an answer meets: an exposed helper nothing declares its way through is expanded
+     * in whatever calls it, and a run's rows never do.
+     */
+    @Test
+    void anExposedHelperNoDeclarationReadsIsNotADisagreement() {
+        String moved = EXPOSING_MODEL.replace("let describe (t: Title) : String = t.value",
+                "let describe (t: Title) : String = \"a different answer\"");
+
+        Agreement held = DeclarationAgreement.of("example.published",
+                declarationsOf(moved), declarationsOf(EXPOSING_MODEL));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "nothing a value crossing into the answer meets is read through it");
+    }
+
+    /** A helper an invariant does call is part of what the type admits, so it is compared. */
+    @Test
+    void aHelperAnInvariantCallsIsADisagreementWhenItMoves() {
+        String moved = EXPOSING_MODEL.replace("let longEnough (s: String) : Bool = length(s) > 0",
+                "let longEnough (s: String) : Bool = length(s) > 3");
+
+        Agreement held = DeclarationAgreement.of("example.published",
+                declarationsOf(moved), declarationsOf(EXPOSING_MODEL));
+
+        assertInstanceOf(Agreement.Disagree.class, held,
+                "what a value is admitted by is read through it");
+    }
+
+    /**
+     * An import list written in another order binds the same names.
+     *
+     * <p>What an import binds is which names it brings in and under which qualifier. The order they
+     * are written in is not something a value can be read differently by.
+     */
+    @Test
+    void anImportListInAnotherOrderIsNotADisagreement() {
+        String reordered = ROOT.replace("import example.shared ( Title, Note )",
+                "import example.shared ( Note, Title )");
+
+        Agreement held = DeclarationAgreement.of("example.root",
+                declarationsOf(List.of(SHARED, reordered)), declarationsOf(List.of(SHARED, ROOT)));
+
+        assertInstanceOf(Agreement.Agree.class, held,
+                "an import list is the names it brings in, not the order they are written in");
+    }
+
+    /**
      * A module reached through an import is held to as well.
      *
      * <p>A field of an imported type is read by that module's declarations, so a module whose own
@@ -268,6 +343,8 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "nothing was published, so nothing was established");
         assertEquals(Agreement.Reason.NOTHING_PUBLISHED, said.reason());
+        assertEquals(Agreement.Side.THE_ANSWER, said.side(),
+                "and it is the answer's classes that carry none");
     }
 
     /**
@@ -286,6 +363,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "a declaration was published and the class carrying it is not there");
         assertEquals(Agreement.Reason.NOT_READABLE_HERE, said.reason());
+        assertEquals(Agreement.Side.THE_ANSWER, said.side());
     }
 
     /** {@code classes} with {@code absent} not on it, as an incomplete jar has it. */

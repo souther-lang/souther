@@ -214,8 +214,14 @@ public final class ModuleMetadata {
      *
      * <p>One set does for both visited and reached: a helper is added the first time it is seen, and
      * nothing is ever taken out, so a second sighting stops the walk by itself.
+     *
+     * <p>Not private, because what a declaration is read through is asked twice: here, to decide what
+     * has to be published with it, and where two builds' declarations are held against each other, to
+     * decide which of the published helpers are part of what a declaration means. Written twice they
+     * would be two answers to one question, and a helper the second one missed would be a declaration
+     * compared without the thing that says what it admits.
      */
-    private static void reach(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> reached) {
+    static void reach(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> reached) {
         String named = switch (e) {
             case Ast.Apply call -> call.written();
             case Ast.Var var -> var.name();
