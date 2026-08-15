@@ -72,7 +72,7 @@ final class DerivedBounds {
             return had;
         }
         if (!deriving.add(atom)) {
-            throw new IllegalStateException("atom `" + atom.rendered() + "` is computed from itself");
+            throw new AnAtomComputedFromItself(atom);
         }
         Derivation recipe = terms.derivations().get(atom);
         Bounds bounds = switch (recipe) {
@@ -128,5 +128,23 @@ final class DerivedBounds {
 
     private static java.math.BigDecimal count(Endpoint end) {
         return Count.number(end.at()).at();
+    }
+
+    /**
+     * An atom recorded as arithmetic over itself.
+     *
+     * <p>Nothing a program can write reaches this: a recipe is recorded over the parts a value was
+     * built from, and a part is a strictly smaller expression. What it says is that the naming built
+     * an atom out of itself, which is the check disagreeing with itself about which value an atom is
+     * — so it is refused rather than swallowed, for the reason
+     * {@link TheCheckDisagreesWithItself} gives.
+     */
+    static final class AnAtomComputedFromItself extends TheCheckDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        AnAtomComputedFromItself(Term atom) {
+            super("atom `" + atom.rendered() + "` is computed from itself");
+        }
     }
 }

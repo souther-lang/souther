@@ -423,7 +423,7 @@ final class Terms {
      * is the naming and the reading disagreeing about which value the atom is, and every bound
      * derived under that name is about neither of them.
      */
-    static final class OneTermTwoDerivations extends IllegalStateException {
+    static final class OneTermTwoDerivations extends TheCheckDisagreesWithItself {
 
         OneTermTwoDerivations(String message) {
             super(message);
@@ -503,7 +503,7 @@ final class Terms {
      * differently. Terms are held by what they are made of now, so that route is gone and what is
      * left is the check handing one value two spacings.
      */
-    static final class OneTermTwoKinds extends IllegalStateException {
+    static final class OneTermTwoKinds extends TheCheckDisagreesWithItself {
 
         OneTermTwoKinds(String message) {
             super(message);

@@ -773,8 +773,10 @@ public final class InvariantChecker {
      * compiler not being able to follow a program.
      */
     static void gaveUp(String where, RuntimeException why) {
-        if (why instanceof Terms.OneTermTwoKinds || why instanceof CitableRegion.NotOnePlace
-                || why instanceof Clause.NotOneClause) {
+        // Asked of what the failure is and not of which ones this has met. A list here is a copy of
+        // the types that carry the distinction, and a new way for the check to disagree with itself
+        // would go on being reported as an ordinary limit with nothing failing while it did.
+        if (why instanceof TheCheckDisagreesWithItself) {
             throw why;
         }
         List<GaveUp> watching = GAVE_UP;
