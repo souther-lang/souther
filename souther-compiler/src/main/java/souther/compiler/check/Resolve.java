@@ -78,6 +78,17 @@ public final class Resolve {
     private final Map<BindingOwner, Integer> counts = new HashMap<>();
     /** The definition whose text is being read. Every binding met belongs to it. */
     private BindingOwner owner;
+
+    /**
+     * Whether what is being resolved was written in an {@code example} or {@code fake} row.
+     *
+     * <p>The one thing this decides is which node a bracketed literal becomes: in a row the brackets
+     * are the notation for whichever collection the position declares, and which one that is has no
+     * answer until the position is known, so the node says so rather than being read as a list here
+     * (spec §example-evaluable). Nothing else about a row is resolved differently, and nothing here
+     * reads a type.
+     */
+    private boolean inARow;
     /**
      * The behaviors this module named through another module's name, by that module.
      *
@@ -360,6 +371,7 @@ public final class Resolve {
             fns.add(r.fn(fn));
         }
         List<Hir.Example> examples = new ArrayList<>();
+        r.inARow = true;   // every operand below is written in a row (spec §example-evaluable)
         for (Ast.Example e : m.examples()) {
             r.owner = r.ownerOfValue(e.target());
             List<Hir.ExampleRow> rows = new ArrayList<>();
@@ -383,6 +395,7 @@ public final class Resolve {
             }
             fakes.add(new Hir.Fake(f.target(), rows, f.pos()));
         }
+        r.inARow = false;
         Map<String, Hir.RetType> exposedOutputs = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.RetType> e : m.exposedOutputs().entrySet()) {
             exposedOutputs.put(e.getKey(), r.retType(e.getValue()));
@@ -954,8 +967,12 @@ public final class Resolve {
             }
             // the type being built is this case's business; everything under it is a slot like any
             // other
+            // A construction written in a row does not write out an optional field it leaves
+            // absent; one written anywhere else says what each of its fields is.
             case Ast.NewData nd -> new Hir.NewData(type(nd.typeName()), inits(nd.inits(), bound),
-                    vars(nd.spreads(), bound), nd.origin(), nd.pos(), nd.region());
+                    vars(nd.spreads(), bound), nd.origin(),
+                    inARow ? Hir.Fields.OPTIONALS_MAY_BE_OMITTED : Hir.Fields.EVERY_ONE_WRITTEN,
+                    nd.pos(), nd.region());
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> {
@@ -999,7 +1016,9 @@ public final class Resolve {
                     expr(x.left(), bound), expr(x.right(), bound), x.origin(), x.pos(), x.region());
             case Ast.If x -> new Hir.If(expr(x.cond(), bound), expr(x.then(), bound),
                     expr(x.els(), bound), x.origin(), x.pos(), x.region());
-            case Ast.ListLit x -> new Hir.ListLit(exprs(x.elements(), bound), x.pos(), x.region());
+            case Ast.ListLit x -> inARow
+                    ? new Hir.RowCollection(exprs(x.elements(), bound), x.pos(), x.region())
+                    : new Hir.ListLit(exprs(x.elements(), bound), x.pos(), x.region());
             case Ast.ListComp x -> new Hir.ListComp(expr(x.element(), bound),
                     exprs(x.guards(), bound), x.origin(), x.pos(), x.region());
             case Ast.Tuple x -> new Hir.Tuple(exprs(x.elements(), bound), x.pos(), x.region());

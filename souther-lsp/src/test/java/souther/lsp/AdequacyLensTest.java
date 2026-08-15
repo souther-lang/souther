@@ -182,17 +182,10 @@ class AdequacyLensTest {
      */
     @Test
     void aLineWhoseValueCouldNotBeReadIsNotInTheRatio() {
-        StringBuilder items = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            items.append(i == 0 ? "" : ", ")
-                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
-                    .append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ")
-                    .append("Group { items = [ ").append(items).append(" ] }");
-        }
+        // Computed rather than spelled: a row's operand is compiled as a method of the module, and
+        // a literal this size is past what a JVM method holds — which would leave the module with
+        // no classes at all, where what this measures is the observation's limit.
+        String groups = "someGroups(64)";
         String unread = """
                 module example.wide
 
@@ -209,8 +202,14 @@ class AdequacyLensTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0) }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0) }) -> Ok { n = 0 }
                 """.formatted(groups);
 
         List<CodeLens> lenses = measuring(Adequacy.Level.ALL)

@@ -500,6 +500,11 @@ final class HelperParams {
                 case Hir.Match m -> visitMatch(m, env, target, expected);
                 case Hir.ListLit list -> visitShared(readings(list.elements(), env), target,
                         expected instanceof Type.ListOf l ? l.element() : null);
+                // A row's brackets never reach a helper's parameter inference: a helper is written in
+                // the module and a row is not one of its call sites. Walked all the same, so that what
+                // is inside is not skipped by a reader that only knows one of the two spellings.
+                case Hir.RowCollection row -> visitShared(readings(row.elements(), env), target,
+                        expected instanceof Type.ListOf l ? l.element() : null);
                 case Hir.Apply call -> visitArgs(call, env, target, expected);
                 case Hir.NewData nd -> visitInits(nd, env, target);
                 case Hir.IfConstructed ic -> visitAttempt(ic, env, target, expected);

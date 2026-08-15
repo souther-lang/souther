@@ -277,8 +277,9 @@ class CompileUnreachableTest {
 
     @Test
     void unreachableAsAnExampleExpectationIsRejected() {
-        // A row states the value a rule answers, and this one answers none; it is refused by the
-        // rule that an expectation is a literal or a construction.
+        // The expectation's position contributes the output's type, so `unreachable` stands where
+        // a type is stated — admissible, as beside a declared return — and aborts when the row
+        // computes it: a row whose expectation aborts states nothing to compare.
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(MODULE + """
 
                 example daysFor
@@ -286,6 +287,7 @@ class CompileUnreachableTest {
                 """));
 
         assertEquals("E1903", e.diagnostics().get(0).code(), e.getMessage());
+        assertTrue(e.getMessage().contains("the table has no such cell"), e.getMessage());
     }
 
     @Test

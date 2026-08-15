@@ -40,9 +40,10 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
     /**
      * A model, with the work the compile that reads it does not get back from.
      *
-     * <p>Carried beside the source because the two here differ in it. One holds a row that never
-     * comes back, which is said here rather than timed; the other walks four thousand nodes to spend
-     * the observation budget and comes back from everything, so nothing about it overruns.
+     * <p>Carried beside the source because the models here differ in it. One holds a row that never
+     * comes back, which is said here rather than timed; the others come back from everything — one
+     * spends the observation budget, one is past what the backend can emit — so nothing about them
+     * overruns.
      */
     private record Unreadable(String source, Deadline overrun) {}
 
@@ -78,20 +79,56 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     | (Draft { flag = Yes, cost = Amount(500) }) -> Big { n = 0 }
                 """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("take"))),
                 // a value past the observation's limits: the position is there and unreadable
-                new Unreadable(budgetSpent(), null));
+                new Unreadable(budgetSpent(), null),
+                // a module whose classes could not be made: nothing was read, and nothing says
+                // which row would have covered what
+                new Unreadable(classesNotMade(), null));
+    }
+
+    /**
+     * A module the backend cannot emit: the row's operand is compiled as a method of its own, and
+     * this one is past what a JVM method holds.
+     *
+     * <p>The third way, and the one that was missed. A source nothing observed and an example block
+     * whose classes would not load were listed where a reader asked whether anything was read;
+     * a module whose classes were not made reads the same to every measure and was not among them,
+     * so the generator offered work for a behavior whose rows nothing had read.
+     */
+    private static String classesNotMade() {
+        StringBuilder items = new StringBuilder();
+        for (int i = 0; i < 4096; i++) {
+            items.append(i == 0 ? "" : ", ").append("Item { a = \"").append(i)
+                    .append("\", b = \"").append(i).append("\", c = \"").append(i).append("\" }");
+        }
+        return """
+                module example.c
+
+                data Amount = Int
+                    invariant value >= 0 && value <= 1000
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Item = { a: String, b: String, c: String }
+
+                data Draft = { items: List<Item>, cost: Amount, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (request: Draft) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = request.cost.value }
+
+                example take
+                    | (Draft { items = [ %s ], cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                """.formatted(items);
     }
 
     private static String budgetSpent() {
-        StringBuilder inner = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            inner.append(i == 0 ? "" : ", ").append("Item { a = \"").append(i)
-                    .append("\", b = \"").append(i).append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ")
-                    .append("Group { items = [ ").append(inner).append(" ] }");
-        }
+        // Computed rather than spelled: a literal this size is a method past the JVM's code-size
+        // limit (E2102), and what this model exists to hit is the observation's limit.
+        String groups = "someGroups(64)";
         return """
                 module example.b
 
@@ -113,13 +150,20 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
                 """.formatted(groups);
     }
 
     /** Compiles are shared between the cases that read the same model: each of the three walks the
-     * same two, and a compilation answers the same questions however many times it is asked. */
+     * same models, and a compilation answers the same questions however many times it is asked. */
     private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
 
     private static Compilation measured(Unreadable model) {

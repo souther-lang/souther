@@ -45,7 +45,9 @@ public final class HelperTyping {
     static void checkHelpers(HelperInliner inliner, Symbols symbols,
                                      Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
-                                     TypeChecker.Elaborated elaborated) {
+                                     TypeChecker.Elaborated elaborated,
+                                     java.util.Set<String> statedReturns,
+                                     java.util.Set<String> rowOperands) {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
@@ -54,6 +56,13 @@ public final class HelperTyping {
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
+            // What a row operand may reach. A row supplies the values a behavior is applied to and
+            // stands in for what that behavior depends on; it is not inside the application, so the
+            // dependencies are not in force where it is computed — and the definition it is
+            // compiled as is nullary and static, with nothing injected into it. Handed the same
+            // requirement table a body gets, a call to a required behavior types here and reaches
+            // no implementation at all.
+            Map<String, ReqSig> reachable = rowOperands.contains(h.name()) ? Map.of() : reqSigs;
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
             // values written through helpers reaches every link exactly as one written without them
@@ -113,7 +122,7 @@ public final class HelperTyping {
                 // Complete the env from the body, then run the same standalone check an annotated
                 // helper gets — so a mis-declared return type or a mis-passed function argument in the
                 // body is caught here, at the helper, not only where it is later inlined.
-                typeFromBody(h, inferred, env, body, symbols, reqSigs, recursiveHelperFns);
+                typeFromBody(h, inferred, env, body, symbols, reachable, recursiveHelperFns);
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
             // rather than expanded; its signature is what a call to it is typed against, so it goes
@@ -127,8 +136,15 @@ public final class HelperTyping {
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
-            checkFunctionArgs(h.writtenBody(), tenv, symbols, reqSigs, inliner);
-            if (Elaborator.producesFunction(body)) {
+            checkFunctionArgs(h.writtenBody(), tenv, symbols, reachable, inliner);
+            // push a declared return type into the body so an empty-collection body (Map.empty, [])
+            // takes the declared element/value type rather than a bottom
+            Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
+            // Only one that declares nothing: a declaration is a claim about the body, so a body
+            // that produces a function is elaborated against it and refused as a block is anywhere
+            // it escapes — skipped, the claim would go unheld and the backend would be left a
+            // method to emit with no elaborated body to emit it from.
+            if (declaredReturn == null && Elaborator.producesFunction(body)) {
                 continue;
             }
 
@@ -137,14 +153,22 @@ public final class HelperTyping {
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
-            // push a declared return type into the body so an empty-collection body (Map.empty, [])
-            // takes the declared element/value type rather than a bottom
-            Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn());
             Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                    new CheckContext(symbols, null, reqSigs)
+                    new CheckContext(symbols, null, reachable)
                             .preserving(reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
+            // A definition no source names computes a row's operand, and an operand answers a value.
+            // One that answers none — `unreachable` on its own — is refused here, where the check
+            // fails the compile: the backend refuses the same shape when it emits, but what ships
+            // carries no method for a row's operand, so a refusal left to emission would surface in
+            // the evaluation build alone and fail nothing.
+            if (!h.written().authored() && bodyType instanceof Type.Never
+                    && (declaredReturn == null || statedReturns.contains(h.name()))) {
+                throw CompileException.of(Diagnostic.at(h.pos(), "unreachable".length())
+                        .hint(new NameMessage.WriteItWhereTheTypeIsStated())
+                        .say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
+            }
             elaborated.definitionTypes.put(h.name(), bodyType);
             if (settled != null) {
                 settledTypes.put(settled, bodyType);
@@ -158,13 +182,19 @@ public final class HelperTyping {
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored.
-            if (declaredReturn != null) {
+            if (declaredReturn != null && !statedReturns.contains(h.name())) {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, symbols)) {
+                    // A definition no source names carries a claim its position made — a row's
+                    // operand, wrapped for emission — so what is said leans on the place, and
+                    // quotes no name the author never wrote.
                     throw CompileException.of(Diagnostic.at(h.pos())
-                            .say(new HelperMessage.TheBodyIsNotWhatTheHelperDeclares(h.name(),
-                                    Type.show(declared), Type.show(bodyType)))
-                                    .build());
+                            .say(h.written().authored()
+                                    ? new HelperMessage.TheBodyIsNotWhatTheHelperDeclares(h.name(),
+                                            Type.show(declared), Type.show(bodyType))
+                                    : new HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes(
+                                            Type.show(declared), Type.show(bodyType)))
+                            .build());
                 }
             }
         }

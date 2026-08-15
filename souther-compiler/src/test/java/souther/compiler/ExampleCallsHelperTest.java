@@ -352,7 +352,12 @@ class ExampleCallsHelperTest {
      */
     @Test
     void aRowAppliesAKernelTheBackendWritesOutInPlace() {
-        assertDoesNotThrow(() -> Compiler.compile(INT_ROW + "  | (Int.divide(7, 2)) -> 3\n"));
+        // Written as `/`: `Int.divide` answers `Int | DivisionByZero`, and an Int position takes a
+        // settled value there as it does in a body (E1812) — the operator's zero branch is the
+        // lowering's own, inside the emitted method.
+        assertDoesNotThrow(() -> Compiler.compile(INT_ROW + "  | (7 / 2) -> 3\n"));
+        CompileException e = err(INT_ROW + "  | (Int.divide(7, 2)) -> 3\n");
+        assertTrue(e.getMessage().contains("E1812"), e.getMessage());
     }
 
     /** The other arm of that branch, which is the half that makes these three kernels different from
@@ -360,8 +365,8 @@ class ExampleCallsHelperTest {
      * emitted method like any other lowering. */
     @Test
     void theZeroDivisorBranchIsWrittenInsideTheEmittedMethodToo() {
-        CompileException e = err(INT_ROW + "  | (Int.divide(7, 0)) -> 0\n");
-        assertTrue(e.getMessage().contains("answered with a `DivisionByZero`"), e.getMessage());
+        CompileException e = err(INT_ROW + "  | (7 / 0) -> 0\n");
+        assertTrue(e.getMessage().contains("division by zero"), e.getMessage());
     }
 
     /**
@@ -381,8 +386,11 @@ class ExampleCallsHelperTest {
                 example echoStr
                   | (String.slice(0, 99, "ab")) -> "ab"
                 """);
-        assertTrue(e.getMessage().contains("`String.slice` did not produce a value"), e.getMessage());
-        assertTrue(!e.getMessage().contains("$intrinsic"),
+        // What was being evaluated is the row's own account of itself — "the value the row
+        // writes" — and the kernel is named by the failure it raised, not by a register.
+        assertTrue(e.getMessage().contains("did not produce a value"), e.getMessage());
+        assertTrue(e.getMessage().contains("String.slice"), e.getMessage());
+        assertTrue(!e.getMessage().contains("$intrinsic") && !e.getMessage().contains("$row"),
                 "the emitted method's name is not the helper's identity: " + e.getMessage());
     }
 
@@ -459,7 +467,9 @@ class ExampleCallsHelperTest {
                 example isThree
                   | (adder(1)) -> true
                 """);
-        assertTrue(e.getMessage().contains("no method was emitted for it"), e.getMessage());
+        // The lambda escapes as the operand's answer, which no position that takes a value holds:
+        // the refusal is the language's own (E1809), not a sentence about library functions.
+        assertTrue(e.getMessage().contains("A block is not a value"), e.getMessage());
         assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
     }
 
@@ -528,13 +538,14 @@ class ExampleCallsHelperTest {
     }
 
     /**
-     * A call the row's arguments do not settle is refused for the variable that stayed open, and not
-     * for the declaration being written with one. What the row wrote is what settles a call, so what
-     * it is told is which variable nothing it wrote settled.
+     * A call over an empty collection settles the way it settles in a body: the element type is the
+     * bottom an empty collection has anywhere, so the row runs and answers. The old reading refused
+     * this for the variable it could not settle, which was a fact about that reading — the module's
+     * own elaboration answers it.
      */
     @Test
-    void aRowIsRefusedForTheVariableItsArgumentsLeftOpen() {
-        CompileException e = err("""
+    void aRowSettlesAnEmptyCollectionAsABodyDoes() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 behavior echo : (b: Bool) -> Bool
@@ -543,12 +554,7 @@ class ExampleCallsHelperTest {
 
                 example echo
                   | (List.isEmpty([ ])) -> true
-                """);
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("'a"),
-                "the report names the variable that stayed open: " + e.getMessage());
-        assertTrue(!e.getMessage().contains("decided by each call"),
-                "a declaration being polymorphic is not the reason: " + e.getMessage());
+                """));
     }
 
     /** And the same kernel with an element written for it is applied. The two rows differ in what

@@ -1129,6 +1129,8 @@ public final class HelperInliner {
                         : body;
             }
             case Hir.ListLit lit -> new Hir.ListLit(inlineList(lit.elements()), lit.pos(), lit.region());
+            case Hir.RowCollection row -> new Hir.RowCollection(inlineList(row.elements()), row.pos(),
+                    row.region());
             case Hir.Tuple tup -> new Hir.Tuple(inlineList(tup.elements()), tup.pos(), tup.region());
             case Hir.TupleGet tg -> new Hir.TupleGet(inline(tg.tuple()), tg.index(), tg.arity(), tg.pos(),
                     tg.region());
@@ -1574,7 +1576,7 @@ public final class HelperInliner {
             spreads.add(Hir.Var.local(name, spread.pos()));
         }
         Hir.Expr built = new Hir.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
-                nd.origin(), nd.pos(), nd.region());
+                nd.origin(), nd.fields(), nd.pos(), nd.region());
         // The bindings a spread of a value becomes stand where the construction stands.
         for (int i = bound.size() - 1; i >= 0; i--) {
             built = new Hir.LetIn(bound.get(i), values.get(i), null, false, null, built, nd.pos(),
@@ -1830,8 +1832,8 @@ public final class HelperInliner {
                 for (Hir.Var s : nd.spreads()) {
                     spreads.add(renameVar(s, renaming));
                 }
-                yield new Hir.NewData(nd.typeName(), inits, spreads, nd.origin(), renaming.at(nd.pos()),
-                        renaming.over(nd.region()));
+                yield new Hir.NewData(nd.typeName(), inits, spreads, nd.origin(), nd.fields(),
+                        renaming.at(nd.pos()), renaming.over(nd.region()));
             }
             case Hir.Match m -> {
                 List<Hir.Case> cases = new ArrayList<>();
@@ -1882,6 +1884,8 @@ public final class HelperInliner {
             }
             case Hir.ListLit lit -> new Hir.ListLit(renameList(lit.elements(), renaming),
                     renaming.at(lit.pos()), renaming.over(lit.region()));
+            case Hir.RowCollection row -> new Hir.RowCollection(renameList(row.elements(), renaming),
+                    renaming.at(row.pos()), renaming.over(row.region()));
             case Hir.Tuple tup -> new Hir.Tuple(renameList(tup.elements(), renaming),
                     renaming.at(tup.pos()), renaming.over(tup.region()));
             case Hir.TupleGet tg -> new Hir.TupleGet(rename(tg.tuple(), renaming), tg.index(), tg.arity(),

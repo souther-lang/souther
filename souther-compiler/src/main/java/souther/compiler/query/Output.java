@@ -67,7 +67,7 @@ public final class Output {
             }
             try {
                 Emissions emitted = Backend.generate(
-                        in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
+                        shipped(in), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses());
                 stamp(db, emitted);
@@ -75,6 +75,27 @@ public final class Output {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+
+        /**
+         * The module as what ships carries it: without the methods emitted for its rows' operands.
+         *
+         * <p>A row runs against {@link Evaluated}'s classes, which keep them; what is written out is
+         * the same program less definitions nothing it holds references — an operand's method is
+         * reached from a row and from nothing else. Which definitions those are is read off the
+         * correspondence the preparation constructed, not off the shape of a name.
+         */
+        private static Hir.Module shipped(Inputs in) {
+            if (in.rowMethods().isEmpty()) {
+                return in.lowered();
+            }
+            List<Hir.FnDef> kept = new ArrayList<>();
+            for (Hir.FnDef fn : in.lowered().takenOn()) {
+                if (!in.rowMethods().contains(fn.name())) {
+                    kept.add(fn);
+                }
+            }
+            return in.lowered().withTakenOn(kept);
         }
 
         /**
@@ -89,7 +110,8 @@ public final class Output {
                       Map<String, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
-                      Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses) {}
+                      Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
+                      Set<String> rowMethods) {}
 
         static Inputs inputs(Db db, String name) {
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
@@ -117,7 +139,8 @@ public final class Output {
             return new Inputs(lowering.value().lowered(), scope.value(),
                     prepared.value().importedFrom(), signatures.value(), imported.value(),
                     injected.value(),
-                    callees.value(), requirements.value(), checked.value(), dischargeClauses.value());
+                    callees.value(), requirements.value(), checked.value(), dischargeClauses.value(),
+                    Set.copyOf(prepared.value().operandMethods().values()));
         }
 
         /**

@@ -1,6 +1,8 @@
 package souther.compiler;
 
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.HelperMessage;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import org.junit.jupiter.api.Test;
@@ -100,9 +102,9 @@ class AStandInIsAdmittedByWhatItStandsForTest {
         return e.diagnostics().get(0);
     }
 
-    private static void refusedAsAStandIn(String model, Class<? extends ExampleMessage> said) {
+    private static void refusedAsAStandIn(String model, Class<? extends Message> said) {
         Diagnostic d = only(model);
-        assertEquals("E1908", d.code(), "a stand-in that does not stand for the dependency's output"
+        assertEquals("E1812", d.code(), "a stand-in that does not stand for the dependency's output"
                 + " is the stand-in's error, not the row's result: " + d.said());
         assertInstanceOf(said, d.said());
     }
@@ -115,7 +117,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example stampAt
                     | "a date" : () with now = Date("2026-07-20") -> Stamp
-                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -124,7 +126,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example stampAt
                     | "a record" : () with now = Mark { on = Date("2026-07-20") } -> Stamp
-                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -135,7 +137,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example stampAt
                     | "a newtype" : () with now = Moment(DateTime("2026-07-20T09:00")) -> Stamp
-                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -146,7 +148,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example run
                     | "outside" : () with ask = Other { n = 1 } -> Wrapped { a = Ok { n = 1 } }
-                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -157,7 +159,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example run
                     | "outside" : () with ask = Other { n = 1 } -> Ok { n = 1 }
-                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -180,7 +182,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example hold
                     | "another element" : () with sizes = texts("a") -> Bag { ns = [ 1 ] }
-                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -205,7 +207,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example bill
                     | "wrong output" : (Amount(1)) -> Receipt { total = Amount(1) }
-                """, ExampleMessage.TheFakeCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test
@@ -217,7 +219,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example bill
                     | "wrong default" : (Amount(1)) -> Receipt { total = Amount(1) }
-                """, ExampleMessage.TheFakeCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     // --- what a stand-in may still be written as ------------------------------------------------
@@ -241,7 +243,7 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example bill
                     | "a base literal" : (Amount(1)) with quote = 2 -> Receipt { total = Amount(2) }
-                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+                """, HelperMessage.WhatIsWrittenHereIsNotWhatItsPositionTakes.class);
     }
 
     @Test

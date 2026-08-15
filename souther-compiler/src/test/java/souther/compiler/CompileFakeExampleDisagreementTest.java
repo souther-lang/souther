@@ -498,13 +498,15 @@ class CompileFakeExampleDisagreementTest {
     }
 
     /**
-     * A `with` stands in with a value or it stands in with nothing. A bare case name is an assertion
-     * a row may make and a stand-in may not: `Missing` has fields, so there is no `Missing` to
-     * install, and the row is left with nothing to disagree with (E1908 says why).
+     * A `with` stands in with a value. `Missing` has fields, so its name stands for no value —
+     * which the language says where the name is written, as it does anywhere else a name is
+     * written where a value goes. Nothing about stand-ins is involved, and the row never gets as
+     * far as having something to disagree with.
      */
     @Test
     void aWithThatCannotBeBuiltStandsInForNothing() {
-        assertEquals(List.of("E1908"), allCodesOf("""
+        CompileException e = org.junit.jupiter.api.Assertions.assertThrows(
+                CompileException.class, () -> Compiler.compile("""
                 module example.b1
 
                 data Found = { id: String }
@@ -526,6 +528,8 @@ class CompileFakeExampleDisagreementTest {
                 example use
                     | "runs" : () with lookup = Missing -> Done
                 """));
+        assertEquals("E1023", e.diagnostic().code(), e.getMessage());
+        assertTrue(e.getMessage().contains("Missing"), e.getMessage());
     }
 
     /**

@@ -49,7 +49,40 @@ final class HelperInvoker {
      * a function is — and that is said as itself, so the rule that a fixture may apply a helper does
      * not appear to have exceptions nothing explains.
      */
+    /**
+     * Runs the method emitted for a row operand, which takes nothing and answers with the value that
+     * operand is.
+     *
+     * <p>No name is registered while it runs. What was being evaluated is the row's own account of
+     * itself and is not read back out of this class, and where execution has got to is the JVM's; a
+     * register here would answer with the name of a method no source spells. That is what
+     * {@link #running()} was for the reading this replaces, and it is not extended to this one.
+     */
+    Object run(String emittedAs) {
+        return apply(null, emittedAs, new Object[0]);
+    }
+
     Object invoke(String helper, String emittedAs, Object[] args) {
+        String outer = running.get();   // a helper applied to a helper's argument nests
+        running.set(helper);
+        try {
+            return apply(helper, emittedAs, args);
+        } catch (InvocationFailure f) {
+            throw RowFailures.of(f, "`" + helper + "`");
+        } finally {
+            running.set(outer);
+        }
+    }
+
+    /**
+     * Loads the method and applies it, turning what it ends with into what the row is told.
+     *
+     * <p>{@code named} is what a report from here calls what it ran, or null where nothing here
+     * names it: an operand's method is the row's own value, and what the row was evaluating is said
+     * by the row.
+     */
+    private Object apply(String named, String emittedAs, Object[] args) {
+        String helper = named == null ? "the value the row writes" : named;
         Method method;
         try {
             Class<?> fns = GeneratedClasses.load(loader, new GeneratedClass.Helpers(module));
@@ -62,31 +95,18 @@ final class HelperInvoker {
         } catch (ClassNotFoundException | NoSuchMethodException _) {
             throw FixtureException.cannotBeCalled(helper);
         }
-        String outer = running.get();   // a helper applied to a helper's argument nests
-        running.set(helper);
         try {
             return method.invoke(null, args);
         } catch (InvocationTargetException ite) {
-            Throwable cause = ite.getCause();
-            // The helper stopped itself, having gone through more than the evaluation was allowed.
-            // That is about the budget and not about this helper's value, and it belongs to whoever
-            // is holding the evaluation to that budget — read as a fixture that would not build, the
-            // reason would be lost and the report would blame the wrong thing.
-            if (cause instanceof souther.compiler.evaluate.StepLimitExceeded
-                    || cause instanceof souther.compiler.evaluate.DepthLimitExceeded) {
-                throw (RuntimeException) cause;
-            }
-            if (cause instanceof StackOverflowError) {
-                // Named while the name is still in hand. What decides is the boundary that reads
-                // everything an evaluation ends with; this only puts the helper into the report.
-                throw new StackExhaustedException("`" + helper + "` overflowed the stack");
-            }
-            throw new FixtureException("`" + helper + "` did not produce a value: "
-                    + (cause == null ? ite : cause.getMessage()));
+            // What the generated code ended with, carried out as it came. What it means — whether
+            // the evaluation went over its budget, whether the stack ran out, whether the value the
+            // row wanted simply is not there — is read where the row is evaluated, which is what
+            // holds the phase and the position to say it against.
+            throw new InvocationFailure(ite.getCause());
         } catch (ReflectiveOperationException e) {
-            throw new FixtureException("`" + helper + "` could not be called: " + e.getMessage());
-        } finally {
-            running.set(outer);
+            // Not the generated program failing: this compiler could not reach its own output.
+            throw new FixtureException((named == null ? "the value the row writes"
+                    : "`" + named + "`") + " could not be called: " + e.getMessage());
         }
     }
 

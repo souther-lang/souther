@@ -9,6 +9,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A fixture applies the helper its call reaches, not the one its spelling names.
@@ -98,14 +99,11 @@ class ARowAppliesTheHelperItsCallReachesTest {
     }
 
     /**
-     * Which name a fixture looks a call up by is one question and whether it may look it up as a helper
-     * at all is another. A binding that shares a helper's spelling is the binding, and a fixture cannot
-     * apply what a binding holds — so the row is refused rather than answered by the helper.
-     *
-     * <p>The first row is what makes this reachable: it applies the helper, so the method is emitted and
-     * a lookup by spelling would find one to run. Asked by spelling, the second row runs {@code twice}
-     * over 3, gets the 6 the behavior also returns, and holds — a row that states one thing and is
-     * passed by another.
+     * A binding that shares a helper's spelling is the binding: the row's expectation is compiled as
+     * this module's code, so its {@code twice} is the lambda the row bound and not the helper. The
+     * mismatch's own content is what proves it — the expectation computed 103, the binding's answer,
+     * where a lookup by spelling would have run the helper, got the 6 the behavior also returns, and
+     * passed a row that states something else.
      */
     @Test
     void aBindingIsNotTheHelperThatSharesItsSpelling() {
@@ -123,6 +121,8 @@ class ARowAppliesTheHelperItsCallReachesTest {
                         Out { m = twice(3) }
                       }
                 """));
-        assertEquals("E1903", e.diagnostic().code(), e.getMessage());
+        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
+        assertTrue(e.getMessage().contains("103"),
+                "the expectation is the binding's answer, not the helper's: " + e.getMessage());
     }
 }

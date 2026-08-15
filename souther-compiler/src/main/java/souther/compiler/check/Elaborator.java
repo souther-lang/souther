@@ -247,19 +247,21 @@ public final class Elaborator {
                                     .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
                 }
-                // by here every spread names a binding in force: a value spread was bound ahead of
-                // the construction when it was inlined, so Core reads the binding it copies from
+                // By here every spread that names a value names a binding in force: a value spread
+                // was bound ahead of the construction when it was inlined, so Core reads the binding
+                // it copies from. What remains unbound is a name that stands for no value — a
+                // behavior, a function, a name nothing declares — and a spread reads a value's
+                // fields, so it is refused the way the name would be anywhere else a value goes.
                 List<Core.Read> spreads = new ArrayList<>();
                 for (Hir.Var s : nd.spreads()) {
-                    if (!(s.denotes() instanceof ValueName.Local local)) {
-                        throw new IllegalStateException("`" + s.name()
-                                + "` is spread but names no binding, at " + s.pos());
+                    if (!(s.answered() != null && s.denotes() instanceof ValueName.Local local)) {
+                        throw notAValue(s, env);
                     }
                     spreads.add(new Core.Read(s.bare(), local.id(), env.typeOf(local.id()), s.pos()));
                 }
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),
                         nd.inits(), spreads, nd.pos(),
-                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
+                        TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx, nd.fields());
                 yield new Core.Construct(built.denotes(), values, Type.ref(built.denotes()), nd.pos());
             }
             case Hir.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
@@ -372,6 +374,29 @@ public final class Elaborator {
                 }
                 yield new Core.ListLit(elements, Type.list(elem), lit.pos());
             }
+            // A row's brackets, which say which collection they are only through the position they
+            // stand at (spec §example-evaluable). Resolved into the form a body writes for that
+            // collection and elaborated as that form, so a row and a body come to one value by one
+            // reading — there is no second account of what a set or a map written this way is.
+            //
+            // What is read from the position is which collection the brackets are and nothing else.
+            // Whether the value belongs at the position is a different question, and one an input is
+            // held to while an expectation is not ({@link RowPosition}), so it is not asked here.
+            case Hir.RowCollection row -> {
+                Hir.Expr written = new Hir.ListLit(row.elements(), row.pos(), row.region());
+                Brackets brackets = contextualCollection(expected);
+                // `[ ]` at a set or a map is the empty one, which is the value a body names rather
+                // than a conversion of an empty list: what it holds has no element to say, and the
+                // name takes it from the position as `Set.empty` does wherever it is written.
+                boolean none = row.elements().isEmpty();
+                yield switch (brackets) {
+                    case SET -> elaborate(none ? empty("Set", row) : fromList("Set", written, row),
+                            env, ctx, expected);
+                    case MAP -> elaborate(none ? empty("Map", row) : fromList("Map", written, row),
+                            env, ctx, expected);
+                    case LIST -> elaborate(written, env, ctx, expected);
+                };
+            }
             case Hir.ListComp comp -> {
                 // A comprehension never reaches the backend: the Lower stage rewrites it to an `if`
                 // before a body is emitted, and the codec emitters desugar the expression they hold
@@ -384,6 +409,46 @@ public final class Elaborator {
                 yield new Core.ListLit(List.of(element), Type.list(element.type()), comp.pos());
             }
         };
+    }
+
+    /** Which collection a row's brackets are, read off the type the position contributes. */
+    private enum Brackets { LIST, SET, MAP }
+
+    /**
+     * The collection {@code contextual} says the brackets are.
+     *
+     * <p>A list where nothing says, which is what the brackets are in a body and so what a row's
+     * are wherever the position adds nothing — inside a lambda, at a `let` with no written type,
+     * or at an expectation of a type that is not a collection. An optional position is read through:
+     * a `?` field holding a set is a set written where the field admits absence, and the notation
+     * question is about the collection rather than about whether it may be missing.
+     */
+    private static Brackets contextualCollection(Type contextual) {
+        return switch (contextual) {
+            case Type.SetOf _ -> Brackets.SET;
+            case Type.MapOf _ -> Brackets.MAP;
+            case Type.OptionOf o -> contextualCollection(o.element());
+            case null, default -> Brackets.LIST;
+        };
+    }
+
+    /** {@code <collection>.fromList(written)} — the form a body writes for the collection a row
+     *  wrote in brackets, applied where the row wrote them. */
+    private static Hir.Expr fromList(String collection, Hir.Expr written, Hir.RowCollection row) {
+        souther.compiler.types.ValueName.Stdlib fromList =
+                new souther.compiler.types.ValueName.Stdlib(collection, "fromList");
+        return new Hir.Apply(collection + ".fromList", fromList,
+                new souther.compiler.types.ReachName.OfLibrary(fromList), List.of(written),
+                souther.compiler.types.ConstructionOrigin.own(), row.pos(), row.region());
+    }
+
+    /** {@code <collection>.empty} — the value a body names for the empty collection a row writes
+     *  in brackets, standing where the row wrote them. */
+    private static Hir.Expr empty(String collection, Hir.RowCollection row) {
+        souther.compiler.types.ValueName.Stdlib empty =
+                new souther.compiler.types.ValueName.Stdlib(collection, "empty");
+        return Hir.Var.respelled(collection + ".empty", empty,
+                new souther.compiler.types.ReachName.OfLibrary(empty), row.pos(), row.region());
     }
 
     /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
@@ -1305,8 +1370,13 @@ public final class Elaborator {
      * would otherwise depend on which check ran, and that is not something a reader can see.
      */
     static CompileException doesNotFit(Hir.Expr operand, Type actual, Type expected, String what) {
+        return doesNotFit(operand.reportedAt(), actual, expected, what);
+    }
+
+    private static CompileException doesNotFit(souther.compiler.diag.Region at, Type actual,
+                                               Type expected, String what) {
         return CompileException.of(Diagnostic
-                        .at(operand.reportedAt())
+                        .at(at)
                         .diff(Type.show(actual, expected), Type.show(expected, actual))
                         .hint(new TypeMessage.AdjustTheValueOrThePosition())
                         .say(new TypeMessage.ItDoesNotHaveTheTypeItNeedsHere(what)).build());
@@ -1403,6 +1473,10 @@ public final class Elaborator {
         String denotes = switch (v.denotes()) {
             case ValueName.Behavior _ -> "a behavior";
             case ValueName.Builtin _ -> "written at the position that reads it, not evaluated";
+            // Reached from a name slot the inliner does not substitute into — a spread. In an
+            // expression slot the inliner has already put the helper's block here, and the block is
+            // refused as one.
+            case ValueName.Helper _ -> "a function";
             case null, default -> null;
         };
         if (denotes != null) {

@@ -68,16 +68,7 @@ class CompilePartialAdequacyTest {
      * writes exactly the number the invariant's lower bound names.
      */
     private static String budgetSpent(String tail) {
-        StringBuilder inner = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            inner.append(i == 0 ? "" : ", ")
-                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
-                    .append("\", c = \"").append(i).append("\" }");
-        }
-        StringBuilder groups = new StringBuilder();
-        for (int i = 0; i < 64; i++) {
-            groups.append(i == 0 ? "" : ", ").append("Group { items = [ ").append(inner).append(" ] }");
-        }
+        String groups = "someGroups(64)";
         return """
                 module example.budget
 
@@ -99,8 +90,15 @@ class CompilePartialAdequacyTest {
 
                 let take (request) = Ok { n = request.cost.value }
 
+
+                let someItems (n: Int): List<Item> =
+                    List.map({ (i) -> Item { a = "x", b = "x", c = "x" } }, List.rangeInclusive(1, n))
+
+                let someGroups (n: Int): List<Group> =
+                    List.map({ (i) -> Group { items = someItems(64) } }, List.rangeInclusive(1, n))
+
                 example take
-                    | (Draft { groups = [ %s ], cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
+                    | (Draft { groups = %s, cost = Amount(0), flag = Yes }) -> Ok { n = 0 }
                 """.formatted(groups) + tail;
     }
 

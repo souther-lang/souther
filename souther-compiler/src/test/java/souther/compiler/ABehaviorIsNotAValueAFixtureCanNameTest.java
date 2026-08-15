@@ -59,8 +59,8 @@ class ABehaviorIsNotAValueAFixtureCanNameTest {
                 """);
         Diagnostic d = e.diagnostics().get(0);
 
-        assertEquals("E1903", d.code());
-        assertTrue(e.getMessage().contains("`base` is not a value a fixture can name"),
+        assertEquals("E1024", d.code());
+        assertTrue(e.getMessage().contains("`base` is a behavior, and cannot be held as a value here"),
                 "the row is told the name is not a value, not that it built the wrong one: "
                         + e.getMessage());
     }
@@ -73,8 +73,8 @@ class ABehaviorIsNotAValueAFixtureCanNameTest {
                 """);
         Diagnostic d = e.diagnostics().get(0);
 
-        assertEquals("E1903", d.code());
-        assertTrue(e.getMessage().contains("`base` is not a value a fixture can spread"),
+        assertEquals("E1024", d.code());
+        assertTrue(e.getMessage().contains("`base` is a behavior, and cannot be held as a value here"),
                 "a spread reads the table the same way a name does: " + e.getMessage());
     }
 

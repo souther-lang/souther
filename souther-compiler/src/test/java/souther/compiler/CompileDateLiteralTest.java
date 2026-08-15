@@ -118,7 +118,9 @@ class CompileDateLiteralTest {
                         (Loan { on = 貸出日("2026-07-01") }) -> Echo { on = 貸出日(Date("2026-07-01")) }
                 """));
 
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
+        assertTrue(e.getMessage().contains("E1317"), e.getMessage());
+        assertTrue(e.getMessage().contains("Date") && e.getMessage().contains("String"),
+                e.getMessage());
     }
 
     @Test

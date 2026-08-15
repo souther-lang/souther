@@ -225,8 +225,9 @@ public final class HelperNames {
         return switch (rebuilt) {
             case Hir.NewData nd -> nd.publishedBy(module);
             // a unit data is constructed by being named, so the name is where it says where it came
-            // from — there is no construction node to say it on
-            case Hir.Var v when v.denotes() instanceof ValueName.OfType named ->
+            // from — there is no construction node to say it on. A name resolution answered with
+            // nothing was reported where it is written; there is no construction to mark on it.
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
                     v.denoting(named.publishedBy(module));
             default -> rebuilt;
         };
@@ -260,7 +261,7 @@ public final class HelperNames {
                 HelperNames::carriedByValue);
         return switch (rebuilt) {
             case Hir.NewData nd -> nd.carriedByValue();
-            case Hir.Var v when v.denotes() instanceof ValueName.OfType named ->
+            case Hir.Var.Denoting v when v.denotes() instanceof ValueName.OfType named ->
                     v.denoting(named.carriedByValue());
             case Hir.Apply call -> call.carriedByValue();
             default -> rebuilt;
@@ -285,9 +286,11 @@ public final class HelperNames {
         if (e == null) {
             return;
         }
+        // A name nothing declares reaches no helper: it was reported where it is written, and a
+        // walk that asks what a name stands for has no edge to add for it.
         ValueName denotes = switch (e) {
-            case Hir.Apply call -> call.denotes();
-            case Hir.Var v -> v.denotes();
+            case Hir.Apply call when call.answered() != null -> call.denotes();
+            case Hir.Var.Denoting v -> v.denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Helper helper) {

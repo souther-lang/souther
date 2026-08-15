@@ -68,8 +68,8 @@ class ExampleMultipleFailuresTest {
             assertEquals("E1903", d.code());
             String rendered = new HumanRenderer(false)
                     .render(d, new SourceContext("probe.sou", TWO_BAD_FIXTURES), Locale.ENGLISH);
-            assertTrue(rendered.contains("must be at least 1 characters"),
-                    "the reason the fixture could not be built, was: " + rendered);
+            assertTrue(rendered.contains("invariant violated"),
+                    "the reason the value did not produce, was: " + rendered);
             assertFalse(rendered.contains("examples do not hold"),
                     "no count-only summary stands in for the reason, was: " + rendered);
         }

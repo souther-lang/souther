@@ -243,6 +243,10 @@ public final class DataChecker {
                         collectConstructs(arm.body(), out, symbols, recConstructs));
             }
             case Hir.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
+            // Whichever collection the brackets turn out to be, what a row writes in them is what it
+            // builds: the notation decides the container and not what is put in it.
+            case Hir.RowCollection row ->
+                    row.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
             case Hir.ListComp comp -> {
                 collectConstructs(comp.element(), out, symbols, recConstructs);
                 comp.guards().forEach(g -> collectConstructs(g, out, symbols, recConstructs));
@@ -656,6 +660,16 @@ public final class DataChecker {
                                           List<Core.Read> spreads,
                                           SourcePos pos, Map<String, Type> fields, Scope env,
                                           CheckContext ctx) {
+        return checkConstruction(typeName, inits, spreads, pos, fields, env, ctx,
+                Hir.Fields.EVERY_ONE_WRITTEN);
+    }
+
+    /** As above, where {@code written} says whether a field left out is one the construction had to
+     *  write. Only a row leaves an optional out (spec §example-evaluable). */
+    static List<Core.FieldValue> checkConstruction(String typeName, List<Hir.FieldInit> inits,
+                                          List<Core.Read> spreads,
+                                          SourcePos pos, Map<String, Type> fields, Scope env,
+                                          CheckContext ctx, Hir.Fields mayOmit) {
         Map<String, Core.FieldValue> written = new LinkedHashMap<>();
         for (Hir.FieldInit init : inits) {
             if (written.containsKey(init.name())) {
@@ -719,6 +733,14 @@ public final class DataChecker {
                 continue;
             }
             Spread from = supplying(spread, f.getKey());
+            if (from == null && mayOmit == Hir.Fields.OPTIONALS_MAY_BE_OMITTED
+                    && f.getValue() instanceof Type.OptionOf) {
+                // A row writes the value a field holds and writes nothing where it holds none, so a
+                // field left out is the absent value it declares rather than a field with no value.
+                values.add(new Core.FieldValue(f.getKey(),
+                        new Core.OptionNone(f.getValue(), pos), pos));
+                continue;
+            }
             if (from == null) {
                 Diagnostic.Builder d = Diagnostic.at(pos)
                         .say(new DataMessage.ConstructionIsMissingAField(typeName, f.getKey()));

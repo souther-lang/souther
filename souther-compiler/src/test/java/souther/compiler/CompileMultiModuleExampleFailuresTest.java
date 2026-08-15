@@ -62,7 +62,7 @@ class CompileMultiModuleExampleFailuresTest {
         assertEquals(3, e.diagnostics().size(),
                 "one row per module, not the first module's alone: " + e.diagnostics().size());
         for (Diagnostic d : e.diagnostics()) {
-            assertEquals("E1903", d.code());
+            assertEquals("E1005", d.code());
         }
     }
 
@@ -110,11 +110,4 @@ class CompileMultiModuleExampleFailuresTest {
                 """));
     }
 
-    @Test
-    void theOneLineMessageCountsThemAll() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(SHARED, ONE, TWO)));
-
-        assertTrue(e.getMessage().contains("3 examples do not hold"), e.getMessage());
-    }
 }

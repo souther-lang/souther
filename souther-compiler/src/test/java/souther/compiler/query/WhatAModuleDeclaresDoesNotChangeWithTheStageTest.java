@@ -151,13 +151,21 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
                     | "a row applies a published helper" : (In { n = doubled(3) }) -> Out { m = 6 }
                 """), Set.of(), ModulePath.EMPTY).db();
 
-        Hir.Module prepared = db.ask(new Shapes.Prepared("app")).value().tree();
+        souther.compiler.check.Prepared state = db.ask(new Shapes.Prepared("app")).value();
+        Hir.Module prepared = state.tree();
         // `run` implements a behavior, which is not a helper and is lowered on its own.
         assertEquals(Set.of(), HelperInliner.helpersOf(prepared).keySet());
-        assertEquals(Set.of("rules.doubled"), HelperInliner.takenOnBy(prepared).keySet());
+        // The module also takes on a method per row operand — the row's input and its expected value
+        // each run as one — so the expected set is read off the correspondence the preparation
+        // constructed, not spelled here.
+        Set<String> rowMethods = Set.copyOf(state.operandMethods().values());
+        assertEquals(2, rowMethods.size(), "one input and one expectation, each emitted for the row");
+        Set<String> takenOn = new java.util.LinkedHashSet<>(rowMethods);
+        takenOn.add("rules.doubled");
+        assertEquals(takenOn, HelperInliner.takenOnBy(prepared).keySet());
         assertEquals(Set.of(), db.ask(new Bodies.RecursiveHelpers("app")).value(),
                 "nothing here recurses, so this is the row's doing and not a recursion's");
-        assertEquals(Set.of("rules.doubled"),
+        assertEquals(takenOn,
                 db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()
                         .map(Hir.FnDef::name).collect(java.util.stream.Collectors.toSet()));
     }
