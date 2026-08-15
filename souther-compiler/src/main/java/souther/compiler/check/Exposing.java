@@ -18,14 +18,19 @@ import java.util.Set;
  * module reaches the library either qualified ({@code List.map}) or by importing the names it wants
  * — {@code import List ( map, filter )} — after which it may write them bare.
  *
- * <p>What the imports bring in is answered as a table ({@link #read}) and nothing in the
- * module is rewritten. A name written bare stays written bare, and what it means where it is written
- * is settled once, by resolution, with the bindings in force — an import is the last thing consulted
- * and a binding in force wins over it. A declaration of that name does not shadow it: the two are a
- * conflict, refused on the import line, and the declaration standing as the name's meaning after
- * that is what recovery does with a module that will not be emitted. The
- * {@code import List ( ... )} lines are then dropped ({@link #withoutLibraryImports}), having been
- * checked.
+ * <p>What the imports bring in is answered as a table and nothing in the module is rewritten. A name
+ * written bare stays written bare, and what it means where it is written is settled once, by
+ * resolution, with the bindings in force — an import is the last thing consulted and a binding in
+ * force wins over it. A declaration of that name does not shadow it: the two are a conflict, refused
+ * on the import line, and the declaration standing as the name's meaning after that is what recovery
+ * does with a module that will not be emitted. The {@code import List ( ... )} lines are then
+ * dropped, having been checked.
+ *
+ * <p>The table and the module without those lines are one answer ({@link #check}), because a module
+ * that has had them dropped is unreadable without it. There is no way to take the second and leave
+ * the first: a reader of a module off the class path did exactly that, and an invariant that called
+ * a name its module imported bare then resolved against nothing in every project but the one that
+ * wrote it.
  *
  * <p>It mirrors Elm's {@code import List exposing (map)}: the qualified access always works, and the
  * import merely lets a name be written without its qualifier. A name exposed from two libraries at
@@ -36,8 +41,13 @@ public final class Exposing {
     private Exposing() {}
 
     /**
-     * What the imports bring in, the imports that are not the library's, and the import lines that
-     * name something this module already declares.
+     * A module with its {@code import List ( ... )} lines dropped, what those lines brought in, and
+     * the ones that name something the module already declares.
+     *
+     * <p>One value, because the first two are one fact. The module no longer says what its bare
+     * names mean and the table is the only thing that does, so a caller holding the module holds the
+     * table with it — wherever that module travels, and whether it was read from a source or off the
+     * class path.
      *
      * <p>A collision is answered rather than thrown because it is one module's mistake and not a
      * reason to stop reading. Thrown, it escaped the question that asked for this module and took
@@ -45,13 +55,24 @@ public final class Exposing {
      * reading this file" for the whole workspace while the author was part-way through writing a
      * {@code let}.
      */
-    public record Validated(Map<String, ValueName.Stdlib> exposed, List<Ast.Import> kept,
-                            List<Diagnostic> conflicts) {}
+    public record Checked(Ast.Module module, Map<String, ValueName.Stdlib> exposed,
+                          List<Diagnostic> conflicts) {}
 
-    /** Both answers at once, for a reader that wants them both and should ask once. */
-    public static Validated read(Ast.Module module) {
-        return validate(module);
+    /**
+     * {@code module} read for its library imports: checked, dropped, and what they brought in.
+     *
+     * <p>Nothing in the module is rewritten. A name written bare is still written bare, and what it
+     * means is one question asked in one place — resolution, against {@link Checked#exposed}.
+     */
+    public static Checked check(Ast.Module module) {
+        Validated validated = validate(module);
+        return new Checked(withoutLibraryImports(module, validated.kept()), validated.exposed(),
+                validated.conflicts());
     }
+
+    /** What {@link #validate} answers, before the module is rebuilt around it. */
+    private record Validated(Map<String, ValueName.Stdlib> exposed, List<Ast.Import> kept,
+                             List<Diagnostic> conflicts) {}
 
     /**
      * The library names an import brings in, with the three things an import can get wrong reported:
@@ -117,14 +138,7 @@ public final class Exposing {
         return new Validated(exposed, kept, conflicts);
     }
 
-    /**
-     * {@code module} with its {@code import List ( ... )} lines dropped, having checked them.
-     *
-     * <p>What they brought in is answered by {@link #read} and settled where the bindings
-     * are known. Nothing in the module is rewritten here: a name written bare is still written bare,
-     * and what it means is one question asked in one place.
-     */
-    public static Ast.Module withoutLibraryImports(Ast.Module module, List<Ast.Import> kept) {
+    private static Ast.Module withoutLibraryImports(Ast.Module module, List<Ast.Import> kept) {
         if (kept.size() == module.imports().size()) {
             return module;
         }

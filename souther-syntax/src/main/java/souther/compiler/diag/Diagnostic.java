@@ -113,6 +113,37 @@ public final class Diagnostic {
     }
 
     /**
+     * The same finding, said at {@code where} instead — for one about code this compile has no
+     * source for.
+     *
+     * <p>A coordinate read from a text nobody holds is not a place a reader can be sent, and every
+     * surface that quotes a line quotes it from a file: given one, a run with a single source quotes
+     * whatever happens to sit at those numbers in the file the author is looking at, and one with
+     * several drops the report for having nowhere to file it. Both are worse than saying where the
+     * code is in words, which is what this does — {@code where} is where this compile met the
+     * declaration, and the coordinate it is given says it stands in for code written in
+     * {@code declaration} ({@link Citation}).
+     *
+     * <p>The one way to move a caret. Everything else about the finding is what it was, so the rule
+     * it reports and the values it says it about do not change with how far away the code turned out
+     * to be. A second region is kept only where it too is somewhere a reader can be sent: a label is
+     * a sentence about the place it points at, and one pointing into the same unheld text says it of
+     * a line the author did not write.
+     */
+    public Diagnostic reachedFrom(SourcePos where, String declaration) {
+        SourcePos stands = where.standingInFor(WrittenAt.outOfSight(declaration));
+        List<LabeledRegion> kept = new ArrayList<>();
+        for (LabeledRegion label : secondary) {
+            if (label.region() != null && label.region().start() != null
+                    && label.region().start().sourceId() != null) {
+                kept.add(label);
+            }
+        }
+        return new Diagnostic(severity, code, Region.point(stands), List.copyOf(kept),
+                literalMessage, diff, notes, suggestion, said);
+    }
+
+    /**
      * What makes two diagnostics one problem: everything this one says, compared by what it says.
      *
      * <p>{@code said} is in here because it is what carries the values. Two diagnostics of one rule

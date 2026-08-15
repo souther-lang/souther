@@ -221,19 +221,19 @@ public final class Compiler {
         compilation.measure(measure);
         Db db = compilation.db();
 
-        CompileException structural = compilation.failure(compilation.structuralReports());
+        CompileException structural = compilation.structuralFailure();
         if (structural != null) {
             throw structural;
         }
 
         db.ask(new Output.All());
-        CompileException failed = compilation.failure(db.allReports());
+        CompileException failed = compilation.failure();
         if (failed != null) {
             throw failed;
         }
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure(db.allReports());
+                CompileException bad = compilation.failure();
                 if (bad != null) {
                     throw bad;
                 }
@@ -265,7 +265,7 @@ public final class Compiler {
         for (String module : compilation.modules()) {
             compilation.answerWarnings(module);
         }
-        warningsOut.addAll(compilation.warnings(db.allReports()));
+        warningsOut.addAll(compilation.warnings());
         return compilation;
     }
 
@@ -309,7 +309,7 @@ public final class Compiler {
         return driven(() -> {
             compilation.measure(measure);
             compilation.answerEverything();
-            warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
+            warningsOut.addAll(compilation.warnings());
             return compilation;
         });
     }
@@ -436,13 +436,13 @@ public final class Compiler {
         compilation.measure(measure);
         Db db = compilation.db();
 
-        CompileException structural = compilation.failure(compilation.structuralReports());
+        CompileException structural = compilation.structuralFailure();
         if (structural != null) {
             throw structural;
         }
 
         db.ask(new Output.All());
-        CompileException failed = compilation.failure(db.allReports());
+        CompileException failed = compilation.failure();
         if (failed != null) {
             throw failed;
         }
@@ -454,7 +454,7 @@ public final class Compiler {
         List<String> exampleSources = new ArrayList<>();
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.failure(db.allReports());
+                CompileException bad = compilation.failure();
                 if (bad != null) {
                     throw bad;
                 }
@@ -472,7 +472,7 @@ public final class Compiler {
         for (String module : compilation.modules()) {
             compilation.answerWarnings(module);
         }
-        warningsOut.addAll(compilation.warnings(db.allReports()));
+        warningsOut.addAll(compilation.warnings());
         if (!exampleFailures.isEmpty()) {
             throw CompileException.ofAllInSources(exampleFailures, exampleSources,
                     ExampleVerifier.legacySummary(exampleFailures));

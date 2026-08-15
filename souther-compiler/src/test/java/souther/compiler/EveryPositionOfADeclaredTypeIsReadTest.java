@@ -80,7 +80,7 @@ class EveryPositionOfADeclaredTypeIsReadTest {
     private static CompileException failure(String source) {
         Compilation compilation = Compilation.ofCoreSource(source);
         compilation.answerEverything();
-        return compilation.failure(compilation.db().allReports());
+        return compilation.failure();
     }
 
     @ParameterizedTest(name = "{0}")

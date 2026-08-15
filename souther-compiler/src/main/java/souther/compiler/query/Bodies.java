@@ -57,11 +57,11 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Front.FromPath.Of path = db.ask(new Front.FromPath()).value();
-            if (path != null && path.injected().containsKey(name)) {
+            Front.FromPath.OnThePath onThePath = Front.onThePath(db, name);
+            if (onThePath != null) {
                 // A module off the path published which of its behaviors are injection targets,
                 // because the fn that decides is not published with it.
-                return Answer.of(path.injected().get(name));
+                return Answer.of(onThePath.injectedBehaviors());
             }
             Ast.Module m = db.ask(new Front.Available(name)).value();
             if (m == null) {

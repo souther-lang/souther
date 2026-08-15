@@ -853,7 +853,7 @@ public final class Names {
          *
          * <p>Read off the parsed source rather than off {@link Front.Available}, because the module
          * that arrives from there has had its standard-library import lines taken out
-         * ({@link souther.compiler.check.Exposing#withoutLibraryImports}) — an unused
+         * ({@link souther.compiler.check.Exposing#check}) — an unused
          * {@code import List ( fold )} would be invisible to a check that read the module. An
          * attached {@code examples for} file writes no imports, so the declaring source's lines are
          * all of them.

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -191,21 +192,28 @@ public final class Front {
     }
 
     /**
-     * One module as its source declared it, with the standard-library {@code exposing} lines already
-     * rewritten and its name checked against the reserved namespace.
+     * One module a source declared, read for its standard-library imports: the module without those
+     * lines and what they brought in, together, with its name checked against the reserved
+     * namespace.
      *
-     * <p>The rows of every {@code examples for} file naming it are appended here, so a module's
-     * examples are its examples wherever they were written. Which file a row came from is
-     * {@link Names.Examples}' business, not this one's.
+     * <p>Both halves from one reading. What a bare name means is decided against the table, and the
+     * module the table is about is the one the rows of every {@code examples for} file naming it
+     * have joined — a value an attached file declares collides with an import of that spelling the
+     * same way one in the model file does. Read a second time from the model file alone, the table
+     * would answer for a module nothing else in this compilation holds.
+     *
+     * <p>The rows themselves join here for the same reason: a module's examples are its examples
+     * wherever they were written. Which file a row came from is {@link Names.Examples}' business,
+     * not this one's.
      */
-    public record Exposed(String name) implements Key<Ast.Module> {
+    public record Checked(String name) implements Key<Exposing.Checked> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
+        public Answer<Exposing.Checked> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             if (layout == null) {
                 return Answer.absent();
@@ -232,19 +240,18 @@ public final class Front {
             // read here is still the model file's lines.
             Ast.Module joined = withAttachedRows(db, raw, layout.exampleFilesOf()
                     .getOrDefault(name, List.of()));
-            Exposing.Validated imports = Exposing.read(joined);
-            Ast.Module whole = Exposing.withoutLibraryImports(joined, imports.kept());
-            if (imports.conflicts().isEmpty()) {
-                return Answer.of(whole);
+            Exposing.Checked checked = Exposing.check(joined);
+            if (checked.conflicts().isEmpty()) {
+                return Answer.of(checked);
             }
             // A library import naming something this module declares. Reported here because this is
             // where the import lines are read, and reported rather than raised so the rest of the
             // module — and every other file beside it — is still read and still answers.
             List<Report> reports = new ArrayList<>();
-            for (Diagnostic conflict : imports.conflicts()) {
+            for (Diagnostic conflict : checked.conflicts()) {
                 reports.add(Report.of(conflict));
             }
-            return Answer.of(whole, reports);
+            return Answer.of(checked, reports);
         }
 
         /**
@@ -292,6 +299,35 @@ public final class Front {
     }
 
     /**
+     * One module as its source declared it, with the standard-library {@code exposing} lines already
+     * dropped.
+     *
+     * <p>The half of {@link Checked} that a reader walking declarations wants. What those lines
+     * brought in is the other half and is asked for as {@link LibraryNames}: nearly everything here
+     * reads the module and would be rebuilt by an edit to any import line if it held the table too.
+     * Neither half is computed twice — both are projections of the one reading.
+     *
+     * <p>What the reading found comes with it. Asking for a module is how a reader finds out whether
+     * reading it went wrong ({@link Names.Sound}), and a projection that answered the module and
+     * kept the reports to itself would say a module with a refused import line was read cleanly.
+     * The reports are the same reports, so a compilation collecting them sees one of each.
+     */
+    public record Exposed(String name) implements Key<Ast.Module> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Ast.Module> compute(Db db) {
+            Answer<Exposing.Checked> checked = db.ask(new Checked(name));
+            return checked.present()
+                    ? Answer.of(checked.value().module(), checked.reports())
+                    : Answer.absent(checked.reports());
+        }
+    }
+
+    /**
      * The modules this compilation reaches that no source declares, read off the path. A module
      * found there brings its own reaches with it, so a dependency of a dependency arrives too.
      *
@@ -300,28 +336,52 @@ public final class Front {
      */
     public record FromPath() implements Key<FromPath.Of> {
 
-        public record Of(Map<String, Ast.Module> modules, Map<String, Set<String>> injected) {}
+        /**
+         * One module off the path, and everything about it this compilation cannot work out again
+         * from the module alone.
+         *
+         * <p>One record and not a map apiece. Each of these is a fact about the module that was lost
+         * on the way in — the injection targets because no {@code let} was published, the library
+         * names because the lines that carried them are dropped once read, where it was reached
+         * because a source of this compile is the only place a reader can be sent. A second map is a
+         * second place to remember to fill, and the one that was not filled is what left an
+         * invariant's bare names denoting nothing.
+         *
+         * @param reachedFrom the nearest place in a source of this compilation on the way to this
+         *        module: the import line that names it, or the one naming whichever module off the
+         *        path led here. Null only where nothing this compile can quote reached it.
+         */
+        public record OnThePath(Ast.Module module, Set<String> injectedBehaviors,
+                                Map<String, ValueName.Stdlib> libraryNames, SourcePos reachedFrom) {}
+
+        public record Of(Map<String, OnThePath> modules) {}
 
         @Override
         public Answer<Of> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
             if (layout == null || path == null) {
-                return Answer.of(new Of(Map.of(), Map.of()));
+                return Answer.of(new Of(Map.of()));
             }
             PublishedModule.Classes classes = path.declarations();
-            Map<String, Ast.Module> found = new LinkedHashMap<>();
-            Map<String, Set<String>> injected = new LinkedHashMap<>();
+            Map<String, OnThePath> found = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             // What is waiting to be read, and — for one a module off the path needs — which module
             // needs it, so an incomplete path is reported as that rather than as an import nobody
             // wrote.
             Deque<String> pending = new ArrayDeque<>();
             Map<String, String> neededBy = new LinkedHashMap<>();
+            // Where a source of this compile named each of them. A module reached only through
+            // another off the path inherits that one's place: the import line naming the dependency
+            // is the nearest thing a reader here holds, and there is no line naming the rest.
+            Map<String, SourcePos> reachedFrom = new LinkedHashMap<>();
             for (String declared : layout.idOfModule().keySet()) {
                 Ast.Module m = db.ask(new Exposed(declared)).value();
                 if (m != null) {
-                    pending.addAll(reaches(m));
+                    reaches(m).forEach((reach, where) -> {
+                        reachedFrom.putIfAbsent(reach, where);
+                        pending.add(reach);
+                    });
                 }
             }
             Set<String> tried = new HashSet<>();
@@ -345,16 +405,19 @@ public final class Front {
                     reports.add(reserved);
                     continue;
                 }
-                Ast.Module m = Exposing.withoutLibraryImports(published.module(),
-                        Exposing.read(published.module()).kept());
-                found.put(name, m);
-                injected.put(name, published.injectedBehaviors());
-                for (String reach : reaches(m)) {
+                Exposing.Checked checked = Exposing.check(published.module());
+                SourcePos here = reachedFrom.get(name);
+                found.put(name, new OnThePath(checked.module(), published.injectedBehaviors(),
+                        checked.exposed(), here));
+                for (String reach : reaches(checked.module()).keySet()) {
                     neededBy.putIfAbsent(reach, name);
+                    if (here != null) {
+                        reachedFrom.putIfAbsent(reach, here);
+                    }
                     pending.add(reach);
                 }
             }
-            return Answer.of(new Of(Ordered.map(found), Ordered.map(injected)), reports);
+            return Answer.of(new Of(Ordered.map(found)), reports);
         }
     }
 
@@ -378,9 +441,8 @@ public final class Front {
             if (exposed.present()) {
                 return Answer.of(exposed.value());
             }
-            FromPath.Of path = db.ask(new FromPath()).value();
-            Ast.Module fromPath = path == null ? null : path.modules().get(name);
-            return fromPath == null ? Answer.absent() : Answer.of(fromPath);
+            FromPath.OnThePath fromPath = onThePath(db, name);
+            return fromPath == null ? Answer.absent() : Answer.of(fromPath.module());
         }
     }
 
@@ -421,8 +483,10 @@ public final class Front {
     /**
      * The library names a module's imports let it write bare, keyed by the bare spelling.
      *
-     * <p>Read from the module as its source declared it, because {@link Exposed} drops the import
-     * lines once it has checked them: what they brought in outlives the lines themselves.
+     * <p>Asked of every module this compilation has and not only of the ones a source declared. The
+     * import lines are dropped once checked, so what they brought in outlives them and has to be
+     * carried; a module off the path carries it the same way, and answering an empty table there
+     * left every bare name in a published invariant denoting nothing.
      */
     public record LibraryNames(String name) implements Key<Map<String, ValueName.Stdlib>> {
         @Override
@@ -432,24 +496,20 @@ public final class Front {
 
         @Override
         public Answer<Map<String, ValueName.Stdlib>> compute(Db db) {
-            Layout.Of layout = db.ask(new Layout()).value();
-            if (layout == null) {
-                return Answer.absent();
+            Answer<Exposing.Checked> checked = db.ask(new Checked(name));
+            if (checked.present()) {
+                return Answer.of(Ordered.map(checked.value().exposed()));
             }
-            String id = layout.idOfModule().get(name);
-            if (id == null) {
-                return Answer.of(Map.of());   // read from the path, where the lines are already gone
-            }
-            Answer<CstFrontend.Parsed> parsed = db.ask(new Parsed(id));
-            if (!parsed.present()) {
-                return Answer.absent();
-            }
-            try {
-                return Answer.of(Ordered.map(Exposing.read(parsed.value().module()).exposed()));
-            } catch (CompileException e) {
-                return Answer.absent(e);   // reported where the import is checked
-            }
+            FromPath.OnThePath onThePath = onThePath(db, name);
+            return onThePath == null ? Answer.absent()
+                    : Answer.of(Ordered.map(onThePath.libraryNames()));
         }
+    }
+
+    /** What the path carries for {@code name}, or null when no module of that name came off it. */
+    static FromPath.OnThePath onThePath(Db db, String name) {
+        FromPath.Of path = db.ask(new FromPath()).value();
+        return path == null ? null : path.modules().get(name);
     }
 
     public record Exposes(String name) implements Key<Set<String>> {
@@ -485,8 +545,8 @@ public final class Front {
         public Answer<Set<String>> compute(Db db) {
             Ast.Module m = db.ask(new Exposed(name)).value();
             if (m == null) {
-                FromPath.Of path = db.ask(new FromPath()).value();
-                m = path == null ? null : path.modules().get(name);
+                FromPath.OnThePath fromPath = onThePath(db, name);
+                m = fromPath == null ? null : fromPath.module();
             }
             return m == null ? Answer.absent() : Answer.of(Names.behaviorNames(m));
         }
@@ -800,18 +860,20 @@ public final class Front {
      * reference needs an import line, so reading only the import lines would leave a module it
      * reaches unread.
      */
-    static Set<String> reaches(Ast.Module m) {
-        Set<String> names = new LinkedHashSet<>();
+    static Map<String, SourcePos> reaches(Ast.Module m) {
+        Map<String, SourcePos> names = new LinkedHashMap<>();
         Map<String, String> aliases = new HashMap<>();
         for (Ast.Import imp : m.imports()) {
-            names.add(imp.module());
+            names.putIfAbsent(imp.module(), imp.pos());
             if (imp.alias() != null) {
                 aliases.put(imp.alias(), imp.module());
             }
         }
-        List<String> written = new ArrayList<>();
+        List<WrittenName> written = new ArrayList<>();
         for (Ast.TypeRef ref : Names.typeRefs(m)) {
-            written.add(ref.name());
+            if (ref.written() != null) {
+                written.add(ref.written());
+            }
         }
         for (Ast.BehaviorDef b : m.behaviors()) {
             List<Ast.Var> named = switch (b) {
@@ -819,14 +881,14 @@ public final class Front {
                 case Ast.SpecBehavior spec -> spec.dependsOn();
             };
             for (Ast.Var ref : named) {
-                written.add(ref.name());
+                written.add(ref.written());
             }
         }
-        for (String name : written) {
-            int dot = name.lastIndexOf('.');
+        for (WrittenName ref : written) {
+            int dot = ref.canonical().lastIndexOf('.');
             if (dot > 0) {
-                String qualifier = name.substring(0, dot);
-                names.add(aliases.getOrDefault(qualifier, qualifier));
+                String qualifier = ref.canonical().substring(0, dot);
+                names.putIfAbsent(aliases.getOrDefault(qualifier, qualifier), ref.pos());
             }
         }
         names.remove(m.name());

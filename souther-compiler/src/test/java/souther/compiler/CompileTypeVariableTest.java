@@ -27,7 +27,7 @@ class CompileTypeVariableTest {
     private static Map<String, byte[]> compileCore(String src) {
         Compilation compilation = Compilation.ofCoreSource(src);
         compilation.answerEverything();
-        CompileException failed = compilation.failure(compilation.db().allReports());
+        CompileException failed = compilation.failure();
         if (failed != null) {
             throw failed;
         }

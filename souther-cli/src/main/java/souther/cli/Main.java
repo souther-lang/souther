@@ -316,7 +316,7 @@ public final class Main {
                     : Compiler.analyzedModules(texts, path, warnings, measure);
             // Said first, and whatever the command answers with after. What is wrong with the source
             // is the same news whether the rest of this reports, refuses, or succeeds.
-            List<Located> errors = compilation.errors(compilation.db().allReports());
+            List<Located> errors = compilation.errors();
             List<Located> said = new ArrayList<>(errors);
             said.addAll(warnings);
             report(said, sources, render);

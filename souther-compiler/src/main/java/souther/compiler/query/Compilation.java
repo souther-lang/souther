@@ -446,8 +446,10 @@ public final class Compilation {
      *
      * <p>Where a report goes is the report's to say, not this method's: an error in an imported
      * module lands on that module's document however far away it was asked for, and a failing
-     * example row lands on the file the row was written in. A report about something the caller does
-     * not have — a module read off the path — has nowhere to go and is left out.
+     * example row lands on the file the row was written in. A report about a module the caller has
+     * no document for is said where that module was reached from, which is a document the caller
+     * does have ({@link #reports()}) — left as it was found it would have nowhere to go, and a
+     * compile that emitted nothing would publish nothing to say why.
      *
      * <p>This is the only place one report becomes several entries. A problem written in two files is
      * said in both, so an author editing either is told, and each entry carries the source its
@@ -461,7 +463,7 @@ public final class Compilation {
         for (String id : sourceIds()) {
             byId.put(id, new ArrayList<>());
         }
-        for (Db.Found found : db.allReports()) {
+        for (Db.Found found : reports()) {
             String primary = locatedSourceIdOf(found);
             for (String id : publishSourceIdsOf(found)) {
                 List<Located> on = byId.get(id);
@@ -473,6 +475,73 @@ public final class Compilation {
         Map<String, List<Located>> published = new LinkedHashMap<>();
         byId.forEach((id, found) -> published.put(id, List.copyOf(found)));
         return published;
+    }
+
+    /**
+     * Everything this compilation found, as a reader may be shown it.
+     *
+     * <p>The one set. What a terminal is told and what an editor is told are the same problems said
+     * the same way, so both read this and neither reads {@link Db#allReports()} — two readings of one
+     * set is how a failure came to stop a build on the command line and leave an editor showing a
+     * clean file.
+     *
+     * <p>What a reading adds is where a report may be sent. A question about a module read off the
+     * class path is answered against text this compile reassembled from what the module published,
+     * and a report it finds carries a coordinate in that text: a line and a column of a file nobody
+     * holds. Filed as it stands, it lands wherever those numbers happen to fall in the file the
+     * author is looking at, or nowhere at all. So it is said at the nearest place on the way to that
+     * module a source of this compilation writes — the {@code import} line naming it, or the one
+     * naming whichever dependency led there — with the code's own home named rather than pointed at
+     * ({@link Diagnostic#reachedFrom}).
+     */
+    public List<Db.Found> reports() {
+        List<Db.Found> reports = new ArrayList<>();
+        for (Db.Found found : db.allReports()) {
+            reports.add(citable(found));
+        }
+        return reports;
+    }
+
+    /**
+     * {@code found} where a reader can be sent to it — itself, for the reports whose coordinate was
+     * read from a source this compile holds.
+     *
+     * <p>Asked of the module the question was about and not of the coordinate alone. A body copied
+     * out of a module off the path is already given the call site it was spliced into
+     * ({@link souther.compiler.diag.WrittenAt}), so a coordinate left naming no source is one read
+     * from a declaration this compile never had a file for.
+     *
+     * <p>The English a raised report carried is dropped with the move. It was rendered with the old
+     * coordinate written into it, and a message that says one place beside a caret at another is the
+     * defect twice.
+     */
+    private Db.Found citable(Db.Found found) {
+        SourcePos at = found.report().diagnostic().pos();
+        if (at == null || at.sourceId() != null || found.module() == null) {
+            return found;
+        }
+        Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
+        if (onThePath == null || onThePath.reachedFrom() == null) {
+            return found;
+        }
+        return new Db.Found(found.module(), found.sourceId(), Report.saidAt(
+                found.report().diagnostic().reachedFrom(onThePath.reachedFrom(), found.module()),
+                found.report().delivery()));
+    }
+
+    /** The one failure these sources have, or null when they have none. */
+    public CompileException failure() {
+        return failure(reports());
+    }
+
+    /**
+     * The failure among {@link #structuralReports()}, or null when there is none — what a caller
+     * that stops before any module is looked at asks for.
+     *
+     * <p>Its own method so that {@link #failure(List)} can stay private.
+     */
+    public CompileException structuralFailure() {
+        return failure(structuralReports());
     }
 
     /**
@@ -512,8 +581,12 @@ public final class Compilation {
      * positions, and a secondary diagnostic is the checker's to withhold where it should not be said
      * at all. This decides how the errors are presented; whether one of them should have been
      * reported is the checker's own question.
+     *
+     * <p>Not public. The reports a surface reads are the ones {@link #reports()} answers, and a
+     * caller able to pass a list of its own is one able to pass the set before it was read for where
+     * a reader can be sent. What is left inside this package is this ordering rule and its test.
      */
-    public CompileException failure(List<Db.Found> found) {
+    CompileException failure(List<Db.Found> found) {
         List<Db.Found> errors = new ArrayList<>();
         for (Db.Found f : found) {
             if (f.report().isError()) {
@@ -651,8 +724,9 @@ public final class Compilation {
      * one thing to be told about on a terminal; the second telling is what an editor needs, and that
      * is {@link #diagnostics()}.
      */
-    public List<Located> warnings(List<Db.Found> found) {
+    public List<Located> warnings() {
         List<Located> warnings = new ArrayList<>();
+        List<Db.Found> found = reports();
         for (Db.Found f : found) {
             if (!f.report().isError()) {
                 warnings.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
@@ -669,8 +743,9 @@ public final class Compilation {
      * already read past it, and showing a reader one error beside an account of everything else
      * would leave them to wonder what the rest of the errors were.
      */
-    public List<Located> errors(List<Db.Found> found) {
+    public List<Located> errors() {
         List<Located> errors = new ArrayList<>();
+        List<Db.Found> found = reports();
         for (Db.Found f : found) {
             if (f.report().isError()) {
                 errors.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
