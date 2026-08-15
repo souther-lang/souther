@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
@@ -316,6 +317,37 @@ public final class HelperInliner {
      */
     public static boolean isHelperName(Set<String> behaviorNames, String fn) {
         return !behaviorNames.contains(fn);
+    }
+
+    /**
+     * Whether a module hands a definition of this name to a reader that asked for it.
+     *
+     * <p>Written over the name and what kind of body it has, because a module's own definitions are
+     * read at both representations: a scope asks what an import brings into the value namespace, of
+     * a module nothing has resolved, and everything after resolution asks the same question of one
+     * it has. The rule is the same one, so it is here rather than restated over each tree.
+     */
+    public static boolean publishes(Set<String> exposing, String fn, boolean hasWrittenBody,
+                                    List<String> wanted) {
+        return hasWrittenBody && exposing.contains(fn) && wanted.contains(fn);
+    }
+
+    /** The names {@code from} publishes among {@code wanted}, of a module as it was written. */
+    public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
+        Set<String> exposed = new HashSet<>(from.exposing());
+        Set<String> behaviorNames = new HashSet<>();
+        for (Ast.BehaviorDef b : from.behaviors()) {
+            behaviorNames.add(b.name());
+        }
+        Set<String> out = new LinkedHashSet<>();
+        for (Ast.FnDef fn : from.fns()) {
+            if (isHelperName(behaviorNames, fn.name())
+                    && publishes(exposed, fn.name(), fn.body() instanceof Ast.FnBody.Written,
+                            wanted)) {
+                out.add(fn.name());
+            }
+        }
+        return out;
     }
 
     /**

@@ -687,42 +687,18 @@ public final class Bodies {
         Set<String> exposed = new java.util.HashSet<>(from.exposing());
         List<Hir.FnDef> out = new java.util.ArrayList<>();
         for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
-            if (publishes(exposed, fn.name(), fn.body() instanceof Hir.FnBody.Written, wanted)) {
+            if (HelperInliner.publishes(exposed, fn.name(),
+                    fn.body() instanceof Hir.FnBody.Written, wanted)) {
                 out.add(fn);
             }
         }
         return out;
     }
 
-    /**
-     * Whether a module hands a definition of this name to a reader that asked for it.
-     *
-     * <p>Written over the name and what kind of body it has, because a module's own definitions are
-     * read at both representations: {@code Resolve} asks what an import brings into the value
-     * namespace, of a module it has not resolved, and everything after it asks the same question of
-     * one it has. The rule is the same one, so it is here rather than restated over each tree.
-     */
-    static boolean publishes(Set<String> exposing, String fn, boolean hasWrittenBody,
-                             List<String> wanted) {
-        return hasWrittenBody && exposing.contains(fn) && wanted.contains(fn);
-    }
-
-    /** The names {@code from} publishes among {@code wanted}, of a module as it was written. */
+    /** The names {@code from} publishes among {@code wanted}, of a module as it was written —
+     * {@link HelperInliner#publishedNames}, which is where the rule is. */
     public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
-        Set<String> exposed = new java.util.HashSet<>(from.exposing());
-        Set<String> behaviorNames = new java.util.HashSet<>();
-        for (Ast.BehaviorDef b : from.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        Set<String> out = new java.util.LinkedHashSet<>();
-        for (Ast.FnDef fn : from.fns()) {
-            if (HelperInliner.isHelperName(behaviorNames, fn.name())
-                    && publishes(exposed, fn.name(), fn.body() instanceof Ast.FnBody.Written,
-                            wanted)) {
-                out.add(fn.name());
-            }
-        }
-        return out;
+        return HelperInliner.publishedNames(from, wanted);
     }
 
     /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec
