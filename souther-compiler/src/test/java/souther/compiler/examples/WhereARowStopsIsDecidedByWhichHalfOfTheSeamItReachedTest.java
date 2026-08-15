@@ -302,6 +302,11 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 c.db().ask(new Shapes.Scope(name)).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifact,
+                // The answerers here apply this compile's own classes, so there is no second set of
+                // declarations to hold theirs against and this is never asked for.
+                () -> {
+                    throw new AssertionError("an answer of this compile's own read declarations");
+                },
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),

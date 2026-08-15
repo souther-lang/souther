@@ -2947,6 +2947,14 @@ A composition's dependencies are its stages' (<<composition-with-requirements>>)
 
 [[stand-in-comparison-completes]]Reading a `+fake+` against the rows recorded for that behavior MUST come to a value, so that what the two state was compared. Being told nothing was found and being told nothing was compared are different answers.
 
+[[an-answer-is-of-the-module-being-evaluated]]What answers a behavior MUST be built against the module the rows are written for, and where that cannot be established the rows MUST NOT be run against it (<<e1927>>). An implementation supplied from outside a compile reads a row's values by the declarations it was built against, and a row handed to one built against another revision is decided by the two builds disagreeing rather than by the model: an invariant narrowed since refuses a value the model admits, a case added to a union arrives where there is no such case, a field renamed is not found under its name. Such a row is undecided rather than failing — everything it can be held to without being run has been, and what it would have decided was not found out.
+
+What is compared is what a value crossing between the two depends on: which cases a union has, what a data holds, what an invariant admits, what a newtype wraps, what a behavior's signature is, which behaviors are left to be injected, what an import binds, and the `+let+`​s a declaration cannot be read without. Everything else may differ. A `+let+` body, an example, a `+fake+`, the order two declarations are written in and how they are spaced are not things a value can be read differently by, and a build that differs only in those is not another build for this purpose. Declarations reached through an `+import+` are held to in the same way, since a field of an imported type is read by that module's declarations.
+
+Whether the two agree and whether it can be told are different answers. Classes carrying no declarations, and declarations this compiler cannot read, establish nothing about either build — the answer may well be of exactly this module — so they are reported as what they are rather than as a build that has moved, and the rows are not run either way. This is not the boundary revision (<<a-published-module-agrees-with-this-compiler>>): two builds of two different models carry the same one, and it says which compiler wrote a module rather than which model it was.
+
+A run whose answers are the ones the compile generated has nothing to establish. There is one build, so what applies a behavior is of the module being evaluated by being of this compile of it.
+
 An injected behavior (<<injected-behavior>>) has no `+let+` to apply, so a row naming one is *recorded* rather than evaluated. It is not refused. A model that a system is being migrated onto is injected everywhere at the start, and the rows harvested from the system it replaces are the record of what each behavior will owe; refusing them would mean keeping that record somewhere the compiler cannot read, which is where it stops being checked.
 
 What a row can be held to without a body, it is held to. Its arity, each input built against its parameter type — compiled as this module's code and run, so an input that breaks an invariant is <<e1903>> the day it is written — the expected arm against the output's cases (<<e1904>>), and the expected value built (<<e1903>>). What is left needs something to run.
@@ -5696,6 +5704,21 @@ Emitted at a row of a `+fake+` table that the table's dispatch can never return,
 An error, and not a measurement: which row answers is decided by the table's own rule rather than by anything a run finds out, so a row that cannot answer is refused the way an arm no `+match+` can reach is (<<e1204>>) rather than reported as something a build may carry.
 
 A `+_+` row and an explicit row do not shadow each other, whichever order they are written in: an explicit row answers where it is asked for what it states, and the `+_+` row answers everywhere else. A second table written for one dependency is not this either — the first one written is what answers, and what the second states is said where that is decided (<<example-pending>>).
+
+[#e1927]
+=== What answers a behavior is not of the model being evaluated
+
+[,text]
+----
+What answers `findTodo` was built against another revision of `todo`: `Title` is
+declared differently there.
+----
+
+Emitted at an `+example+` whose behavior is answered by an implementation supplied from outside the compile, where nothing can establish that what answers it was built against this model (<<an-answer-is-of-the-module-being-evaluated>>). The rows are not run against it: what a row's values are is decided by this model and what reads them is decided by whatever that implementation was compiled against, so a row handed over would be decided by the two disagreeing rather than by the model — and that lands on a comparison, which is read as a statement about the model.
+
+Said once for the behavior, however many rows were waiting on it: one answer and one model disagreeing is one fact, and the rows did not stop for reasons of their own. Each of them is recorded as undecided, with its inputs and its expectation already built and held to their invariants.
+
+Two things are reported under this code, and they are not the same finding. Where both sides were read and one declares something else, the declaration is named and the fix is to build again. Where the declarations could not be read at all — classes carrying none, or declarations written at another boundary revision (<<e1505>>) — nothing has been established about either build, and saying a build was stale would be saying it on evidence nobody has.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

@@ -24,6 +24,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 
@@ -944,6 +945,11 @@ public final class Output {
             souther.compiler.examples.ExampleVerifier.Observations observed =
                     souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
                             artifact,
+                            // What this compile declares, for holding an answer's own declarations
+                            // against. Asked for only if something has to be held: a compile's own
+                            // answers are of the module being evaluated by being of this compile of
+                            // it, and every answer this run has is one of those today.
+                            () -> new ClassFileDeclarations(db.ask(new All()).value()::get),
                             requirements, evaluationLoader(db),
                             values == null ? Map.of() : values, sourceId, deadlineOf(db),
                             policyOf(db),

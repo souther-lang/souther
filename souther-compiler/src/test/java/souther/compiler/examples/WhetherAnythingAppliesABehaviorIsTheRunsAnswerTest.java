@@ -215,6 +215,9 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         mine.db().ask(new Shapes.Scope(name)).value(),
                         mine.db().ask(new Bodies.Signatures(name)).value(),
                         artifactOf(other, "example.elsewhere"),
+                        () -> {
+                            throw new AssertionError("the run was made before it was refused");
+                        },
                         mine.db().ask(new Bodies.Requirements(name)).value(),
                         ExampleVerifier.class.getClassLoader(),
                         mine.db().ask(new Bodies.ModuleDefinitions(name)).value(),
@@ -304,6 +307,11 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 c.db().ask(new Shapes.Scope(name)).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifactOf(c, name),
+                // Every answer here applies this compile's own classes, so nothing is held against
+                // this module's declarations and they are never read.
+                () -> {
+                    throw new AssertionError("an answer of this compile's own read declarations");
+                },
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),

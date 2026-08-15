@@ -124,6 +124,32 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1909)
     record AFakeHadNoOutputForAnInput(String input) implements ExampleMessage, Reported {}
 
+    /**
+     * What answers the behavior was built against another revision of the module, and the two say
+     * different things about something a value crossing between them depends on.
+     */
+    @Code(DiagnosticCode.E1927)
+    record TheAnswerIsOfAnotherBuild(String target, String module, String declaration)
+            implements ExampleMessage, Reported {}
+
+    /** What to do about it: the two are one model, built twice. */
+    record BuildWhatAnswersItAgainstThisRevision(String module)
+            implements ExampleMessage, Supporting {}
+
+    /**
+     * Whether what answers the behavior was built against this module could not be told — which is
+     * not the same as their disagreeing, and is said as its own thing for that reason.
+     */
+    @Code(DiagnosticCode.E1927)
+    record WhetherTheAnswerIsOfThisModuleCannotBeTold(String target, String module)
+            implements ExampleMessage, Reported {}
+
+    /** Nothing was published for the module: the classes carry no declarations at all. */
+    record ItsClassesCarryNoDeclarations(String module) implements ExampleMessage, Supporting {}
+
+    /** Declarations were published and this compiler does not read them. */
+    record WhatItPublishedCannotBeReadHere(String module) implements ExampleMessage, Supporting {}
+
     // --- what the evaluation could not finish ---
 
     /** The evaluation did not answer in time. */

@@ -56,6 +56,20 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          * what it would have covered is unknown. */
         ROW_UNDECIDED(false),
         /**
+         * A row was not handed to what was to apply it: nothing could establish that the answer's
+         * declarations are the ones the row is written for.
+         *
+         * <p>One code for both of the ways that happens. They are two things to tell a person — one
+         * build has moved on from another, against nothing here being able to read what the answer
+         * carries — and what a measure loses is the same either way: what the running would have
+         * decided. Which of the two it was is said where a person reads it.
+         *
+         * <p>The rows behind it were read. They were built, held to their invariants, and recorded;
+         * a measure over them is over rows that are there, and what is missing from it is everything
+         * only the running establishes.
+         */
+        ANSWERER_NOT_ESTABLISHED(false),
+        /**
          * The generated classes would not link.
          *
          * <p>Named for what is caught, which is a {@code LinkageError} and not one of the things
