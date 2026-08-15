@@ -290,8 +290,11 @@ public final class CoverageSites {
          */
         private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part) {
             int index = sites.size();
-            sites.add(new Site(behavior, kind, label,
-                    Citation.of(new SourceRef(sourceId, owner.pos())),
+            // Of the node's own coordinate. The walk's `sourceId` is the module being
+            // measured, and an arm of a helper another module of this compile wrote is in
+            // that module's file — pairing the two wrote one source's identity beside the
+            // other's line and column.
+            sites.add(new Site(behavior, kind, label, Citation.of(owner.pos()),
                     index, ordinal++, new Obligation(behavior, origin, part)));
             return index;
         }

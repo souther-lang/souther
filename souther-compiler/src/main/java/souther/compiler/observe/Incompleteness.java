@@ -136,7 +136,7 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
 
     public static Incompleteness at(Code code, Scope scope, String subject, SourceRef where) {
         return new Incompleteness(code, Target.of(scope, subject),
-                Optional.ofNullable(where).map(Citation::of));
+                Optional.ofNullable(where).map(SourceRef::pos).map(Citation::of));
     }
 
     /** A position, which takes the behavior it sits in as well as the path. Both, because whose

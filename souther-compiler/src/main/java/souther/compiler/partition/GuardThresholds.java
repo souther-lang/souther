@@ -313,7 +313,7 @@ public final class GuardThresholds {
         // it.
         OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(guard, site,
                 plan.site(site).obligation(),
-                Citation.of(new SourceRef(guard.at().sourceId(), iff.pos())),
+                Citation.of(iff.pos()),
                 true, placed.witness(), holdsAtTheLine(comparison.op()), false);
         BoundaryObligation made = new BoundaryObligation(
                 new BoundaryTarget.EqualTerms(behavior, on, against, carrier), origin,
@@ -464,7 +464,7 @@ public final class GuardThresholds {
             }
             singled.add(new Guards.Singled(term, value,
                     new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
-                            Citation.of(new SourceRef(guard.at().sourceId(), iff.pos())),
+                            Citation.of(iff.pos()),
                             true, placed.witness(), op == Hir.BinOp.EQ, true)));
             return term.path();
         }
@@ -473,7 +473,7 @@ public final class GuardThresholds {
         boolean holds = op == Hir.BinOp.LE || op == Hir.BinOp.GE;
         out.add(new Threshold(term, value, below,
                 new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
-                        Citation.of(new SourceRef(guard.at().sourceId(), iff.pos())),
+                        Citation.of(iff.pos()),
                         below, placed.witness(), holds)));
         // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
         // and `x > c` agree about the first and take opposite halves, so the arms are read off the

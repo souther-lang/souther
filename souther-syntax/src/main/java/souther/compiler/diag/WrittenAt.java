@@ -57,8 +57,14 @@ public sealed abstract class WrittenAt permits AtItsPlace, StoodInFor {
      *
      * <p>Total, and defined on both arms. A projection that answered only for the case it was written
      * for would leave the other reading the coordinate, which is where this started.
+     *
+     * <p>Takes the coordinate and not a {@link SourceRef} over it. A reference holds a source of its
+     * own beside the one the coordinate carries, and the two can disagree — a walk over one module
+     * pairs its own source with a position from a helper another module of the same compile wrote.
+     * Reading either of them was survivable while each reader picked one; a citation is the single
+     * answer about a place, so a contradiction inside it is a place that is two places.
      */
-    abstract Citation cite(SourceRef reachedFrom);
+    abstract Citation cite(SourcePos reachedFrom);
 
     /** The ordinary answer: what every coordinate a source was read for carries. */
     public static final WrittenAt HERE = new AtItsPlace();

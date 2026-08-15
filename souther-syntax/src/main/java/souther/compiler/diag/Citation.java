@@ -25,8 +25,14 @@ import java.util.SequencedMap;
  * write it, the sum would decorate nothing, and the second case would go unread again.
  *
  * <p>Built one way. {@link #of} asks the coordinate's provenance to project itself, which is the only
- * thing {@link WrittenAt} will do and is package-private so that it stays so. There is no
- * constructor a caller could reach to state a place the compiler did not observe.
+ * thing {@link WrittenAt} will do and is package-private so that it stays so, and the arms cannot be
+ * built or implemented from outside this package. So there is no independent construction path: every
+ * citation is a projection of provenance a coordinate already carries.
+ *
+ * <p>Which is a rule about where a statement comes from and not a claim that provenance is a secret.
+ * A caller may stamp a coordinate itself and project that, and may compare a provenance against one
+ * it builds. What it may not do is read the declaration off a coordinate and write a place of its
+ * own, which is the defect this exists to close.
  */
 public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
 
@@ -49,16 +55,17 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
         SourceRef reachedFrom();
     }
 
-    /** What a report may say about where {@code ref} names code written. */
-    static Citation of(SourceRef ref) {
-        return ref.pos().writtenAt().cite(ref);
-    }
-
-    /** The same, for a coordinate that carries the source it is in — which is every coordinate a
-     *  diagnostic is built at, the source having been part of the position since positions were
-     *  gathered across files. */
+    /**
+     * What a report may say about where {@code pos} names code written.
+     *
+     * <p>Of the coordinate, and never of a {@link SourceRef} over one. A reference carries a source
+     * beside the one the coordinate has, the two can disagree, and a citation that took the pair
+     * would hold both — which is how a report came to write one source's identity beside another
+     * source's line and column. The coordinate has said which source it is in since positions were
+     * gathered across files, so there is nothing the second one adds and one thing it can do.
+     */
     static Citation of(SourcePos pos) {
-        return of(new SourceRef(pos.sourceId(), pos));
+        return pos.writtenAt().cite(pos);
     }
 
     /**

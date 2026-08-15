@@ -86,6 +86,37 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 | "a big one" : (50) -> Size(50)
             """;
 
+    /**
+     * The third state: written where this compile can show it, and not in the file the section is
+     * about.
+     *
+     * <p>{@code HERE} and {@code OutOfSight} are the two a provenance has, and they are not the two a
+     * report has to tell apart. A helper another module of the same compile wrote keeps the positions
+     * it was written at, so its arm is {@code HERE} — in a file the reader holds, and not this one.
+     * A report that named no file sent the reader to those numbers in the wrong source, which is what
+     * making places into citations did until the citation stopped being built out of two source
+     * identities at once.
+     */
+    private static final List<String> ANOTHER_SOURCE = List.of("""
+            module up exposing ( clamp )
+
+            let clamp (n: Int): Int =
+                if n >= 0 then n else 0
+            """, """
+            module down
+
+            import up ( clamp )
+
+            data Size = Int
+
+            behavior sized : (n: Int) -> Size
+                constructs Size
+            let sized (n) = Size(clamp(n))
+
+            example sized
+                | "a positive one" : (5) -> Size(5)
+            """);
+
     private static final String DECLARATION = "Int.abs";
 
     // --- the arm, in each of the four renderings that say where it is -------------------------------
@@ -178,6 +209,28 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         }
     }
 
+    // --- the third state, which is neither of the two a provenance has ------------------------------
+
+    /**
+     * An arm of a helper another module of this compile wrote is named with its file.
+     *
+     * <p>Its provenance is {@code HERE} — the copy kept the positions it was written at, because the
+     * reader holds that file. What the report must not do is print those numbers bare under a section
+     * about another source, which is exactly what happened while a citation was built from a walk's
+     * own source paired with a position from somewhere else.
+     */
+    @Test
+    void anArmAnotherSourceOfThisCompileWroteIsNamedWithItsFile() {
+        Elsewhere said = fromAnotherSource();
+
+        assertTrue(said.armLine().contains("up.sou:"),
+                () -> "the line names the file the arm is written in: " + said.armLine());
+        assertEquals("up.sou", said.sourceOfTheArm(),
+                "and the document points at that source, not at the one being reported on");
+        assertEquals("here", said.writtenAt().get("kind").asString(),
+                "the copy kept its own positions, so the place is the place");
+    }
+
     // --- the controls -------------------------------------------------------------------------------
 
     @Test
@@ -193,6 +246,12 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         assertEquals("here", said.writtenAt().get("kind").asString());
         assertFalse(said.writtenAt().has("declaration"),
                 "there is no declaration to name where the place is the place");
+        // The other document too, and not only the one above. `here` is written rather than left
+        // out, so an emitter that started omitting it would be caught by something — which the
+        // out-of-sight test beside this one cannot do.
+        JsonNode region = JSON.readTree(said.diagnosticJson()).get("region");
+        assertEquals("here", region.get("writtenAt").get("kind").asString());
+        assertFalse(region.get("writtenAt").has("declaration"));
     }
 
     @Test
@@ -303,6 +362,45 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 new JsonRenderer().render(arm, new SourceContext("m.sou", model), Locale.ENGLISH),
                 armLines.get(0), unreached.get(0).get("at"),
                 boundaryLines, origins, document);
+    }
+
+    /** What the two renderings say about an arm written in another source of this compile. */
+    private record Elsewhere(String armLine, String sourceOfTheArm, JsonNode writtenAt) {}
+
+    /**
+     * A compile of two sources, so that the section a report is about and the file an arm is written
+     * in are different files this compile holds.
+     *
+     * <p>Named by {@link SourceNameResolver}, because what a reader is shown a source as is a fact
+     * about the set in front of them. The identities are the compile's own, so the document is read
+     * through its {@code sources} table the way any consumer reads one.
+     */
+    private static Elsewhere fromAnotherSource() {
+        Compilation compilation = Compilation.ofSources(ANOTHER_SOURCE,
+                souther.compiler.meta.ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        SourceNameResolver names = id -> "0".equals(id) ? "up.sou" : "down.sou";
+        AdequacyReport report = AdequacyReport.of(compilation);
+
+        List<String> lines = report.human(names).lines().map(String::strip)
+                .filter(line -> line.startsWith("· no row goes through")).toList();
+        assertEquals(1, lines.size(), () -> "one arm is unreached: " + lines);
+
+        JsonNode document = JSON.readTree(report.json(names));
+        JsonNode down = null;
+        for (JsonNode module : document.get("modules")) {
+            if ("down".equals(module.get("module").asString())) {
+                down = module;
+            }
+        }
+        assertNotNull(down, "the module the row names is reported");
+        JsonNode unreached = down.get("behaviors").get(0).get("branch").get("unreached");
+        assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
+        JsonNode at = unreached.get(0).get("at");
+        return new Elsewhere(lines.get(0),
+                document.get("sources").get(at.get("sourceId").asString()).asString(),
+                at.get("writtenAt"));
     }
 
     /** Every {@code at} the document holds, wherever it sits. */

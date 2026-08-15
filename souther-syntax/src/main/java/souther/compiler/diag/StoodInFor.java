@@ -37,8 +37,9 @@ final class StoodInFor extends WrittenAt {
     }
 
     @Override
-    Citation cite(SourceRef reachedFrom) {
-        return new OutOfSightCitation(declaration, reachedFrom);
+    Citation cite(SourcePos reachedFrom) {
+        return new OutOfSightCitation(declaration,
+                new SourceRef(reachedFrom.sourceId(), reachedFrom));
     }
 
     @Override

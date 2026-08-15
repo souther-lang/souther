@@ -17,8 +17,8 @@ final class AtItsPlace extends WrittenAt {
     }
 
     @Override
-    Citation cite(SourceRef at) {
-        return new WrittenCitation(at);
+    Citation cite(SourcePos at) {
+        return new WrittenCitation(new SourceRef(at.sourceId(), at));
     }
 
     @Override
