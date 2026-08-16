@@ -45,6 +45,12 @@ public final class FieldDomains {
      */
     public static final String THE_VALUE = "";
 
+    /** No position anywhere, for the reading that reached none. Unmodifiable, as every other part
+     * of {@link #NONE} is: a shared constant handing out a map anybody could add to is a value one
+     * caller can change under the rest. */
+    private static final SequencedMap<Term, String> NO_POSITIONS =
+            java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>());
+
     /**
      * Nothing known of any field.
      *
@@ -56,7 +62,7 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), true,
-                    Set.of(THE_VALUE), new LinkedHashMap<>(), ConstraintState.top(),
+                    Set.of(THE_VALUE), NO_POSITIONS, ConstraintState.top(),
                     null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
