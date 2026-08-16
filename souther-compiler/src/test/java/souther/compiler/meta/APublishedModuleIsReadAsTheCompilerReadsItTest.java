@@ -124,6 +124,39 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
                 "its invariant calls a helper `example.money` published, which the import brings in");
     }
 
+    /** It names a type another module declares, and nothing else of it. */
+    private static final String NAMING = """
+            module example.line
+            import example.money ( Amount )
+
+            data Line = { amount: Amount }
+            """;
+
+    /**
+     * A module reading through one these classes do not carry is not read.
+     *
+     * <p>The bare name its import brought in is in scope denoting nothing, which is what an author
+     * being told what is wrong with the import line needs. A reader is not being told anything: what
+     * it has is a field whose type is the error type, read back as a declaration of this module and
+     * compared with one from a build that could see the module. So the two are told apart here, and
+     * a module whose imports this set cannot answer is one this set cannot say what declares.
+     */
+    @Test
+    void aModuleReadingThroughOneTheseClassesDoNotCarryIsNotRead() {
+        Map<String, byte[]> classes =
+                new java.util.LinkedHashMap<>(Compiler.compileModules(List.of(OFFERING, NAMING)));
+        int all = classes.size();
+        classes.keySet().removeIf(binary -> binary.contains("money"));
+        org.junit.jupiter.api.Assertions.assertTrue(classes.size() < all,
+                "the module being withheld is one this set had");
+        PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get));
+
+        assertNull(universe.resolved("example.line"),
+                "its field's type is declared by a module nothing here carries");
+        org.junit.jupiter.api.Assertions.assertFalse(universe.declares("example.money"),
+                "which is a name these classes say nothing about, not one they cannot read");
+    }
+
     /** What the invariant of {@code type} calls, as the front end answered it. */
     private static ValueName calledByTheInvariantOf(Hir.Module module, String type) {
         for (Hir.Def def : module.defs()) {
