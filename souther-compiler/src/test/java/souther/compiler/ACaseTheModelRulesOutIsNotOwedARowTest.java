@@ -34,8 +34,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ACaseTheModelRulesOutIsNotOwedARowTest {
 
-    /** {@code Pending} is a case with an answer and no row: a gap that is real, beside one that is
-     * not. Without it, a measure that simply reported nothing would pass every assertion here. */
+    /**
+     * A case the model's own rules refuse, beside one it admits.
+     *
+     * <p>{@code Active} is never {@code Off}, so a row at {@code Off} is one the constructor
+     * refuses (E1903) whatever the body says, and the {@code unreachable} says the same thing the
+     * invariant does. {@code Pending} is a case with an answer and no row: a gap that is real,
+     * beside one that is not. Without it, a measure that simply reported nothing would pass every
+     * assertion here.
+     */
+    private static final String RULED_OUT = """
+            module example.probe
+
+            data On
+            data Off
+            data Pending
+            data Flag = On | Off | Pending
+            data Active = Flag invariant value /= Off
+            data Answer = Int
+
+            behavior pick : (f: Active) -> Answer
+                constructs Answer
+
+            let pick (f) = match f.value with
+                | On      -> Answer(1)
+                | Pending -> Answer(0)
+                | Off     -> unreachable "an Active is never Off"
+
+            example pick
+                | "on" : (Active(On)) -> Answer(1)
+            """;
+
+    /** A body that declares a case cannot arrive where the type says it can. What the measures do
+     * with the claim is what the axis assertions below are about. */
     private static final String MODEL = """
             module example.probe
 
@@ -94,7 +125,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      */
     @Test
     void whatIsDeclaredIsWhatIsCoverableAndWhatIsRuledOut() {
-        InputCaseEvidence input = input(MODEL, 0);
+        InputCaseEvidence input = input(RULED_OUT, 0);
 
         assertEquals(3, input.declared().size());
         assertEquals(1, input.excluded().size());
@@ -103,11 +134,66 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         assertEquals(List.of("Off"), input.excluded().stream().map(each -> each.name()).toList());
     }
 
+    /**
+     * What takes a case out is the rules, and not the body saying so.
+     *
+     * <p>The same model with the {@code unreachable} replaced by an answer. Nothing declares
+     * anything about {@code Off} and it is out of the denominator all the same, because
+     * {@code Active}'s invariant is what refuses it — measured the other way round, an author was
+     * asked for a row the constructor refuses whenever they had not written the claim.
+     */
+    @Test
+    void whatTakesACaseOutIsTheRulesAndNotAClaim() {
+        String answered = RULED_OUT.replace(
+                "| Off     -> unreachable \"an Active is never Off\"", "| Off     -> Answer(9)");
+
+        InputCaseEvidence input = input(answered, 0);
+
+        assertEquals(List.of("Off"), input.excluded().stream().map(each -> each.name()).toList());
+        assertEquals(List.of("Pending"),
+                input.unspecified().stream().map(each -> each.name()).toList());
+    }
+
+    /**
+     * A claim the rules contradict moves nothing.
+     *
+     * <p>{@code Flag} has {@code B} and nothing anywhere says a caller cannot pass one, so the row
+     * is still owed. The body says otherwise, and what the body says is not what the denominator is
+     * made of: taken at its word, the measure drops the one obligation whose discharge would have
+     * shown the model wrong.
+     */
+    @Test
+    void aClaimTheRulesContradictLeavesTheCaseOwed() {
+        String claimed = """
+                module example.probe
+
+                data A
+                data B
+                data Kind = A | B
+                data Answer = Int
+
+                behavior pick : (k: Kind) -> Answer
+                    constructs Answer
+
+                let pick (k) = match k with
+                    | A -> Answer(1)
+                    | B -> unreachable "B never arrives"
+
+                example pick
+                    | "a" : (A) -> Answer(1)
+                """;
+
+        InputCaseEvidence input = input(claimed, 0);
+
+        assertEquals(List.of(), input.excluded().stream().map(each -> each.name()).toList());
+        assertEquals(List.of("B"), input.unspecified().stream().map(each -> each.name()).toList());
+    }
+
     /** The gap that is real is still reported; the one no row can fill is not. */
     @Test
     void theCaseWithAnAnswerIsStillOwedARow() {
         assertEquals(List.of("Pending"),
-                input(MODEL, 0).unspecified().stream().map(each -> each.name()).toList());
+                input(RULED_OUT, 0).unspecified().stream().map(each -> each.name()).toList());
     }
 
     @Test
@@ -203,11 +289,11 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      */
     @Test
     void nothingIsWarnedAboutThatNoRowCouldAnswer() {
-        assertEquals(List.of("E1915", "E1918"), warnings(MODEL).stream().sorted().toList());
-        assertTrue(messages(MODEL).stream().allMatch(said -> said.contains("Pending")),
-                messages(MODEL).toString());
-        assertFalse(messages(MODEL).stream().anyMatch(said -> said.contains("Off")),
-                messages(MODEL).toString());
+        assertEquals(List.of("E1915", "E1918"), warnings(RULED_OUT).stream().sorted().toList());
+        assertTrue(messages(RULED_OUT).stream().allMatch(said -> said.contains("Pending")),
+                messages(RULED_OUT).toString());
+        assertFalse(messages(RULED_OUT).stream().anyMatch(said -> said.contains("Off")),
+                messages(RULED_OUT).toString());
     }
 
     private static List<String> warnings(String source) {
@@ -346,7 +432,8 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 """;
 
         assertEquals(List.of("Off"),
-                input(bound, 0).excluded().stream().map(each -> each.name()).toList());
+                axis(bound).excluded().stream()
+                        .map(PartitionEvidence.ExcludedClass::classId).toList());
     }
 
     /**

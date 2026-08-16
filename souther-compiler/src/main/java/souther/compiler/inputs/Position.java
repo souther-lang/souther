@@ -90,6 +90,16 @@ public sealed interface Position permits ReadPosition {
      */
     Admits admissionOf(Case one);
 
+    /**
+     * The same, of a case named by the declaration it is.
+     *
+     * <p>What a measure counting a sum's cases has in hand is the declaration, and what the reading
+     * holds is a distinction it made from that declaration. Asked here so that the two meet by
+     * identity: a caller rebuilding the distinction to look it up would have to know what the
+     * reading knew when it made one, and would find nothing on the day that changed.
+     */
+    Admits admissionOf(TypeSymbol leaf);
+
     /** How much of what the rules say about this position's values was read. */
     AdmissibleSet.Completeness completeness();
 

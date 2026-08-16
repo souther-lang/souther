@@ -60,6 +60,16 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm term,
      * opposite things, which is what putting the widening here is for.
      */
     @Override
+    public Admits admissionOf(TypeSymbol leaf) {
+        for (Case each : declared) {
+            if (each instanceof Case.SumCase sum && sum.leaf().equals(leaf)) {
+                return admissionOf(each);
+            }
+        }
+        return new Admits.Unsettled(new Unsettlement.NoSuchDistinction());
+    }
+
+    @Override
     public Admits admissionOf(Case one) {
         if (obligations instanceof ObligationDomain.Conservative) {
             return new Admits.Unsettled(new Unsettlement.RulesLeaveNothing());

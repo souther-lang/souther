@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.inputs.TermPath;
 import souther.compiler.source.SourceId;
 
 
@@ -423,8 +424,8 @@ public final class Adequacy {
                         byTarget.getOrDefault(behavior.name(), Observed.NONE),
                         behavior instanceof Hir.SpecBehavior spec ? spec.params().stream()
                                 .map(Hir.Param::name).toList() : List.of(),
-                        excluded == null ? Exclusions.NONE
-                                : excluded.getOrDefault(behavior.name(), Exclusions.NONE),
+                        readInputs == null ? InputDomain.NONE
+                                : readInputs.getOrDefault(behavior.name(), InputDomain.NONE),
                         producing.get(behavior.name()), producingPlan,
                         reachableArms == null ? NOTHING_PROVEN
                                 : reachableArms.getOrDefault(behavior.name(), NOTHING_PROVEN)));
@@ -1896,6 +1897,31 @@ public final class Adequacy {
     }
 
     /**
+     * The cases of an input the rules refuse, which are the ones no row can be written at.
+     *
+     * <p>Asked of the reading, case by case and by the declaration each case is. Only a refusal
+     * takes a case out: a case the reading could not settle stays counted, because what would take
+     * it out is a proof and not the absence of one — and a case counted where the reading was set
+     * aside is exactly the case nobody could have proven anything about.
+     *
+     * <p>Nothing a body says reaches this. An {@code unreachable} arm is a claim about the same
+     * position, checked against this reading rather than read into it.
+     */
+    private static Set<TypeSymbol> refusedAt(InputDomain read, String parameter,
+                                             Set<TypeSymbol> declared) {
+        if (parameter == null || declared.isEmpty()) {
+            return Set.of();
+        }
+        souther.compiler.inputs.Position at = read.at(TermPath.of(parameter));
+        if (at == null) {
+            return Set.of();   // nothing was read about the position, so nothing is proven about it
+        }
+        return declared.stream()
+                .filter(each -> at.admissionOf(each) instanceof souther.compiler.inputs.Admits.Refused)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
      * The cases the output has to be covered at, which is not quite what a row's expected arm is held
      * against ({@link TypeOps#outputCases}).
      *
@@ -1919,11 +1945,14 @@ public final class Adequacy {
     }
 
     /**
-     * @param parameters the behavior's parameter names, which is how an exclusion read off the body
-     *                   at an input position is matched to the position this counts
+     * @param parameters the behavior's parameter names, which is how a position this counts is found
+     *                   in the reading of the behavior's input
+     * @param read       what can arrive at each position of the input, which is what decides the
+     *                   denominator here. Not the type's cases alone: a case the rules refuse is one
+     *                   no row can be built at, and counting it holds the model short for ever
      */
     static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen,
-                                        List<String> parameters, Exclusions excluded,
+                                        List<String> parameters, InputDomain read,
                                         souther.compiler.core.Core body,
                                         souther.compiler.coverage.CoverageSites.Plan plan,
                                         Effective reachable) {
@@ -1951,13 +1980,8 @@ public final class Adequacy {
             inSpecified.add(new LinkedHashSet<>());
             inExecuted.add(new LinkedHashSet<>());
             inVerified.add(new LinkedHashSet<>());
-            // Matched within the position it was read at: a class is named the same way at every
-            // position of the same type, and one behaviour's `Off` arm says nothing about another
-            // input that is also a `Flag`.
-            List<TypeSymbol> here = i < parameters.size()
-                    ? excluded.atParameter(parameters.get(i)) : List.of();
-            inExcluded.add(here.stream().filter(declared::contains)
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
+            inExcluded.add(refusedAt(read, i < parameters.size() ? parameters.get(i) : null,
+                    declared));
         }
 
         for (RowOutcome row : rows) {
