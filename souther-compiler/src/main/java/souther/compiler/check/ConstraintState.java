@@ -47,20 +47,21 @@ import java.util.Set;
  * later is a component of this and an arm of {@link #isBottom}, and every such reader has it without
  * being touched.
  *
- * <p>One reader still asks the numbers alone, and it is the other question. Whether a path is
- * reached — whether the conditions guarding a construction can all hold — is asked of
- * {@code numbers} where the walk reads a branch, so a path made impossible by predicates alone is
- * walked and what stands on it is reported. That is a mistake of the same shape as the one above,
- * and it is not this one: what it moves is which constructions are reported at, and a change to
- * that is its own change with its own reason to make.
+ * <p>Two questions are asked here and they are one answer. Whether any value of a declaration
+ * exists, and whether a path a construction stands on is reached, are both whether anything at all
+ * satisfies what has been taken in — so both are {@link #isBottom}, under the name each context
+ * reads it by ({@link FieldDomains#infeasible}, {@link Known#reachesNothing}). They were once two
+ * readers of two domains, and each of them answered that there was something wherever the domain it
+ * happened to ask had nothing to say.
  */
 record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
-                       AdmissibleValues<Term> values, OrderedIntervals<Term> ordered) {
+                       AdmissibleValues<Term> values, OrderedIntervals<Term> ordered,
+                       boolean shown) {
 
     /** Nothing taken in, so nothing ruled out. */
     static ConstraintState top() {
         return new ConstraintState(NumericDomain.top(), PredicateFacts.none(),
-                AdmissibleValues.top(), OrderedIntervals.top());
+                AdmissibleValues.top(), OrderedIntervals.top(), false);
     }
 
     /**
@@ -69,9 +70,30 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
      * <p>Every domain, because each of them can hold the whole state's contradiction on its own: what
      * one of them cannot express it leaves alone, so a contradiction found anywhere is a
      * contradiction, and one found nowhere is only what these readings were able to show.
+     *
+     * <p>And {@code shown}, which is a caller having shown it by an argument none of the domains
+     * makes: a condition no case of what it is written over satisfies is one nothing enters, and
+     * what says so is a reading of the cases rather than anything an interval or a predicate holds.
+     * It is another piece of evidence for the one answer and not a second answer — a state that
+     * carried its own reachability beside the domains would be two records to keep in step, and the
+     * first domain added without touching the second would put them out of agreement.
      */
     boolean isBottom() {
-        return numbers.isBottom() || facts.isBottom() || values.isBottom() || ordered.isBottom();
+        return shown || numbers.isBottom() || facts.isBottom() || values.isBottom()
+                || ordered.isBottom();
+    }
+
+    /**
+     * This, with nothing satisfying it, shown by an argument outside the domains.
+     *
+     * <p>Written here rather than as a contradiction lodged in one of them. Said as {@code 1 <= 0}
+     * in the numbers, which is how it read before, the claim came out as an arithmetic one: a reader
+     * asking why a state holds nothing was told the rules about numbers conflict, and a reader
+     * asking whether a path is reached was pulled back to {@code numbers.isBottom()} — which is the
+     * reading this question came apart along.
+     */
+    ConstraintState shownToHoldNothing() {
+        return shown ? this : new ConstraintState(numbers, facts, values, ordered, true);
     }
 
     /**
@@ -112,21 +134,21 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
 
     /** This, with {@code f rel 0} taken as holding. */
     ConstraintState taking(LinearForm<Term> f, Rel rel, Map<Term, Granularity> kinds) {
-        return new ConstraintState(numbers.assume(f, rel, kinds), facts, values, ordered);
+        return new ConstraintState(numbers.assume(f, rel, kinds), facts, values, ordered, shown);
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
     ConstraintState taking(Term key, boolean positive) {
-        return new ConstraintState(numbers, facts.assume(key, positive), values, ordered);
+        return new ConstraintState(numbers, facts.assume(key, positive), values, ordered, shown);
     }
 
     /** This, with {@code admitted} taken as holding of the positions it speaks about. */
     ConstraintState taking(AdmissibleValues<Term> admitted) {
-        return new ConstraintState(numbers, facts, values.meet(admitted), ordered);
+        return new ConstraintState(numbers, facts, values.meet(admitted), ordered, shown);
     }
 
     /** This, with {@code bounded} taken as holding of the positions it bounds. */
     ConstraintState taking(OrderedIntervals<Term> bounded) {
-        return new ConstraintState(numbers, facts, values, ordered.meet(bounded));
+        return new ConstraintState(numbers, facts, values, ordered.meet(bounded), shown);
     }
 }
