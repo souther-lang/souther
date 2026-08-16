@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.msg.MessageKeys;
@@ -13,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,7 +65,7 @@ class CompileImportCollisionTest {
                         data Line = { a: Amount }
                         """)));
 
-        assertEquals(3, e.diagnostic().region().start().line(), "the caret is on the second import");
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(), "the caret is on the second import");
         assertEquals(1, e.diagnostic().secondary().size(), "the first import is labelled too");
         assertEquals(2, ((souther.compiler.diag.DiagnosticPlace.InSource) e.diagnostic().secondary().get(0).place()).region().start().line());
     }
@@ -81,18 +84,28 @@ class CompileImportCollisionTest {
         assertTrue(e.getMessage().contains("Amount"), e.getMessage());
     }
 
+    /**
+     * Two lines bringing in one declaration have written one meaning twice, and there is nothing to
+     * settle between them.
+     *
+     * <p>What a spelling means is counted in the things brought and not in the lines that brought
+     * them. Counted in lines, an author who wrote the same import twice was told their name was
+     * ambiguous and shown one module twice as the two things it stood for. The library path has
+     * always answered it this way — two {@code import List ( map )} lines are one table entry — and
+     * a name is not more ambiguous for having arrived through a user module.
+     *
+     * <p>The redundant line itself goes unsaid. Whether a line that adds nothing is worth a warning
+     * is a question about import lines and not about what a name means, and nothing here answers
+     * it.
+     */
     @Test
-    void theSameNameTwiceFromOneModuleIsReportedAsThat() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(A, """
-                        module probe.c
-                        import probe.a ( Amount )
-                        import probe.a ( Amount )
-                        data Line = { a: Amount }
-                        """)));
-
-        assertTrue(e.getMessage().contains("probe.a"), e.getMessage());
-        assertFalse(e.getMessage().contains("local definition"), e.getMessage());
+    void theSameNameTwiceFromOneModuleIsOneMeaningWrittenTwice() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(A, """
+                module probe.c
+                import probe.a ( Amount )
+                import probe.a ( Amount )
+                data Line = { a: Amount }
+                """)));
     }
 
     @Test

@@ -185,10 +185,6 @@ public sealed interface Readback {
         /** The standard library publishes no operation of that name in that module. */
         record NoSuchLibraryFunction(String from, String name) implements Exposure {}
 
-        /** Two library modules publish the bare name, so importing both leaves it saying neither. */
-        record BroughtTwice(String from, String name, String earlier) implements Exposure {}
 
-        /** The name is also declared by the module the line is written in. */
-        record CollidesWithADeclaration(String from, String name) implements Exposure {}
     }
 }

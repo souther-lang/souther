@@ -119,7 +119,7 @@ public final class Compiler {
      * <p>No position is claimed: where the stack ended is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).nowhere().build());
     }
 
     /**
@@ -452,8 +452,9 @@ public final class Compiler {
         // Every module's classes are now present, so a constant construction and an example can
         // resolve a cross-module reference — including into a dependency, whose classes come off the
         // same path its declarations were read from.
-        List<Diagnostic> exampleFailures = new ArrayList<>();
-        List<SourceId> exampleSources = new ArrayList<>();
+        // Each failing row with the file it is listed under: a row from an `examples for` file is
+        // written in that file, not in the module it contributes to.
+        List<Located> exampleFailures = new ArrayList<>();
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
                 CompileException bad = compilation.failure();
@@ -464,9 +465,8 @@ public final class Compiler {
             }
             for (SourceId id : compilation.exampleSourcesOf(module)) {
                 for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
-                    exampleFailures.add(failure.diagnostic());
-                    // a row from an `examples for` file is positioned in that file, not this one
-                    exampleSources.add(id);
+                    exampleFailures.add(new Located(failure.diagnostic(),
+                            souther.compiler.diag.ReportContext.inFile(id)));
                 }
             }
             db.ask(new Output.SaidDisagreements(module));
@@ -476,8 +476,8 @@ public final class Compiler {
         }
         warningsOut.addAll(compilation.warnings());
         if (!exampleFailures.isEmpty()) {
-            throw CompileException.ofAllInSources(exampleFailures, exampleSources,
-                    ExampleVerifier.legacySummary(exampleFailures));
+            throw CompileException.ofAllReported(exampleFailures,
+                    ExampleVerifier.legacySummary(Located.diagnosticsOf(exampleFailures)));
         }
         return compilation;
     }

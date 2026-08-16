@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.CompileException;
 
@@ -92,7 +94,7 @@ class HighValueDiagnosticTest {
                 """);
         assertEquals("check.fold.seed.title", d.titleKey());
         // the primary caret is on the Map.empty seed (line 7), not the `+` inside upsert
-        assertEquals(7, d.pos().line());
+        assertEquals(7, ((Primary.InSource) d.primary()).place().region().start().line());
     }
 
     @Test

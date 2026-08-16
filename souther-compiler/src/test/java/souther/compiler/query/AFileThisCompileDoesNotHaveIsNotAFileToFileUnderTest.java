@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.msg.NameMessage;
@@ -53,7 +55,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
         byId.put("m.sou", M);
         Compilation c = ofDocuments(byId);
 
-        assertEquals(new SourceId("m.sou"), c.sourceIdOf(about("m.sou")));
+        assertEquals(new SourceId("m.sou"), c.filedUnderOf(about("m.sou")));
     }
 
     @Test
@@ -62,7 +64,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
         byId.put("m.sou", M);
         Compilation c = ofDocuments(byId);
 
-        assertEquals(new SourceId("m.sou"), c.sourceIdOf(about("somewhere-else.sou")),
+        assertEquals(new SourceId("m.sou"), c.filedUnderOf(about("somewhere-else.sou")),
                 "the position names a file this compile was never handed");
     }
 

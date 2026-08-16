@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
@@ -182,8 +184,8 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
         Located said = compilation.diagnostics().get(new SourceId("0")).stream()
                 .filter(d -> d.diagnostic().code().equals("E1509")).findFirst().orElseThrow();
 
-        assertEquals(6, said.diagnostic().pos().line(), "the import line naming the module");
-        assertEquals(1, said.diagnostic().pos().column());
+        assertEquals(6, ((Primary.InSource) said.diagnostic().primary()).place().region().start().line(), "the import line naming the module");
+        assertEquals(1, ((Primary.InSource) said.diagnostic().primary()).place().region().start().column());
     }
 
     /** The boundary revision does not agree. */

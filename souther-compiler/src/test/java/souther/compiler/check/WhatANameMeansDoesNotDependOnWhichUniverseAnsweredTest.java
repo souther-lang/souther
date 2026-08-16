@@ -101,25 +101,25 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
     }
 
     /** What resolution reads other modules by: what each reading of them settled. */
-    private static Registry<Ast.Def> declaredBy(Map<String, ModuleUniverse.InSight> readings) {
+    private static Registry<Ast.Def> declaredBy(Db db, Map<String, ModuleUniverse.InSight> readings) {
         Map<String, Registry.Declared<Ast.Def>> declared = new LinkedHashMap<>();
         readings.forEach((name, sighted) -> {
-            if (sighted instanceof ModuleUniverse.InSight.Read there) {
-                declared.put(name, new Registry.Declared<>(there.declarations(),
-                        Registry.baseNames(there.module().exposing())));
+            if (sighted instanceof ModuleUniverse.InSight.Read) {
+                declared.put(name, CompilationUniverse.subject(db, name).declared());
             }
         });
         return Registry.ofRead(declared);
     }
 
     /** {@code module} resolved against {@code universe}, by the one assembly there is. */
-    private static Hir.Module resolvedAgainst(ModuleUniverse universe, Scoping.Subject subject,
+    private static Hir.Module resolvedAgainst(Db db, ModuleUniverse universe,
+                                              Scoping.Subject subject,
                                               Map<String, ModuleUniverse.InSight> readings) {
         Scoping.Scoped scoped = Scoping.of(universe, subject);
         assertEquals(java.util.List.of(), scoped.refused(),
                 "nothing about this model is refused");
-        Resolve.Resolution answered = Resolve.resolving(subject.read().module(),
-                scoped.writtenSymbols(declaredBy(readings)), scoped.values());
+        Resolve.Resolution answered = Resolve.resolving(subject.module(),
+                scoped.writtenSymbols(declaredBy(db, readings)), scoped.values());
         assertEquals(java.util.List.of(), answered.unresolved(),
                 () -> "every name was answered: " + answered.unresolved());
         return answered.module();
@@ -132,7 +132,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         Hir.Module byTheCompilation = db.ask(new Names.Resolved("scope.down")).value();
 
         Map<String, ModuleUniverse.InSight> readings = readings(db);
-        Hir.Module byWhatWasRead = resolvedAgainst(new ModuleUniverse.OfWhatIsRead(readings),
+        Hir.Module byWhatWasRead = resolvedAgainst(db, new ModuleUniverse.OfWhatIsRead(readings),
                 subject(db, "scope.down"), readings);
 
         assertEquals(byTheCompilation, byWhatWasRead,
@@ -183,13 +183,14 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
     void aReadingWithoutItsLibraryNamesCannotAnswerWhatItsImportsBroughtIn() {
         Db db = compiled().db();
         Map<String, ModuleUniverse.InSight> readings = readings(db);
+        Scoping.Subject full = CompilationUniverse.subject(db, "scope.down");
         Scoping.Subject withoutTheTable =
-                new Scoping.Subject(read(readings, "scope.down"), Map.of());
+                new Scoping.Subject(full.module(), full.declared(), java.util.List.of());
 
         Scoping.Scoped scoped =
                 Scoping.of(new ModuleUniverse.OfWhatIsRead(readings), withoutTheTable);
-        Resolve.Resolution answered = Resolve.resolving(withoutTheTable.read().module(),
-                scoped.writtenSymbols(declaredBy(readings)), scoped.values());
+        Resolve.Resolution answered = Resolve.resolving(withoutTheTable.module(),
+                scoped.writtenSymbols(declaredBy(db, readings)), scoped.values());
 
         assertTrue(answered.unresolved().stream()
                         .anyMatch(e -> e.getMessage().contains("length")),

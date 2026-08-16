@@ -52,7 +52,7 @@ public sealed interface DiagnosticPlace {
     record InSource(Region region) implements DiagnosticPlace {
 
         public InSource {
-            heldToOnePlace(region);
+            OnePlace.heldTo(region);
             if (!(region.start().quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds)) {
                 throw new NotAPlace("a place a reader is sent to names the source it is in: "
                         + region);
@@ -91,7 +91,7 @@ public sealed interface DiagnosticPlace {
      * @throws NotOnePlace where the ends are in two places
      */
     static DiagnosticPlace of(Region region) {
-        heldToOnePlace(region);
+        OnePlace.heldTo(region);
         return switch (Citation.of(region.start())) {
             case Citation.Written _, Citation.Reached _ -> new InSource(region);
             case Citation.OutOfSight out -> new Unavailable(out.provenance());
@@ -120,35 +120,6 @@ public sealed interface DiagnosticPlace {
 
         NotAPlace(String message) {
             super(message);
-        }
-    }
-
-    /**
-     * Refuses a region that is not one place before anything is asked of it.
-     *
-     * <p>The whole of where a position is, and not just the file. A region whose ends are in two
-     * places is a place that is two places, and a placement is what says which place one end is in —
-     * so this is one comparison rather than a file test and a provenance test that could be kept in
-     * step by hand. Read off the start alone, the second end's answer would go unrecorded: a region
-     * running from a copy of {@code A} to a copy of {@code B} would come back as a report about
-     * {@code A}, and nothing anywhere would say otherwise.
-     *
-     * <p>Held here rather than on {@link Region}, which is a pair of coordinates and is built by
-     * every pass; this is where a pair is asked to be a place. Measured before it was written: no
-     * region in the compiler's own corpus has ends that disagree about provenance.
-     */
-    private static void heldToOnePlace(Region region) {
-        if (region == null) {
-            throw new NotAPlace("a label is about a region and was given none");
-        }
-        SourcePos start = region.start();
-        SourcePos end = region.end();
-        if (start == null || end == null) {
-            throw new NotAPlace("a region a label is about has two ends: " + region);
-        }
-        if (!start.placement().equals(end.placement())) {
-            throw new NotOnePlace("a region runs from " + start.placement() + " to "
-                    + end.placement() + ", which is not one place");
         }
     }
 

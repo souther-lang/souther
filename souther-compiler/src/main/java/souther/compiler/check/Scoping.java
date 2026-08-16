@@ -2,12 +2,15 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Denotation;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -47,22 +50,143 @@ public final class Scoping {
      * module nothing can say anything about.
      */
     public static Scoped of(ModuleUniverse universe, Subject subject) {
-        ModuleUniverse.InSight.Read read = subject.read();
-        Ast.Module m = read.module();
+        Ast.Module m = subject.module();
         List<Refusal> refused = new ArrayList<>();
-        Map<String, Denotation> denotations = new LinkedHashMap<>();
         Map<String, String> aliases = new LinkedHashMap<>();
-        for (Ast.Def own : read.declarations().values()) {
+        Map<String, Ast.Def> ownData = subject.declared().declarations();
+        // What this module writes for itself, by the namespace each spelling reaches. A data is in
+        // both — it is a type and the construction of one — and a `let` or a behavior is a value
+        // and nothing in the type namespace, which is what lets one of each under a spelling come
+        // apart after the collision between them has been said.
+        Set<String> ownValues = new LinkedHashSet<>(ownData.keySet());
+        ownValues.addAll(behaviorNames(m));
+        for (Ast.FnDef fn : m.fns()) {
+            ownValues.add(fn.name());
+        }
+
+        // Every claim on a spelling, whichever kind of line made it. Which provider a claim came
+        // from is what makes it, and settles nothing after that: two lines asking for one spelling
+        // are one contest, and reading the library ones apart from the rest is how `map` could
+        // arrive from a library import and a user module at once with nobody saying so.
+        //
+        // In the order the lines are written, and not in the order the two sets of claims were
+        // gathered. Which line a contest is reported at, and which is shown as the one that has
+        // the name already, is read off this — so gathered order would put the library line first
+        // whatever the author wrote.
+        List<Claim> claims = new ArrayList<>(subject.libraryClaims());
+        claims.addAll(claimsOf(universe, m, aliases, refused));
+        claims.sort(Comparator.<Claim>comparingInt(each -> line(each.imp()))
+                .thenComparingInt(each -> column(each.imp())));
+        ResolvedImports imports =
+                adjudicate(claims, ownData.keySet(), ownValues, refused);
+
+        Map<String, Denotation> denotations = new LinkedHashMap<>();
+        for (Ast.Def own : ownData.values()) {
             denotations.put(own.name(),
                     new Denotation.Denotes(TypeSymbols.declared(own.declaredKey())));
         }
-        // Which import brought each name in, so a second one naming it is reported against that
-        // import rather than against a local definition the module may not have.
-        Map<String, Ast.Import> from = new HashMap<>();
-        // An import line that is wrong is refused and skipped, and the ones that are fine still
-        // bring in what they bring in. A half-typed import is as ordinary as a half-typed name, and
-        // taking the whole scope away would leave every name in the file meaning nothing — which is
-        // when an author most wants to be told what one means.
+        denotations.putAll(imports.types());
+
+        Resolve.Values values = new Resolve.Values(
+                reachable(universe, subject, imports), new OfTheUniverse(universe));
+        refused.addAll(oneSpellingTwice(subject, ownData));
+        return new Scoped(m.name(), denotations, aliases, values, imports, refused);
+    }
+
+    /**
+     * Where a line is written, so claims can be put in the order an author reads them.
+     *
+     * <p>A line the author did not write is last. An import synthesized from a qualified reference
+     * stands at the module header, which is before every line that was written, and showing it as
+     * the one that has a name already would name a line nobody can go and look at.
+     */
+    private static int line(Ast.Import imp) {
+        SourcePos at = imp.pos();
+        return at == null ? Integer.MAX_VALUE : at.line();
+    }
+
+    private static int column(Ast.Import imp) {
+        SourcePos at = imp.pos();
+        return at == null ? Integer.MAX_VALUE : at.column();
+    }
+
+    /**
+     * One import line asking for one spelling.
+     *
+     * <p>Written down before anything is decided, because deciding needs all of them. A spelling
+     * two lines ask for is settled by what the two would bring and not by which was read first —
+     * read first-wins, the same two lines in the other order give one mistaken program two
+     * meanings, and every pass below reads whichever meaning the order happened to give.
+     */
+    public sealed interface Claim {
+
+        /** The line this was written on. */
+        Ast.Import imp();
+
+        /** The spelling it asks for. */
+        String name();
+
+        /** Whether an author wrote this name on an import list.
+         *
+         * <p>A name that was not is one a qualified reference asked for — {@code app.third.quote}
+         * reaches into that module whether or not a line says so, and an import is synthesized to
+         * record the dependency. It claims no bare spelling: the reference names its module, so
+         * there is nothing for it to be ambiguous with, and a contest it took part in would be
+         * reported on a line nobody wrote. */
+        boolean written();
+
+        /** The line asked, and the module it names hands this over. */
+        record Stands(Ast.Import imp, String name, boolean written, Brought what)
+                implements Claim {}
+
+        /** The line asked, and there is nothing to hand over — the claim does not stand at all.
+         *  Told apart from a claim that stands and is not adopted, which is a decision between
+         *  claims rather than a fact about this one. */
+        record DoesNot(Ast.Import imp, String name, boolean written) implements Claim {}
+    }
+
+    /**
+     * What one import line would bring in under one spelling.
+     *
+     * <p>Two claims bring the same thing when these are equal, which is what decides whether a
+     * spelling is claimed twice or claimed once by two lines. Compared as what is brought and not
+     * as which line brought it: importing one declaration twice is one meaning written twice, and
+     * an author who wrote the line twice has made no ambiguity.
+     */
+    public sealed interface Brought {
+
+        /** A data, which is a name in the type namespace and a construction in the value one. */
+        record ADeclaration(TypeSymbol type) implements Brought {}
+
+        /** A behavior, which a reader calls. */
+        record ABehavior(ValueName.Behavior name) implements Brought {}
+
+        /** A definition the module hands over, which a reader writes bare.
+         *
+         * <p>Carries the leave the reading granted and not a name made from the spelling. A leave
+         * that survives the contest is a leave the reader may redeem, so what may be taken from
+         * that module afterwards is what was settled here — asked of the module again instead, the
+         * answer would be what it publishes rather than what this module was left with. */
+        record AHelper(ModuleUniverse.InSight.Read.PublishedHelper leave) implements Brought {}
+
+        /** An operation of the standard library, which an {@code import List ( map )} line lets a
+         *  reader write without its qualifier. */
+        record ALibraryOperation(ValueName.Stdlib name) implements Brought {}
+    }
+
+
+    /**
+     * Every claim this module's import lines make, and the refusals that are about the lines
+     * themselves rather than about any contest between them.
+     *
+     * <p>An import line that is wrong is refused and its claims do not stand; the ones that are
+     * fine still bring in what they bring in. A half-typed import is as ordinary as a half-typed
+     * name, and taking the whole scope away would leave every name in the file meaning nothing —
+     * which is when an author most wants to be told what one means.
+     */
+    private static List<Claim> claimsOf(ModuleUniverse universe, Ast.Module m,
+                                        Map<String, String> aliases, List<Refusal> refused) {
+        List<Claim> claims = new ArrayList<>();
         for (Ast.Import imp : importsOf(universe, m)) {
             ModuleUniverse.InSight.Read there;
             switch (universe.module(imp.module())) {
@@ -78,69 +202,142 @@ public final class Scoping {
                 }
             }
             if (there == null) {
-                nameless(denotations, imp.names());
+                claims.addAll(none(imp));
                 continue;
             }
-            Ast.Module src = there.module();
             if (imp.alias() != null) {
                 String taken = aliasTakenBy(universe, imp.alias(), aliases);
                 if (taken != null) {
                     refused.add(new Refusal.AliasTaken(imp, taken));
-                    nameless(denotations, imp.names());
-                    continue;   // an alias that names two things names neither here
+                    claims.addAll(none(imp));   // an alias that names two things names neither here
+                    continue;
                 }
                 aliases.put(imp.alias(), imp.module());
             }
-            Set<String> exposed = Registry.baseNames(src.exposing());
-            Map<String, Ast.Def> declared = there.declarations();
-            for (String imported : imp.names()) {
-                if (!exposed.contains(imported)) {
-                    refused.add(new Refusal.NotExposed(imp, imported));
-                    nameless(denotations, List.of(imported));
-                    continue;
+            for (Ast.ImportedName imported : imp.importedNames()) {
+                Claim made = claim(imp, imported, there, refused);
+                if (made != null) {
+                    claims.add(made);
                 }
-                Ast.Def brought = declared.get(imported);
-                if (brought == null) {
-                    // a behavior import is resolved separately, and so is a value or a helper: none
-                    // of them is a data Def, so none goes into the type namespace
-                    if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
-                        continue;
-                    }
-                    refused.add(new Refusal.NoSuchName(imp, imported));
-                    nameless(denotations, List.of(imported));
-                    continue;
-                }
-                if (denotations.get(imported) instanceof Denotation.Denotes) {
-                    // Which of the two is asked of what has the name, not of what this module
-                    // declares: an import that brought it in is in `from`, and one that did not is
-                    // an import against a declaration. Read the other way round, the second could
-                    // be told to name an import that is not there.
-                    Ast.Import earlier = from.get(imported);
-                    refused.add(earlier == null
-                            ? new Refusal.CollidesWithADeclaration(imp, imported)
-                            : new Refusal.BroughtTwice(imp, imported, earlier));
-                    continue;   // the first claim on the name keeps it
-                }
-                // A name a failed import line only stood in for is not a claim on it: an import
-                // that can do the job takes it, and says nothing about the line that could not.
-                // Which declaration it is is the declaration's to say: an identity made here from
-                // the import line's module and the spelling would answer for a declaration
-                // whatever the name came from.
-                denotations.put(imported,
-                        new Denotation.Denotes(TypeSymbols.declared(brought.declaredKey())));
-                from.put(imported, imp);
             }
         }
-        Resolve.Values values =
-                new Resolve.Values(reachable(universe, subject), new OfTheUniverse(universe));
-        refused.addAll(oneSpellingTwice(universe, read));
-        return new Scoped(m.name(), denotations, aliases, values, refused);
+        return claims;
+    }
+
+    /** What one name on one import line asks for, of a module that can answer. */
+    private static Claim claim(Ast.Import imp, Ast.ImportedName named,
+                               ModuleUniverse.InSight.Read there, List<Refusal> refused) {
+        String imported = named.text();
+        boolean written = named.pos() != null;
+        if (!there.exposes(imported)) {
+            refused.add(new Refusal.NotExposed(imp, imported));
+            return new Claim.DoesNot(imp, imported, written);
+        }
+        Ast.Def declared = there.declaration(imported);
+        if (declared != null) {
+            return new Claim.Stands(imp, imported, written,
+                    new Brought.ADeclaration(TypeSymbols.declared(declared.declaredKey())));
+        }
+        if (there.declaresBehavior(imported)) {
+            return new Claim.Stands(imp, imported, written,
+                    new Brought.ABehavior(new ValueName.Behavior(imp.module(), imported)));
+        }
+        java.util.Optional<ModuleUniverse.InSight.Read.PublishedHelper> published =
+                there.publishedHelper(imported);
+        if (published.isPresent()) {
+            return new Claim.Stands(imp, imported, written,
+                    new Brought.AHelper(published.get()));
+        }
+        if (there.declaresValue(imported)) {
+            // Declared and exposed, and nothing to hand over. Nothing is wrong with the line and
+            // nothing arrived, so no claim is made on the spelling at all — it is not in scope
+            // here, and a use of it is a name this module never had.
+            return null;
+        }
+        refused.add(new Refusal.NoSuchName(imp, imported));
+        return new Claim.DoesNot(imp, imported, written);
+    }
+
+    /** Every name a line asks for, claimed by nothing — the line could not do its job at all. */
+    private static List<Claim> none(Ast.Import imp) {
+        List<Claim> claims = new ArrayList<>();
+        for (Ast.ImportedName name : imp.importedNames()) {
+            claims.add(new Claim.DoesNot(imp, name.text(), name.pos() != null));
+        }
+        return claims;
+    }
+
+    /**
+     * What each spelling the import lines claim means here.
+     *
+     * <p>Counted in distinct things brought and not in claims made. Two lines importing one
+     * declaration have written one meaning twice, and an author who did that has made no ambiguity
+     * to resolve; two lines bringing different things have, and neither wins — a spelling that
+     * means two things means neither, and choosing by the order the lines were read would give the
+     * same mistaken program two meanings.
+     *
+     * <p>A declaration of this module's own beats every claim on its spelling, and the line that
+     * made the claim is told so. It beats it where it is, though, and not everywhere: a
+     * {@code let} of a name and a data brought in under it are one spelling in two namespaces, and
+     * taking the data away as well would report a type nothing declares at every field written
+     * with it — a second thing said about the one line already refused. Which namespace a
+     * declaration holds is what the projections read, and each keeps its own.
+     */
+    private static ResolvedImports adjudicate(List<Claim> claims, Set<String> ownTypes,
+                                              Set<String> ownValues, List<Refusal> refused) {
+        Map<String, List<Claim>> byName = new LinkedHashMap<>();
+        for (Claim each : claims) {
+            if (each.written()) {
+                byName.computeIfAbsent(each.name(), k -> new ArrayList<>()).add(each);
+            }
+        }
+        Map<String, ResolvedImport> settled = new LinkedHashMap<>();
+        byName.forEach((spelling, made) -> {
+            ResolvedImport.Held held = new ResolvedImport.Held(
+                    ownTypes.contains(spelling), ownValues.contains(spelling));
+            Map<Brought, Ast.Import> distinct = new LinkedHashMap<>();
+            for (Claim each : made) {
+                if (each instanceof Claim.Stands(Ast.Import imp, String _, boolean _,
+                        Brought what)) {
+                    if (held.asAValue() || held.asAType()) {
+                        refused.add(new Refusal.CollidesWithADeclaration(imp, spelling));
+                    }
+                    distinct.putIfAbsent(what, imp);
+                }
+            }
+            if (distinct.size() > 1) {
+                List<Ast.Import> lines = new ArrayList<>(distinct.values());
+                for (Ast.Import imp : lines.subList(1, lines.size())) {
+                    refused.add(new Refusal.BroughtTwice(imp, spelling, lines.get(0)));
+                }
+                settled.put(spelling, new ResolvedImport.BringsNothing(held));
+                return;
+            }
+            if (distinct.size() == 1) {
+                settled.put(spelling,
+                        new ResolvedImport.Brings(distinct.keySet().iterator().next(), held));
+                return;
+            }
+            // Every claim on it failed. The name is in scope meaning nothing, so a use of it takes
+            // the error type and says nothing more; left out of scope, every use would be reported
+            // as an unknown name, which sends the author to a body when what is wrong is the line.
+            settled.put(spelling, new ResolvedImport.BringsNothing(held));
+        });
+        return new ResolvedImports(settled);
     }
 
     /**
      * The module a scope is being assembled for, and what only it needs.
      *
-     * <p>One value, because the two cannot be told apart afterwards. The
+     * <p>The module itself is here and not in the universe. A module being scoped is the one this
+     * reads the syntax of — its import lines, its bodies, the names its declarations write — and
+     * that is a capability nothing has over any other module: what a universe answers about a
+     * neighbour is what was settled about it ({@link ModuleUniverse.InSight.Read}), asked one name
+     * at a time, so no walk can work the same facts out a second way. Its own declaration index is
+     * here for the same reason and from the other side — reading every one of them is what a
+     * module may do to itself and to nothing else.
+     *
+     * <p>One value, because the parts cannot be told apart afterwards. The
      * {@code import List ( map )} lines are dropped once read ({@link Exposing}), so what they
      * brought in outlives them and travels with the module or is lost — read as a second answer it
      * was answered emptily for a module off the class path, and every bare name in a published
@@ -151,11 +348,11 @@ public final class Scoping {
      * write bare, and a universe that answered it anyway would put every importer's scope behind an
      * edit to a library import line in a module it imports from.
      */
-    public record Subject(ModuleUniverse.InSight.Read read,
-                          Map<String, ValueName.Stdlib> libraryNames) {
+    public record Subject(Ast.Module module, Registry.Declared<Ast.Def> declared,
+                          List<Claim> libraryClaims) {
 
         public Subject {
-            libraryNames = Collections.unmodifiableMap(new LinkedHashMap<>(libraryNames));
+            libraryClaims = List.copyOf(libraryClaims);
         }
     }
 
@@ -177,7 +374,7 @@ public final class Scoping {
      */
     public record Scoped(String module, Map<String, Denotation> denotations,
                          Map<String, String> aliases, Resolve.Values values,
-                         List<Refusal> refused) {
+                         ResolvedImports imports, List<Refusal> refused) {
 
         /** Copied, for the reason {@link Exposing.Checked} is: this is an answer a compilation
          *  remembers, and an answer it remembers is a value. */
@@ -207,6 +404,7 @@ public final class Scoping {
         public Resolve.Reachable reachable() {
             return values.reachable();
         }
+
 
         /** The same over a stage of the declarations something has resolved. */
         public Symbols symbolsOver(Registry<Hir.Def> registry) {
@@ -257,20 +455,6 @@ public final class Scoping {
     }
 
     /**
-     * Puts {@code names} in scope as names that denote nothing.
-     *
-     * <p>An import line that could not do its job was refused on that line. A name it was to bring
-     * in is in scope all the same, denoting nothing — so a use of it takes the error type and says
-     * nothing more. Leaving it out of scope instead would report an unknown type at every use, which
-     * sends the author to a field when what is wrong is the import.
-     */
-    private static void nameless(Map<String, Denotation> denotations, List<String> names) {
-        for (String written : names) {
-            denotations.putIfAbsent(written, Denotation.STANDS_FOR_NOTHING);
-        }
-    }
-
-    /**
      * What already answers to {@code alias} as a qualifier, or null where nothing does.
      *
      * <p>An alias must be a qualifier nothing else already is: another alias, a module of this
@@ -297,8 +481,9 @@ public final class Scoping {
      * name came from, and a reader that answered "all of them" for a universe it had not finished
      * reading would report the name as denoting nothing.
      */
-    private static Resolve.Reachable reachable(ModuleUniverse universe, Subject subject) {
-        Ast.Module m = subject.read().module();
+    private static Resolve.Reachable reachable(ModuleUniverse universe, Subject subject,
+                                               ResolvedImports imports) {
+        Ast.Module m = subject.module();
         // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
         // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
         // two answers to one question is how a name came to denote a helper here and a behavior
@@ -314,31 +499,29 @@ public final class Scoping {
         for (String own : behaviorNames) {
             behaviors.put(own, new ValueName.Behavior(m.name(), own));
         }
+        Map<String, ValueName.Stdlib> library = new LinkedHashMap<>();
+        Set<String> nothing = new LinkedHashSet<>();
+        // What the lines settled, read rather than worked out again. A definition another module
+        // publishes is written here bare, like one of this module's own — a value substituted at
+        // its reference, a helper expanded at its call (ADR-0072).
+        imports.values().forEach((spelling, reach) -> {
+            switch (reach) {
+                case Reach.Reaches(ValueName.Helper named) -> helpers.putIfAbsent(spelling, named);
+                case Reach.Reaches(ValueName.Behavior named) ->
+                        behaviors.putIfAbsent(spelling, named);
+                case Reach.Reaches(ValueName.Stdlib named) -> library.putIfAbsent(spelling, named);
+                case Reach.Reaches _ -> { }
+                case Reach.StandsForNothing _ -> nothing.add(spelling);
+                case Reach.NotInScope _ -> { }
+            }
+        });
         boolean whole = true;
-        // A definition another module publishes is written here bare, like one of this module's own
-        // — a value substituted at its reference, a helper expanded at its call (ADR-0072). What it
-        // denotes is the module that declares it: the bare spelling is this module's way of writing
-        // it, and the pair (module, name) is what the definition is. A reader that spells one of
-        // its own the same way is a name clash, which the import check refuses.
         for (Ast.Import imp : m.imports()) {
-            if (!(universe.module(imp.module()) instanceof ModuleUniverse.InSight.Read there)) {
+            if (!(universe.module(imp.module()) instanceof ModuleUniverse.InSight.Read)) {
                 whole = false;
-                continue;
-            }
-            Ast.Module from = there.module();
-            for (String published : HelperInliner.publishedNames(from, imp.names())) {
-                helpers.putIfAbsent(published, new ValueName.Helper(from.name(), published));
-            }
-            Set<String> declared = behaviorNames(from);
-            for (String imported : imp.names()) {
-                if (declared.contains(imported)) {
-                    // a name this module declares itself is the one it means
-                    behaviors.putIfAbsent(imported,
-                            new ValueName.Behavior(imp.module(), imported));
-                }
             }
         }
-        return new Resolve.Reachable(m.name(), helpers, behaviors, whole, subject.libraryNames());
+        return new Resolve.Reachable(m.name(), helpers, behaviors, nothing, whole, library);
     }
 
     /**
@@ -365,9 +548,17 @@ public final class Scoping {
         }
 
         @Override
-        public Set<String> behaviorsOf(String module) {
+        public Resolve.Declares declaresBehavior(String module, String name) {
+            if (!(universe.module(module) instanceof ModuleUniverse.InSight.Read read)) {
+                return Resolve.Declares.CANNOT_SAY;
+            }
+            return read.declaresBehavior(name) ? Resolve.Declares.YES : Resolve.Declares.NO;
+        }
+
+        @Override
+        public Set<String> behaviorNamesToSuggest(String module) {
             return universe.module(module) instanceof ModuleUniverse.InSight.Read read
-                    ? behaviorNames(read.module()) : null;
+                    ? read.behaviorNamesToSuggest() : Set.of();
         }
     }
 
@@ -387,14 +578,9 @@ public final class Scoping {
      * <p>A behavior and a {@code let} of one name are not two: they are the declaration and the
      * implementation of one thing (ADR-0072).
      */
-    private static List<Refusal> oneSpellingTwice(ModuleUniverse universe,
-                                                  ModuleUniverse.InSight.Read read) {
-        Ast.Module m = read.module();
+    private static List<Refusal> oneSpellingTwice(Subject subject, Map<String, Ast.Def> declared) {
+        Ast.Module m = subject.module();
         List<Refusal> refused = new ArrayList<>();
-        // What the module has, as the universe answered it — not what its text writes. A
-        // declaration it does not have is refused where declarations are indexed, and a second
-        // reading of the text here would be a second answer to which of them it has.
-        Map<String, Ast.Def> declared = read.declarations();
         for (Ast.Def def : declared.values()) {
             // A standard-library qualifier is the only spelling that reaches the library, so a data
             // of that name hides it — from every module, since the qualifier is not this module's
@@ -409,58 +595,7 @@ public final class Scoping {
                 refused.add(new Refusal.ALetAndADataShareASpelling(fn));
             }
         }
-        // What this module declares under a name, whichever kind of declaration it is: a data, a
-        // `let`, a behavior. A behavior and its `let` are one of them, so the set is what is asked
-        // rather than a count.
-        Set<String> ownNames = new LinkedHashSet<>(declared.keySet());
-        ownNames.addAll(implementing);
-        for (Ast.FnDef fn : m.fns()) {
-            ownNames.add(fn.name());
-        }
-        // A name an import brings in is written here bare (ADR-0075), so it arrives in this
-        // namespace exactly as one of this module's own does — and collides the same way. Which
-        // kind of thing each side is does not enter into it: the reader writes one spelling, and
-        // one spelling here means one thing.
-        for (Ast.Import imp : m.imports()) {
-            for (String imported : intoTheValueNamespace(universe, imp)) {
-                if (ownNames.contains(imported)) {
-                    refused.add(new Refusal.CollidesWithADeclaration(imp, imported));
-                }
-            }
-        }
         return refused;
-    }
-
-    /**
-     * The names {@code imp} brings into the value namespace: the definitions the module publishes,
-     * the behaviors it declares and the types it declares, all of which a reader writes bare. A type
-     * is one of them because a unit data is a value, a newtype is applied to what it wraps and a
-     * record is constructed by its name — the type namespace refuses a type against a type, so what
-     * a type adds here is a type against a {@code let} or a behavior.
-     *
-     * <p>Only what the module exposes, and only what the line asks for. A name the line names and
-     * the module does not expose is nothing this import brought in, and refusing it here would tell
-     * the author to rename a definition that is not what is wrong — the line is answered by
-     * {@link Refusal.NotExposed}, which is the whole of it.
-     *
-     * <p>A library import is not here. Those lines are read where the table they fill is built
-     * ({@link Exposing}) and are gone from the module by the time this is asked.
-     */
-    private static Set<String> intoTheValueNamespace(ModuleUniverse universe, Ast.Import imp) {
-        if (!(universe.module(imp.module()) instanceof ModuleUniverse.InSight.Read read)) {
-            return Set.of();
-        }
-        Ast.Module from = read.module();
-        Set<String> names = new LinkedHashSet<>(HelperInliner.publishedNames(from, imp.names()));
-        Set<String> declared = new LinkedHashSet<>(behaviorNames(from));
-        declared.addAll(read.declarations().keySet());
-        Set<String> exposed = new LinkedHashSet<>(from.exposing());
-        for (String name : imp.names()) {
-            if (declared.contains(name) && exposed.contains(name)) {
-                names.add(name);
-            }
-        }
-        return names;
     }
 
     /**
@@ -502,8 +637,8 @@ public final class Scoping {
     }
 
     /** The behaviors this module names through another module's name, by that module. */
-    public static Map<String, Set<String>> borrowed(ModuleUniverse universe, Ast.Module m) {
-        Map<String, String> qualifiers = aliases(m);
+    private static Map<String, Set<String>> borrowed(ModuleUniverse universe, Ast.Module m) {
+        Map<String, String> qualifiers = qualifiersWritten(m);
         Map<String, Set<String>> out = new LinkedHashMap<>();
         for (Ast.Var ref : qualifiedBehaviorRefs(m)) {
             String written = ref.name();
@@ -513,15 +648,27 @@ public final class Scoping {
                 continue;
             }
             String bare = written.substring(written.lastIndexOf('.') + 1);
-            if (behaviorNames(read.module()).contains(bare)) {
+            if (read.declaresBehavior(bare)) {
                 out.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
             }
         }
         return out;
     }
 
-    /** Each {@code import ... as} alias, against the module it stands for. */
-    public static Map<String, String> aliases(Ast.Module m) {
+    /**
+     * Each {@code import ... as} alias against the module its line names, as the source writes
+     * them.
+     *
+     * <p>Not what a qualifier means here. An alias two lines both take is refused and the first
+     * keeps it; this reads every line and the last one wins, so the two answer differently for
+     * exactly the module an author was told about. What a qualifier names is
+     * {@link Scoped#aliases()}, which is what the refusal was applied to.
+     *
+     * <p>Here for finding which modules a module reaches, which is a different question and wants
+     * the wider answer: a line that was refused still names a module this one depends on, and a
+     * cycle running through it is a cycle whether or not the alias stood.
+     */
+    public static Map<String, String> qualifiersWritten(Ast.Module m) {
         Map<String, String> qualifiers = new HashMap<>();
         for (Ast.Import imp : m.imports()) {
             if (imp.alias() != null) {
@@ -565,20 +712,6 @@ public final class Scoping {
         Set<String> names = new LinkedHashSet<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
             names.add(b.name());
-        }
-        return names;
-    }
-
-    /** The definitions a module declares in the value namespace — its values and its helpers. Like
-     * a behavior, one is a name in that namespace and not a data, so an import of it resolves
-     * elsewhere. */
-    public static Set<String> valueNames(Ast.Module m) {
-        Set<String> behaviors = behaviorNames(m);
-        Set<String> names = new LinkedHashSet<>();
-        for (Ast.FnDef fn : m.fns()) {
-            if (HelperInliner.isHelperName(behaviors, fn.name())) {
-                names.add(fn.name());
-            }
         }
         return names;
     }

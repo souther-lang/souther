@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.msg.ExampleMessage;
@@ -143,6 +145,6 @@ class ExampleFileValuesTest {
         assertEquals("E1906", e.diagnostic().code());
         assertInstanceOf(ExampleMessage.TheNameIsAlreadyDeclared.class, e.diagnostic().said());
         assertEquals(new SourceId("1"), e.sourceId(), "the declaration is in the attached file");
-        assertEquals(3, e.diagnostic().pos().line(), "and at its own line");
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(), "and at its own line");
     }
 }

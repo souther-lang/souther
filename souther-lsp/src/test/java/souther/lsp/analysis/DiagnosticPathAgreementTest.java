@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -162,8 +163,13 @@ class DiagnosticPathAgreementTest {
 
         // LSP positions are 0-based, the compiler's are 1-based; that offset is the only difference
         // allowed between them.
-        assertEquals(compiled.pos().line() - 1, seen.range().start().line(), "line");
-        assertEquals(compiled.pos().column() - 1, seen.range().start().character(), "column");
+        // The compile reads a document of its own, so what it reports points into a source of it.
+        souther.compiler.diag.SourcePos at = assertInstanceOf(
+                souther.compiler.diag.Primary.InSource.class, compiled.primary(),
+                "a report from a compile of a source points into that source")
+                .place().region().start();
+        assertEquals(at.line() - 1, seen.range().start().line(), "line");
+        assertEquals(at.column() - 1, seen.range().start().character(), "column");
     }
 
     @ParameterizedTest(name = "{0}")

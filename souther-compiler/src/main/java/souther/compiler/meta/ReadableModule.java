@@ -1,7 +1,8 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.types.ValueName;
+import souther.compiler.check.Scoping;
+import java.util.List;
 
 import java.util.Map;
 import java.util.Set;
@@ -22,7 +23,7 @@ import java.util.Set;
  * implementation is the readback's own.
  *
  * <p>The three are one fact and travel together. The module no longer says what its bare names mean
- * — the lines that said so are dropped once read — so {@link #libraryNames()} is the only thing that
+ * — the lines that said so are dropped once read — so {@link #libraryClaims()} is the only thing that
  * does. Which behaviors are injection targets is not written in any declaration and does not survive
  * as source, so it cannot be worked out again from the module either.
  *
@@ -51,5 +52,5 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
     Set<String> injectedBehaviors();
 
     /** What its library import lines brought in, which the module itself no longer says. */
-    Map<String, ValueName.Stdlib> libraryNames();
+    List<Scoping.Claim> libraryClaims();
 }

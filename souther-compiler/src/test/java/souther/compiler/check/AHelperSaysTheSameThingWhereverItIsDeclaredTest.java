@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
@@ -77,9 +79,9 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         Diagnostic one = only(diagnosticsOf(Map.of("m.sou", ONE_MODULE)), "m.sou");
 
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said());
-        assertEquals("Yen", quoted(ONE_MODULE, one.region()),
+        assertEquals("Yen", quoted(ONE_MODULE, ((Primary.InSource) one.primary()).place().region()),
                 "the caret is on the construction, which is what the rule is about");
-        assertFalse(one.pos().wasCopiedHere(),
+        assertFalse(((Primary.InSource) one.primary()).place().region().start().wasCopiedHere(),
                 "the construction is in a file this compile has, so the caret is at the code");
     }
 
@@ -93,11 +95,11 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
                 "down.sou");
 
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said());
-        assertEquals("Yen", quoted(DECLARING, one.region()),
+        assertEquals("Yen", quoted(DECLARING, ((Primary.InSource) one.primary()).place().region()),
                 "the caret is on the construction, in the file the helper is written in");
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("up.sou")),
-                one.pos().quotedFrom());
-        assertFalse(one.pos().wasCopiedHere());
+                ((Primary.InSource) one.primary()).place().region().start().quotedFrom());
+        assertFalse(((Primary.InSource) one.primary()).place().region().start().wasCopiedHere());
     }
 
     /**
@@ -133,7 +135,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertEquals(1, byFile.get(new SourceId("up.sou")).size(), () -> "" + byFile.get(new SourceId("up.sou")));
         assertEquals(1, byFile.get(new SourceId("down.sou")).size(), () -> "" + byFile.get(new SourceId("down.sou")));
-        assertEquals(new SourceId("up.sou"), byFile.get(new SourceId("down.sou")).get(0).primarySourceId(),
+        assertEquals(new SourceId("up.sou"), byFile.get(new SourceId("down.sou")).get(0).context().filedUnder().orElse(null),
                 "the caret is on the construction wherever the report is published");
         assertEquals(byFile.get(new SourceId("up.sou")).get(0).diagnostic().identity(),
                 byFile.get(new SourceId("down.sou")).get(0).diagnostic().identity(),
@@ -159,7 +161,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
                         .standingInFor(new DeclaringCode(
                                 new SourceProvenance.APublishedModule("up", "up.atLeastZero")))
                         .placement(),
-                one.pos().placement(),
+                ((Primary.InSource) one.primary()).place().region().start().placement(),
                 "the caret is in the file the reader is compiling, since there is no other, and it"
                         + " says the code it names is written where that file cannot show");
     }
@@ -172,7 +174,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         Diagnostic one = only(diagnosticsOf(Map.of("down.sou", CALLING), published(DECLARING)),
                 "down.sou");
 
-        assertEquals(one.region().start(), one.region().end(),
+        assertEquals(((Primary.InSource) one.primary()).place().region().start(), ((Primary.InSource) one.primary()).place().region().end(),
                 "a stand-in points, it does not underline text it did not measure");
     }
 

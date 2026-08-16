@@ -333,24 +333,6 @@ public final class HelperInliner {
         return hasWrittenBody && exposing.contains(fn) && wanted.contains(fn);
     }
 
-    /** The names {@code from} publishes among {@code wanted}, of a module as it was written. */
-    public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
-        Set<String> exposed = new HashSet<>(from.exposing());
-        Set<String> behaviorNames = new HashSet<>();
-        for (Ast.BehaviorDef b : from.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        Set<String> out = new LinkedHashSet<>();
-        for (Ast.FnDef fn : from.fns()) {
-            if (isHelperName(behaviorNames, fn.name())
-                    && publishes(exposed, fn.name(), fn.body() instanceof Ast.FnBody.Written,
-                            wanted)) {
-                out.add(fn.name());
-            }
-        }
-        return out;
-    }
-
     /**
      * The recursive helpers this module reaches and does not declare, by the qualified name it
      * reaches each of them by ({@code List.foldFrom}, {@code pricing.sumDown}).

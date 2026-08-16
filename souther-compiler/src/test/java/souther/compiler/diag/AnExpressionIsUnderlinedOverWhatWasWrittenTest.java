@@ -225,7 +225,7 @@ class AnExpressionIsUnderlinedOverWhatWasWrittenTest {
 
     /** The primary region of the one report compiling {@code source} produces. */
     private static Region primary(String source) {
-        return only(source).region();
+        return ((Primary.InSource) only(source).primary()).place().region();
     }
 
     /** The {@code n}th secondary region of the one report compiling {@code source} produces. */

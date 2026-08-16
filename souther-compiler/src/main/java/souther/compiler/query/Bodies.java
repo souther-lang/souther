@@ -12,8 +12,11 @@ import souther.compiler.check.InjectionSigs;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
+import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.ModuleUniverse.InSight.Read.PublishedHelper;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -24,12 +27,14 @@ import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
@@ -170,20 +175,69 @@ public final class Bodies {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                Set<String> deps = db.ask(new Dependencies(imp.module())).value();
-                if (deps == null) {
-                    continue;
+            borrowed(db, name).forEach((bare, from) -> {
+                Set<String> deps = db.ask(new Dependencies(from)).value();
+                if (deps != null && deps.contains(bare)) {
+                    result.add(bare);
                 }
-                for (String bare : imp.names()) {
-                    if (deps.contains(bare)) {
-                        result.add(bare);
-                    }
-                }
-            }
+            });
             return Answer.of(Ordered.set(result));
         }
     }
+
+    /**
+     * The behaviors this module borrows by writing a bare name, and which module each is of.
+     *
+     * <p>Read off what the import lines settled, and not worked out from the lines again. Walked
+     * here, a module that declares a behavior and does not offer it answers yes to "do you declare
+     * one" — so a line refused for that was borrowed from all the same, and an author was told the
+     * module does not expose the name and then told two modules were offering it.
+     *
+     * <p>A name a qualified reference reaches is not here. That claims no bare spelling, so nothing
+     * settled it, and it joins where the one rule that sees it is.
+     */
+    private static Map<String, String> borrowed(Db db, String module) {
+        Map<String, String> out = new LinkedHashMap<>();
+        Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(module));
+        if (scoped.present()) {
+            scoped.value().imports().behaviors()
+                    .forEach((bare, named) -> out.put(bare, named.module()));
+        }
+        // And the ones a qualified reference reaches, which claim no bare spelling and so were
+        // settled by no contest. They are borrowed all the same: naming a behavior through its
+        // module reaches it, and the signature and the injected field come with it.
+        for (Resolve.QualifiedUse each : reachedByAQualifier(db, module)) {
+            out.putIfAbsent(each.named().name(), each.named().module());
+        }
+        return out;
+    }
+
+    /**
+     * The behaviors a qualified reference reaches, as resolution answered them.
+     *
+     * <p>Read as the answer rather than found among the module's imports. An import is synthesized
+     * for each module a reference reaches, to record the dependency — and a dependency the module
+     * already has is not recorded twice, so a behavior named through its module was invisible here
+     * whenever a line happened to name the same module and name. Which is exactly when the bare
+     * spelling had been refused and the qualified reference was the only way the behavior was
+     * reached at all.
+     *
+     * <p>Each occurrence, and not one per module. An import stands where the first reference to
+     * that module is written, so a second one elsewhere was reported at the first one's line.
+     */
+    private static List<Resolve.QualifiedUse> reachedByAQualifier(Db db, String module) {
+        Answer<List<Resolve.QualifiedUse>> reached =
+                db.ask(new Names.QualifiedBehaviors(module));
+        return reached.present() ? reached.value() : List.of();
+    }
+
+    /** The leave each definition this module imported carries, by the bare name it writes for
+     *  it. What may be read from another module is what this module was left with. */
+    private static Map<String, PublishedHelper> leaves(Db db, String module) {
+        Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(module));
+        return scoped.present() ? scoped.value().imports().leaves() : Map.of();
+    }
+
 
     /** The behaviors a module borrows that may be called by name where they are declared. */
     public record ImportedCallable(String name) implements Key<Set<String>> {
@@ -198,17 +252,12 @@ public final class Bodies {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                Set<String> callable = db.ask(new Callable(imp.module())).value();
-                if (callable == null) {
-                    continue;
+            borrowed(db, name).forEach((bare, from) -> {
+                Set<String> callable = db.ask(new Callable(from)).value();
+                if (callable != null && callable.contains(bare)) {
+                    result.add(bare);
                 }
-                for (String bare : imp.names()) {
-                    if (callable.contains(bare)) {
-                        result.add(bare);
-                    }
-                }
-            }
+            });
             return Answer.of(Ordered.set(result));
         }
     }
@@ -260,30 +309,31 @@ public final class Bodies {
             if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.absent();
             }
-            Map<String, Sig> result = new LinkedHashMap<>();
-            Map<String, String> fromModule = new LinkedHashMap<>();   // bare name → its module
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                Ast.Module src = db.ask(new Front.Available(imp.module())).value();
-                if (src == null) {
-                    continue;   // the unknown module is reported where the scope is worked out
-                }
-                Set<String> declared = Scoping.behaviorNames(src);
-                for (String bare : imp.names()) {
-                    if (!declared.contains(bare)) {
-                        continue;   // a type import, or a name the module does not declare
-                    }
-                    Map<String, Sig> sigs = db.ask(new Signatures(imp.module())).value();
-                    Sig sig = sigs == null ? null : sigs.get(bare);
-                    if (sig == null) {
-                        continue;
-                    }
-                    String earlier = fromModule.put(bare, imp.module());
-                    if (earlier != null && !earlier.equals(imp.module())) {
-                        return Answer.absent(collision(bare, earlier, imp));
-                    }
-                    result.put(bare, sig);
+            // A behavior's name is a member of the generated class, so two of them cannot share
+            // one. Two written lines claiming a spelling are a contest and are settled where
+            // claims are; what is left here is a name reached through a qualified reference — it
+            // claims no bare spelling, so no contest saw it, and this is the one rule that does.
+            Map<String, String> from = new LinkedHashMap<>();
+            Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(name));
+            if (scoped.present()) {
+                scoped.value().imports().behaviors()
+                        .forEach((each, named) -> from.put(each, named.module()));
+            }
+            for (Resolve.QualifiedUse each : reachedByAQualifier(db, name)) {
+                String earlier = from.put(each.named().name(), each.named().module());
+                if (earlier != null && !earlier.equals(each.named().module())) {
+                    return Answer.absent(collision(each.named().name(), earlier,
+                            each.named().module(), each.at()));
                 }
             }
+            Map<String, Sig> result = new LinkedHashMap<>();
+            from.forEach((each, declaredBy) -> {
+                Map<String, Sig> sigs = db.ask(new Signatures(declaredBy)).value();
+                Sig sig = sigs == null ? null : sigs.get(each);
+                if (sig != null) {
+                    result.put(each, sig);
+                }
+            });
             return Answer.of(Ordered.map(result));
         }
 
@@ -292,11 +342,13 @@ public final class Bodies {
          * also a member name in the generated class — an injected behavior is a field, and a stage
          * that is one becomes a field here too — so the two cannot both be reached.
          */
-        private Report collision(String bare, String earlier, Ast.Import imp) {
-            return Report.raised(Diagnostic.say(new ModuleMessage.ABehaviorIsNamedFromTwoModules(bare, earlier, imp.module()))
-                            .at(imp.pos())
-                            .hint(new ModuleMessage.ABehaviorsNameIsAlsoItsInjectedField(bare)).build());
+        private Report collision(String bare, String earlier, String andThis, SourcePos at) {
+            return Report.raised(Diagnostic
+                    .say(new ModuleMessage.ABehaviorIsNamedFromTwoModules(bare, earlier, andThis))
+                    .at(at)
+                    .hint(new ModuleMessage.ABehaviorsNameIsAlsoItsInjectedField(bare)).build());
         }
+
     }
 
     /** The behaviors a module borrows that are injection targets where they are declared, so a
@@ -313,17 +365,12 @@ public final class Bodies {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                Set<String> injected = db.ask(new Injected(imp.module())).value();
-                if (injected == null) {
-                    continue;
+            borrowed(db, name).forEach((bare, from) -> {
+                Set<String> injected = db.ask(new Injected(from)).value();
+                if (injected != null && injected.contains(bare)) {
+                    result.add(bare);
                 }
-                for (String bare : imp.names()) {
-                    if (injected.contains(bare)) {
-                        result.add(bare);
-                    }
-                }
-            }
+            });
             return Answer.of(Ordered.set(result));
         }
     }
@@ -569,9 +616,17 @@ public final class Bodies {
             if (!resolved.present()) {
                 return Answer.absent();
             }
+            // Which definitions of another module this one may read is what its import lines
+            // were left with, and it is settled where claims are settled. Asked of that module
+            // again, a definition it publishes could be read under a spelling no line got — the
+            // claim having lost a contest, or come in on a line that was refused — and the leave
+            // would be granted a second time to a claim that did not stand.
+            Map<String, List<PublishedHelper>> byModule = new LinkedHashMap<>();
+            leaves(db, name).values().forEach(leave -> byModule
+                    .computeIfAbsent(leave.module(), k -> new ArrayList<>()).add(leave));
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-            for (Hir.Import imp : resolved.value().imports()) {
-                Answer<Hir.Module> from = db.ask(new Settled(imp.module()));
+            for (Map.Entry<String, List<PublishedHelper>> allowed : byModule.entrySet()) {
+                Answer<Hir.Module> from = db.ask(new Settled(allowed.getKey()));
                 // Closed against the table that module's own bodies are expanded against, which is
                 // everything it can name and not only what it declares: a published body may call a
                 // helper that module imported in turn, and a chain of three is where a table of its
@@ -582,14 +637,14 @@ public final class Bodies {
                 // over the question of what it means — and the answer taken here would be this
                 // module's guess about another module's declarations.
                 Answer<Expanding.Of> against =
-                        db.ask(new Expanding(imp.module(), InliningPolicy.FULL));
+                        db.ask(new Expanding(allowed.getKey(), InliningPolicy.FULL));
                 if (!from.present() || !against.present()) {
                     continue;
                 }
                 // Two imports reaching one definition reach one definition: the name it is keyed by
                 // is the module that declares it and its own name, so the second arrival is the same
                 // entry rather than a second copy of the method.
-                publishedClosure(from.value(), imp.names(), against.value())
+                publishedClosure(from.value(), allowed.getValue(), against.value())
                         .forEach(out::putIfAbsent);
             }
             return Answer.of(out);
@@ -613,11 +668,12 @@ public final class Bodies {
      * reader follows from the same shape: a definition with no parameters is substituted where it is
      * named, one with parameters is expanded where it is called.
      */
-    public static Map<String, Hir.FnDef> publishedDefinitions(Hir.Module from, List<String> wanted,
-                                                              Expanding.Of against) {
+    private static Map<String, Hir.FnDef> publishedDefinitions(Hir.Module from,
+                                                               Collection<PublishedHelper> allowed,
+                                                               Expanding.Of against) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
         HelperInliner inliner = null;
-        for (Hir.FnDef fn : publishable(from, wanted)) {
+        for (Hir.FnDef fn : bodiesOf(from, allowed)) {
             if (inliner == null) {
                 inliner = HelperInliner.over(against.table(), against.graph());
             }
@@ -637,9 +693,10 @@ public final class Bodies {
      * it reaches in turn. A mutually-recursive group therefore arrives whole: each member is reached
      * from the others, so following the calls collects all of them.
      */
-    public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from, List<String> wanted,
+    public static Map<String, Hir.FnDef> publishedClosure(Hir.Module from,
+                                                          Collection<PublishedHelper> allowed,
                                                           Expanding.Of against) {
-        Map<String, Hir.FnDef> out = publishedDefinitions(from, wanted, against);
+        Map<String, Hir.FnDef> out = publishedDefinitions(from, allowed, against);
         if (out.isEmpty()) {
             return out;
         }
@@ -670,30 +727,78 @@ public final class Bodies {
         return out;
     }
 
-    /** The bare names {@code from} publishes among {@code wanted} — what a reader writes for them.
-     * Asked on its own where only the names are wanted, so resolving a module's names does not close
-     * every body the modules around it publish. */
-    public static Set<String> publishedNames(Hir.Module from, List<String> wanted) {
-        Set<String> out = new java.util.LinkedHashSet<>();
-        for (Hir.FnDef fn : publishable(from, wanted)) {
-            out.add(fn.name());
+    /**
+     * The bodies {@code from} was given leave to hand over, in the order it declared them.
+     *
+     * <p>Nothing here decides what is published. Each of {@code allowed} is a
+     * {@link PublishedHelper}, which only a reading of that module can make — so this reads the
+     * bodies it was told it may read and has no way to reach any other. What it does decide is the
+     * order, and that is the declaring module's: these become methods of the reader, and the module
+     * that wrote them is what says which comes first.
+     */
+    private static List<Hir.FnDef> bodiesOf(Hir.Module from, Collection<PublishedHelper> allowed) {
+        Map<String, Hir.FnDef> helpers = HelperInliner.helpersOf(from);
+        // Every leave is redeemed, and redeeming one is the only way to a body. Reading the module
+        // first and keeping whichever definitions a leave happened to name would let a leave for
+        // something that module has not got go by unnoticed, which is the disagreement worth
+        // knowing about.
+        Map<String, Hir.FnDef> found = new LinkedHashMap<>();
+        for (PublishedHelper each : allowed) {
+            found.put(each.name(), bodyOf(from, helpers, each));
         }
-        return out;
-    }
-
-    /** The definitions {@code from} offers among {@code wanted}: its values and helpers that it
-     * exposes. A behavior's own {@code let} is not among them whatever its shape — it is an
-     * implementation, and what a reader reaches is the behavior, which it calls (ADR-0005). */
-    private static List<Hir.FnDef> publishable(Hir.Module from, List<String> wanted) {
-        Set<String> exposed = new java.util.HashSet<>(from.exposing());
         List<Hir.FnDef> out = new java.util.ArrayList<>();
-        for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
-            if (HelperInliner.publishes(exposed, fn.name(),
-                    fn.body() instanceof Hir.FnBody.Written, wanted)) {
+        for (String declared : helpers.keySet()) {
+            Hir.FnDef fn = found.get(declared);
+            if (fn != null) {
                 out.add(fn);
             }
         }
         return out;
+    }
+
+    /**
+     * A leave to read a definition, and a module that has no such definition to hand over.
+     *
+     * <p>Not a limit of an analysis. A reading said that module publishes the name, and a reading
+     * is what every reader of that module is answered from — so a settled module without the body
+     * is the compiler holding two answers to one question, and the reader that swallowed it would
+     * publish nothing and look exactly like a reader that had nothing to publish.
+     */
+    static final class ALeaveAndAModuleDisagree extends RuntimeException
+            implements souther.compiler.diag.TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        ALeaveAndAModuleDisagree(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * The body {@code leave} is leave to read.
+     *
+     * <p>Takes the leave rather than the name, so that reaching a definition of another module and
+     * being allowed to are one step. What it checks is that the two agree about whose module this
+     * is: a leave is about one module, and read against another's tree it would hand back a
+     * definition nobody published under a name that happens to be spelt the same.
+     *
+     * <p>A body that is not written here is the reading and the settled module disagreeing about
+     * what is published, which is not something either of them may recover from — the reading said
+     * a body would be here to hand over.
+     */
+    private static Hir.FnDef bodyOf(Hir.Module from, Map<String, Hir.FnDef> helpers,
+                                    PublishedHelper leave) {
+        if (!from.name().equals(leave.module())) {
+            throw new ALeaveAndAModuleDisagree("`" + leave
+                    + "` is leave to read a definition of `" + leave.module()
+                    + "`, read against `" + from.name() + "`");
+        }
+        Hir.FnDef fn = helpers.get(leave.name());
+        if (fn == null || !(fn.body() instanceof Hir.FnBody.Written)) {
+            throw new ALeaveAndAModuleDisagree("`" + leave
+                    + "` is published, and the settled module has no body written for it");
+        }
+        return fn;
     }
 
     /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.Compiler;
@@ -207,8 +209,8 @@ class UnresolvedNamesTest {
                 """);
 
         assertEquals(1, found.size(), found.toString());
-        assertEquals(6, found.get(0).region().start().line(), found.toString());
-        assertEquals(20, found.get(0).region().start().column(),
+        assertEquals(6, ((Primary.InSource) found.get(0).primary()).place().region().start().line(), found.toString());
+        assertEquals(20, ((Primary.InSource) found.get(0).primary()).place().region().start().column(),
                 "the stage, not the behavior it is in: " + found);
     }
 

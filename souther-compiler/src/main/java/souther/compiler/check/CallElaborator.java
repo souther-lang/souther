@@ -467,8 +467,14 @@ public final class CallElaborator {
             }
             Diagnostic.Builder b = Diagnostic
                     .at(args.get(seed).reportedAt());
-            if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
-                b.secondary(stepError.diagnostic().region(), new NameMessage.TheAccumulatorsTypeStaysUnknown());
+            // The step's own place, where it has one a reader can be sent to. A report about code
+            // out of sight, or one in a text this compile cannot name, has no place to lend: the
+            // region it holds is not one this label could be read at.
+            if (stepError.diagnostic() != null
+                    && stepError.diagnostic().primary()
+                            instanceof souther.compiler.diag.Primary.InSource(
+                                    souther.compiler.diag.DiagnosticPlace.InSource place)) {
+                b.secondary(place, new NameMessage.TheAccumulatorsTypeStaysUnknown());
             }
             throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
         }

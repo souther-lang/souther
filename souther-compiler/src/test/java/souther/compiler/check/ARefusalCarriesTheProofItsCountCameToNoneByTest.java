@@ -68,6 +68,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                     "every case " + it.cases().stream().map(each -> shape(each)).toList();
             case Emptiness.ConflictingRules _ -> "rules contradict";
             case Emptiness.EmptyNumericInterval _ -> "an empty range";
+            case Emptiness.EmptyOrderedInterval _ -> "ends with nothing between them";
             case Emptiness.SetRequiresTooManyDistinctValues it -> "a set over at most " + it.available();
             case Emptiness.NoAllowedCollectionSize _ -> "no size";
         };
@@ -77,14 +78,136 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         return these.stream().map(TypeSymbol::name).toList();
     }
 
-    /** Rules that contradict, which is what the one sentence written before never said. */
+    /**
+     * A position bounded above a value it is bounded below of, carried as that and with its place.
+     *
+     * <p>Nearer than {@link Emptiness.ConflictingRules}, which says the rules contradict and nothing
+     * further. Two domains hold this contradiction — the interval algebra reads the numbers and the
+     * ordering reads the ends — and which proof is carried has to be the one that can say what it
+     * found, whichever of them a reader happens to ask first.
+     */
+    @Test
+    void endsWithNothingBetweenThemAreCarriedAsThatAndNotAsRulesContradicting() {
+        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+                        new Emptiness.EmptyOrderedInterval()), only("""
+                module demo
+
+                data Bad = Int
+                    invariant no = value >= 2 && value <= 1
+                """));
+    }
+
+    /**
+     * And a position on an order the numbers do not carry is shown by the same proof.
+     *
+     * <p>The whole point of the two issues this closes: one shape, one proof, one sentence. A date
+     * bounded above a date it is bounded below of was not refused at all, and refusing it under the
+     * general sentence would leave the same model told two different things depending on what
+     * carries it.
+     */
+    @Test
+    void anOrderTheNumbersDoNotCarryIsShownByTheSameProof() {
+        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+                        new Emptiness.EmptyOrderedInterval()), only("""
+                module demo
+
+                data Bad = Date
+                    invariant no = value >= Date("2020-01-01") && value <= Date("2010-01-01")
+                """));
+    }
+
+    /** And the place named is the field, where the rules were written about one. */
+    @Test
+    void thePlaceAnEmptyOrderNamesIsTheFieldTheRulesBound() {
+        assertEquals(new Emptiness.AtAField("at",
+                        new Emptiness.EmptyOrderedInterval()), only("""
+                module demo
+
+                data Held = { at: Date }
+                    invariant no = at >= Date("2020-01-01") && at <= Date("2010-01-01")
+                """));
+    }
+
+    /**
+     * The position a choice names is the one every alternative leaves nothing at.
+     *
+     * <p>Two situations were answered with one rule. An alternative nobody can take leaves the
+     * answer to the others, and its evidence goes with it; where <em>every</em> alternative is
+     * impossible, no one of them speaks for the rest, and taking the first one found impossible out
+     * of the answer settles the proof by the order the operands were written in.
+     *
+     * <p>Nor may they be met. A meet is a conjunction and the alternatives were never stated
+     * together: both alternatives here are impossible because of {@code a}, and met they are a
+     * {@code b} bounded at 0 and at 1 — a contradiction neither alternative contains, at a position
+     * the rules are fine with. {@code b} is declared first, so the refusal was written about it.
+     */
+    @Test
+    void thePositionAChoiceNamesIsTheOneEveryAlternativeLeavesNothingAt() {
+        Emptiness expected = new Emptiness.AtAField("a", new Emptiness.EmptyOrderedInterval());
+        assertEquals(expected, only("""
+                module demo
+
+                data X = { b: Int, a: String }
+                    invariant no = (a < "" && b == 0) || (a < "" && b == 1)
+                """));
+        assertEquals(expected, only("""
+                module demo
+
+                data X = { b: Int, a: String }
+                    invariant no = (a < "" && b == 1) || (a < "" && b == 0)
+                """), "and the operands the other way round");
+    }
+
+    /**
+     * And where the alternatives leave nothing at different positions, none of them is named.
+     *
+     * <p>A choice between {@code a < ""} and {@code b < ""} admits nothing, and neither position is
+     * one the choice leaves empty: each alternative admits every value of the other's. So what can
+     * be said is that the rules cannot all hold, which is the general form and is what a reading
+     * that could show a contradiction and no more leaves.
+     */
+    @Test
+    void aChoiceWhoseAlternativesFailAtDifferentPositionsNamesNone() {
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data X = { a: String, b: String }
+                    invariant no = a < "" || b < ""
+                """));
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data X = { a: String, b: String }
+                    invariant no = b < "" || a < ""
+                """), "and the operands the other way round");
+    }
+
+    /** And the same where the two alternatives are shown impossible by different readings. */
+    @Test
+    void aChoiceShownImpossibleByTwoDifferentReadingsNamesNoPosition() {
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = s < "" || (b == true && b == false)
+                """));
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = (b == true && b == false) || s < ""
+                """), "and the operands the other way round");
+    }
+
+    /** Rules that contradict in a way no range holds, which is the general form. */
     @Test
     void rulesThatCannotAllHoldAreCarriedAsThat() {
         assertEquals(new Emptiness.ConflictingRules(), only("""
                 module demo
 
-                data Bad = Int
-                    invariant no = value >= 2 && value <= 1
+                data Bad = String
+                    invariant no = String.matches("[A-Z]+", value)
+                        && Bool.not(String.matches("[A-Z]+", value))
                 """));
     }
 
@@ -162,7 +285,8 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 """);
         assertEquals(List.of(List.of("Bad"), List.of("A", "B")),
                 reported.stream().map(each -> named(each.members())).toList());
-        assertEquals(new Emptiness.ConflictingRules(), reported.get(0).why());
+        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+                new Emptiness.EmptyOrderedInterval()), reported.get(0).why());
         if (!(reported.get(1).why() instanceof Emptiness.NoBaseInComponent)) {
             throw new AssertionError("the cycle is left with nothing to bottom out: "
                     + reported.get(1).why());
@@ -253,8 +377,9 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 data Both = { n: Int, held: Bad }
                     invariant no = n >= 2 && n <= 1
                 """;
-        assertEquals(new Emptiness.ConflictingRules(), reported(before).get(1).why());
-        assertEquals(new Emptiness.ConflictingRules(), reported(after).get(1).why(),
-                "and the fields the other way round");
+        assertEquals(new Emptiness.AtAField("n", new Emptiness.EmptyOrderedInterval()),
+                reported(before).get(1).why());
+        assertEquals(new Emptiness.AtAField("n", new Emptiness.EmptyOrderedInterval()),
+                reported(after).get(1).why(), "and the fields the other way round");
     }
 }

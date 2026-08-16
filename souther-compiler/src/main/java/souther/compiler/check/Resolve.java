@@ -104,6 +104,8 @@ public final class Resolve {
     private final Map<String, Set<String>> borrowed = new LinkedHashMap<>();
     /** Where each of those was first named — the position the synthesized import stands at. */
     private final Map<String, SourcePos> borrowedAt = new LinkedHashMap<>();
+    /** Every behavior a qualified reference reached, as this pass answered it. */
+    private final List<QualifiedUse> qualified = new ArrayList<>();
 
     private Resolve(SyntaxSymbols symbols, Values values) {
         this.symbols = symbols;
@@ -168,7 +170,8 @@ public final class Resolve {
      * says the same thing, and holding it reaches nothing.
      */
     public record Reachable(String module, Map<String, ValueName.Helper> helpers,
-                            Map<String, ValueName.Behavior> behaviors, boolean behaviorsWhole,
+                            Map<String, ValueName.Behavior> behaviors,
+                            Set<String> standingForNothing, boolean behaviorsWhole,
                             Map<String, ValueName.Stdlib> exposed) {
 
         /** Copied, because a reader holds this. A table something else can still write to is not a
@@ -179,6 +182,8 @@ public final class Resolve {
         public Reachable {
             helpers = Collections.unmodifiableMap(new LinkedHashMap<>(helpers));
             behaviors = Collections.unmodifiableMap(new LinkedHashMap<>(behaviors));
+            standingForNothing =
+                    Collections.unmodifiableSet(new LinkedHashSet<>(standingForNothing));
             exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
         }
 
@@ -192,15 +197,46 @@ public final class Resolve {
          * three tables: two of those would agree until one of them moved, and nothing would say
          * which had.
          *
-         * <p>A binding in force and a type written as a value are not here. Both are answered before
-         * this table is consulted — the first from the bindings that hold at the position, the
-         * second from the type scope — so neither is a fact about the module.
+         * <p>A binding in force is not here: it is answered from the bindings that hold at the
+         * position, before this is read, and is no fact about the module. Nor is a type written as
+         * a value — but that one is read <em>after</em> this rather than before it. What a spelling
+         * reaches here is settled, and a type of that name is what to do when nothing here answers,
+         * so a data an import brought in no longer takes a spelling this module writes a
+         * {@code let} for.
          */
         public Map<String, ValueName> byName() {
             Map<String, ValueName> reached = new LinkedHashMap<>(helpers);
             behaviors.forEach(reached::putIfAbsent);
             exposed.forEach(reached::putIfAbsent);
             return Collections.unmodifiableMap(reached);
+        }
+
+        /**
+         * What writing {@code name} here would mean.
+         *
+         * <p>Three answers, and the third is why this is asked rather than looked up. A name an
+         * import line was to bring in and could not is in scope denoting nothing: what is wrong was
+         * said on that line, so a use of it says nothing more. Absent from the table instead, every
+         * use is reported as a name nothing declares, and the author is sent to a body where
+         * nothing is wrong — which is the same reasoning the type namespace was written to
+         * ({@link Denotation}), and the same three answers.
+         */
+        public Reach reach(String name) {
+            return reachIn(byName(), name);
+        }
+
+        /** The same, over a table {@link #byName} already answered. Package-private, so the only
+         *  readers are the ones that got the table from here: the rule about what a spelling means
+         *  is this one, and a caller that assembled a table of its own would be asking it of
+         *  something else. {@code Resolve} reads every name a module writes, and rebuilding the
+         *  table for each of them is what this saves. */
+        Reach reachIn(Map<String, ValueName> reached, String name) {
+            ValueName named = reached.get(name);
+            if (named != null) {
+                return new Reach.Reaches(named);
+            }
+            return standingForNothing.contains(name) ? Reach.STANDS_FOR_NOTHING
+                    : Reach.NOT_IN_SCOPE;
         }
 
         /**
@@ -220,7 +256,7 @@ public final class Resolve {
                     helpers.put(fn.name(), new ValueName.Helper(m.name(), fn.name()));
                 }
             }
-            return new Reachable(m.name(), helpers, behaviors, true, Map.of());
+            return new Reachable(m.name(), helpers, behaviors, Set.of(), true, Map.of());
         }
     }
 
@@ -313,7 +349,12 @@ public final class Resolve {
             }
 
             @Override
-            public Set<String> behaviorsOf(String module) {
+            public Declares declaresBehavior(String module, String name) {
+                return Declares.NO;
+            }
+
+            @Override
+            public Set<String> behaviorNamesToSuggest(String module) {
                 return Set.of();
             }
         };
@@ -321,13 +362,40 @@ public final class Resolve {
         /** Whether this compilation has a module of that name. */
         boolean hasModule(String name);
 
+        /** Whether that module declares a behavior of that name. */
+        Declares declaresBehavior(String module, String name);
+
         /**
-         * The behaviors that module declares, or null where this compilation has it and cannot read
-         * it — which is not the same as its declaring none. Whatever is wrong with it is reported on
-         * its own source, so a name that may have come from there is left unanswered and said
-         * nothing about.
+         * The behavior names a report may offer where nothing answered to one.
+         *
+         * <p>Told apart from {@link #declaresBehavior} because the two are different capabilities,
+         * not because they read different things. That one settles what a name means; this one is
+         * what a "did you mean" may say, and what belongs in it is a question about reports. One
+         * method answering both is a set handed to a reader that only had a question, and a reader
+         * holding the set is a reader that can write a rule of its own about what the module has.
          */
-        Set<String> behaviorsOf(String module);
+        Set<String> behaviorNamesToSuggest(String module);
+    }
+
+    /**
+     * Whether a module declares something, where being unable to say is one of the answers.
+     *
+     * <p>Three and not two. A module this compilation has and cannot read declares nothing anybody
+     * here can name, and that is not the same as its declaring none: whatever is wrong with it is
+     * reported on its own source, so a name that may have come from there is left unanswered and
+     * said nothing about. Answered as a set that was null, the reader that forgot the null was
+     * told the module declares nothing.
+     */
+    public enum Declares {
+
+        /** It declares one. */
+        YES,
+
+        /** It does not. */
+        NO,
+
+        /** This compilation has the module and cannot read it, so nothing here can say. */
+        CANNOT_SAY
     }
 
     /**
@@ -402,7 +470,23 @@ public final class Resolve {
      */
     public record Resolution(Hir.Module module, ResolutionIndex index,
                              List<CompileException> unresolved,
-                             Map<String, OfDeclaration> declarations) {}
+                             Map<String, OfDeclaration> declarations,
+                             List<QualifiedUse> qualified) {}
+
+    /**
+     * One behavior a qualified reference reached, and where the reference is written.
+     *
+     * <p>What this pass answered, handed on as what it answered. A reader wanting these used to
+     * find them among the module's imports, because an import is synthesized for each module one
+     * reaches — but an import records a dependency, and a dependency the module already has is not
+     * recorded twice. So a behavior named through its module was invisible to that reader whenever
+     * a line happened to name the same module and name, which is exactly when the bare spelling had
+     * been refused and the qualified reference was the only way the behavior was reached at all.
+     *
+     * <p>The occurrence and not the module. An import stands where the first reference to that
+     * module is, so a second one elsewhere was reported at the first one's line.
+     */
+    public record QualifiedUse(ValueName.Behavior named, SourcePos at) {}
 
     /**
      * What resolving one declaration came to.
@@ -528,7 +612,8 @@ public final class Resolve {
                         m.exampleFileTarget(), m.pos()),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
                         Map.copyOf(r.binders)),
-                List.copyOf(r.unresolved), Map.copyOf(declarations));
+                List.copyOf(r.unresolved), Map.copyOf(declarations),
+                List.copyOf(r.qualified));
     }
 
     /**
@@ -657,21 +742,25 @@ public final class Resolve {
                     .say(new ModuleMessage.NoModuleOfThatName(qualifier, bare))
                     .at(ref.pos()).build()));
         }
-        Set<String> declared = elsewhere.behaviorsOf(target);
-        if (declared == null) {
-            // The module is one this compilation has and could not read. What is wrong with it is
-            // reported on its own source; saying anything here sends the author to a file that is
-            // fine.
-            return unanswered(ref);
-        }
-        if (!declared.contains(bare)) {
-            return noBehavior(ref, unknown.report(ref, declared));
+        switch (elsewhere.declaresBehavior(target, bare)) {
+            case CANNOT_SAY -> {
+                // The module is one this compilation has and could not read. What is wrong with it
+                // is reported on its own source; saying anything here sends the author to a file
+                // that is fine.
+                return unanswered(ref);
+            }
+            case NO -> {
+                return noBehavior(ref,
+                        unknown.report(ref, elsewhere.behaviorNamesToSuggest(target)));
+            }
+            case YES -> { }
         }
         ValueName.Behavior named = new ValueName.Behavior(target, bare);
         // A behavior named through its module is reached through an import, whether or not the
         // author wrote one: the borrowed signature and the injected field are found by it.
         borrowed.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
         borrowedAt.putIfAbsent(target, ref.pos());
+        qualified.add(new QualifiedUse(named, ref.pos()));
         return behaviorReached(ref, named);
     }
 
@@ -680,6 +769,12 @@ public final class Resolve {
         ValueName.Behavior named = reachable.behaviors().get(written);
         if (named != null) {
             return behaviorReached(ref, named);
+        }
+        if (reachable.standingForNothing().contains(written)) {
+            // A name an import line was to bring in and could not. Said on that line, so a stage
+            // that writes it says nothing more — the same answer a name in a body gets, and for
+            // the same reason: a reader sent here is sent to a composition that is right.
+            return unanswered(ref);
         }
         if (!reachable.behaviorsWhole()) {
             // An import that could not be followed may have been where this name came from.
@@ -1243,24 +1338,29 @@ public final class Resolve {
      * <p>One ladder, in one order, so a name means the same thing under an application as beside one.
      * It was two — a bare name tried the declared types before this module's helpers, an applied one
      * tried the library first and the types last — and which rung answered therefore depended on
-     * whether a `(` followed. The rungs a spelling could reach twice are refused where the value
-     * namespace is assembled, so the order between them decides nothing.
+     * whether a `(` followed.
+     *
+     * <p>The value namespace is read before a type is read as one. A spelling reaching two of these
+     * is refused where the namespace is assembled, so in a module that compiles the order decides
+     * nothing — but a refusal is reported and recovered from, and what each name means afterwards
+     * should not follow from which rung happened to be tried first. So a type read as a value is
+     * what to do when the value namespace has no answer, and not a rung above it.
      *
      * <p>{@code applied} is the one thing the position still says. A type written as a value is the
      * construction of a unit data and records where it came from; applied, it is a newtype taking
      * what it wraps, and the application is what says that.
      */
-    private ValueName lookup(WrittenName name, boolean applied, Bindings bound) {
+    private Reach lookup(WrittenName name, boolean applied, Bindings bound) {
         String written = name.canonical();
         // a binding in force wins over everything else: a body may bind a name a module declares,
         // and the binding is what the name means there
         ValueName.Local binding = bound.binderOf(written);
         if (binding != null) {
-            return binding;
+            return new Reach.Reaches(binding);
         }
         // names the language itself gives: Option's two cases
         if (written.equals("None") || written.equals("Some")) {
-            return new ValueName.Builtin(written);
+            return new Reach.Reaches(new ValueName.Builtin(written));
         }
         // A library qualifier makes this a library reference — `Date(...)`, whose namespace is the
         // whole name, included. Whether the library has a member of that name is the check's to say:
@@ -1276,19 +1376,34 @@ public final class Resolve {
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             if (Reserved.isNamespace(reachable.module()) || !Prelude.isPrivateMember(written)) {
-                return dot < 0 ? ValueName.Stdlib.namespace(written)
-                        : new ValueName.Stdlib(written.substring(0, dot), written.substring(dot + 1));
+                return new Reach.Reaches(dot < 0 ? ValueName.Stdlib.namespace(written)
+                        : new ValueName.Stdlib(written.substring(0, dot),
+                                written.substring(dot + 1)));
             }
-            return null;
+            return Reach.NOT_IN_SCOPE;
         }
-        if (symbols.scope().resolve(name) instanceof Denotation.Denotes d) {
-            return new ValueName.OfType(written, d.type(),
-                    applied ? null : ConstructionOrigin.own());
-        }
+
         // A helper or a value of this module, a behavior it reaches, or a name an import let it
         // write without a qualifier — asked of the one table that says which, so that a reader
         // listing what may be written here reads the same answer this does.
-        return reaches.get(written);
+        // What this module can name in the value namespace, which is the settled answer: its own
+        // definitions and what the import lines were left with.
+        Reach reached = reachable.reachIn(reaches, written);
+        if (!(reached instanceof Reach.NotInScope)) {
+            return reached;
+        }
+        // A type written as a value, which is the construction of what it denotes. Read after the
+        // value namespace and not before it, because it is what to do when nothing there answers
+        // rather than a rung of its own: a spelling the value namespace settled is settled, and a
+        // type of that name is a second answer to a question already answered. Before this, a data
+        // an import brought in beat a `let` written here under the same name — the collision
+        // between them is reported, and what each means afterwards was decided by the order these
+        // were consulted rather than by anything either says.
+        if (symbols.scope().resolve(name) instanceof Denotation.Denotes d) {
+            return new Reach.Reaches(new ValueName.OfType(written, d.type(),
+                    applied ? null : ConstructionOrigin.own()));
+        }
+        return reached;
     }
 
     /**
@@ -1333,14 +1448,23 @@ public final class Resolve {
             return null;
         }
         WrittenName written = dottedName(fa);
-        ValueName denotes = lookup(written, applied, bound);
-        if (denotes != null) {
-            ValueName resolved = answered(written, denotes);
-            return new Hir.Var.Denoting(written, resolved,
-                    ReachName.of(resolved, written.canonical(), reachable.module()),
-                    written.region());
+        switch (lookup(written, applied, bound)) {
+            case Reach.Reaches(ValueName denotes) -> {
+                ValueName resolved = answered(written, denotes);
+                return new Hir.Var.Denoting(written, resolved,
+                        ReachName.of(resolved, written.canonical(), reachable.module()),
+                        written.region());
+            }
+            // A qualified spelling an import line was to bring in and could not. Said on that line
+            // already, so the chain is answered here rather than taken apart and reported again.
+            case Reach.StandsForNothing _ -> {
+                unanswered();
+                return new Hir.Var.Unanswered(written, written.region());
+            }
+            case Reach.NotInScope _ -> {
+                return unknownMember(fa, written, applied, bound);
+            }
         }
-        return unknownMember(fa, written, applied, bound);
     }
 
     /**
@@ -1394,8 +1518,14 @@ public final class Resolve {
 
     /** What a name used as a value denotes, or null where nothing does — reported here. */
     private ValueName valueName(WrittenName written, Bindings bound) {
-        ValueName denotes = lookup(written, false, bound);
-        return denotes != null ? denotes : nothing(unknownIdentifier(written, bound));
+        return switch (lookup(written, false, bound)) {
+            case Reach.Reaches(ValueName named) -> named;
+            // Already accounted for on the import line that could not bring it in. Counted, so the
+            // module is not emitted, and said nothing about, so the author is not sent to a body
+            // where nothing is wrong.
+            case Reach.StandsForNothing _ -> unanswered();
+            case Reach.NotInScope _ -> nothing(unknownIdentifier(written, bound));
+        };
     }
 
     /**
@@ -1406,8 +1536,11 @@ public final class Resolve {
      * position it was written in is a fact about the source rather than about the name.
      */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
-        ValueName denotes = lookup(call.name(), true, bound);
-        return denotes != null ? denotes : nothing(unknownIdentifier(call.name(), bound));
+        return switch (lookup(call.name(), true, bound)) {
+            case Reach.Reaches(ValueName named) -> named;
+            case Reach.StandsForNothing _ -> unanswered();
+            case Reach.NotInScope _ -> nothing(unknownIdentifier(call.name(), bound));
+        };
     }
 
     /**
@@ -1443,6 +1576,19 @@ public final class Resolve {
      */
     private ValueName nothing(CompileException why) {
         unresolved.add(why);
+        failed++;
+        return null;
+    }
+
+    /**
+     * Records that a name in a body reached nothing, where what is wrong has already been said.
+     *
+     * <p>Counted and not reported. A name an import line was to bring in is in scope reaching
+     * nothing, and the line it came from is where the author was told — so the module is one whose
+     * names did not all come out, which is what {@code failed} is, and nothing further is said
+     * about a body that is not what is wrong.
+     */
+    private ValueName unanswered() {
         failed++;
         return null;
     }
