@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.Emitted;
+import souther.compiler.EmittedBytes;
 import org.junit.jupiter.api.Test;
 import souther.compiler.jvm.DecoderKind;
 import souther.compiler.jvm.GeneratedClass;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,16 +44,17 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     @Test
     void aDataAndABehaviorThatCapitalizesOntoItAreOneClass() {
         Emissions out = new Emissions("demo");
-        out.put(QUOTE_DATA, new byte[] {1});
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> out.put(QUOTE_BEHAVIOR, new byte[] {2}));
+                () -> out.put(QUOTE_BEHAVIOR, EmittedBytes.of(QUOTE_BEHAVIOR, "second")));
         assertTrue(refused.getMessage().contains("demo.Quote"),
                 "the refusal names the class both wanted: " + refused.getMessage());
         assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
                 "and the two identities that wanted it: " + refused.getMessage());
         assertEquals(List.of(Emitted.value("demo", "Quote")), List.copyOf(out.byBinaryName().keySet()),
                 "the class already written stays the one that is written");
-        assertEquals(1, out.byBinaryName().get(Emitted.value("demo", "Quote"))[0],
+        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "first"),
+                out.byBinaryName().get(Emitted.value("demo", "Quote")),
                 "and it is not replaced on the way out");
     }
 
@@ -60,10 +63,12 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     @Test
     void twoMembersBridgedUnderOneNameAreOneClass() {
         Emissions out = new Emissions("demo");
-        out.put(new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("a", "Foo"))), new byte[] {1});
+        GeneratedClass.BridgeCase fromA =
+                new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("a", "Foo")));
+        out.put(fromA, EmittedBytes.of(fromA));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> out.put(new GeneratedClass.BridgeCase("demo", TypeSymbols.declared(new TypeKey("b", "Foo"))),
-                        new byte[] {2}));
+                () -> out.put(new GeneratedClass.BridgeCase("demo",
+                        TypeSymbols.declared(new TypeKey("b", "Foo"))), EmittedBytes.of(fromA)));
         assertTrue(refused.getMessage().contains("a.Foo") && refused.getMessage().contains("b.Foo"),
                 "the refusal names both members: " + refused.getMessage());
     }
@@ -77,12 +82,13 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     @Test
     void oneIdentityCannotRewriteAnotherThatHasTheSameName() {
         Emissions out = new Emissions("demo");
-        out.put(QUOTE_DATA, new byte[] {1});
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> out.rewrite(QUOTE_BEHAVIOR, bytes -> new byte[] {2}));
+                () -> out.rewrite(QUOTE_BEHAVIOR, _ -> EmittedBytes.of(QUOTE_BEHAVIOR)));
         assertTrue(refused.getMessage().contains("Quote") && refused.getMessage().contains("quote"),
                 "the refusal names what was emitted and what asked: " + refused.getMessage());
-        assertEquals(1, out.byBinaryName().get(Emitted.value("demo", "Quote"))[0],
+        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "first"),
+                out.byBinaryName().get(Emitted.value("demo", "Quote")),
                 "and the class is not rewritten");
     }
 
@@ -90,11 +96,12 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     @Test
     void andTheIdentityThatWasEmittedMayRewriteIt() {
         Emissions out = new Emissions("demo");
-        out.put(QUOTE_DATA, new byte[] {1});
-        out.rewrite(QUOTE_DATA, bytes -> new byte[] {(byte) (bytes[0] + 1)});
-        assertEquals(2, out.byBinaryName().get(Emitted.value("demo", "Quote"))[0]);
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
+        out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA, "rewritten"));
+        assertArrayEquals(EmittedBytes.of(QUOTE_DATA, "rewritten"),
+                out.byBinaryName().get(Emitted.value("demo", "Quote")));
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> out.put(QUOTE_DATA, new byte[] {3}));
+                () -> out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "third")));
         assertTrue(refused.getMessage().contains("written twice"),
                 "and a rewrite is not a second emission: " + refused.getMessage());
     }
@@ -104,7 +111,7 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     void andNothingCanBeRewrittenThatWasNeverEmitted() {
         Emissions out = new Emissions("demo");
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> out.rewrite(QUOTE_DATA, bytes -> new byte[] {1}));
+                () -> out.rewrite(QUOTE_DATA, _ -> EmittedBytes.of(QUOTE_DATA)));
         assertTrue(refused.getMessage().contains("demo.Quote"), refused.getMessage());
         assertEquals(List.of(), List.copyOf(out.byBinaryName().keySet()));
     }
@@ -114,10 +121,11 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     @Test
     void andSoIsOneArrivingWithOthers() {
         Emissions out = new Emissions("demo");
-        out.put(QUOTE_DATA, new byte[] {1});
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
         Map<GeneratedClass, byte[]> more = new LinkedHashMap<>();
-        more.put(new GeneratedClass.Lambda("demo", 0), new byte[] {2});
-        more.put(QUOTE_DATA, new byte[] {3});
+        GeneratedClass.Lambda lambda = new GeneratedClass.Lambda("demo", 0);
+        more.put(lambda, EmittedBytes.of(lambda));
+        more.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "third"));
         assertThrows(IllegalStateException.class, () -> out.putAll(more));
     }
 
@@ -126,10 +134,14 @@ class TwoClassesUnderOneNameAreNotOneClassTest {
     @Test
     void andEveryOtherIdentityIsWritten() {
         Emissions out = new Emissions("demo");
-        out.put(QUOTE_DATA, new byte[] {1});
-        out.putAll(Map.of(new GeneratedClass.Encoder(QUOTE_DATA), new byte[] {2}));
-        out.put(new GeneratedClass.Decoder(QUOTE_DATA, DecoderKind.JSON), new byte[] {3});
-        out.put(new GeneratedClass.BehaviorInterface("demo", "price"), new byte[] {4});
+        out.put(QUOTE_DATA, EmittedBytes.of(QUOTE_DATA, "first"));
+        GeneratedClass.Encoder encoder = new GeneratedClass.Encoder(QUOTE_DATA);
+        GeneratedClass.Decoder decoder = new GeneratedClass.Decoder(QUOTE_DATA, DecoderKind.JSON);
+        GeneratedClass.BehaviorInterface price =
+                new GeneratedClass.BehaviorInterface("demo", "price");
+        out.putAll(Map.of(encoder, EmittedBytes.of(encoder)));
+        out.put(decoder, EmittedBytes.of(decoder));
+        out.put(price, EmittedBytes.of(price));
         assertEquals(List.of(Emitted.value("demo", "Quote"), Emitted.encoder("demo", "Quote"),
                         Emitted.decoder("demo", "Quote", DecoderKind.JSON),
                         Emitted.behaviorInterface("demo", "price")),

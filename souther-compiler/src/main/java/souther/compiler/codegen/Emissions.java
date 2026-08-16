@@ -5,6 +5,7 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.jvm.SoutherJvmAbi;
 
+import java.lang.classfile.ClassFile;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -53,7 +54,37 @@ public final class Emissions {
                     + "; a module's declared and generated names are one namespace and this one is"
                     + " written twice");
         }
+        declares(generated, name, bytes);
         byName.put(name, new Emission(generated, bytes));
+    }
+
+    /**
+     * That the class in {@code bytes} is the one this is held under.
+     *
+     * <p>Two walks answer where a generated class belongs: the one that made the identity, and the
+     * one that built the bytes. They are the same answer, and where a walk works it out from a table
+     * a spelling is the key of, they come apart — the map ships a name whose bytes declare another
+     * class, so the class that was asked for is missing and the one that arrived overwrites
+     * somebody else's. Nothing downstream can tell: a loader reads the name from the map.
+     *
+     * <p>Read here rather than left to a caller. The Class-File API hands back a model whose parts
+     * are read on demand, so a read outside this method is a read outside the guard, and a name
+     * nothing looked at is a name nothing checked.
+     */
+    private static void declares(GeneratedClass generated, JvmClassName name, byte[] bytes) {
+        String written;
+        try {
+            written = ClassFile.of().parse(bytes).thisClass().asInternalName().replace('/', '.');
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("the class emitted for " + generated + " as " + name
+                    + " cannot be read back", e);
+        }
+        if (!written.equals(name.binaryName())) {
+            throw new IllegalStateException("the class emitted for " + generated + " is held as "
+                    + name.binaryName() + " and declares itself " + written
+                    + "; a loader reads the first and the JVM reads the second, so the name asked"
+                    + " for is not on the class that arrives");
+        }
     }
 
     void putAll(Map<GeneratedClass, byte[]> classes) {
@@ -85,7 +116,9 @@ public final class Emissions {
             throw new IllegalStateException(name + " was emitted for " + held.generated()
                     + ", not " + generated + "; one name, and not the same thing under it");
         }
-        byName.put(name, new Emission(held.generated(), rewriting.apply(held.bytes())));
+        byte[] rewritten = rewriting.apply(held.bytes());
+        declares(generated, name, rewritten);
+        byName.put(name, new Emission(held.generated(), rewritten));
     }
 
     /**
