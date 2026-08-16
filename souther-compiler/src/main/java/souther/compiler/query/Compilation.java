@@ -567,10 +567,10 @@ public final class Compilation {
         }
         return switch (said.primary()) {
             case null -> souther.compiler.meta.ModuleReadback.provenanceOf(module);
-            case Primary.Unavailable(SourceProvenance from) -> from;
+            case Primary.Unavailable _ -> said.whereItsCodeIsWritten();
             case Primary.AtARegion(Region region) ->
-                    Citation.of(region.start()) instanceof Citation.OutOfSight out
-                            ? out.provenance() : null;
+                    Citation.of(region.start()) instanceof Citation.OutOfSight
+                            ? said.whereItsCodeIsWritten() : null;
         };
     }
 

@@ -9,6 +9,7 @@ import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -74,6 +75,42 @@ class AReportWithNowhereToPointStillSaysWhereItsCodeIsTest {
                         java.util.List.of(new SourcePos(2, 1, new SourceId("app.sou"))),
                         new SourceProvenance.APublishedModule("lib.other"),
                         new ModuleMessage.ItIsReachedFromHereToo()));
+    }
+
+    /**
+     * And the same holds for a report that says it through the position it points at.
+     *
+     * <p>The other way a report knows. A position still inside a module's published text has never
+     * been turned into a place, so the report has a region — and that region says which module wrote
+     * the code as surely as a report with no region does. Guarding one and not the other leaves the
+     * hole in the shape it was found in: two states with the same answer, one of them read.
+     */
+    @Test
+    void aReportPointingIntoAPublishedTextIsNotMovedAsSomebodyElsesCodeEither() {
+        Diagnostic said = Diagnostic.at(Placement.whatAModulePublished(THE_CODE).at(4, 20))
+                .say(new ModuleMessage.CannotReadAFieldOnASum("x", "S"))
+                .build();
+
+        assertEquals(THE_CODE.asDeclared(), said.whereItsCodeIsWritten(),
+                "it says where its code is, through what it points at");
+        assertThrows(Diagnostic.MovedSomewhereElsesCode.class,
+                () -> said.reachedFrom(
+                        java.util.List.of(new SourcePos(2, 1, new SourceId("app.sou"))),
+                        new SourceProvenance.APublishedModule("lib.other"),
+                        new ModuleMessage.ItIsReachedFromHereToo()));
+    }
+
+    /** A report about code the reader is looking at says nothing to be preferred, and a caller that
+     *  moves it supplies the answer — which is what makes the argument a fallback and not a second
+     *  authority. */
+    @Test
+    void aReportAboutCodeTheReaderIsLookingAtSaysNothingToPrefer() {
+        Diagnostic said = Diagnostic.at(
+                        Placement.aFileOfThisCompile(new SourceId("app.sou")).at(2, 1))
+                .say(new ModuleMessage.CannotReadAFieldOnASum("x", "S"))
+                .build();
+
+        assertNull(said.whereItsCodeIsWritten(), "there is no elsewhere to name");
     }
 
     /** Moved with what it says, it becomes a report a reader can be sent to, still about the same

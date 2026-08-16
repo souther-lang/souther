@@ -96,6 +96,29 @@ public final class Diagnostic {
         return primary;
     }
 
+    /**
+     * What this report already says about where its code is written, or null where it says nothing.
+     *
+     * <p>Two ways of knowing and one answer. A report with nowhere to point carries it outright; one
+     * pointing at a position carries it in what that position says, and a position in a module's
+     * published text or copied out of one says it as surely as the first does. Split, they became two
+     * questions with the same answer, and whoever was reading only the first had to work the second
+     * out again from whatever was to hand — which is the shape this whole change is about.
+     *
+     * <p>Null where the report is about code the reader is looking at, and where it points at nothing
+     * at all. Neither of those is an answer to be preferred over a caller's; both are the absence of
+     * one.
+     */
+    public SourceProvenance whereItsCodeIsWritten() {
+        return switch (primary) {
+            case null -> null;
+            case Primary.Unavailable(SourceProvenance from) -> from;
+            case Primary.AtARegion(Region region) ->
+                    Citation.of(region.start()) instanceof Citation.Elsewhere elsewhere
+                            ? elsewhere.provenance() : null;
+        };
+    }
+
     public List<LabeledRegion> secondary() {
         return secondary;
     }
@@ -162,8 +185,8 @@ public final class Diagnostic {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
-        if (primary instanceof Primary.Unavailable(SourceProvenance known)
-                && !known.equals(provenance)) {
+        SourceProvenance known = whereItsCodeIsWritten();
+        if (known != null && !known.equals(provenance)) {
             throw new MovedSomewhereElsesCode(known, provenance);
         }
         DeclaringCode declaring = new DeclaringCode(provenance);
