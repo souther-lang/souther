@@ -173,6 +173,22 @@ class EveryWayAnArtifactsImportLineCanFailIsNamedTest {
                                 Map.of("Amount", "data Amount = Int"))))));
     }
 
+    /**
+     * A {@code let} it published under the spelling of a declaration.
+     *
+     * <p>The other refusal about a module's own declarations, and the one an artifact can carry
+     * without any import line being involved: a published {@code let} travels with the declarations
+     * that cannot be read without it, and one written under a data's spelling is two things in the
+     * value namespace.
+     */
+    @Test
+    void aPublishedLetUnderTheSpellingOfADeclaration() {
+        assertEquals(new Readback.DeclarationRejection.ALetAndADataShareASpelling("Amount"),
+                theDeclaration(published(Map.of("app.order", publishing(
+                        Map.of("Amount", "data Amount = Decimal"),
+                        List.of("let Amount (n: Int) : Int = n"))))));
+    }
+
     /** A declaration taking a standard-library qualifier, which is no module's to shadow. */
     @Test
     void aDeclarationTakingTheLibraryQualifier() {
@@ -236,7 +252,7 @@ class EveryWayAnArtifactsImportLineCanFailIsNamedTest {
                             "another build",
                             "module " + name + " exposing ( " + module.exposed() + " )",
                             module.imports(), List.copyOf(module.declarations().keySet()),
-                            List.of(), List.of()),
+                            List.of(), module.helpers()),
                     null, null, null));
             module.declarations().forEach((declared, text) -> classes.put(name + "." + declared,
                     new PublishedClasses.Declarations(null, text, null, null)));
@@ -246,16 +262,25 @@ class EveryWayAnArtifactsImportLineCanFailIsNamedTest {
 
     /** A module whose lines are what is being read, exposing everything it declares. */
     private static Module importing(List<String> imports, Map<String, String> declarations) {
-        return new Module(String.join(", ", declarations.keySet()), imports, declarations);
+        return new Module(String.join(", ", declarations.keySet()), imports, declarations,
+                List.of());
     }
 
     /** One that exposes a name of its own choosing, which is how a module comes to expose what it
      *  does not declare and to declare what it does not expose. */
     private static Module exposing(String exposed, Map<String, String> declarations) {
-        return new Module(exposed, List.of(), declarations);
+        return new Module(exposed, List.of(), declarations, List.of());
     }
 
-    /** A module as it was published: what its header exposes, its import lines, and the text of
-     *  each declaration. */
-    private record Module(String exposed, List<String> imports, Map<String, String> declarations) {}
+    /** One carrying a published {@code let} beside its declarations, which is what an artifact
+     *  brings along for a declaration that cannot be read without it. */
+    private static Module publishing(Map<String, String> declarations, List<String> helpers) {
+        return new Module(String.join(", ", declarations.keySet()), List.of(), declarations,
+                helpers);
+    }
+
+    /** A module as it was published: what its header exposes, its import lines, the text of each
+     *  declaration, and the {@code let}s that travel with them. */
+    private record Module(String exposed, List<String> imports, Map<String, String> declarations,
+                          List<String> helpers) {}
 }

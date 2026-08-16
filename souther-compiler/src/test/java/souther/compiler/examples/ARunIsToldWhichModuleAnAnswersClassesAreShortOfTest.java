@@ -91,11 +91,37 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
     }
 
     /**
+     * A line refused for anything else is told to build the artifact again.
+     *
+     * <p>The control that holds the line where it is drawn. This stops the same reading at the same
+     * place as the one above — an import line of {@code example.root} that could not do its job,
+     * naming the same module — and the classes are not short of anything: the module is there and
+     * does not expose what the line asks for, which is the artifact being wrong about it. So the
+     * reason is the same sentence and what there is to do is not, and a run that answered the two
+     * alike would pass the test above by supplying a module for every refused line.
+     */
+    @Test
+    void aLineRefusedForAnythingElseIsToldToBuildTheArtifactAgain() {
+        Answering refused = answeringFrom(withSharedKeepingItsTypeToItself());
+
+        List<Message> told = noted(evaluated(refused).failures().get(0));
+
+        assertTrue(told.contains(
+                        new ModuleMessage.AnImportLineOfItsCannotBeReadHere("example.shared")),
+                "the same reason, naming the same module: " + told);
+        assertTrue(told.contains(
+                        new ExampleMessage.BuildWhatAnswersItAgainstThisRevision("example.root")),
+                "and a different thing to do, because there is nothing to supply: " + told);
+        assertTrue(told.stream().noneMatch(
+                        said -> said instanceof ExampleMessage.BuildWhatAnswersItAgainstAPathThatCarries),
+                "so nobody is sent to add a module to a path: " + told);
+    }
+
+    /**
      * An answer whose classes carry something wrong is told to build it again.
      *
-     * <p>The control for the one above. Both stop the same reading at the same place and only the
-     * artifact differs, so a run that said one thing about the two would pass the first test by
-     * saying it about everything.
+     * <p>The same control one level out, over the failure rather than over the line: this one never
+     * reaches an import line at all.
      */
     @Test
     void anArtifactThatIsWrongRatherThanShortIsToldToBeBuiltAgain() {
@@ -109,6 +135,27 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
         assertTrue(told.stream().noneMatch(
                         said -> said instanceof ExampleMessage.BuildWhatAnswersItAgainstAPathThatCarries),
                 "and nobody is sent to add a module to a path: " + told);
+    }
+
+    /** A build of the shared module that declares the type and does not expose it. */
+    private static final String KEEPING_IT = """
+            module example.shared exposing ( Note )
+            import String ( length )
+
+            data Title = String
+                invariant length(value) > 0
+
+            data Note = String
+            """;
+
+    /** The good build, with the shared module's classes taken from one that keeps its type to
+     *  itself — two builds, which is what an answer brought from elsewhere is. */
+    private static PublishedClasses withSharedKeepingItsTypeToItself() {
+        PublishedClasses both = declarationsOf(List.of(SHARED, ROOT));
+        PublishedClasses keeping = declarationsOf(List.of(KEEPING_IT));
+        return binaryName -> binaryName.equals("example.shared")
+                || binaryName.startsWith("example.shared.")
+                ? keeping.of(binaryName) : both.of(binaryName);
     }
 
     /** What the report says under what it says, which is what the reader is told. */
