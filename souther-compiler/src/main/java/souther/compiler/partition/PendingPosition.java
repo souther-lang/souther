@@ -57,9 +57,15 @@ sealed interface PendingPosition {
             // holds, a rule about what is inside is a second description of that same stop and the
             // first is the cause (issue #626).
             case StructuralInspection.Blocked blocked -> new Blocked(axis.path(), blocked.why());
-            // And a rule about this position's own values that went unread outranks nothing but the
-            // absence. It is not a division, so the position is still pending whatever a body says;
-            // it is a rule the model states, so an absence may not follow from this position.
+            // And a rule about this position's own values that went unread is said ahead of what a
+            // body's comparison came to, where both have something to say. Both are true of such a
+            // position and one line is written: the rule on the declaration is the one whose being
+            // read would give the position an axis, and a comparison relating it to another
+            // position would divide it no way however well it were read. So the reason that names
+            // a limit points at the limit, and the reason that names a shape is not reached.
+            //
+            // It outranks nothing else. This is not a division, so the position is still pending
+            // whatever a body says; it is a rule the model states, so an absence may not follow.
             case StructuralInspection.Leaf _ -> axis.unread() == null ? new Leaf(axis.path())
                     : new Blocked(axis.path(), axis.unread());
             // A position with no evidence that was never read. Nothing about a model follows from

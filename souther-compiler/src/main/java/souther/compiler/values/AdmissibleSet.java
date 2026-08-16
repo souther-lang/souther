@@ -23,8 +23,21 @@ package souther.compiler.values;
  * at.
  *
  * <p>{@link #approximation} is an upper bound in every row: everything it excludes is excluded.
- * That is what lets a reader narrow with it whatever the completeness beside it says, and it is
- * only under {@link Completeness.Complete} that the set is the whole of what the rules leave.
+ * What a reader may do with it follows from that alone, and the three are deliberately not the
+ * same list:
+ *
+ * <pre>
+ *     narrow with it            in every row — a class holding none of its values holds none
+ *     make classes out of it    wherever it is finite — the values are the ones the model named
+ *     call it exact             only under Complete
+ * </pre>
+ *
+ * <p>The middle one is the row to keep. A finite set read beside a rule this could not take in
+ * names the same values the model singled out, and the classes are the same classes; what the
+ * completeness beside it settles is what may be said about them afterwards — that a rule which went
+ * unread may yet refuse one — and not whether there are any. A reading that made classes only under
+ * {@code Complete} would leave the two spellings of one distinction measured differently again, the
+ * sum keeping its cases beside a rule nothing could read and the enumeration losing them.
  */
 public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
 
@@ -56,11 +69,13 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
         }
     }
 
-    private static final Completeness COMPLETE = new Completeness.Complete();
+    /** Every rule about the position was read, which is what a reader holding no reading of its own
+     * starts from. */
+    public static final Completeness READ_IN_FULL = new Completeness.Complete();
 
     /** The whole of what the rules leave the position. */
     public static AdmissibleSet complete(ValueSet values) {
-        return new AdmissibleSet(values, COMPLETE);
+        return new AdmissibleSet(values, READ_IN_FULL);
     }
 
     /** These values, with something about the position left unread. */

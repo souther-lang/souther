@@ -114,22 +114,35 @@ final class AdmissibleReading {
     /**
      * A rule this reading could not turn into a set of values, and why.
      *
-     * <p>The positions it names decide it, in one place, because the positions are what the two
-     * answers are about. A rule naming two of them says where one stands against the other —
-     * {@code startsAt < endsAt}, {@code a /= b}, a call over both — and a set of one position's
-     * values is not what a rule like that says, whatever shape it is written in. A rule naming one
-     * says something about that one, and this did not read the shape it says it in.
+     * <p>How far this got and not how many positions the rule mentions. A comparison of one
+     * position with another is a rule about a pair — {@code startsAt < endsAt}, {@code a /= b} —
+     * and a set of one position's values is not what it says; nothing about it was beyond this
+     * reading, which is what makes it its own answer rather than a shape nobody could read.
+     * Anything else is a form this reading does not take apart, whatever it mentions.
      *
-     * <p>Which is why the two are settled together rather than at each shape that gives up. Written
-     * per shape, the ordering comparisons fell through one path and the equalities another, and a
-     * relation between two positions was reported as a form nobody could read when it was written
-     * with a {@code <}.
+     * <p>Counting the positions instead reads {@code validPair(left, right)} as a relation, which
+     * it may not be: what is known there is that two positions appear in an expression this could
+     * not interpret, and the word it would be projected to says the rule relates them. The two
+     * cases are told apart by what was recognised, at the one place a reading gives up, so an
+     * ordering comparison and an equality answer alike — written per shape, {@code <} fell through
+     * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
     private AdmissibleValues<Term> unreadable(Core e) {
-        Set<Term> named = names(e);
-        return AdmissibleValues.unreadable(named, named.size() >= 2
+        return AdmissibleValues.unreadable(names(e), relatesTwoPositions(e)
                 ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
     }
+
+    /** Whether {@code e} is a comparison this reading recognised, of one position against another. */
+    private boolean relatesTwoPositions(Core e) {
+        return e instanceof Core.Binary b && COMPARES.contains(b.op())
+                && positionIn(b.left()) != null && positionIn(b.right()) != null;
+    }
+
+    /** The comparisons a rule relating two positions is written with. Everything else is read as a
+     * form rather than as a relation, since what a call or a pattern says about the positions in it
+     * is what this reading could not work out. */
+    private static final Set<Hir.BinOp> COMPARES = Set.of(Hir.BinOp.EQ, Hir.BinOp.NE,
+            Hir.BinOp.LT, Hir.BinOp.LE, Hir.BinOp.GT, Hir.BinOp.GE);
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */

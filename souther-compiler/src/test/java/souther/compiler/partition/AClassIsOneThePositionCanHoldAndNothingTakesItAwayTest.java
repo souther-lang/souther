@@ -124,6 +124,61 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 """, "classify"));
     }
 
+    /**
+     * And the classes stay in the order the type declares them, not the order the rule names them.
+     *
+     * <p>The classes are the position's, and a reader lists them as the model wrote them. Ordered
+     * by the rule, one partition would be written two ways depending on which value the author put
+     * first — in the report, and in the rows a generator offers from it.
+     */
+    @Test
+    void theClassesLeftAreInTheOrderTheTypeDeclaresThem() {
+        assertEquals(List.of("Prospecting", "Won"), declared("""
+                module g
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                data StageI = Stage
+                    invariant either = value == Won || value == Prospecting
+
+                data Accepted = { at: String }
+
+                behavior classify : (s: StageI) -> Accepted
+                """, "classify"));
+    }
+
+    /**
+     * A position that can hold none of its classes keeps them, rather than coming back divided no
+     * way.
+     *
+     * <p>Nothing left is not an empty partition: it is a value nothing can build, which is refused
+     * where the declaration is (E1013) and is why this model does not compile. What is asserted is
+     * that the reading of it does not answer with the one sentence this whole protocol is against —
+     * a position the model divides three ways, reported as one it divides no way, because the rules
+     * then refuse all three.
+     */
+    @Test
+    void aPositionThatCanHoldNoneOfItsClassesIsNotOneDividedNoWay() {
+        assertEquals(List.of("Prospecting", "Qualified", "Won"), declared("""
+                module g
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                data StageI = Stage
+                    invariant both = value == Qualified && value == Won
+
+                data Accepted = { at: String }
+
+                behavior classify : (s: StageI) -> Accepted
+                """, "classify"));
+    }
+
     /** A case the rule leaves is still a class, so the crossing takes away only what it must. */
     @Test
     void aRuleThatRefusesNothingLeavesEveryCase() {

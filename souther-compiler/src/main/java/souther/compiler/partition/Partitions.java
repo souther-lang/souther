@@ -636,8 +636,8 @@ public final class Partitions {
         // classes was never checked at all, and the one case the type exists to make loud was the
         // one that stayed quiet.
         PartitionInput input = PartitionInput.of(TypeView.of(type, symbols));
-        LocalPartition local = LocalPartition.of(input, path, symbols, placed);
-        LocalReading reading = local.reading();
+        LocalInspection inspected = LocalInspection.of(input, path, symbols, placed);
+        LocalReading reading = inspected.reading();
         for (UnreadRule each : reading.unread()) {
             if (unread.stream().noneMatch(had -> had.equals(each))) {
                 unread.add(each);
@@ -648,12 +648,13 @@ public final class Partitions {
         if (reading.admissible() != null && !reading.admissible().isEmpty()) {
             domains.put(term, reading.admissible());
         }
-        switch (local) {
+        switch (inspected.partition()) {
             case LocalPartition.Divided divided -> {
                 if (divided.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
                     uncertain.add(term);
                 }
-                out.add(new Axis(id, term, type, divided.classes(), divided.cuts().cuts()));
+                out.add(new Axis(id, term, type, divided.classes(), divided.cuts().cuts(),
+                        java.util.Set.of(), divided.completeness(), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what is under it.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
@@ -675,8 +676,9 @@ public final class Partitions {
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Pending pending ->
-                            out.add(Axis.pendingAt(id, term, type, pending,
-                                    local instanceof LocalPartition.Blocked blocked
+                            out.add(Axis.pendingAt(id, term, type,
+                                    reading.admitted().completeness(), pending,
+                                    inspected.partition() instanceof LocalPartition.Blocked blocked
                                             ? blocked.why() : null));
                 }
             }

@@ -89,7 +89,12 @@ public sealed interface Rules {
             // A name denoting no declaration. Nothing is written about it here because there is
             // nothing here to write it on — and what that costs the position is said by the reading
             // of its shape, which reports the type as one this could not interpret.
-            case null, default -> new NoneWritten();
+            //
+            // No `default` beside it. A declaration kind added later has to be classified here, and
+            // the classification is what says whether a rule can be written on one: read as
+            // `NoneWritten` by a default, an unknown kind would arrive as a value the model states
+            // no rule about, which is the sentence this whole reading exists to stop being cheap.
+            case null -> new NoneWritten();
         };
     }
 

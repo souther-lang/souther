@@ -221,6 +221,30 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, shaped, "left");
     }
 
+    /**
+     * And a call over two positions is a form this could not read, not a relation between them.
+     *
+     * <p>What is known of {@code validPair(left, right)} is that two positions appear in something
+     * this reading could not interpret. Whether the rule says anything about how they stand against
+     * each other is exactly what was not worked out, so counting the positions and calling it a
+     * relation says more than the reading found — and the word it is projected to tells the author
+     * their rule compares one position with another.
+     */
+    @Test
+    void aCallOverTwoPositionsIsAFormNotARelation() {
+        FieldDomains read = of("""
+                module demo
+
+                let validPair (a: String, b: String) = String.length(a) == String.length(b)
+
+                data Pair = { left: String, right: String }
+                    invariant paired = validPair(left, right)
+                """, "Pair");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "right");
+    }
+
     /** A rule this cannot read on its own leaves the position open, and says that it did. */
     @Test
     void aRuleThatCannotBeReadAtAllLeavesThePositionOpenAndSaysWhy() {

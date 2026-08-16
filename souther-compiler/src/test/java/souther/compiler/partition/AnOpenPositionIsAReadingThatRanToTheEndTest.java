@@ -17,6 +17,9 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
+import souther.compiler.values.AdmissibleSet;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -72,18 +75,23 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
 
     /** As a parameter is read: under the declaration the signature wrote, with what is written
      *  about it. */
-    private LocalPartition read(String type) {
+    private LocalInspection read(String type) {
         Type stands = Type.ref(named(type));
-        return LocalPartition.of(PartitionInput.of(TypeView.of(stands, symbols)),
+        return LocalInspection.of(PartitionInput.of(TypeView.of(stands, symbols)),
                 TermPath.of("x"), symbols,
                 new Partitions.Placed(named(type), Rules.of(stands, symbols)));
+    }
+
+    /** What the reading of {@code type} came to. */
+    private LocalPartition partitionOf(String type) {
+        return read(type).partition();
     }
 
     /** A type that states cases divides the position, and no line is drawn through them. */
     @Test
     void classesAndNoLineIsADivision() {
         LocalPartition.Divided found =
-                assertInstanceOf(LocalPartition.Divided.class, read("Stage"));
+                assertInstanceOf(LocalPartition.Divided.class, partitionOf("Stage"));
 
         assertEquals(List.of("Prospecting", "Qualified", "Won"),
                 found.classes().stream().map(PartitionClass::id).toList());
@@ -95,7 +103,7 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     @Test
     void aLineAndNoClassIsADivisionToo() {
         LocalPartition.Divided found =
-                assertInstanceOf(LocalPartition.Divided.class, read("Amount"));
+                assertInstanceOf(LocalPartition.Divided.class, partitionOf("Amount"));
 
         assertEquals(List.of(), found.classes());
         assertInstanceOf(CutEvidence.Present.class, found.cuts());
@@ -107,7 +115,7 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     @Test
     void theValuesARuleNamesAreADivisionAsWell() {
         LocalPartition.Divided found =
-                assertInstanceOf(LocalPartition.Divided.class, read("Gender"));
+                assertInstanceOf(LocalPartition.Divided.class, partitionOf("Gender"));
 
         assertEquals(2, found.classes().size(), found.classes().toString());
     }
@@ -116,8 +124,8 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
      *  is what licenses asking what is under it. */
     @Test
     void nothingWrittenAndReadToTheEndIsOpen() {
-        assertInstanceOf(LocalPartition.Open.class, read("Plain"));
-        assertInstanceOf(LocalPartition.Open.class, read("Slot"));
+        assertInstanceOf(LocalPartition.Open.class, partitionOf("Plain"));
+        assertInstanceOf(LocalPartition.Open.class, partitionOf("Slot"));
     }
 
     /** A rule written here that this could not read is neither. Nothing follows about the model,
@@ -125,7 +133,7 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     @Test
     void aRuleThisCouldNotReadIsNotAnOpenPosition() {
         LocalPartition.Blocked blocked =
-                assertInstanceOf(LocalPartition.Blocked.class, read("Email"));
+                assertInstanceOf(LocalPartition.Blocked.class, partitionOf("Email"));
 
         assertInstanceOf(BlockReason.UnreadValueRule.class, blocked.why());
     }
@@ -145,10 +153,27 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     /** An answer that says nothing cannot be written as one that says something. */
     @Test
     void anEmptyDivisionIsNotAnAnswer() {
-        LocalReading reading = read("Plain").reading();
+        assertThrows(IllegalArgumentException.class,
+                () -> new LocalPartition.Divided(List.of(), new CutEvidence.None(),
+                        AdmissibleSet.READ_IN_FULL));
+    }
+
+    /**
+     * And a reading short of the rules cannot be paired with an open position.
+     *
+     * <p>The sentence an absence is built on is "the model divides this position no way", and it
+     * may not be reached from a reading that could not take in a rule about the position. Refused
+     * where the pair is made, so no value carrying the contradiction exists — rather than left to
+     * a condition each place that builds one has to remember.
+     */
+    @Test
+    void aReadingShortOfTheRulesIsNotAnOpenPosition() {
+        LocalReading partial = read("Email").reading();
 
         assertThrows(IllegalArgumentException.class,
-                () -> new LocalPartition.Divided(reading, List.of(), new CutEvidence.None()));
+                () -> new LocalInspection(partial, new LocalPartition.Open()));
+        assertDoesNotThrow(
+                () -> new LocalInspection(read("Plain").reading(), new LocalPartition.Open()));
     }
 
     /** And neither can no lines at all be written as lines. */
