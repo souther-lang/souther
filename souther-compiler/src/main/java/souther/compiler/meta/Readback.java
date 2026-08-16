@@ -165,6 +165,22 @@ public sealed interface Readback<T> {
         record InvalidPublishedSyntax() implements Failure {}
 
         /**
+         * A name its declarations write reaches nothing here.
+         *
+         * <p>Its own arm, and not a kind of syntax that will not parse: what it published parses,
+         * its declarations are a set one module may have, and its import lines did their job. What
+         * is left is that a name written in it is answered by nothing this reading can see.
+         *
+         * <p>Which name, and why that one, is not carried. What resolution has when a name reaches
+         * nothing is a report — built for an author with the file open, quoting the line it was
+         * written on — and the line is in a text nobody holds. Classified into facts it would be
+         * the language's rules about names restated at this boundary, and a rule restated goes
+         * wrong on its own the day the language moves. So what this boundary says is what it can
+         * say and keep saying: the names of what was published do not resolve here.
+         */
+        record UnresolvedPublishedNames() implements Failure {}
+
+        /**
          * Its import lines could not do their job.
          *
          * <p>At least one, and the type says so: {@code first} is the one a reader with room for a
@@ -228,6 +244,12 @@ public sealed interface Readback<T> {
         /** It is named after a built-in {@code Option} case, which no module may declare
          *  (ADR-0035). */
         record BuiltInOptionCaseDeclared(String declaration) implements DeclarationRejection {}
+
+        /** It takes a standard-library qualifier, which is no module's to shadow. */
+        record TakesTheLibraryQualifier(String declaration) implements DeclarationRejection {}
+
+        /** A {@code let} and a data of the module are written under this one spelling. */
+        record ALetAndADataShareASpelling(String declaration) implements DeclarationRejection {}
     }
 
     /**
@@ -245,13 +267,36 @@ public sealed interface Readback<T> {
      */
     sealed interface Exposure {
 
-        /** The library module the line names. */
+        /** The module the line names. Every way a line can fail names one, which is why it is
+         *  asked of all of them. What the line was to bring in is not — a line naming a module
+         *  nothing carries brings in nothing, and an {@code as} clause claims no bare name at all —
+         *  so that is read off the arms that have one rather than answered emptily by the rest. */
         String from();
-
-        /** The name it was to bring in. */
-        String name();
 
         /** The standard library publishes no operation of that name in that module. */
         record NoSuchLibraryFunction(String from, String name) implements Exposure {}
+
+        /** The line names a module these classes do not carry. */
+        record NoSuchModule(String from) implements Exposure {}
+
+        /** The module is there and does not expose the name. */
+        record NotExposed(String from, String name) implements Exposure {}
+
+        /** The module is there and declares nothing of that name. */
+        record NoSuchName(String from, String name) implements Exposure {}
+
+        /** The line's alias is a qualifier something already answers to.
+         *
+         * @param takenBy what answers to it already — another alias's module, a module of these
+         *        classes, or the standard library */
+        record AliasTaken(String from, String alias, String takenBy) implements Exposure {}
+
+        /** Two of its lines bring one bare name in, and they do not bring the same thing.
+         *
+         * @param earlier the module named by the line that has the name already */
+        record BroughtTwice(String from, String name, String earlier) implements Exposure {}
+
+        /** The line brings in a name the module declares itself. */
+        record CollidesWithADeclaration(String from, String name) implements Exposure {}
     }
 }

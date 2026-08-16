@@ -817,7 +817,9 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "nothing was published, so nothing was established");
-        assertEquals(Agreement.Reason.NOTHING_PUBLISHED, said.reason());
+        assertInstanceOf(Readback.NotReady.SaysNothing.class, said.reading(),
+                "the classes say nothing about it, which is not their saying something unreadable");
+        assertEquals("example.stale", said.module());
         assertEquals(Agreement.Side.THE_ANSWER, said.side(),
                 "and it is the answer's classes that carry none");
     }
@@ -837,7 +839,10 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "a declaration was published and the class carrying it is not there");
-        assertEquals(Agreement.Reason.NOT_READABLE_HERE, said.reason());
+        // Which declaration, and not only that something could not be read: the reading found it
+        // and the answer carries what it found.
+        assertEquals(new Readback.Failure.DeclarationMissing("Title"),
+                assertInstanceOf(Readback.NotReady.Unreadable.class, said.reading()).why());
         assertEquals(Agreement.Side.THE_ANSWER, said.side());
     }
 

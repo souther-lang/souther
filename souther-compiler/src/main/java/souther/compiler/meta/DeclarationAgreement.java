@@ -77,14 +77,6 @@ public final class DeclarationAgreement {
                 .heldFrom(new ValueName.Behavior(module, behavior));
     }
 
-    /** Which of the two ways a module could not be read it was. */
-    private static Agreement unreadable(String module, PublishedUniverse universe,
-                                        Agreement.Side side) {
-        return new Agreement.Unreadable(module,
-                universe.declares(module) ? Agreement.Reason.NOT_READABLE_HERE
-                        : Agreement.Reason.NOTHING_PUBLISHED,
-                side);
-    }
 
     /**
      * The closure of what one behavior's crossing depends on, held across two builds as it is found.
@@ -168,16 +160,22 @@ public final class DeclarationAgreement {
             if (ourSide.containsKey(module)) {
                 return null;
             }
-            PublishedUniverse.Read here = mine.resolved(module);
-            if (here == null) {
-                return unreadable(module, mine, Agreement.Side.THE_MODULE_BEING_EVALUATED);
+            // What each side answered, taken as it was answered. Which of the ways a module could
+            // not be read it was used to be worked out here by asking the classes a second, coarser
+            // question, so a reader was told that what was published cannot be read here whatever
+            // had actually gone wrong — a dependency the answer's classes leave out reads the same
+            // as an artifact from another compiler.
+            Readback<PublishedUniverse.Read> here = mine.resolved(module);
+            if (here instanceof Readback.NotReady<PublishedUniverse.Read> notRead) {
+                return new Agreement.Unreadable(notRead,
+                        Agreement.Side.THE_MODULE_BEING_EVALUATED);
             }
-            PublishedUniverse.Read there = yours.resolved(module);
-            if (there == null) {
-                return unreadable(module, yours, Agreement.Side.THE_ANSWER);
+            Readback<PublishedUniverse.Read> there = yours.resolved(module);
+            if (there instanceof Readback.NotReady<PublishedUniverse.Read> notRead) {
+                return new Agreement.Unreadable(notRead, Agreement.Side.THE_ANSWER);
             }
-            ourSide.put(module, here);
-            theirSide.put(module, there);
+            ourSide.put(module, ((Readback.Ready<PublishedUniverse.Read>) here).value());
+            theirSide.put(module, ((Readback.Ready<PublishedUniverse.Read>) there).value());
             return null;
         }
 

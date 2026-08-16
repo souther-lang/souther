@@ -36,6 +36,8 @@ import souther.compiler.observe.Stage;
 import souther.compiler.meta.Agreement;
 import souther.compiler.meta.DeclarationAgreement;
 import souther.compiler.meta.PublishedClasses;
+import souther.compiler.meta.Readback;
+import souther.compiler.meta.ReadbackReasons;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -418,8 +420,7 @@ public final class ExampleVerifier {
                 // be refused rather than a state of this compiler. Saying nothing is not saying
                 // "this compile's own": read that way, an implementation would be out of the
                 // question by returning null, which is what the abstract accessor was for.
-                case null -> new Agreement.Unreadable(module.name(),
-                        Agreement.Reason.NO_ORIGIN_STATED, Agreement.Side.THE_ANSWER);
+                case null -> new Agreement.NoOriginStated(module.name());
                 case TheCompilesOwn _ -> null;
                 case Origin.Published published -> agreements
                         .computeIfAbsent(published.classes(), _ -> new LinkedHashMap<>())
@@ -447,27 +448,52 @@ public final class ExampleVerifier {
                             differs.declaration()))
                     .hint(new ExampleMessage.BuildWhatAnswersItAgainstThisRevision(differs.module()))
                     .build();
-            case Agreement.Unreadable unreadable -> Diagnostic.at(ex.pos())
+            case Agreement.NoOriginStated stated -> Diagnostic.at(ex.pos())
                     .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(target,
-                            unreadable.module()))
-                    // Which side could not be read decides what the reader is to do about it, so the
-                    // hint says whose declarations they are. Naming the answer's build for what this
-                    // compile could not read would send someone to rebuild what is not in question.
-                    .hint(switch (unreadable.side()) {
-                        case THE_ANSWER -> switch (unreadable.reason()) {
-                            case NOTHING_PUBLISHED ->
-                                    new ExampleMessage.ItsClassesCarryNoDeclarations(unreadable.module());
-                            case NOT_READABLE_HERE ->
-                                    new ExampleMessage.WhatItPublishedCannotBeReadHere(unreadable.module());
-                            case NO_ORIGIN_STATED ->
-                                    new ExampleMessage.ItDidNotSayWhichBuildItReadsBy(unreadable.module());
-                        };
-                        case THE_MODULE_BEING_EVALUATED ->
-                                new ExampleMessage.ThisCompileCannotReadItsOwnDeclarationsOf(
-                                        unreadable.module());
-                    })
+                            stated.module()))
+                    .hint(new ExampleMessage.ItDidNotSayWhichBuildItReadsBy(stated.module()))
+                    .build();
+            case Agreement.Unreadable unreadable -> whyItCannotBeTold(
+                    Diagnostic.at(ex.pos())
+                            .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(
+                                    target, unreadable.module()))
+                            // Which side could not be read decides what the reader is to do about
+                            // it, so the hint says whose declarations they are. Naming the answer's
+                            // build for what this compile could not read would send someone to
+                            // rebuild what is not in question.
+                            .hint(switch (unreadable.side()) {
+                                case THE_ANSWER -> switch (unreadable.reading()) {
+                                    case Readback.NotReady.SaysNothing<?> _ ->
+                                            new ExampleMessage.ItsClassesCarryNoDeclarations(
+                                                    unreadable.module());
+                                    case Readback.NotReady.Unreadable<?> _ ->
+                                            new ExampleMessage.WhatItPublishedCannotBeReadHere(
+                                                    unreadable.module());
+                                };
+                                case THE_MODULE_BEING_EVALUATED ->
+                                        new ExampleMessage.ThisCompileCannotReadItsOwnDeclarationsOf(
+                                                unreadable.module());
+                            }),
+                    unreadable.reading())
                     .build();
         };
+    }
+
+    /**
+     * The reading's own reason, under what the reader was told about whose declarations they are.
+     *
+     * <p>Said here and not left out. What a run has to go on when an answer cannot be held to this
+     * module is why its declarations could not be read — a dependency the answer's classes leave
+     * out and an artifact from another compiler are two things to do something about, and a reader
+     * told only that what was published cannot be read here has been given neither. Nothing is added
+     * for a set of classes that carry nothing: what would be said is that they carry nothing, which
+     * the hint above it already says.
+     */
+    private static Diagnostic.Builder whyItCannotBeTold(Diagnostic.Builder said,
+                                                        Readback.NotReady<?> reading) {
+        return reading instanceof Readback.NotReady.Unreadable<?>(String _, Readback.Failure why)
+                ? ReadbackReasons.said(said, why)
+                : said;
     }
 
     /** The injected behavior named {@code name} in this module — a valid target for a fake; null if

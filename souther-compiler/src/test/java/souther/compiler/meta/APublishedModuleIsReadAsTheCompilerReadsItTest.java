@@ -9,10 +9,9 @@ import souther.compiler.types.ValueName;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
@@ -46,9 +45,9 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     /** A bare name an import brought in is read as what it stands for. */
     @Test
     void aBareNameAnImportBroughtInIsReadAsWhatItStandsFor() {
-        Hir.Module read = universeOf(LIB).resolved("lib.text").module();
+        Hir.Module read = readingOf(universeOf(LIB), "lib.text",
+                "the module is published and this compiler reads it").module();
 
-        assertNotNull(read, "the module is published and this compiler reads it");
         ValueName calls = calledByTheInvariantOf(read, "Title");
         assertInstanceOf(ValueName.Stdlib.class, calls,
                 "`length` was brought in by an import and stands for a standard-library function");
@@ -67,10 +66,9 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         Map<String, byte[]> both = Compiler.compileModules(List.of(LIB, QUALIFYING));
         PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(both::get));
 
-        PublishedUniverse.Read uses = universe.resolved("app.uses");
+        readingOf(universe, "app.uses", "the module names a type of another and is read");
 
-        assertNotNull(uses);
-        assertNotNull(universe.resolved("lib.text"),
+        readingOf(universe, "lib.text",
                 "the module its field's type is declared by was read, with nothing importing it");
     }
 
@@ -82,13 +80,20 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         assertSame(universe.resolved("lib.text"), universe.resolved("lib.text"));
     }
 
-    /** Classes that declare nothing of that name answer with nothing. */
+    /**
+     * Classes that declare nothing of that name say so as that.
+     *
+     * <p>Which of the two absences it is comes off the answer. It used to be a null, with whether
+     * these classes carry the name at all asked of them again afterwards — so a name they say
+     * nothing about and a name they carry unreadably were told apart by a second question rather
+     * than by what the reading found.
+     */
     @Test
     void whatIsNotPublishedIsNotRead() {
         PublishedUniverse universe = universeOf(LIB);
 
-        assertNull(universe.resolved("nothing.here"));
-        org.junit.jupiter.api.Assertions.assertFalse(universe.declares("nothing.here"));
+        assertInstanceOf(Readback.NotReady.SaysNothing.class, universe.resolved("nothing.here"),
+                "these classes carry nothing of that name, which is not carrying it unreadably");
     }
 
     /** A module whose invariant calls a helper another module published. */
@@ -120,7 +125,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
         Map<String, byte[]> classes = Compiler.compileModules(List.of(OFFERING, READING));
         PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get));
 
-        assertNotNull(universe.resolved("example.order"),
+        readingOf(universe, "example.order",
                 "its invariant calls a helper `example.money` published, which the import brings in");
     }
 
@@ -151,9 +156,15 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
                 "the module being withheld is one this set had");
         PublishedUniverse universe = PublishedUniverse.of(new ClassFileDeclarations(classes::get));
 
-        assertNull(universe.resolved("example.line"),
-                "its field's type is declared by a module nothing here carries");
-        org.junit.jupiter.api.Assertions.assertFalse(universe.declares("example.money"),
+        Readback.Failure why = refusalOf(universe, "example.line");
+
+        Readback.Failure.InvalidExposure lines = assertInstanceOf(
+                Readback.Failure.InvalidExposure.class, why,
+                "its import line names a module these classes do not carry");
+        assertEquals(new Readback.Exposure.NoSuchModule("example.money"), lines.first(),
+                "and the reason says which module, rather than the module being unreadable for"
+                        + " nothing anybody can name");
+        assertInstanceOf(Readback.NotReady.SaysNothing.class, universe.resolved("example.money"),
                 "which is a name these classes say nothing about, not one they cannot read");
     }
 
@@ -181,12 +192,31 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
                 "pub.naming.Note", dataClass("data Note = { s: pub.twice.Same }"));
         PublishedUniverse universe = PublishedUniverse.of(n -> PublishedClasses.carrying(published.get(n)));
 
-        assertNull(universe.resolved("pub.twice"), "`Same` is declared twice, so it is not indexed");
+        assertInstanceOf(Readback.Failure.InvalidDeclarations.class,
+                refusalOf(universe, "pub.twice"),
+                "`Same` is declared twice, so it is not indexed");
 
-        assertNull(org.junit.jupiter.api.Assertions.assertDoesNotThrow(
-                        () -> universe.resolved("pub.naming"),
-                        "the module naming it is read back as an absence, not as a raise"),
-                "its field's type is declared by a module this reader cannot read");
+        Readback<PublishedUniverse.Read> naming = assertDoesNotThrow(
+                () -> universe.resolved("pub.naming"),
+                "the module naming it is read back as an absence, not as a raise");
+        assertInstanceOf(Readback.Failure.UnresolvedPublishedNames.class,
+                assertInstanceOf(Readback.NotReady.Unreadable.class, naming).why(),
+                "its field's type is declared by a module this reader cannot read, so the name"
+                        + " reaches nothing");
+    }
+
+    /** {@code module} as this universe read it, which is what a reading that got to the end
+     *  answers with. */
+    private static PublishedUniverse.Read readingOf(PublishedUniverse universe, String module,
+                                                    String why) {
+        return assertInstanceOf(PublishedUniverse.Read.class,
+                assertInstanceOf(Readback.Ready.class, universe.resolved(module), why).value());
+    }
+
+    /** Why {@code module} could not be read, as the arm rather than as an absence. */
+    private static Readback.Failure refusalOf(PublishedUniverse universe, String module) {
+        return assertInstanceOf(Readback.NotReady.Unreadable.class,
+                universe.resolved(module)).why();
     }
 
     /** A `$Module` class carrying {@code types}, as another build would have stamped it. */

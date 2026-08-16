@@ -103,8 +103,13 @@ public sealed interface ModuleMessage extends Message {
     record WhatItPublishedIsNotSourceThisCompilerParses() implements ModuleMessage, Supporting {}
 
     /** Why: one of its import lines is not one this compiler can read. Which of the ways a line can
-     *  fail is the publishing project's to see in its own build; here they come to the same thing. */
-    record AnImportLineOfItsCannotBeReadHere(String name, String from) implements ModuleMessage, Supporting {}
+     *  fail is the publishing project's to see in its own build; here they come to the same thing,
+     *  so what is said is the module the line names and not what it was to bring in — which some of
+     *  the ways do not have. */
+    record AnImportLineOfItsCannotBeReadHere(String from) implements ModuleMessage, Supporting {}
+
+    /** Why: a name its declarations write reaches nothing here. */
+    record ANameItPublishedReachesNothingHere() implements ModuleMessage, Supporting {}
 
     /** Why: what it declares is not a set of declarations one module may have. Which rule it breaks
      *  is the publishing project's to see in its own build; here they come to the same thing. */
