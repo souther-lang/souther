@@ -6,6 +6,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -65,7 +66,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
      */
     @Test
     void anUnreadRuleStatedBesideAnotherNarrowsNothing() {
-        AdmissibleValues<String> both = says(VALUE, A).meet(AdmissibleValues.unreadable(Set.of()));
+        AdmissibleValues<String> both = says(VALUE, A)
+                .meet(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
         assertEquals(ValueSet.just(A), both.at(VALUE));
         assertFalse(both.isBottom());
         assertTrue(both.speaksFor(VALUE));
@@ -75,7 +77,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     @Test
     void anUnreadRuleNamingAPositionLeavesItSpokenForByNothing() {
         AdmissibleValues<String> both =
-                says(VALUE, A).meet(AdmissibleValues.unreadable(Set.of(OTHER)));
+                says(VALUE, A).meet(
+                        AdmissibleValues.unreadable(Set.of(OTHER), UnreadReason.FORM_NOT_READ));
         assertTrue(both.speaksFor(VALUE));
         assertFalse(both.speaksFor(OTHER));
         assertEquals(ValueSet.ANY, both.at(OTHER));
@@ -92,7 +95,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     @Test
     void anUnreadAlternativeTakesBackWhatTheOtherSaid() {
         AdmissibleValues<String> either =
-                says(VALUE, A).join(AdmissibleValues.unreadable(Set.of()));
+                says(VALUE, A)
+                        .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
         assertEquals(ValueSet.ANY, either.at(VALUE));
         assertFalse(either.isBottom());
     }
@@ -105,9 +109,11 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
      */
     @Test
     void aPositionLeftOpenByAnUnreadAlternativeIsNotOneNothingWasSaidAbout() {
-        assertFalse(says(VALUE, A).join(AdmissibleValues.unreadable(Set.of())).speaksFor(VALUE));
-        assertFalse(AdmissibleValues.<String>unreadable(Set.of()).join(says(VALUE, A))
+        assertFalse(says(VALUE, A)
+                .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ))
                 .speaksFor(VALUE));
+        assertFalse(AdmissibleValues.<String>unreadable(Set.of(), UnreadReason.FORM_NOT_READ)
+                .join(says(VALUE, A)).speaksFor(VALUE));
     }
 
     /** A position neither alternative spoke about is open because neither said anything, which this
@@ -138,5 +144,49 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
         assertEquals(ValueSet.ANY, AdmissibleValues.<String>top().at(VALUE));
         assertTrue(AdmissibleValues.<String>top().speaksFor(VALUE));
         assertFalse(AdmissibleValues.<String>top().isBottom());
+    }
+
+    /**
+     * What stopped a rule travels with the position it named.
+     *
+     * <p>Recovered afterwards, it could only be recovered from the rules again — and the reading
+     * that could tell a rule relating two positions from one written in a form it does not take
+     * apart is this one, at the moment it gave up.
+     */
+    @Test
+    void whatStoppedARuleIsHeldWithThePositionItNamed() {
+        AdmissibleValues<String> read =
+                AdmissibleValues.unreadable(Set.of(VALUE), UnreadReason.RELATES_TWO_POSITIONS);
+
+        assertEquals(UnreadReason.RELATES_TWO_POSITIONS, read.whyUnread(VALUE));
+        assertNull(read.whyUnread(OTHER), "a position no rule named is one nothing stopped");
+    }
+
+    /**
+     * A position an alternative takes back is spoiled by what stopped the <em>other</em> branch.
+     *
+     * <p>The position is open because a rule over there went unread. Naming this branch's reason —
+     * it has none, having been read in full — would send a reader to the half of the disjunction
+     * that was understood.
+     */
+    @Test
+    void aPositionTakenBackByAnAlternativeSaysWhatStoppedThatAlternative() {
+        AdmissibleValues<String> either = says(VALUE, A)
+                .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
+
+        assertEquals(UnreadReason.FORM_NOT_READ, either.whyUnread(VALUE));
+    }
+
+    /** And where a rule already named the position, that is what is said: a rule written about this
+     *  position is nearer than a branch that widened it from outside. */
+    @Test
+    void aRuleThatNamedThePositionOutranksTheBranchThatWidenedIt() {
+        AdmissibleValues<String> either =
+                AdmissibleValues.<String>unreadable(Set.of(VALUE),
+                                UnreadReason.RELATES_TWO_POSITIONS)
+                        .meet(says(OTHER, A))
+                        .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
+
+        assertEquals(UnreadReason.RELATES_TWO_POSITIONS, either.whyUnread(VALUE));
     }
 }

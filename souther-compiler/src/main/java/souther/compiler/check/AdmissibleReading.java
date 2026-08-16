@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -97,7 +98,7 @@ final class AdmissibleReading {
                 return comparison(b, (b.op() == Hir.BinOp.EQ) == positive);
             }
         }
-        return AdmissibleValues.unreadable(names(e));
+        return AdmissibleValues.unreadable(names(e), UnreadReason.FORM_NOT_READ);
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */
@@ -107,19 +108,39 @@ final class AdmissibleReading {
             // `"A" == value` says what `value == "A"` says.
             read = sided(b.right(), b.left(), states);
         }
-        return read != null ? read : AdmissibleValues.unreadable(names(b));
+        return read != null ? read : AdmissibleValues.unreadable(names(b), whyNot(b));
+    }
+
+    /**
+     * Why a comparison this reading recognised said nothing about the positions it names.
+     *
+     * <p>Told apart at the point of failure, where both sides are still in hand. A comparison of two
+     * positions is a rule about a pair, and nothing about it was beyond this reading — a set of one
+     * position's values is simply not what it says. A comparison against anything else is a form
+     * this reading does not take apart, which is a fact about the reading. Recovered afterwards from
+     * the positions alone, the two would be one answer.
+     */
+    private UnreadReason whyNot(Core.Binary b) {
+        return positionIn(b.left()) != null && positionIn(b.right()) != null
+                ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ;
     }
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */
     private AdmissibleValues<Term> sided(Core where, Core what, boolean states) {
-        Term position = terms.atomOf(where, at);
-        if (position == null) {
-            position = terms.bodyKey(where, at);
-        }
+        Term position = positionIn(where);
         Type type = position == null ? null : byName.get(position);
         Value value = type == null ? null : valueOf(what);
         return value == null ? null : AdmissibleValues.at(position, admits(value, states, type));
+    }
+
+    /** The position {@code e} is, or null where it is not one of the positions being read for. */
+    private Term positionIn(Core e) {
+        Term named = terms.atomOf(e, at);
+        if (named == null) {
+            named = terms.bodyKey(e, at);
+        }
+        return named != null && byName.containsKey(named) ? named : null;
     }
 
     /**
