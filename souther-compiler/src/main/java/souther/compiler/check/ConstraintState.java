@@ -47,12 +47,12 @@ import java.util.Set;
  * later is a component of this and an arm of {@link #isBottom}, and every such reader has it without
  * being touched.
  *
- * <p>One reader still asks the numbers alone, and it is the other question. Whether a path is
- * reached — whether the conditions guarding a construction can all hold — is asked of
- * {@code numbers} where the walk reads a branch, so a path made impossible by predicates alone is
- * walked and what stands on it is reported. That is a mistake of the same shape as the one above,
- * and it is not this one: what it moves is which constructions are reported at, and a change to
- * that is its own change with its own reason to make.
+ * <p>Two questions are asked here and they are one answer. Whether any value of a declaration
+ * exists, and whether a path a construction stands on is reached, are both whether anything at all
+ * satisfies what has been taken in — so both are {@link #isBottom}, under the name each context
+ * reads it by ({@link FieldDomains#infeasible}, {@link Known#reachesNothing}). They were once two
+ * readers of two domains, and each of them answered that there was something wherever the domain it
+ * happened to ask had nothing to say.
  */
 record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
                        AdmissibleValues<Term> values, OrderedIntervals<Term> ordered) {

@@ -50,9 +50,10 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
         }
     }
 
-    /** The relations between numbers this state holds. Handed out because a bound is read off an
-     * interval and off nothing else; whether anything satisfies the state at all is
-     * {@link ConstraintState#isBottom} and is not assembled from this. */
+    /** The relations between numbers this state holds. Handed out for what only an interval can
+     * answer — a bound is read off one and off nothing else — and for nothing about the state as a
+     * whole. Whether a value exists and whether a path is reached are both
+     * {@link ConstraintState#isBottom}, and neither is assembled from this. */
     NumericDomain<Term> numbers() {
         return constraints.numbers();
     }
@@ -60,6 +61,23 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
     /** The predicates this state has settled, read the same way and for the same reason. */
     PredicateFacts facts() {
         return constraints.facts();
+    }
+
+    /**
+     * Whether the conditions that hold here cannot all hold, so nothing stands where this does.
+     *
+     * <p>Asked of the whole state ({@link ConstraintState#isBottom}) and not of a domain, because a
+     * clause reaches whatever domain has a word for it: guards that settle a predicate both ways
+     * leave the predicates contradictory and every number untouched, and a reader that asked the
+     * numbers would walk that path and report the construction standing on it. That is a report
+     * about a value the program never builds.
+     *
+     * <p>No flag of its own, for the same reason. A second record of the answer is a second thing to
+     * keep in step, and the first domain added without touching it would put the two out of
+     * agreement — which is the shape this question already came apart along once.
+     */
+    boolean reachesNothing() {
+        return constraints.isBottom();
     }
 
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value

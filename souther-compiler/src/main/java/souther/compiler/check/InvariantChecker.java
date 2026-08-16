@@ -935,6 +935,14 @@ public final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     private void walk(Core e, Known k, Denotations at, int depth) {
+        // Nothing reaches here, so there is nothing here to be about. Asked once, at the one door
+        // every reading goes through: a branch, an arm, a departure, an attempt's success and a
+        // closure's body are each walked with something further settled, and each of them is a place
+        // the conditions can come to contradict. Asked at the reports instead, a reading added to
+        // this walk would be one more that has to remember.
+        if (k.reachesNothing()) {
+            return;
+        }
         Core.LetIn standing = bindingInValueIn(e);
         if (standing != null) {
             // A call this analysis expanded is a binding holding what it was given, and where that
@@ -1641,12 +1649,10 @@ public final class InvariantChecker {
         }
     }
 
-    /** What reading {@code e} finds, or nothing where the conditions along the way contradict — a
-     * branch nothing reaches finds nothing, and what is not there violates nothing. */
+    /** What reading {@code e} finds. A branch nothing reaches finds nothing, which is the walk's
+     * answer ({@link Known#reachesNothing}) and not a second one taken here: this collects what the
+     * reading found and decides nothing about whether there was anything to find. */
     private Map<Occurrence, Reported> reading(Core e, Known k, Denotations at, int depth) {
-        if (k.numbers().isBottom()) {
-            return Map.of();
-        }
         Capture outer = capturing;
         Capture mine = Capture.empty();
         capturing = mine;
