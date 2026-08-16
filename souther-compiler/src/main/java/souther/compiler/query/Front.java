@@ -11,6 +11,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.Scoping;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
@@ -489,9 +490,10 @@ public final class Front {
      * A module of this compilation, wherever it came from: declared by a source, or read off the
      * path. Absent when nothing here has it, which is what an import of an unknown module sees.
      *
-     * <p>A source module reaches here with its qualified behavior references already bound to
-     * imports ({@link Names.Bound}); a path module has none to bind, because a behavior reference
-     * is not published.
+     * <p>A module reaches here as it was written, with the qualified behavior references it names
+     * still qualified. Which import each of them asks for is worked out where the scope is
+     * assembled ({@link souther.compiler.check.Scoping#importsOf}), so nothing between a module
+     * being read and being answered here rewrites what it says.
      */
     public record Available(String name) implements Key<Ast.Module> {
         @Override
@@ -668,11 +670,8 @@ public final class Front {
     /**
      * The behavior names a module declares.
      *
-     * <p>Read where a {@code >->} stage or a {@code depends on} is resolved, which is why it asks
-     * {@link Exposed} rather than {@link Available}: binding a module's own stages is what
-     * {@link Available} does, and a module whose stage names another module's behavior would
-     * otherwise be waiting on itself. Nothing between the two changes which behaviors a module
-     * declares.
+     * <p>Its own question for the reason {@link Exposes} is: what reads this wants one line of a
+     * module's header, and that survives almost every edit to the module itself.
      */
     public record Behaviors(String name) implements Key<Set<String>> {
         @Override
@@ -687,7 +686,7 @@ public final class Front {
                 FromPath.OnThePath fromPath = onThePath(db, name);
                 m = fromPath == null ? null : fromPath.module();
             }
-            return m == null ? Answer.absent() : Answer.of(Names.behaviorNames(m));
+            return m == null ? Answer.absent() : Answer.of(Scoping.behaviorNames(m));
         }
     }
 

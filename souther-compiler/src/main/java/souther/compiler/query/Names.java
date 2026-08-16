@@ -5,6 +5,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclaredNames;
+import souther.compiler.check.ModuleUniverse;
+import souther.compiler.check.Scoping;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
@@ -182,52 +184,6 @@ public final class Names {
         };
     }
 
-    /**
-     * The behaviors a module can name without a qualifier: its own, and the ones its imports bring
-     * in, each under the bare name it is reached by.
-     *
-     * <p>{@code whole} is false when an import could not be followed, so a name that is not here may
-     * still have come from somewhere — the difference between "nothing declares this" and "this
-     * compilation cannot say".
-     */
-    public record BehaviorsInScope(String name) implements Key<BehaviorsInScope.Of> {
-
-        public record Of(Map<String, ValueName.Behavior> byName, boolean whole) {}
-
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Of> compute(Db db) {
-            Ast.Module m = db.ask(new Front.Exposed(name)).value();
-            if (m == null) {
-                return Answer.absent();
-            }
-            Map<String, ValueName.Behavior> byName = new LinkedHashMap<>();
-            for (String own : behaviorNames(m)) {
-                byName.put(own, new ValueName.Behavior(name, own));
-            }
-            boolean whole = true;
-            for (Ast.Import imp : m.imports()) {
-                Answer<Set<String>> declared = db.ask(new Front.Behaviors(imp.module()));
-                if (!declared.present()) {
-                    whole = false;
-                    continue;
-                }
-                for (String imported : imp.names()) {
-                    if (declared.value().contains(imported)) {
-                        // a name this module declares itself is the one it means
-                        byName.putIfAbsent(imported,
-                                new ValueName.Behavior(imp.module(), imported));
-                    }
-                }
-            }
-            return Answer.of(new Of(Ordered.map(byName), whole));
-        }
-    }
-
     /** What a module declares, by the name written there — checked once, here, because the names
      * are the same at every stage and every later registry reads them through this. */
     public record Declarations(String name) implements Key<Map<String, Ast.Def>> {
@@ -351,15 +307,18 @@ public final class Names {
     }
 
     /**
-     * What each bare name means in a module: its own declarations plus the ones its imports bring
-     * in, and which module each {@code import ... as} alias names.
+     * What the names a module writes mean here: what each bare name denotes in either namespace,
+     * which module each {@code import ... as} alias names, and what an import line could not do.
+     *
+     * <p>Worked out by {@link Scoping}, against this compilation as a {@link ModuleUniverse}. This
+     * is where a compilation reads the result, so this is where a refusal becomes something to tell
+     * the author — the assembly itself says nothing to anyone, which is what lets a reader that is
+     * only reading a module use the same rules.
      *
      * <p>Every import is validated here and nowhere else — that it names a module this compilation
      * has, that the module exposes what is asked for, that no two imports bring in the same name.
      */
-    public record Imports(String name) implements Key<Imports.Of> {
-
-        public record Of(Map<String, Denotation> scope, Map<String, String> aliases) {}
+    public record ModuleScope(String name) implements Key<Scoping.Scoped> {
 
         @Override
         public String module() {
@@ -367,119 +326,68 @@ public final class Names {
         }
 
         @Override
-        public Answer<Of> compute(Db db) {
-            Answer<Ast.Module> module = db.ask(new Front.Available(name));
-            if (!module.present()) {
+        public Answer<Scoping.Scoped> compute(Db db) {
+            Scoping.Subject subject = CompilationUniverse.subject(db, name);
+            if (subject == null) {
                 return Answer.absent();
             }
-            Ast.Module m = module.value();
-            List<Ast.Import> imports = importsOf(db, name);
-            Registry<Ast.Def> registry = writtenRegistry(db);
-            Map<String, Denotation> scope = new HashMap<>();
-            for (Ast.Def own : registry.declaredIn(name).values()) {
-                scope.put(own.name(),
-                        new Denotation.Denotes(TypeSymbols.declared(own.declaredKey())));
-            }
-            Set<String> ownNames = Ordered.set(scope.keySet());
-            // Which import brought each name in, so a second one naming it is reported against that
-            // import rather than against a local definition the module may not have.
-            Map<String, Ast.Import> from = new HashMap<>();
-            Map<String, String> aliases = new HashMap<>();
-            Set<String> broken = db.ask(new Front.Broken()).value();
-            // An import line that is wrong is reported and skipped, and the ones that are fine still
-            // bring in what they bring in. A half-typed import is as ordinary as a half-typed name,
-            // and taking the whole scope away would leave every name in the file meaning nothing —
-            // which is when an author most wants to be told what one means.
+            Scoping.Scoped scoped = Scoping.of(CompilationUniverse.over(db), subject);
             List<Report> reports = new ArrayList<>();
-            for (Ast.Import imp : imports) {
-                if (broken != null && broken.contains(imp.module())) {
-                    nameless(scope, imp.names());
-                    continue;   // the file that will not parse reports its own error
-                }
-                Ast.Module src = db.ask(new Front.Available(imp.module())).value();
-                if (src == null || !db.ask(new Declarations(imp.module())).present()) {
-                    // Not being part of this compilation and being part of it while saying nothing
-                    // usable are different things, and only the first is the importer's business.
-                    // Whatever is wrong with a module that is here is reported on its own source;
-                    // saying it again here sends the author to a file that is fine.
-                    if (!registry.moduleNames().contains(imp.module())) {
-                        reports.add(unknownModule(imp));
-                    }
-                    nameless(scope, imp.names());
-                    continue;
-                }
-                if (imp.alias() != null) {
-                    Report clash = aliasTaken(imp, aliases, registry.moduleNames());
-                    if (clash != null) {
-                        reports.add(clash);
-                        nameless(scope, imp.names());
-                        continue;   // an alias that names two things names neither here
-                    }
-                    aliases.put(imp.alias(), imp.module());
-                }
-                Set<String> exposed = registry.exposedBy(imp.module());
-                for (String imported : imp.names()) {
-                    if (!exposed.contains(imported)) {
-                        reports.add(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleDoesNotExposeIt(imported, imp.module()))
-                                        .at(imp.pos()).build()));
-                        nameless(scope, List.of(imported));
-                        continue;
-                    }
-                    // asked one name at a time: what else that module declares is not what this
-                    // import is about, and reading it would make this module depend on it
-                    TypeSymbol brought = registry.identify(new TypeKey(imp.module(), imported));
-                    if (brought == null) {
-                        // a behavior import is resolved separately, and so is a value or a helper:
-                        // none of them is a data Def, so none goes into the symbols map
-                        if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
-                            continue;
-                        }
-                        reports.add(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleDeclaresNoSuchName(imported, imp.module()))
-                                        .at(imp.pos()).build()));
-                        nameless(scope, List.of(imported));
-                        continue;
-                    }
-                    Denotation standingIn = scope.get(imported);
-                    if (standingIn instanceof Denotation.Denotes) {
-                        reports.add(importCollision(imported, imp,
-                                ownNames.contains(imported) ? null : from.get(imported)));
-                        continue;   // the first claim on the name keeps it
-                    }
-                    // A name a failed import line only stood in for is not a claim on it: an import
-                    // that can do the job takes it, and says nothing about the line that could not.
-                    scope.put(imported, new Denotation.Denotes(brought));
-                    from.put(imported, imp);
-                }
+            for (Scoping.Refusal refusal : scoped.refused()) {
+                reports.add(said(refusal));
             }
-            if (!reports.isEmpty()) {
-                return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)), reports);
-            }
-            return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)));
+            return reports.isEmpty() ? Answer.of(scoped) : Answer.of(scoped, reports);
         }
     }
 
     /**
-     * Puts {@code names} in scope as names that denote nothing.
+     * What to tell the author about a name the scope could not hold.
      *
-     * <p>An import line that could not do its job was reported on that line. A name it was to bring
-     * in is in scope all the same, denoting nothing — so a use of it takes the error type and says
-     * nothing more. Leaving it out of scope instead would report an unknown type at every use, which
-     * sends the author to a field when what is wrong is the import.
+     * <p>A switch over every refusal there is, with nothing to fall through to: a rule added to the
+     * assembly is a rule this compilation has to have something to say about, and one that reached
+     * here with nothing to say would be a name quietly denoting nothing.
      */
-    private static void nameless(Map<String, Denotation> scope, List<String> names) {
-        for (String written : names) {
-            scope.putIfAbsent(written, Denotation.STANDS_FOR_NOTHING);
-        }
+    private static Report said(Scoping.Refusal refusal) {
+        return switch (refusal) {
+            case Scoping.Refusal.NoSuchModule(Ast.Import imp) ->
+                    Report.raised(Diagnostic.say(new ModuleMessage.UnknownModule(imp.module()))
+                            .at(imp.pos()).build());
+            case Scoping.Refusal.NotExposed(Ast.Import imp, String named) ->
+                    Report.raised(Diagnostic
+                            .say(new ModuleMessage.TheModuleDoesNotExposeIt(named, imp.module()))
+                            .at(imp.pos()).build());
+            case Scoping.Refusal.NoSuchName(Ast.Import imp, String named) ->
+                    Report.raised(Diagnostic
+                            .say(new ModuleMessage.TheModuleDeclaresNoSuchName(named, imp.module()))
+                            .at(imp.pos()).build());
+            case Scoping.Refusal.AliasTaken(Ast.Import imp, String takenBy) ->
+                    Report.raised(Diagnostic
+                            .say(new ModuleMessage.TheAliasIsAlreadyTaken(imp.alias(), takenBy))
+                            .at(imp.pos())
+                            .hint(new ModuleMessage.AnAliasIsANameNothingElseAnswersTo()).build());
+            case Scoping.Refusal.BroughtTwice(Ast.Import imp, String named, Ast.Import earlier) ->
+                    broughtTwice(named, imp, earlier);
+            case Scoping.Refusal.CollidesWithADeclaration(Ast.Import imp, String named) ->
+                    Report.raised(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(named))
+                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName()).build());
+            case Scoping.Refusal.TakesTheLibraryQualifier(Ast.Def def) ->
+                    Report.raised(Diagnostic.at(def.pos())
+                            .say(new DataMessage.ADataTakesTheStandardLibraryQualifier(def.name()))
+                            .build());
+            case Scoping.Refusal.ALetAndADataShareASpelling(Ast.FnDef fn) ->
+                    Report.raised(Diagnostic.at(fn.pos())
+                            .say(new DataMessage.ALetAndADataShareOneSpelling(fn.name())).build());
+        };
     }
 
     /** What names mean in a module, over the declaration world {@code registry} reads. */
     private static Answer<Symbols> symbols(Db db, String name, Registry<Hir.Def> registry) {
-        Answer<Imports.Of> imports = db.ask(new Imports(name));
-        if (!imports.present()) {
+        Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
+        if (!scoped.present()) {
             return Answer.absent();
         }
-        return Answer.of(Symbols.of(name, registry, imports.value().scope(),
-                imports.value().aliases()));
+        return Answer.of(scoped.value().symbolsOver(registry));
     }
 
     /** What names mean in a module over the declarations as resolution left them — what
@@ -496,12 +404,11 @@ public final class Names {
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
      * against. */
     static Answer<SyntaxSymbols> writtenSymbols(Db db, String name) {
-        Answer<Imports.Of> imports = db.ask(new Imports(name));
-        if (!imports.present()) {
+        Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
+        if (!scoped.present()) {
             return Answer.absent();
         }
-        return Answer.of(SyntaxSymbols.of(name, writtenRegistry(db), imports.value().scope(),
-                imports.value().aliases()));
+        return Answer.of(scoped.value().writtenSymbols(writtenRegistry(db)));
     }
 
     /** What names mean in a module before anything is derived from it — what {@link Resolved}
@@ -537,14 +444,15 @@ public final class Names {
             // Resolution reads other modules' declarations as they were written, not as they will
             // be resolved: a name written there is that module's to resolve, and asking for its
             // resolved form here would be this module waiting on its own.
-            Answer<SyntaxSymbols> scope = writtenSymbols(db, name);
-            if (!scope.present()) {
+            Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
+            if (!scoped.present()) {
                 return Answer.absent();
             }
             Resolve.Resolution resolution;
             try {
-                resolution = Resolve.resolving(available.value(), scope.value(),
-                        reachableValues(db, available.value()));
+                resolution = Resolve.resolving(available.value(),
+                        scoped.value().writtenSymbols(writtenRegistry(db)),
+                        scoped.value().values());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -552,8 +460,7 @@ public final class Names {
             // type in its place. The answer is present, so an editor can still say what the names
             // around the mistake mean; what must not happen — emitting a module with a hole in it —
             // is stopped where the module is checked.
-            List<Report> reports = new ArrayList<>(
-                    valueNamespaceCollisions(db, available.value()));
+            List<Report> reports = new ArrayList<>();
             for (CompileException unresolved : resolution.unresolved()) {
                 reports.addAll(Report.of(unresolved));
             }
@@ -722,7 +629,7 @@ public final class Names {
                     db.ask(new Front.ShadowsPath(name)),
                     db.ask(new InCycle(name)),
                     db.ask(new Declarations(name)),
-                    db.ask(new Imports(name)),
+                    db.ask(new ModuleScope(name)),
                     db.ask(new Resolution(name)));
             for (Answer<?> answer : asked) {
                 if (answer.hasError()) {
@@ -915,57 +822,6 @@ public final class Names {
         // other name in the value namespace — so they are in the record above, and reading the tree
         // for them again would be a second place that says which import is used.
         return used;
-    }
-
-    /** What a module's bodies can name without a binding: its own helpers, and every behavior it can
-     * reach — its own and the ones its imports bring in. */
-    private static Resolve.Values reachableValues(Db db, Ast.Module m) {
-        // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
-        // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
-        // two answers to one question is how a name came to denote a helper here and a behavior
-        // there.
-        Set<String> behaviorNames = new LinkedHashSet<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
-        for (Ast.FnDef fn : m.fns()) {
-            if (HelperInliner.isHelperName(behaviorNames, fn.name())) {
-                helpers.put(fn.name(), new ValueName.Helper(m.name(), fn.name()));
-            }
-        }
-        // A definition another module publishes is written here bare, like one of this module's own —
-        // a value substituted at its reference, a helper expanded at its call (ADR-0072). What it
-        // denotes is the module that declares it: the bare spelling is this module's way of writing
-        // it, and the pair (module, name) is what the definition is. A reader that spells one of its
-        // own the same way is a name clash, which the import check reports.
-        for (Ast.Import imp : m.imports()) {
-            Ast.Module from = db.ask(new Front.Available(imp.module())).value();
-            if (from == null) {
-                continue;
-            }
-            for (String published : Bodies.publishedNames(from, imp.names())) {
-                helpers.putIfAbsent(published, new ValueName.Helper(from.name(), published));
-            }
-        }
-        BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
-        Map<String, ValueName.Stdlib> exposed = db.ask(new Front.LibraryNames(m.name())).value();
-        return new Resolve.Values(m.name(), helpers,
-                behaviors == null ? Map.of() : behaviors.byName(),
-                behaviors != null && behaviors.whole(),
-                exposed == null ? Map.of() : exposed,
-                new Resolve.Elsewhere() {
-                    @Override
-                    public boolean hasModule(String name) {
-                        return db.ask(new Front.ModuleNames()).value().contains(name);
-                    }
-
-                    @Override
-                    public Set<String> behaviorsOf(String module) {
-                        Answer<Set<String>> declared = db.ask(new Front.Behaviors(module));
-                        return declared.present() ? declared.value() : null;
-                    }
-                });
     }
 
     /** The resolved module — {@link Resolution} without the record of how it got there. */
@@ -1413,7 +1269,7 @@ public final class Names {
 
     private static List<Dependency> dependencies(Ast.Module m, Set<String> modules) {
         List<Dependency> deps = new ArrayList<>();
-        Map<String, String> qualifiers = aliases(m);
+        Map<String, String> qualifiers = Scoping.aliases(m);
         for (Ast.Import imp : m.imports()) {
             deps.add(new Dependency(imp.module(), imp.pos()));
         }
@@ -1428,102 +1284,13 @@ public final class Names {
                 deps.add(new Dependency(target, ref.pos()));
             }
         }
-        for (Ast.Var ref : qualifiedBehaviorRefs(m)) {
-            String target = moduleNamedBy(ref.name(), qualifiers);
+        for (Ast.Var ref : Scoping.qualifiedBehaviorRefs(m)) {
+            String target = Scoping.moduleNamedBy(ref.name(), qualifiers);
             if (modules.contains(target) && !target.equals(m.name())) {
                 deps.add(new Dependency(target, ref.pos()));
             }
         }
         return deps;
-    }
-
-    /** Each import alias, against the module it stands for. */
-    private static Map<String, String> aliases(Ast.Module m) {
-        Map<String, String> qualifiers = new HashMap<>();
-        for (Ast.Import imp : m.imports()) {
-            if (imp.alias() != null) {
-                qualifiers.put(imp.alias(), imp.module());
-            }
-        }
-        return qualifiers;
-    }
-
-    /** The module a qualified spelling names, by its qualifier — an alias, or a module named under
-     * its own name. Null where the spelling carries no qualifier. */
-    private static String moduleNamedBy(String written, Map<String, String> qualifiers) {
-        int dot = written.lastIndexOf('.');
-        if (dot < 0) {
-            return null;
-        }
-        String qualifier = written.substring(0, dot);
-        return qualifiers.getOrDefault(qualifier, qualifier);
-    }
-
-    /** Every name the behavior namespace writes with a qualifier: a {@code >->} stage, a
-     *  {@code depends on}. */
-    private static List<Ast.Var> qualifiedBehaviorRefs(Ast.Module m) {
-        List<Ast.Var> out = new ArrayList<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
-            List<Ast.Var> refs = switch (b) {
-                case Ast.PipeBehavior pipe -> pipe.stages();
-                case Ast.SpecBehavior spec -> spec.dependsOn();
-            };
-            for (Ast.Var ref : refs) {
-                if (ref.name().lastIndexOf('.') >= 0 && !Resolve.namesABoundaryEdge(ref.name())) {
-                    out.add(ref);
-                }
-            }
-        }
-        return out;
-    }
-
-    /**
-     * The behaviors this module names through another module's name, by that module.
-     *
-     * <p>Naming one is reaching into that module whether or not an import line says so: the borrowed
-     * signature and the injected field are found by an import, and the module is a dependency for
-     * the same reason. So it is answered here, off the spellings the header writes, rather than
-     * below resolution — what modules this one reaches has to be settled before anything resolves
-     * against them.
-     *
-     * <p>Whether the behavior is there at all is not asked. A name that reaches into a module names
-     * that module either way, and what it turned out to denote is {@code Resolution}'s to say.
-     */
-    public record Borrowed(String name) implements Key<Map<String, Set<String>>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Map<String, Set<String>>> compute(Db db) {
-            Answer<Ast.Module> exposed = db.ask(new Front.Exposed(name));
-            if (!exposed.present()) {
-                return Answer.absent();
-            }
-            Ast.Module m = exposed.value();
-            Set<String> modules = db.ask(new Front.ModuleNames()).value();
-            Map<String, String> qualifiers = aliases(m);
-            Map<String, Set<String>> out = new LinkedHashMap<>();
-            for (Ast.Var ref : qualifiedBehaviorRefs(m)) {
-                String written = ref.name();
-                String target = moduleNamedBy(written, qualifiers);
-                if (target == null || target.equals(name)
-                        || modules == null || !modules.contains(target)) {
-                    continue;
-                }
-                String bare = written.substring(written.lastIndexOf('.') + 1);
-                // A name that module does not declare is borrowed from nowhere. That it names
-                // nothing is reported where the clause is read, and an import synthesized for it
-                // would say the same thing a second time against a line nobody wrote.
-                Answer<Set<String>> declared = db.ask(new Front.Behaviors(target));
-                if (!declared.present() || !declared.value().contains(bare)) {
-                    continue;
-                }
-                out.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
-            }
-            return Answer.of(Map.copyOf(out));
-        }
     }
 
     /**
@@ -1533,45 +1300,24 @@ public final class Names {
      * <p>What a reader wanting "which modules does this reach, and which of their names" asks. The
      * second kind carries no import line, and a reader that read only the lines would miss the
      * borrowed signature it has to hold.
+     *
+     * <p>Answered by {@link Scoping}, which is where the scope those imports fill is assembled. A
+     * reader here and the scope disagreeing about which imports a module has is a reader holding a
+     * signature the scope never brought a name in for.
+     *
+     * <p>The module's own lines are read off what it wrote, so a module nothing may be built on
+     * still has the imports it wrote. The ones a qualified reference asks for are not: which
+     * behaviors another module declares is a question about that module, and a universe that will
+     * not let it be built on does not answer it. Nothing is synthesized then — what the reference
+     * names is answered where the reference is written, and an import invented for it would say it
+     * a second time against a line nobody wrote.
+     *
+     * <p>Not what a cycle is found by. That is walked off the spellings a module writes
+     * ({@link Cycles}), which is why a cycle written with no import line at all is still found.
      */
     public static List<Ast.Import> importsOf(Db db, String name) {
-        Answer<Ast.Module> module = db.ask(new Front.Available(name));
-        if (!module.present()) {
-            return List.of();
-        }
-        List<Ast.Import> imports = new ArrayList<>(module.value().imports());
-        Map<String, Set<String>> borrowed = db.ask(new Borrowed(name)).value();
-        if (borrowed == null) {
-            return imports;
-        }
-        for (Map.Entry<String, Set<String>> e : borrowed.entrySet()) {
-            Set<String> already = new LinkedHashSet<>();
-            for (Ast.Import imp : module.value().imports()) {
-                if (imp.module().equals(e.getKey())) {
-                    already.addAll(imp.names());
-                }
-            }
-            List<Ast.ImportedName> names = new ArrayList<>();
-            for (String bare : e.getValue()) {
-                if (!already.contains(bare)) {
-                    // No position on a synthesized name: nobody wrote it on an import list. The
-                    // qualified reference that asked for it is where it came from.
-                    names.add(new Ast.ImportedName(bare, null));
-                }
-            }
-            if (!names.isEmpty()) {
-                imports.add(new Ast.Import(e.getKey(), null, names, module.value().pos()));
-            }
-        }
-        return imports;
-    }
-
-    static Set<String> behaviorNames(Ast.Module m) {
-        Set<String> names = new LinkedHashSet<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
-            names.add(b.name());
-        }
-        return names;
+        Ast.Module m = db.ask(new Front.Available(name)).value();
+        return m == null ? List.of() : Scoping.importsOf(CompilationUniverse.over(db), m);
     }
 
     /** The same, of a module resolution has been over. */
@@ -1583,151 +1329,11 @@ public final class Names {
         return names;
     }
 
-    /** The definitions a module declares in the value namespace — its values and its helpers. Like a
-     * behavior, one is a name in that namespace and not a data, so an import of it resolves
-     * elsewhere. */
-    static Set<String> valueNames(Ast.Module m) {
-        Set<String> behaviors = behaviorNames(m);
-        Set<String> names = new LinkedHashSet<>();
-        for (Ast.FnDef fn : m.fns()) {
-            if (HelperInliner.isHelperName(behaviors, fn.name())) {
-                names.add(fn.name());
-            }
-        }
-        return names;
-    }
-
-    static Report unknownModule(Ast.Import imp) {
-        return Report.raised(Diagnostic.say(new ModuleMessage.UnknownModule(imp.module()))
-                        .at(imp.pos()).build());
-    }
-
     /**
-     * An alias must be a qualifier nothing else already is: another alias, a module in this
-     * compilation, or a standard-library qualifier. Left to win silently it would take over what
-     * {@code List.map} or {@code billing.Amount} means here.
+     * The name arrived twice, from two imports. Either way the way out is inside the module: keep at
+     * most one of them bare and name the other through its module.
      */
-    private static Report aliasTaken(Ast.Import imp, Map<String, String> aliases,
-                                     Set<String> modules) {
-        String taken = aliases.containsKey(imp.alias()) ? aliases.get(imp.alias())
-                : modules.contains(imp.alias()) ? imp.alias()
-                : Prelude.isQualifier(imp.alias()) ? "souther" : null;
-        if (taken == null) {
-            return null;
-        }
-        return Report.raised(Diagnostic.say(new ModuleMessage.TheAliasIsAlreadyTaken(imp.alias(), taken))
-                        .at(imp.pos())
-                        .hint(new ModuleMessage.AnAliasIsANameNothingElseAnswersTo()).build());
-    }
-
-    /**
-     * Every way a spelling reaches this module's value namespace, and a report for each spelling that
-     * reaches it twice.
-     *
-     * <p>A data reaches it — a unit data is a value, a newtype is applied to what it wraps, a record
-     * is constructed by its name — and so do a {@code let}, a behavior, a definition another module
-     * publishes, and a standard-library qualifier. One name means one thing there, whichever way it
-     * arrived. A spelling with two meanings is answered by whichever reader looks first, which is how
-     * a name could be a unit data where it stood alone and an imported helper where it was applied.
-     *
-     * <p>Asked here because this is where the namespace is assembled (see {@link #reachableValues}).
-     * A rule stated per arrival would have to be restated for each new way in.
-     *
-     * <p>A behavior and a {@code let} of one name are not two: they are the declaration and the
-     * implementation of one thing (ADR-0072).
-     */
-    private static List<Report> valueNamespaceCollisions(Db db, Ast.Module m) {
-        List<Report> reports = new ArrayList<>();
-        Map<String, Ast.Def> declared = new LinkedHashMap<>();
-        for (Ast.Def def : m.defs()) {
-            // A standard-library qualifier is the only spelling that reaches the library, so a data
-            // of that name hides it — from every module, since the qualifier is not this module's to
-            // shadow. Refused where it is declared, as a reserved module name is (see Front).
-            if (Prelude.isQualifier(def.name())) {
-                reports.add(Report.raised(Diagnostic
-                                .at(def.pos()).say(new DataMessage.ADataTakesTheStandardLibraryQualifier(def.name())).build()));
-            }
-            declared.put(def.name(), def);
-        }
-        Set<String> implementing = new HashSet<>();
-        for (Ast.BehaviorDef b : m.behaviors()) {
-            implementing.add(b.name());
-        }
-        for (Ast.FnDef fn : m.fns()) {
-            if (implementing.contains(fn.name()) || !declared.containsKey(fn.name())) {
-                continue;
-            }
-            reports.add(Report.raised(Diagnostic
-                            .at(fn.pos()).say(new DataMessage.ALetAndADataShareOneSpelling(fn.name())).build()));
-        }
-        // What this module declares under a name, whichever kind of declaration it is: a data, a
-        // `let`, a behavior. A behavior and its `let` are one of them, so the set is what is asked
-        // rather than a count.
-        Set<String> ownNames = new LinkedHashSet<>(declared.keySet());
-        ownNames.addAll(implementing);
-        for (Ast.FnDef fn : m.fns()) {
-            ownNames.add(fn.name());
-        }
-        // A name an import brings in is written here bare (ADR-0075), so it arrives in this
-        // namespace exactly as one of this module's own does — and collides the same way. Which kind
-        // of thing each side is does not enter into it: the reader writes one spelling, and one
-        // spelling here means one thing.
-        for (Ast.Import imp : m.imports()) {
-            for (String imported : importedIntoValues(db, imp)) {
-                if (ownNames.contains(imported)) {
-                    reports.add(importCollision(imported, imp, null));
-                }
-            }
-        }
-        return reports;
-    }
-
-    /**
-     * The names {@code imp} brings into the value namespace: the definitions the module publishes,
-     * the behaviors it declares and the types it declares, all of which a reader writes bare. A type
-     * is one of them because a unit data is a value, a newtype is applied to what it wraps and a
-     * record is constructed by its name — the type namespace refuses a type against a type, so what
-     * a type adds here is a type against a {@code let} or a behavior.
-     *
-     * <p>Only what {@code from} exposes, and only what the line asks for. A name the line names and
-     * the module does not expose is nothing this import brought in, and reporting a collision for it
-     * would tell the author to rename a definition that is not what is wrong — the line is answered
-     * by {@code check.import.notexposed}, which is the whole of it.
-     *
-     * <p>A library import is not here. Those lines are read where the table they fill is built
-     * ({@link Exposing}) and are gone from the module by the time this is asked.
-     */
-    private static Set<String> importedIntoValues(Db db, Ast.Import imp) {
-        Ast.Module from = db.ask(new Front.Available(imp.module())).value();
-        if (from == null) {
-            return Set.of();
-        }
-        Set<String> names = new LinkedHashSet<>(Bodies.publishedNames(from, imp.names()));
-        Set<String> declared = new LinkedHashSet<>(behaviorNames(from));
-        for (Ast.Def def : from.defs()) {
-            declared.add(def.name());
-        }
-        Set<String> exposed = new HashSet<>(from.exposing());
-        for (String name : imp.names()) {
-            if (declared.contains(name) && exposed.contains(name)) {
-                names.add(name);
-            }
-        }
-        return names;
-    }
-
-    /**
-     * The name arrived twice. {@code earlier} is the import that already brought it in, or null when
-     * the module defines it itself. Either way the way out is inside the module: keep at most one of
-     * them bare and name the other through its module.
-     */
-    private static Report importCollision(String name, Ast.Import imp, Ast.Import earlier) {
-        if (earlier == null) {
-            return Report.raised(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(name))
-                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
-                            .build());
-        }
+    private static Report broughtTwice(String name, Ast.Import imp, Ast.Import earlier) {
         Diagnostic.Builder b = Diagnostic.at(imp.pos())
                 .secondary(Region.point(earlier.pos()), new ModuleMessage.ItWasAlreadyImportedHere(name, earlier.module()));
         return Report.raised((earlier.module().equals(imp.module())

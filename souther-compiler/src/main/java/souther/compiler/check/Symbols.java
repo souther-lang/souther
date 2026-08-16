@@ -54,9 +54,12 @@ public final class Symbols implements NameSense {
 
     /** As {@link #of(Hir.Module, Map, Map, Map)}, over a registry that reads its declarations
      * however it likes — the form a query-backed compilation uses, where a module's definitions are
-     * asked for one at a time rather than held in a map. */
-    public static Symbols of(String module, Registry<Hir.Def> registry,
-                             Map<String, Denotation> names, Map<String, String> aliases) {
+     * asked for one at a time rather than held in a map.
+     *
+     * <p>Reached through {@link Scoping.Scoped#symbolsOver}, for the reason
+     * {@link SyntaxSymbols#of(String, Registry, Map, Map)} is. */
+    static Symbols of(String module, Registry<Hir.Def> registry,
+                      Map<String, Denotation> names, Map<String, String> aliases) {
         return new Symbols(module, registry, names, Map.copyOf(aliases));
     }
 

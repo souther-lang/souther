@@ -185,10 +185,12 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
             }
         }
         assertEquals(Set.of(
-                        // The declaration says which one it is: indexing what a module writes, and
-                        // writing a declaration's class into the metadata.
+                        // The declaration says which one it is: indexing what a module writes,
+                        // assembling a module's scope out of the declarations it and its imports
+                        // have, and writing a declaration's class into the metadata.
                         "SyntaxSymbols.java: def.declaredKey()",
-                        "Names.java: own.declaredKey()",
+                        "Scoping.java: own.declaredKey()",
+                        "Scoping.java: brought.declaredKey()",
                         "ModuleMetadata.java: def.declaredKey()",
                         // The address a declaration world has just been asked about and answered for.
                         "Registry.java: address",

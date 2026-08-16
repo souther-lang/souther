@@ -14,6 +14,7 @@ import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.Scoping;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -266,7 +267,7 @@ public final class Bodies {
                 if (src == null) {
                     continue;   // the unknown module is reported where the scope is worked out
                 }
-                Set<String> declared = Names.behaviorNames(src);
+                Set<String> declared = Scoping.behaviorNames(src);
                 for (String bare : imp.names()) {
                     if (!declared.contains(bare)) {
                         continue;   // a type import, or a name the module does not declare
@@ -687,39 +688,9 @@ public final class Bodies {
         Set<String> exposed = new java.util.HashSet<>(from.exposing());
         List<Hir.FnDef> out = new java.util.ArrayList<>();
         for (Hir.FnDef fn : HelperInliner.helpersOf(from).values()) {
-            if (publishes(exposed, fn.name(), fn.body() instanceof Hir.FnBody.Written, wanted)) {
+            if (HelperInliner.publishes(exposed, fn.name(),
+                    fn.body() instanceof Hir.FnBody.Written, wanted)) {
                 out.add(fn);
-            }
-        }
-        return out;
-    }
-
-    /**
-     * Whether a module hands a definition of this name to a reader that asked for it.
-     *
-     * <p>Written over the name and what kind of body it has, because a module's own definitions are
-     * read at both representations: {@code Resolve} asks what an import brings into the value
-     * namespace, of a module it has not resolved, and everything after it asks the same question of
-     * one it has. The rule is the same one, so it is here rather than restated over each tree.
-     */
-    static boolean publishes(Set<String> exposing, String fn, boolean hasWrittenBody,
-                             List<String> wanted) {
-        return hasWrittenBody && exposing.contains(fn) && wanted.contains(fn);
-    }
-
-    /** The names {@code from} publishes among {@code wanted}, of a module as it was written. */
-    public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
-        Set<String> exposed = new java.util.HashSet<>(from.exposing());
-        Set<String> behaviorNames = new java.util.HashSet<>();
-        for (Ast.BehaviorDef b : from.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        Set<String> out = new java.util.LinkedHashSet<>();
-        for (Ast.FnDef fn : from.fns()) {
-            if (HelperInliner.isHelperName(behaviorNames, fn.name())
-                    && publishes(exposed, fn.name(), fn.body() instanceof Ast.FnBody.Written,
-                            wanted)) {
-                out.add(fn.name());
             }
         }
         return out;

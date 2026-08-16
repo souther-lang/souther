@@ -1,0 +1,122 @@
+package souther.compiler.check;
+
+import souther.compiler.ast.Ast;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Where the modules a module is resolved against come from.
+ *
+ * <p>One question, asked by name. That is the whole of it: a universe says what it has under a name
+ * and nothing about what a name written in a module means. What names mean is {@link Scoping}'s,
+ * and it is the same rule whichever universe answered — a compilation reading its own sources, or a
+ * reader putting a set of published classes back together.
+ *
+ * <p>Two universes assembling a scope apiece is what left a model that compiles in the project that
+ * wrote it and refuses to be imported anywhere else: the two agreed on nothing but by having been
+ * written to agree, and a rule changed on one side stayed right on the other. So there is nothing
+ * here to derive a scope with. What can be worked out from a module is worked out once, where the
+ * scope is assembled.
+ *
+ * <p>Asked one name at a time rather than handed over as a set, because a compilation that reaches
+ * no other module reads none.
+ *
+ * <p>What it answers is what may be built on, and that is the whole of what it answers. A universe
+ * that will not let a module be built on says nothing further about it — not its text, not the
+ * behaviors it declares — so a reader here does not have to know which of several questions to ask
+ * to get the most that can be had. The cost falls where it should: every module answered that way
+ * is one already refused for a reason its author has been given, and what is lost is a second
+ * report about it.
+ *
+ * <p>It is worth knowing that a compilation refuses one on grounds that are not about the module at
+ * all. A module in an import cycle has been read, and what stops it is a rule about the set it is
+ * in; that rule is written into what a compilation says a module declares, so it arrives here.
+ * Whether it belongs there is its own question and not one this seam settles.
+ */
+public interface ModuleUniverse {
+
+    /** What this universe has under {@code name}. */
+    InSight module(String name);
+
+    /**
+     * What a universe has under a name.
+     *
+     * <p>Three answers and not two. Knowing a name and being able to read what it declares are
+     * different things, and a reader told only whether a module came back cannot tell an import of
+     * something that is not there — which is the importer's mistake and is reported on the import
+     * line — from an import of something that is there and cannot be read, whose fault is reported
+     * on its own source and would be said twice if it were said here as well.
+     */
+    sealed interface InSight {
+
+        /**
+         * What a universe says a module is, to a module that names it: what it wrote, and what it
+         * declares.
+         *
+         * <p>Both, because the second is a rule and not a reading: a name written twice keeps the
+         * first, a built-in case name is refused, and what is left is what the module declares. A
+         * reader that indexed the declarations itself would be a second place that rule is
+         * written, and the two would differ in what they do about the ones they refuse.
+         *
+         * <p>What a module's own import lines let it write bare is not here. It is not something
+         * one module needs of another — nothing a reader writes is answered by the library names
+         * another module may write bare — and reading it of every module named would put every
+         * importer's scope behind an edit to a line in a module it imports from. It belongs to the
+         * module being scoped, and travels with it ({@link Scoping.Subject}).
+         */
+        record Read(Ast.Module module, Map<String, Ast.Def> declarations) implements InSight {
+
+            public Read {
+                declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
+            }
+        }
+
+        /** This universe has it and cannot say what it declares. Whatever is wrong with it is
+         *  reported where it is, so a reader that reached it says nothing further. */
+        record Unreadable() implements InSight {}
+
+        /** Nothing of that name here. */
+        record Unknown() implements InSight {}
+
+        InSight UNREADABLE = new Unreadable();
+        InSight UNKNOWN = new Unknown();
+
+        /**
+         * Whether this universe has a module of that name at all, whether or not it can say what it
+         * declares.
+         *
+         * <p>Written once, here, because it is the one question two of the three answers agree on
+         * and a reader asking it for itself asks it as "not the third one" — which reads as though
+         * the other two were one answer, and is how they came to be treated as one.
+         */
+        default boolean isThere() {
+            return !(this instanceof Unknown);
+        }
+    }
+
+    /**
+     * The modules of a set already read. A name that is not among them is nothing this universe
+     * has — a reading that went wrong is left out by whoever read it, and is
+     * {@link InSight.Unreadable} only if it says so.
+     *
+     * <p>A record rather than a lambda, for the reason {@link Scoping.OfTheUniverse} is: a universe
+     * ends up inside an answer a compilation remembers, and two answers built from the same
+     * universe have to be equal or nothing that read one is ever kept.
+     */
+    record OfWhatIsRead(Map<String, InSight> modules) implements ModuleUniverse {
+
+        public OfWhatIsRead {
+            modules = Map.copyOf(modules);
+        }
+
+        @Override
+        public InSight module(String name) {
+            return modules.getOrDefault(name, InSight.UNKNOWN);
+        }
+    }
+
+    /** Nothing in sight — a module resolved on its own. */
+    ModuleUniverse NOTHING = new OfWhatIsRead(Map.of());
+}
