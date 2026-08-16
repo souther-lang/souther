@@ -306,16 +306,32 @@ public final class LspServer {
 
     // --- completion ---
 
+    /**
+     * The names that may be written at the cursor.
+     *
+     * <p>Answered from the workspace snapshot, as every other question about a position is: what a
+     * bare name reaches here is settled by this document's imports and by the modules around it, and
+     * one document cannot say what its own import lines brought in without reading them a second
+     * time — which is the rule that decides it, written twice.
+     */
     private Object completion(JsonNode params) {
         Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
                 .orElse(null);
-        String text = p == null ? null : documents.get(p.uri());
-        if (text == null) {
+        if (p == null || documents.get(p.uri()) == null) {
             return List.of();
         }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
         List<Object> items = new ArrayList<>();
-        for (CompletionItem item : analyzer.completions(text, p.position())) {
-            items.add(Map.of("label", item.label(), "kind", item.kind()));
+        for (CompletionItem item : analyzer.completions(p.uri(), p.position(), graph)) {
+            Map<String, Object> sent = new LinkedHashMap<>();
+            sent.put("label", item.label());
+            sent.put("kind", item.kind());
+            // Omitted rather than sent as null for a name with no origin: a client renders an empty
+            // detail as an empty line beside the label.
+            if (item.detail() != null) {
+                sent.put("detail", item.detail());
+            }
+            items.add(sent);
         }
         return items;
     }
