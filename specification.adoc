@@ -5021,7 +5021,7 @@ Reported where a module the class path carries cannot be read back into the surf
 
 Said where the module was reached from — the `+import+` line in this project that arrives at it, and every other line that does, since a dependency two files import is reached by both. The artifact's own lines are not this compile's to quote, and a report carrying one sends an author to a place in a file they do not have.
 
-One report and one code, whichever of the four it was, because the author reading it has one thing to do about any of them. The rules broken are the publishing project's; naming one of them as the rule this author is in breach of hands them somebody else's obligation. A module refused here is still a module this compile has heard of, so an importer is not also told there is no such thing.
+One report and one code, whichever failure it was, because the author reading it has one thing to do about any of them. The rules broken are the publishing project's; naming one of them as the rule this author is in breach of hands them somebody else's obligation. A module refused here is still a module this compile has heard of, so an importer is not also told there is no such thing.
 
 [#e1601-removed]
 === (retired)

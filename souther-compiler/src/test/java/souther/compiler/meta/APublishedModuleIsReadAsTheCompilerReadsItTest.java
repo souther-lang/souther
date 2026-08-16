@@ -176,7 +176,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
                 "pub.twice.B", dataClass("data Same = Int"),
                 "pub.naming.$Module", moduleClass("pub.naming", List.of(), List.of("Note")),
                 "pub.naming.Note", dataClass("data Note = { s: pub.twice.Same }"));
-        PublishedUniverse universe = PublishedUniverse.of(published::get);
+        PublishedUniverse universe = PublishedUniverse.of(n -> PublishedClasses.carrying(published.get(n)));
 
         assertNull(universe.resolved("pub.twice"), "`Same` is declared twice, so it is not indexed");
 

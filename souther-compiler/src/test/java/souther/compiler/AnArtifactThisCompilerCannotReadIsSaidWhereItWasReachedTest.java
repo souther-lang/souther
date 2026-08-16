@@ -46,7 +46,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
 
         @Override
         public PublishedClasses declarations() {
-            return published::get;
+            return binaryName -> PublishedClasses.carrying(published.get(binaryName));
         }
     }
 
@@ -59,6 +59,10 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 "module " + module + " exposing ( " + String.join(", ", types) + " )",
                 imports, types, List.of(), helpers), null, null, null);
     }
+
+    /** Bytes that begin like a class file and end before one does. */
+    private static final byte[] NOT_A_CLASS_FILE =
+            {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE, 0, 0};
 
     private static PublishedClasses.Declarations dataClass(String declaration) {
         return new PublishedClasses.Declarations(null, declaration, null, null);
@@ -162,14 +166,28 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
      */
     @Test
     void oneWhoseClassesThisJvmDoesNotRead() {
-        bothAreSaidOnTheSource(new ModulePath() {
-            @Override
-            public byte[] bytes(String binaryName) {
-                return binaryName.equals("lib.pub.$Module")
-                        ? new byte[] {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE, 0, 0}
-                        : null;
-            }
-        });
+        bothAreSaidOnTheSource(
+                binaryName -> binaryName.equals("lib.pub.$Module") ? NOT_A_CLASS_FILE : null);
+    }
+
+    /**
+     * And a declaration's class, not only the one the reading starts at.
+     *
+     * <p>The reading asks for several classes: the one the declarations are stamped on, and one per
+     * type and behavior it says it publishes. Answering the first as a value and leaving the rest to
+     * raise moves the defect one class along rather than closing it — the jar whose {@code $Module}
+     * reads fine and whose {@code Held} does not is the same artifact, and the author has the same
+     * thing to do about it.
+     */
+    @Test
+    void oneWhoseDeclarationsClassThisJvmDoesNotRead() {
+        Map<String, byte[]> built = Compiler.compile("""
+                module lib.pub exposing ( Held )
+                data Held = String
+                """);
+
+        bothAreSaidOnTheSource(binaryName -> binaryName.equals("lib.pub.Held")
+                ? NOT_A_CLASS_FILE : built.get(binaryName));
     }
 
     /**
@@ -287,7 +305,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
             public PublishedClasses declarations() {
                 return binaryName -> {
                     if (binaryName.equals("app.uses.$Module")) {
-                        return onlyTheModuleClass;
+                        return PublishedClasses.carrying(onlyTheModuleClass);
                     }
                     throw new IllegalStateException("read past the name: " + binaryName);
                 };

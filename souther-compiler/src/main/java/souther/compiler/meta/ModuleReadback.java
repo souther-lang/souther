@@ -17,7 +17,6 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * Reading a module back from what {@link ModuleMetadata} wrote into its classes: the declarations
@@ -44,10 +43,11 @@ import java.util.function.Function;
  * {@link Readback.Failure}, named where it is found by the code that knows its shape, so what
  * converts is stated rather than decided by how wide a caller's catch happened to be.
  *
- * <p>Two raises are turned into failures, and each catch is around the one call that makes it: the
- * class-file reader, which refuses bytes it does not know, and the parser. Both are passes and both
- * raise, so this is where a raise becomes a value; wrapping any more than the call would let
- * something else's raise arrive as a statement about this artifact.
+ * <p>One raise is turned into a failure here, the parser's, and the catch is around the parse
+ * alone. The other physical way a reading fails — bytes this runtime does not read — is answered
+ * as a value by {@link PublishedClasses}, which is where the bytes are and so the only place that
+ * knows what went wrong with them. Nothing here reads an exception type as a statement about
+ * somebody's artifact.
  */
 public final class ModuleReadback {
 
@@ -80,20 +80,26 @@ public final class ModuleReadback {
      * ended the compilation from a question whose whole answer is yes or no.
      */
     public static boolean carry(String module, PublishedClasses classes) {
-        return declarationsOf(module, classes) instanceof Found.Declared;
+        return classes.of(declarationsClassOf(module))
+                instanceof PublishedClasses.Carried.Declared(PublishedClasses.Declarations d)
+                && d.module() != null;
     }
 
     /** What {@code classes} carry for {@code moduleName}. */
     public static Readback read(String moduleName, PublishedClasses classes) {
         PublishedClasses.Declarations found;
-        switch (declarationsOf(moduleName, classes)) {
-            case Found.Nothing _ -> {
+        switch (classes.of(declarationsClassOf(moduleName))) {
+            case PublishedClasses.Carried.NoSuchClass _ -> {
                 return new Readback.SaysNothing();
             }
-            case Found.NotClassFiles _ -> {
+            case PublishedClasses.Carried.NotAClassFileThisJvmReads _ -> {
                 return unreadable(moduleName, new Readback.Failure.NotClassFilesThisJvmReads());
             }
-            case Found.Declared(PublishedClasses.Declarations declared) -> found = declared;
+            case PublishedClasses.Carried.Declared(PublishedClasses.Declarations declared) ->
+                    found = declared;
+        }
+        if (found.module() == null) {
+            return new Readback.SaysNothing();   // a class this compiler put no declarations on
         }
         PublishedClasses.SoutherModuleView m = found.module();
         // A member this compiler asks for and the writer did not write reads as its default. The
@@ -106,23 +112,44 @@ public final class ModuleReadback {
         StringBuilder declarations = new StringBuilder();
         Set<String> injected = new LinkedHashSet<>();
         for (String type : m.types()) {
-            String text = declared(classes, moduleName + "." + type,
-                    PublishedClasses.Declarations::data);
-            if (text == null) {
+            PublishedClasses.Declarations carried;
+            switch (classes.of(moduleName + "." + type)) {
+                case PublishedClasses.Carried.NotAClassFileThisJvmReads _ -> {
+                    return unreadable(moduleName,
+                            new Readback.Failure.NotClassFilesThisJvmReads());
+                }
+                case PublishedClasses.Carried.NoSuchClass _ -> {
+                    return unreadable(moduleName,
+                            new Readback.Failure.DeclarationMissing(type));
+                }
+                case PublishedClasses.Carried.Declared(PublishedClasses.Declarations d) ->
+                        carried = d;
+            }
+            if (carried.data() == null) {
                 return unreadable(moduleName, new Readback.Failure.DeclarationMissing(type));
             }
-            declarations.append('\n').append(text).append('\n');
+            declarations.append('\n').append(carried.data()).append('\n');
         }
         for (String behavior : m.behaviors()) {
-            String binaryName = SoutherJvmAbi.nameOf(
-                    new GeneratedClass.BehaviorInterface(moduleName, behavior)).binaryName();
-            String text = declared(classes, binaryName,
-                    PublishedClasses.Declarations::behaviorSignature);
-            if (text == null) {
+            PublishedClasses.Declarations carried;
+            switch (classes.of(SoutherJvmAbi.nameOf(
+                    new GeneratedClass.BehaviorInterface(moduleName, behavior)).binaryName())) {
+                case PublishedClasses.Carried.NotAClassFileThisJvmReads _ -> {
+                    return unreadable(moduleName,
+                            new Readback.Failure.NotClassFilesThisJvmReads());
+                }
+                case PublishedClasses.Carried.NoSuchClass _ -> {
+                    return unreadable(moduleName,
+                            new Readback.Failure.DeclarationMissing(behavior));
+                }
+                case PublishedClasses.Carried.Declared(PublishedClasses.Declarations d) ->
+                        carried = d;
+            }
+            if (carried.behaviorSignature() == null) {
                 return unreadable(moduleName, new Readback.Failure.DeclarationMissing(behavior));
             }
-            declarations.append('\n').append(text).append('\n');
-            if (Boolean.TRUE.equals(classes.of(binaryName).behaviorInjected())) {
+            declarations.append('\n').append(carried.behaviorSignature()).append('\n');
+            if (Boolean.TRUE.equals(carried.behaviorInjected())) {
                 injected.add(behavior);
             }
         }
@@ -215,50 +242,6 @@ public final class ModuleReadback {
     }
 
     /**
-     * What looking for a module's declarations class found.
-     *
-     * <p>Three outcomes here as well, and for the reason the reading has three: a class this JVM
-     * will not read is not a class that is not there. The classes on a path came from wherever the
-     * build that made them came from, and one of them may be a class file at a major version this
-     * JVM does not know — read as an absence, an author is told there is no such module while their
-     * dependency list says otherwise.
-     */
-    private sealed interface Found {
-
-        /** No class of that name, or one this compiler put no declarations on. */
-        record Nothing() implements Found {}
-
-        /** The declarations that class carries. */
-        record Declared(PublishedClasses.Declarations declarations) implements Found {}
-
-        /** There is a class and this JVM does not read class files of its kind. */
-        record NotClassFiles() implements Found {}
-    }
-
-    /**
-     * What {@code classes} carry on {@code module}'s declarations class.
-     *
-     * <p>Asked one way, so that {@link #carry} and {@link #read} cannot come to differ about whether
-     * the path has a name.
-     *
-     * <p>The catch is around the one call that turns bytes into declarations, and around that call
-     * alone: {@link ClassFileDeclarations} hands the bytes to the class-file reader, which refuses a
-     * malformed file and one at a version it does not know by raising. That is the only raise this
-     * step has, and it is the reading's to answer rather than the compilation's to end.
-     */
-    private static Found declarationsOf(String module, PublishedClasses classes) {
-        PublishedClasses.Declarations found;
-        try {
-            found = classes.of(SoutherJvmAbi.nameOf(
-                    new GeneratedClass.ModuleDeclarations(module)).binaryName());
-        } catch (IllegalArgumentException _) {
-            return new Found.NotClassFiles();
-        }
-        return found == null || found.module() == null
-                ? new Found.Nothing() : new Found.Declared(found);
-    }
-
-    /**
      * {@code module} with the import lines its declarations do not need left out. A module's
      * {@code let} bodies are not published, so an import only they used would otherwise be
      * republished and every importing project would have to put that module on its path to read
@@ -338,11 +321,8 @@ public final class ModuleReadback {
         return word.substring(from, to);
     }
 
-    /** The text {@code member} reads off {@code binaryName}'s class, or null where these classes do
-     *  not carry it. */
-    private static String declared(PublishedClasses classes, String binaryName,
-                                   Function<PublishedClasses.Declarations, String> member) {
-        PublishedClasses.Declarations found = classes.of(binaryName);
-        return found == null ? null : member.apply(found);
+    /** The class a module's declarations are stamped on. */
+    private static String declarationsClassOf(String module) {
+        return SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(module)).binaryName();
     }
 }

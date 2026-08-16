@@ -230,18 +230,9 @@ class ModuleReadbackTest {
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """);
-        PublishedClasses stale = binaryName -> {
-            PublishedClasses.Declarations d =
-                    new ClassFileDeclarations(classes::get).of(binaryName);
-            if (d == null || d.module() == null) {
-                return d;
-            }
-            PublishedClasses.SoutherModuleView m = d.module();
-            return new PublishedClasses.Declarations(
-                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old",
-                            m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
-                    d.data(), d.behaviorSignature(), d.behaviorInjected());
-        };
+        PublishedClasses stale = viewing(classes, m -> new PublishedClasses.SoutherModuleView(
+                m.compat() + 1, "0.0.1-old", m.header(), m.imports(), m.types(),
+                m.behaviors(), m.invariantHelpers()));
 
         Readback.Failure.Incompatible why = assertInstanceOf(
                 Readback.Failure.Incompatible.class, refusalOf("shared.money", stale));
@@ -262,18 +253,9 @@ class ModuleReadbackTest {
                 data Amount = Int
                 let taxed (a: Amount) = Amount(a.value * 110 / 100)
                 """);
-        PublishedClasses older = binaryName -> {
-            PublishedClasses.Declarations d =
-                    new ClassFileDeclarations(classes::get).of(binaryName);
-            if (d == null || d.module() == null) {
-                return d;
-            }
-            PublishedClasses.SoutherModuleView m = d.module();
-            return new PublishedClasses.Declarations(
-                    new PublishedClasses.SoutherModuleView(m.compat() - 1, "0.0.1-older",
-                            m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
-                    d.data(), d.behaviorSignature(), d.behaviorInjected());
-        };
+        PublishedClasses older = viewing(classes, m -> new PublishedClasses.SoutherModuleView(
+                m.compat() - 1, "0.0.1-older", m.header(), m.imports(), m.types(),
+                m.behaviors(), m.invariantHelpers()));
 
         Readback.Failure.Incompatible why = assertInstanceOf(
                 Readback.Failure.Incompatible.class, refusalOf("shared.money", older));
@@ -295,18 +277,9 @@ class ModuleReadbackTest {
                 readBack("shared.money", classes).module().fns().stream()
                         .map(Ast.FnDef::name).toList());
 
-        PublishedClasses stale = binaryName -> {
-            PublishedClasses.Declarations d =
-                    new ClassFileDeclarations(classes::get).of(binaryName);
-            if (d == null || d.module() == null) {
-                return d;
-            }
-            PublishedClasses.SoutherModuleView m = d.module();
-            return new PublishedClasses.Declarations(
-                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old",
-                            m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
-                    d.data(), d.behaviorSignature(), d.behaviorInjected());
-        };
+        PublishedClasses stale = viewing(classes, m -> new PublishedClasses.SoutherModuleView(
+                m.compat() + 1, "0.0.1-old", m.header(), m.imports(), m.types(),
+                m.behaviors(), m.invariantHelpers()));
 
         Readback.Failure.Incompatible why = assertInstanceOf(
                 Readback.Failure.Incompatible.class, refusalOf("shared.money", stale));
@@ -333,25 +306,32 @@ class ModuleReadbackTest {
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """);
-        PublishedClasses renamed = binaryName -> {
-            PublishedClasses.Declarations d =
-                    new ClassFileDeclarations(classes::get).of(binaryName);
-            if (d == null || d.module() == null) {
-                return d;
-            }
-            PublishedClasses.SoutherModuleView m = d.module();
-            return new PublishedClasses.Declarations(
-                    new PublishedClasses.SoutherModuleView(m.compat(), m.compiler(),
-                            "module shared.other exposing ( Amount )", m.imports(), m.types(),
-                            m.behaviors(), m.invariantHelpers()),
-                    d.data(), d.behaviorSignature(), d.behaviorInjected());
-        };
+        PublishedClasses renamed = viewing(classes, m -> new PublishedClasses.SoutherModuleView(
+                m.compat(), m.compiler(), "module shared.other exposing ( Amount )",
+                m.imports(), m.types(), m.behaviors(), m.invariantHelpers()));
 
         Readback.Failure.AnotherModule why = assertInstanceOf(
                 Readback.Failure.AnotherModule.class, refusalOf("shared.money", renamed));
 
         assertEquals("shared.other", why.named(),
                 "the name the artifact gave itself, which is not the one it was filed under");
+    }
+
+    /** {@code classes}, with whatever their `$Module` annotation says rewritten by {@code as}. */
+    private static PublishedClasses viewing(
+            Map<String, byte[]> classes,
+            java.util.function.UnaryOperator<PublishedClasses.SoutherModuleView> as) {
+        ClassFileDeclarations read = new ClassFileDeclarations(classes::get);
+        return binaryName -> {
+            if (!(read.of(binaryName)
+                    instanceof PublishedClasses.Carried.Declared(
+                            PublishedClasses.Declarations d))
+                    || d.module() == null) {
+                return read.of(binaryName);
+            }
+            return new PublishedClasses.Carried.Declared(new PublishedClasses.Declarations(
+                    as.apply(d.module()), d.data(), d.behaviorSignature(), d.behaviorInjected()));
+        };
     }
 
     private static List<String> names(List<Ast.Def> defs) {

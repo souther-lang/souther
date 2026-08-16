@@ -26,16 +26,26 @@ public final class ClassFileDeclarations implements PublishedClasses {
     }
 
     @Override
-    public PublishedClasses.Declarations of(String binaryName) {
+    public PublishedClasses.Carried of(String binaryName) {
         byte[] bytes = bytesOf.apply(binaryName);
         if (bytes == null) {
-            return null;
+            return new PublishedClasses.Carried.NoSuchClass();
+        }
+        List<Annotation> annotations;
+        try {
+            annotations = annotations(bytes);
+        } catch (IllegalArgumentException _) {
+            // The one thing that can go wrong here, and the only place that knows it did: the
+            // class-file reader refuses a malformed file and one at a major version it does not
+            // know. Said as what it is, so that nothing further out has to read an exception type
+            // as a statement about somebody's artifact.
+            return new PublishedClasses.Carried.NotAClassFileThisJvmReads();
         }
         PublishedClasses.SoutherModuleView module = null;
         String data = null;
         String signature = null;
         Boolean injected = null;
-        for (Annotation a : annotations(bytes)) {
+        for (Annotation a : annotations) {
             String type = a.className().stringValue();
             if (type.endsWith("/SoutherModule;")) {
                 module = moduleView(a);
@@ -46,7 +56,8 @@ public final class ClassFileDeclarations implements PublishedClasses {
                 injected = bool(a, "injected");
             }
         }
-        return new PublishedClasses.Declarations(module, data, signature, injected);
+        return new PublishedClasses.Carried.Declared(
+                new PublishedClasses.Declarations(module, data, signature, injected));
     }
 
     private static List<Annotation> annotations(byte[] bytes) {

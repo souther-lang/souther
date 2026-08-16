@@ -813,7 +813,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     @Test
     void classesCarryingNoDeclarationsCannotBeToldEitherWay() {
         Agreement held = DeclarationAgreement.of("example.stale", "rename",
-                declarationsOf(MODEL), _ -> null);
+                declarationsOf(MODEL), _ -> new PublishedClasses.Carried.NoSuchClass());
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "nothing was published, so nothing was established");
@@ -934,7 +934,8 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
     /** {@code classes} with {@code absent} not on it, as an incomplete jar has it. */
     private static PublishedClasses missing(String absent, PublishedClasses classes) {
-        return binaryName -> binaryName.equals(absent) ? null : classes.of(binaryName);
+        return binaryName -> binaryName.equals(absent)
+                ? new PublishedClasses.Carried.NoSuchClass() : classes.of(binaryName);
     }
 
     /** The classes one build of a model spread over several sources emits. */
