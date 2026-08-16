@@ -269,8 +269,8 @@ class ASecondaryRegionNamesItsFileTest {
      */
     @Test
     void aRegionOutOfSightBecomesALabelWithNothingToPointAt() {
-        SourcePos there = new SourcePos(3, 3).standingInFor(
-                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.rule")));
+        SourcePos there = Placement.whatAModulePublished(
+                new SourceProvenance.APublishedModule("lib.rule")).at(3, 3);
         LabeledRegion label = new LabeledRegion(Region.ofWidth(there, 4),
                 new NameMessage.WriteItOnItsOwn("x"));
 

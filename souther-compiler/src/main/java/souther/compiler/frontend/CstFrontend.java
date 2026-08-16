@@ -10,7 +10,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceProvenance;
-import souther.compiler.diag.TextRead;
+import souther.compiler.diag.Placement;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,7 +41,7 @@ public final class CstFrontend {
      * those positions are in no file and are not where the code is.
      */
     public static Ast.Module parse(String source, String defaultModuleName) {
-        return parse(source, defaultModuleName, TextRead.aTextWithNoIdentity());
+        return parse(source, defaultModuleName, Placement.aTextWithNoIdentity());
     }
 
     /** As {@link #parse(String, String)} with the default module name {@code Main}. */
@@ -62,10 +62,10 @@ public final class CstFrontend {
      * be a name this compile made up for a module that has one.
      */
     public static Ast.Module parseWhatAModulePublished(String source, SourceProvenance provenance) {
-        return parse(source, null, TextRead.whatAModulePublished(provenance));
+        return parse(source, null, Placement.whatAModulePublished(provenance));
     }
 
-    private static Ast.Module parse(String source, String defaultModuleName, TextRead read) {
+    private static Ast.Module parse(String source, String defaultModuleName, Placement read) {
         CstParser.Result result = CstParser.parse(source);
         if (!result.errors().isEmpty()) {
             throw firstError(source, read, result.errors().get(0));
@@ -102,8 +102,8 @@ public final class CstFrontend {
      * worked out again.
      */
     public static Parsed parseWithSlices(String source, String defaultModuleName, SourceId sourceId) {
-        TextRead read = sourceId == null ? TextRead.aTextWithNoIdentity()
-                : TextRead.aFileOfThisCompile(sourceId);
+        Placement read = sourceId == null ? Placement.aTextWithNoIdentity()
+                : Placement.aFileOfThisCompile(sourceId);
         CstParser.Result result = CstParser.parse(source);
         if (!result.errors().isEmpty()) {
             throw firstError(source, read, result.errors().get(0));
@@ -149,7 +149,7 @@ public final class CstFrontend {
      * taken off the builder — the build never ran — so this is the one position of a source that
      * would otherwise not say which file it is in, and a syntax error would be the single kind of
      * mistake still reported against whatever file the reader guessed at. */
-    private static CompileException firstError(String source, TextRead read, CstError<?> e) {
+    private static CompileException firstError(String source, Placement read, CstError<?> e) {
         LineIndex lines = new LineIndex(source, read);
         Diagnostic diag = Diagnostic.say(e.said())
                 .at(lines.posOf(e.offset()), e.width()).build();

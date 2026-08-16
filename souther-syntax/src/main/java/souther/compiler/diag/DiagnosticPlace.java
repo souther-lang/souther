@@ -150,9 +150,9 @@ public sealed interface DiagnosticPlace {
             throw new NotOnePlace("a region runs from " + start.sourceId() + " to "
                     + end.sourceId() + ", which is not one place in one source");
         }
-        if (!start.writtenAt().equals(end.writtenAt())) {
-            throw new NotOnePlace("a region runs from " + start.writtenAt() + " to "
-                    + end.writtenAt() + ", which is not one place written in one place");
+        if (!start.placement().equals(end.placement())) {
+            throw new NotOnePlace("a region runs from " + start.placement() + " to "
+                    + end.placement() + ", which is not one place written in one place");
         }
     }
 

@@ -12,7 +12,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceProvenance;
-import souther.compiler.diag.WrittenAt;
+import souther.compiler.diag.Placement;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.WrittenAtMessage;
 import souther.compiler.meta.ModulePath;
@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,7 +77,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said());
         assertEquals("Yen", quoted(ONE_MODULE, one.region()),
                 "the caret is on the construction, which is what the rule is about");
-        assertEquals(WrittenAt.HERE, one.pos().writtenAt(),
+        assertFalse(one.pos().isOutOfSight(),
                 "the construction is in a file this compile has, so the caret is at the code");
     }
 
@@ -93,7 +94,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         assertEquals("Yen", quoted(DECLARING, one.region()),
                 "the caret is on the construction, in the file the helper is written in");
         assertEquals(new SourceId("up.sou"), one.pos().sourceId());
-        assertEquals(WrittenAt.HERE, one.pos().writtenAt());
+        assertFalse(one.pos().isOutOfSight());
     }
 
     /**
@@ -151,9 +152,12 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said(),
                 "the rule broken is the same rule");
-        assertEquals(WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up", "up.atLeastZero")), one.pos().writtenAt());
-        assertEquals(new SourceId("down.sou"), one.pos().sourceId(),
-                "the caret is in the file the reader is compiling, since there is no other");
+        assertEquals(Placement.aFileOfThisCompile(new SourceId("down.sou"))
+                        .standingInFor(Placement.whatAModulePublished(
+                                new SourceProvenance.APublishedModule("up", "up.atLeastZero"))),
+                one.pos().placement(),
+                "the caret is in the file the reader is compiling, since there is no other, and it"
+                        + " says the code it names is written where that file cannot show");
     }
 
     /** And it claims no width there. The width a report about a construction measures is the

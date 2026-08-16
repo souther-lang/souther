@@ -174,7 +174,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
                 """, "sized"), positions);
 
         List<String> said = positions.stream().filter(SourcePos::isOutOfSight)
-                .map(p -> p.writtenAt().toString()).distinct().toList();
+                .map(p -> p.placement().toString()).distinct().toList();
         assertTrue(said.stream().allMatch(s -> s.contains("TheStandardLibrary")),
                 () -> "the library is still what the copy came from: " + said);
         assertTrue(said.stream().allMatch(s -> s.contains("Int.abs")),

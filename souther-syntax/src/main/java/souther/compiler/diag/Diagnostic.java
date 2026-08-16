@@ -153,13 +153,13 @@ public final class Diagnostic {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
-        WrittenAt out = WrittenAt.outOfSight(provenance);
+        Placement declaring = Placement.whatAModulePublished(provenance);
         List<LabeledRegion> also = new ArrayList<>(secondary);
         for (SourcePos other : where.subList(1, where.size())) {
-            also.add(new LabeledRegion(Region.point(other.standingInFor(out)), alsoHere));
+            also.add(new LabeledRegion(Region.point(other.standingInFor(declaring)), alsoHere));
         }
         return new Diagnostic(severity, code,
-                Region.point(where.get(0).standingInFor(out)), List.copyOf(also),
+                Region.point(where.get(0).standingInFor(declaring)), List.copyOf(also),
                 literalMessage, diff, notes, suggestion, said);
     }
 

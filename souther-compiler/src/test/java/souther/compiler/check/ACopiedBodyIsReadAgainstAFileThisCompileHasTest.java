@@ -9,7 +9,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
-import souther.compiler.diag.WrittenAt;
+import souther.compiler.diag.Placement;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
@@ -122,8 +122,10 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
 
         assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() == null).toList(),
                 "every coordinate the backend is built from names a source this compile has");
-        assertTrue(positions.stream().anyMatch(p ->
-                        WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up", "up.doubled")).equals(p.writtenAt())),
+        Placement spliced = Placement.aFileOfThisCompile(new SourceId("down.sou"))
+                .standingInFor(Placement.whatAModulePublished(
+                        new SourceProvenance.APublishedModule("up", "up.doubled")));
+        assertTrue(positions.stream().anyMatch(p -> spliced.equals(p.placement())),
                 "the body came from a module read off the path, and the lowering did not forget");
     }
 

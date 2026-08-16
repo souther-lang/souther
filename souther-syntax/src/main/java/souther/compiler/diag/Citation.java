@@ -26,10 +26,10 @@ import java.util.SequencedMap;
  * {@code at()} on this interface would be the shortest way back to the defect: every caller would
  * write it, the sum would decorate nothing, and the second case would go unread again.
  *
- * <p>Built one way. {@link #of} asks the coordinate's provenance to project itself, which is the only
- * thing {@link WrittenAt} will do and is package-private so that it stays so, and the arms cannot be
- * built or implemented from outside this package. So there is no independent construction path: every
- * citation is a projection of provenance a coordinate already carries.
+ * <p>Built one way. {@link #of} asks the position's {@link Placement} to project itself, which is the
+ * only thing a placement will do for a caller and is package-private so that it stays so, and the arms
+ * cannot be built or implemented from outside this package. So there is no independent construction
+ * path: every citation is a projection of what a position already carries.
  *
  * <p>Which is a rule about where a statement comes from and not a claim that provenance is a secret.
  * A caller may stamp a coordinate itself and project that, and may compare a provenance against one
@@ -68,7 +68,7 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
      * came to write one source's identity beside another source's line and column.
      */
     static Citation of(SourcePos pos) {
-        return pos.writtenAt().cite(pos);
+        return pos.placement().cite(pos);
     }
 
     /**
