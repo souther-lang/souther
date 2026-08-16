@@ -4,7 +4,9 @@ import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.UnreadReason;
 import souther.compiler.values.ValueSet;
 
 import souther.compiler.numeric.Count;
@@ -45,13 +47,15 @@ public final class FieldDomains {
      * Nothing known of any field.
      *
      * <p>Which is not the same as a value with nothing written about it, and answers as the first:
-     * no clause of anything was gathered here, so {@link #admits} says of every position that a
-     * rule about it may be unread. A caller holding this holds it because it chose not to read a
-     * declaration or had none to read, and neither of those is a reading that found no rules.
+     * no clause of anything was gathered here, so {@link #admits} says of every position that the
+     * reading never reached the rules about it ({@link UnreadReason#NOT_REACHED}). A caller holding
+     * this holds it because it chose not to read a declaration or had none to read, and neither of
+     * those is a reading that found no rules.
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), true,
-                    false, ConstraintState.top(), null, null, null, Map.of(), () -> true);
+                    Set.of(THE_VALUE), ConstraintState.top(), null, null, null, Map.of(),
+                    () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -65,14 +69,17 @@ public final class FieldDomains {
     private final Map<String, NumericDomain.Bounds> heldByField;
     /** Which values each position may hold — see {@link #admits}. */
     private final Map<String, ValueSet> admittedByField;
-    /** Whether that is the whole of what the rules leave each of them — see {@link #speaksFor}. */
-    private final Map<String, Boolean> spokenForByField;
+    /** What stopped the reading from speaking for a position, for the ones it could not speak for.
+     * A position not here is one the reading took every rule about into the set — see
+     * {@link #admits}. */
+    private final Map<String, UnreadReason> unreadByField;
     /** Whether the reading that produced these bounds ran to the end. Kept because it is what that
      * reading knows about itself: a walk that fell over produces the same empty domain as a value
      * with no rules, and a second reading asked afterwards does not take the same path. */
     private final boolean seeded;
-    /** Whether every clause of this value reached the readings at all — see {@link #admits}. */
-    private final boolean everyClauseGathered;
+    /** Where a clause of this value did not reach the readings at all, as the paths the stops
+     * happened at — see {@link #admits}. */
+    private final Set<String> notGathered;
     /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
@@ -88,21 +95,21 @@ public final class FieldDomains {
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
                          Map<String, ValueSet> admittedByField,
-                         Map<String, Boolean> spokenForByField,
+                         Map<String, UnreadReason> unreadByField,
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeSymbol>> narrowers,
-                         boolean seeded, boolean everyClauseGathered,
+                         boolean seeded, Set<String> notGathered,
                          ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.admittedByField = admittedByField;
-        this.spokenForByField = spokenForByField;
+        this.unreadByField = unreadByField;
         this.directs = directs;
         this.narrowers = narrowers;
         this.seeded = seeded;
-        this.everyClauseGathered = everyClauseGathered;
+        this.notGathered = notGathered;
         this.constraints = constraints;
         this.named = named;
         this.data = data;
@@ -188,7 +195,7 @@ public final class FieldDomains {
         // are. Every position and not only the fields: what a name wraps is at no path of its own,
         // and it is the position a reader of a newtype asks about.
         Map<String, ValueSet> admitted = new LinkedHashMap<>();
-        Map<String, Boolean> spokenFor = new LinkedHashMap<>();
+        Map<String, UnreadReason> unread = new LinkedHashMap<>();
         // Every position that answers to either name. A number is called one thing by the interval
         // algebra and another by everything else, and the two are filed as they are found — so a
         // reading keyed by one of the maps would leave a position held only by the other answering
@@ -202,13 +209,20 @@ public final class FieldDomains {
             // is filed under whichever the reading recognised. Both are about the same values, so
             // what holds of it is what both leave.
             ValueSet here = ValueSet.ANY;
-            boolean spoken = true;
+            UnreadReason why = null;
             for (Term name : named(seeded, field)) {
                 here = here.meet(values.at(name));
-                spoken &= values.speaksFor(name);
+                // The first that stopped it. Two names of one position are two ways the same rules
+                // were filed, so a second reason is another account of a position already known to
+                // be short of its rules rather than a further thing wrong with it.
+                if (why == null) {
+                    why = values.whyUnread(name);
+                }
             }
             admitted.put(field, here);
-            spokenFor.put(field, spoken);
+            if (why != null) {
+                unread.put(field, why);
+            }
         });
         // Resolved here rather than handed over as atoms. An atom is a name the seeding gave a shape
         // and means nothing once the reading that named it is gone, so a caller holding one could
@@ -226,9 +240,9 @@ public final class FieldDomains {
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
-                Map.copyOf(spokenFor), seeded.reading().directs(),
+                Map.copyOf(unread), seeded.reading().directs(),
                 seeded.reading().narrowers(),
-                seeded.everyClauseRead(), seeded.everyClauseGathered(),
+                seeded.everyClauseRead(), seeded.notGathered(),
                 seeded.constraints(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
@@ -400,47 +414,27 @@ public final class FieldDomains {
     }
 
     /**
-     * Which values a position may hold, and whether that is the whole of what its rules leave it.
-     *
-     * <p>One answer and not two, because the two are read together or read wrongly. A set of two
-     * values is a division the model draws at that position; the same set beside a rule this
-     * reading could not take in is a division the model may draw more finely; and both are the same
-     * set. Handed over as a set with a second answer beside it, a caller may take the set and leave
-     * the answer — which is what {@link Held} is here to stop happening to a bound, one question
-     * earlier.
-     */
-    public sealed interface Admits {
-
-        /** The whole of what the rules leave the position. */
-        record EveryRuleRead(ValueSet values) implements Admits {}
-
-        /**
-         * These values, and the rules may leave fewer.
-         *
-         * <p>A rule reaching the position was not read as a set, or the reading never reached the
-         * position at all. Which of those it was is not said, because what a reader does about it
-         * is the same: the values hold — everything they exclude is excluded — and they are not a
-         * division of the position.
-         */
-        record SomeRuleUnread(ValueSet values) implements Admits {}
-
-        /** The values, which bound the position from above whichever of the two this is. */
-        ValueSet values();
-    }
-
-    /**
-     * Which values the position at {@code path} may hold.
+     * Which values the position at {@code path} may hold, and how much of its rules was read.
      *
      * <p>{@link ValueSet#ANY} where the rules leave it open, which is also what a position nothing
-     * was written about comes to — told apart from a position this could not read by which of the
-     * two answers carries it.
+     * was written about comes to — told apart from a position this could not read by the
+     * completeness beside it, which is why the two are handed over as one value
+     * ({@link AdmissibleSet}).
      *
      * <p>{@code path} is read from the value these are of, as {@link #at} is, and what a name wraps
      * is at {@link #THE_VALUE}. A range is not handed back there and this is: a newtype's value is
      * the position the newtype is, so it is the position a reader of one asks about.
+     *
+     * <p>The position's own reason comes first where there is one. A rule written about this
+     * position that could not be read is what an author would act on; that the gathering stopped
+     * somewhere else in the value is true as well and is the coarser of the two.
      */
-    public Admits admits(String path) {
+    public AdmissibleSet admits(String path) {
         ValueSet values = admittedByField.getOrDefault(path, ValueSet.ANY);
+        UnreadReason here = unreadByField.get(path);
+        if (here != null) {
+            return AdmissibleSet.partial(values, here);
+        }
         // A clause that never reached the readings cannot have spoiled the position it was about,
         // because no reading here ever saw which position that was. A walk that fell over and a
         // clause nothing could type are both that, and both leave maps that read exactly like a
@@ -451,8 +445,30 @@ public final class FieldDomains {
         // clauses it was handed, and a clause it could not turn into an obligation is one this
         // reading may have taken in whole; borrowing it would settle this reading's completeness by
         // a fragment that is not this reading's.
-        return everyClauseGathered && spokenForByField.getOrDefault(path, true)
-                ? new Admits.EveryRuleRead(values) : new Admits.SomeRuleUnread(values);
+        return reachedTheRulesAt(path) ? AdmissibleSet.complete(values)
+                : AdmissibleSet.partial(values, UnreadReason.NOT_REACHED);
+    }
+
+    /**
+     * Whether the gathering reached whatever rules are written about the position at {@code path}.
+     *
+     * <p>A stop reaches the position it happened at and everything under it, and no further. A rule
+     * that narrows a position names it, and a clause written inside one field names no position
+     * outside that field — so a walk that declined to enter a regex-bounded code has said nothing
+     * about the plain {@code Int} beside it.
+     *
+     * <p>A stop at {@link #THE_VALUE} is different in kind and is why the paths are compared rather
+     * than counted: the declaration's own clause can name any position of it, so a clause of it
+     * that never arrived leaves every position short of its rules.
+     */
+    private boolean reachedTheRulesAt(String path) {
+        for (String stopped : notGathered) {
+            if (stopped.equals(THE_VALUE) || path.equals(stopped)
+                    || path.startsWith(stopped + ".")) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Both names the position at {@code path} answers to. A number has one of each and everything

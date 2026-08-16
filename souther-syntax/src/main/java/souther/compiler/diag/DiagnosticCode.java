@@ -59,6 +59,8 @@ public enum DiagnosticCode {
     E1022("a-value-does-not-reach-itself", "check.value.cycle.title"),
     E1105("an-invariant-observes-and-does-not-build", "check.invariant.invalid.title"),
     E1106("an-invariant-answers-on-every-path", "check.invariant.invalid.title"),
+    E1107("an-invariant-is-declared-where-a-construction-owes-it",
+            "check.invariant.invalid.title"),
     E1201("match-covers-every-case", "e1201.title"),
     E1202("a-match-subject-is-a-sum", "check.match.title"),
     E1203("a-match-arm-names-a-case-of-the-subject", "check.match.title"),

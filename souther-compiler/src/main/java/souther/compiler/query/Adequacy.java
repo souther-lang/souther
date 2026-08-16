@@ -1627,7 +1627,7 @@ public final class Adequacy {
         /** What stopped a derivation, in the words a report writes it in. */
         private static String said(souther.compiler.partition.UndividedPosition.Reason reason) {
             return switch (reason) {
-                case UNSUPPORTED_SYNTAX -> "a comparison here is written in a form this does not read";
+                case UNSUPPORTED_SYNTAX -> "a rule about it is one this compiler did not read";
                 case UNSUPPORTED_DOMAIN ->
                         "it is compared against values no line can be drawn on here";
                 case UNSUPPORTED_PARTITION_SHAPE ->

@@ -1184,6 +1184,8 @@ A value constraint written as a comment in the spec DSL is made executable as an
 
 [[invariant-needs-a-value-to-constrain]]A type an invariant is declared on MUST have a value for it to observe. A unit data has one value and no field, so there is nothing for a clause to read and nothing it could reject.
 
+[[an-invariant-is-declared-where-a-construction-owes-it]]An invariant MUST be declared on a type something constructs. A sum names which cases a value can be and is never itself built — `+T(...)+` is refused wherever it is written, and a value of `+T+` is written as one of its cases (<<a-sum-case-is-a-declared-data>>) — so a clause declared on one would be owed by no construction and checked at no boundary. Write it on the case, or on a newtype over the sum, which is built and carries its own check (<<newtype>>). Writing one on a sum is a compile error rather than a clause with no effect, for the reason the same rule is stated for a unit data: a clause that is dropped takes whatever is written inside it along with it.
+
 [[an-invariant-observes-and-does-not-build]]An invariant observes the value being built and MUST NOT build one. A construction inside it would run the built type's own check inside this one, and the answer to whether this value holds would depend on whether another one did.
 
 [[an-invariant-answers-on-every-path]]An invariant MUST answer on every path through it. It is checked on every construction and at every boundary (<<invariant-mvp>>), so it may not reach an `+unreachable+` and may not reach a `+partial+` helper, which publishes no termination guarantee (<<fn-rules>>).
@@ -4581,6 +4583,17 @@ guarantee; an invariant is checked on every construction.
 ----
 
 Reported at the clause (<<an-invariant-answers-on-every-path>>). An invariant runs at every construction and at every boundary, so a path through it that answers nothing — an `+unreachable+`, or a `+partial+` helper that may not stop — is a check that may not come back.
+
+[#e1107]
+=== An invariant is declared where no construction would owe it
+
+[,text]
+----
+`Stage` is a sum, and nothing constructs one — a value of `Stage` is written as one of its cases —
+so this invariant would be owed by no construction and checked at no boundary.
+----
+
+Reported at the clause (<<an-invariant-is-declared-where-a-construction-owes-it>>). Write the rule on the case it is about, or on a newtype over the sum, which is built and carries its own check. Refused rather than kept as a clause with no effect: a sum is lowered into a declaration with no place to put one, so a clause allowed through here is dropped along with anything written inside it, and a reading that asks which rules a position has cannot tell it from a declaration nobody wrote a rule on.
 
 [#e1201]
 === Non-exhaustive match

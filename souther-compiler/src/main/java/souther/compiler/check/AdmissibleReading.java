@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -97,7 +98,7 @@ final class AdmissibleReading {
                 return comparison(b, (b.op() == Hir.BinOp.EQ) == positive);
             }
         }
-        return AdmissibleValues.unreadable(names(e));
+        return unreadable(e);
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */
@@ -107,19 +108,69 @@ final class AdmissibleReading {
             // `"A" == value` says what `value == "A"` says.
             read = sided(b.right(), b.left(), states);
         }
-        return read != null ? read : AdmissibleValues.unreadable(names(b));
+        return read != null ? read : unreadable(b);
     }
+
+    /**
+     * A rule this reading could not turn into a set of values, and why.
+     *
+     * <p>How far this got and not how many positions the rule mentions. A comparison of one
+     * position with another is a rule about a pair — {@code startsAt < endsAt}, {@code a /= b} —
+     * and a set of one position's values is not what it says; nothing about it was beyond this
+     * reading, which is what makes it its own answer rather than a shape nobody could read.
+     * Anything else is a form this reading does not take apart, whatever it mentions.
+     *
+     * <p>Counting the positions instead reads {@code validPair(left, right)} as a relation, which
+     * it may not be: what is known there is that two positions appear in an expression this could
+     * not interpret, and the word it would be projected to says the rule relates them. The two
+     * cases are told apart by what was recognised, at the one place a reading gives up, so an
+     * ordering comparison and an equality answer alike — written per shape, {@code <} fell through
+     * one path and {@code ==} another, and a relation came out as a form nobody could read.
+     */
+    private AdmissibleValues<Term> unreadable(Core e) {
+        return AdmissibleValues.unreadable(names(e), relatesTwoPositions(e)
+                ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
+    }
+
+    /**
+     * Whether {@code e} is a comparison this reading recognised, of one position against another.
+     *
+     * <p>Another, and not a position on each side. {@code value == value} has two operands and one
+     * position, and the word this is projected to says the rule relates the position to another —
+     * which the model did not write. What is true of such a rule is that this reading did not take
+     * it in, which is what every other unrecognised shape says.
+     */
+    private boolean relatesTwoPositions(Core e) {
+        if (!(e instanceof Core.Binary b) || !COMPARES.contains(b.op())) {
+            return false;
+        }
+        Term left = positionIn(b.left());
+        Term right = positionIn(b.right());
+        return left != null && right != null && !left.equals(right);
+    }
+
+    /** The comparisons a rule relating two positions is written with. Everything else is read as a
+     * form rather than as a relation, since what a call or a pattern says about the positions in it
+     * is what this reading could not work out. */
+    private static final Set<Hir.BinOp> COMPARES = Set.of(Hir.BinOp.EQ, Hir.BinOp.NE,
+            Hir.BinOp.LT, Hir.BinOp.LE, Hir.BinOp.GT, Hir.BinOp.GE);
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */
     private AdmissibleValues<Term> sided(Core where, Core what, boolean states) {
-        Term position = terms.atomOf(where, at);
-        if (position == null) {
-            position = terms.bodyKey(where, at);
-        }
+        Term position = positionIn(where);
         Type type = position == null ? null : byName.get(position);
         Value value = type == null ? null : valueOf(what);
         return value == null ? null : AdmissibleValues.at(position, admits(value, states, type));
+    }
+
+    /** The position {@code e} is, or null where it is not one of the positions being read for. */
+    private Term positionIn(Core e) {
+        Term named = terms.atomOf(e, at);
+        if (named == null) {
+            named = terms.bodyKey(e, at);
+        }
+        return named != null && byName.containsKey(named) ? named : null;
     }
 
     /**

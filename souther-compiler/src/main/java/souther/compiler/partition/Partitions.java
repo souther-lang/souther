@@ -10,6 +10,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.Rules;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.numeric.Count;
@@ -18,6 +19,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -129,7 +131,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found,
-                    new Placed(readAs(type, symbols), fieldDomainsOf(type, symbols)),
+                    new Placed(readAs(type, symbols), rulesOf(type, symbols)),
                     domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
@@ -300,9 +302,11 @@ public final class Partitions {
                 // everything else. Ranges here would ask the rows for a distinction between the two
                 // sides of a value the behavior treats alike.
                 NumericDomain.Bounds only = domainOf(base, term);
-                keep(out, measured, axis.carrying(
-                        singledClasses(points, term, axis.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, term.carrierAt(axis.type(), symbols))),
+                NumericTerm at = term;
+                Axis here2 = axis;
+                keep(out, measured, refine(axis,
+                        () -> singledClasses(points, at, here2.type(), only, symbols),
+                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols))),
                         new BodyCutInspection.Evidence(), rules);
                 continue;
             }
@@ -337,17 +341,6 @@ public final class Partitions {
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
             Carrier carrier = term.carrierAt(axis.type(), symbols);
-            // The ranges a cut leaves, where the position has no finer partition of its own. On an
-            // enumeration it has: the cases are the classes, and `s < Qualified` divides them into
-            // `{Prospecting}` and `{Qualified, Won}`, which is coarser than the cases. The meet of
-            // the two is the case partition, so the cut adds no class — and a class list rebuilt
-            // from the ranges would take away distinctions the model already made. The line is still
-            // a line and still owes its rows; only the classes stay as they were.
-            List<PartitionClass> classes = carrier instanceof Carrier.Ordinal ? List.of()
-                    : Intervals.classesOf(
-                            Intervals.of(reachable, domain == null ? null : domain.min(),
-                                    domain == null ? null : domain.max()),
-                            term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             //
@@ -355,13 +348,52 @@ public final class Partitions {
             // a rule that went unread either: what it says was understood. So the answer there is
             // that the rules were exhausted, which is what keeps `Blocked` meaning that a
             // comparison could not be interpreted rather than everything that came to nothing.
-            keep(out, measured, axis.measuredAt(axis.id(), term).carrying(
-                    classes.isEmpty() ? axis.classes() : classes,
+            NumericDomain.Bounds within = domain;
+            NumericTerm measuredAt = term;
+            Axis read = axis;
+            keep(out, measured, refine(axis.measuredAt(axis.id(), term),
+                    () -> Intervals.classesOf(
+                            Intervals.of(reachable, within == null ? null : within.min(),
+                                    within == null ? null : within.max()),
+                            measuredAt, read.type(), symbols),
                     merged(axis.cuts(), reachable, carrier)),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), between);
+    }
+
+    /**
+     * The same position, with what a body's rules add to it.
+     *
+     * <p>Refinement and not replacement. What a body draws is evidence arriving after the model's
+     * own, and evidence only ever tells a position's values apart more finely — so where the model
+     * already divides the position, the lines a body draws are lines among those classes and the
+     * classes stay as they are. Rebuilt from the lines, a position the model divides three ways
+     * would come back divided two ways, and the loss reads as the model never having stated the
+     * third.
+     *
+     * <p>Which is a rule about the classes and not about the carrier. It stood as a test for an
+     * enumeration, being where it was first noticed; a position whose rules name the values it
+     * holds is divided just as finely and had no such test, so a {@code guard} over it replaced
+     * what the model states.
+     *
+     * <p>The two agree wherever the old one fired, and they agree by construction rather than by
+     * luck: an enumeration's cases are its classes, and a crossing never leaves a position whose
+     * type states classes without any ({@code LocalInspection}'s {@code constructibleAt}). So there
+     * is no position with an ordered carrier for these to be about, and ranges over the count an
+     * enumeration's cases are ordered by are never rebuilt into a partition of them.
+     *
+     * <p>The lines are taken either way. A line is still a line where it divides nothing new, and
+     * still owes its rows.
+     *
+     * @param otherwise the classes to use where the model divides the position no way, asked for
+     *                  only there — a position that already has classes has no use for them, and
+     *                  working them out would be a reading whose answer is thrown away
+     */
+    private static Axis refine(Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise,
+                               List<Cut> cuts) {
+        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts);
     }
 
     /**
@@ -610,8 +642,8 @@ public final class Partitions {
         // classes was never checked at all, and the one case the type exists to make loud was the
         // one that stayed quiet.
         PartitionInput input = PartitionInput.of(TypeView.of(type, symbols));
-        LocalInspection local = LocalInspection.inspect(input, path, symbols, placed);
-        LocalReading reading = local.reading();
+        LocalInspection inspected = LocalInspection.of(input, path, symbols, placed);
+        LocalReading reading = inspected.reading();
         for (UnreadRule each : reading.unread()) {
             if (unread.stream().noneMatch(had -> had.equals(each))) {
                 unread.add(each);
@@ -622,18 +654,20 @@ public final class Partitions {
         if (reading.admissible() != null && !reading.admissible().isEmpty()) {
             domains.put(term, reading.admissible());
         }
-        switch (local) {
-            case LocalInspection.Evidence evidence -> {
-                if (evidence.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
+        switch (inspected.partition()) {
+            case LocalPartition.Divided divided -> {
+                if (divided.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
                     uncertain.add(term);
                 }
-                out.add(new Axis(id, term, type, evidence.classes(), evidence.cuts().cuts()));
+                out.add(new Axis(id, term, type, divided.classes(), divided.cuts().cuts(),
+                        java.util.Set.of(), divided.completeness(), null, null));
             }
-            // Both local producers were asked and neither answered, which is what licenses asking
-            // what is under the position. The answer is not a verdict: a leaf and a block are both
-            // positions still to be answered for, and each carries what it is left with if nothing
-            // answers.
-            case LocalInspection.Exhausted _ -> {
+            // Nothing local divides the position, which is what licenses asking what is under it.
+            // Whether the reading got to the end of the rules is carried rather than acted on here:
+            // a position made of positions is given up in favour of what is under it either way,
+            // and a rule about the whole value that this could not read says nothing about which of
+            // its fields it would have divided.
+            case LocalPartition.Open _, LocalPartition.Blocked _ -> {
                 switch (StructuralInspection.of(input.shape(), depth < MAX_DEPTH)) {
                     // The one answer that takes the position away: what is under it is what the
                     // classes belong to, and this position is not carried further.
@@ -644,9 +678,14 @@ public final class Partitions {
                         }
                     }
                     // A leaf and a block are both positions still to be answered for, and each
-                    // carries what it is left with if nothing answers.
+                    // carries what it is left with if nothing answers — including a rule about this
+                    // position that the local reading could not take in, which is what keeps the
+                    // position from completing as one the model divides no way.
                     case StructuralInspection.Pending pending ->
-                            out.add(Axis.pendingAt(id, term, type, pending));
+                            out.add(Axis.pendingAt(id, term, type,
+                                    reading.admitted().completeness(), pending,
+                                    inspected.partition() instanceof LocalPartition.Blocked blocked
+                                            ? blocked.why() : null));
                 }
             }
         }
@@ -655,25 +694,41 @@ public final class Partitions {
 
     /** The value a position is inside: what it is called, and what its rules leave each position of
      * it able to hold. */
-    record Placed(TypeSymbol value, FieldDomains domains) {
+    record Placed(TypeSymbol value, Rules rules) {
+
+        /** What the rules leave the numbers, ends and narrowings of this value. */
+        FieldDomains bounds() {
+            return rules.bounds();
+        }
 
         /** What is left for the position at {@code path}, which is read from the value this is of. */
         NumericDomain.Bounds at(TermPath path) {
             return path.fields().isEmpty() ? null
-                    : domains.at(String.join(".", path.fields()));
+                    : bounds().at(String.join(".", path.fields()));
+        }
+
+        /**
+         * Which values the position at {@code path} may hold, and how much of its rules was read.
+         *
+         * <p>Asked at every path, the value's own included: what a name wraps is at no path of its
+         * own and is the position a reader of a newtype asks about, which is why this is not the
+         * empty answer where {@link #at} is.
+         */
+        AdmissibleSet admits(TermPath path) {
+            return rules.admits(String.join(".", path.fields()));
         }
 
         /** The ends the clauses reaching this value place on the coordinates at {@code path}, which
          * is a different question from what {@link #at} leaves them. */
         List<FieldDomains.Placed> placedAt(TermPath path) {
             return path.fields().isEmpty() ? List.of()
-                    : domains.placedAt(String.join(".", path.fields()));
+                    : bounds().placedAt(String.join(".", path.fields()));
         }
 
         /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
         List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
             return path.fields().isEmpty() ? List.of()
-                    : domains.narrowedBy(String.join(".", path.fields()), lower);
+                    : bounds().narrowedBy(String.join(".", path.fields()), lower);
         }
     }
 
@@ -707,11 +762,14 @@ public final class Partitions {
      * fields, and can be ones this could not read, and all three are answers about the same value:
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
+     *
+     * <p>Whether there was a declaration to read at all is {@link Rules}' answer and not a default
+     * this fills in. A position with no declaration on it has no rule written about it, and a
+     * reading that said instead "a rule about this may have gone unread" would say it of every
+     * plain {@code String} in every model.
      */
-    private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
-        TypeSymbol read = readAs(type, symbols);
-        return read != null && symbols.declarations().declaration(read.key()) instanceof Hir.Data data
-                ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
+    private static Rules rulesOf(Type type, Symbols symbols) {
+        return Rules.of(readAs(type, symbols), symbols);
     }
 
     /**

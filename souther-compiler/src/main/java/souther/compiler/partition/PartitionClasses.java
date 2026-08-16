@@ -9,6 +9,8 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -119,7 +121,7 @@ final class PartitionClasses {
         for (PartitionClass each : of(new TypeView(view.declared(), List.of(), view.shape()),
                 symbols)) {
             out.add(PartitionClass.ungeneratable(each.id(), each.label(),
-                    Classifier.under(worn, each.classifier()), why));
+                    Classifier.under(worn, each.classifier()), why).holding(each.denotes()));
         }
         return out;
     }
@@ -133,15 +135,19 @@ final class PartitionClasses {
     /** The two values of a {@code Bool}, under the names the position writes them under. */
     private static List<PartitionClass> eitherWay(List<TypeSymbol> worn,
                                                   List<TypeReachName.Written> writes) {
+        // Each holds the one value it is named after, which is what lets a rule denying that value
+        // be read as refusing the whole class.
         return List.of(
                 PartitionClass.of("true", "true",
                         Classifier.under(worn, Classifier.byShape(v -> isBool(v, true))),
                         RepresentativeSource.under(writes,
-                                RepresentativeSource.of(FixtureTemplate.bool(true)))),
+                                RepresentativeSource.of(FixtureTemplate.bool(true))))
+                        .holding(ValueSet.just(Value.truth(true))),
                 PartitionClass.of("false", "false",
                         Classifier.under(worn, Classifier.byShape(v -> isBool(v, false))),
                         RepresentativeSource.under(writes,
-                                RepresentativeSource.of(FixtureTemplate.bool(false)))));
+                                RepresentativeSource.of(FixtureTemplate.bool(false))))
+                        .holding(ValueSet.just(Value.truth(false))));
     }
 
     /** Whether an optional holds anything, which is the one division its type makes. */
@@ -186,6 +192,33 @@ final class PartitionClasses {
 
     private static PartitionClass caseClass(TypeSymbol leaf, List<TypeSymbol> worn,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
+        return holdingWhatItIs(leaf, symbols, writableCase(leaf, worn, writes, symbols));
+    }
+
+    /**
+     * The same class, saying which values it holds.
+     *
+     * <p>Said of the case and not of the class that came back, because what a class means and
+     * whether a row for it can be written down are two answers and only the second turns on which
+     * module is reading. A case holding nothing is one value wherever it is read; a case holding a
+     * record has no end of them and says nothing here.
+     *
+     * <p>Applied after the class is built rather than inside the branch that builds one. Written
+     * there, the two answers came back together: a case another module keeps to itself took the
+     * arm that says nothing can be written for it, and left without saying what it holds — so a
+     * rule denying that case had nothing to prove itself against, and the case stayed in the
+     * denominator of every module but the one that declared it.
+     */
+    private static PartitionClass holdingWhatItIs(TypeSymbol leaf, Symbols symbols,
+                                                  PartitionClass built) {
+        return symbols.declarations().declaration(leaf.key()) instanceof Hir.Data
+                ? built : built.holding(ValueSet.just(Value.of(leaf)));
+    }
+
+    /** The class itself: what it is called, what it recognises, and what can be written for it. */
+    private static PartitionClass writableCase(TypeSymbol leaf, List<TypeSymbol> worn,
+                                               List<TypeReachName.Written> writes,
+                                               Symbols symbols) {
         Classifier is = Classifier.under(worn, Classifier.byShape(v -> switch (v) {
             case ObservedValue.Unit u -> leaf.equals(u.type());
             case ObservedValue.Constructed c -> leaf.equals(c.type());

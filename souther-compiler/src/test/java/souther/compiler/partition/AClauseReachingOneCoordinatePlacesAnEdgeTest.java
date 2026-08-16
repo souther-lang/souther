@@ -299,6 +299,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      *
      * <p>The rule this is here to keep. Neither position is divided by it, so an edge derived from it
      * would be a partition of a number the author never bounded (#427).
+     *
+     * <p>And neither is said to be one the model divides no way. There is a rule about each of them
+     * — the one relating them — so what a report can say is that the rule does not divide either,
+     * which is where it is sent. An absence there would tell the author their model draws no
+     * distinction at a position their model has a rule about (issue #772).
      */
     @Test
     void aClauseRelatingTwoPositionsPlacesNoEdge() {
@@ -308,8 +313,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onSpan                   implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not derivable: v.startsAt
-                      · not derivable: v.endsAt
+                      · not read: v.startsAt (the comparison relates it to another position rather than dividing it)
+                      · not read: v.endsAt (the comparison relates it to another position rather than dividing it)
                     boundary    not measured (no line was derived at any position)
                 """), report);
     }
@@ -324,8 +329,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onFloor                  implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not derivable: v.n
-                      · not derivable: v.min
+                      · not read: v.n (the comparison relates it to another position rather than dividing it)
+                      · not read: v.min (the comparison relates it to another position rather than dividing it)
                     boundary    not measured (no line was derived at any position)
                 """), report);
     }
@@ -444,9 +449,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * And where the type chose nothing, two such rules choose nothing either.
      *
      * <p>Both coordinates of `s` are bounded and neither by `s`'s own type, so which of them this
-     * position is measured at is a question with no answer here (ADR-0090). Left as a position
-     * nothing divides, which claims nothing; taking whichever was looked at first would put a line
-     * the author can read beside one they cannot see.
+     * position is measured at is a question with no answer here (ADR-0090). Nothing is divided and
+     * nothing is claimed about the model either: two rules are written about this position and what
+     * a report says is that they were not read, which sends the author to a limit of this compiler
+     * rather than to a distinction their model does not draw. Taking whichever was looked at first
+     * would put a line the author can read beside one they cannot see.
      */
     @Test
     void rulesAboutBothCoordinatesLeaveThePositionUndivided() {
@@ -456,7 +463,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                   onR                      implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                      · not derivable: v.s
+                      · not read: v.s (a rule about it is one this compiler did not read)
                     boundary    not measured (no line was derived at any position)
                 """), report);
     }

@@ -58,6 +58,29 @@ public sealed interface BlockReason {
     record UnreadComparisonDomain() implements BlockReason {}
 
     /**
+     * A rule naming which values the position may hold is written in a form no reader here takes
+     * apart as a set of them: a call, a pattern, a comparison against something other than a value
+     * written out.
+     *
+     * <p>Its own case beside {@link UnreadComparisonForm}, which is about a rule stating where the
+     * values stop. The two are read by different readers of the same clause and would be lifted by
+     * different work — one wants a wider fragment of comparison forms, and one wants a reading of
+     * values that follows a rule into a shape it does not enter today.
+     */
+    record UnreadValueRule() implements BlockReason {}
+
+    /**
+     * The reading of what the position may hold never reached the rules about it.
+     *
+     * <p>Not a rule it read and could not use. The walk that gathers a value's clauses stopped
+     * somewhere — at a depth, at a type it had already been through, at one with no declaration to
+     * read — or a clause could not be typed and so arrived nowhere. None of those is a fact about
+     * the rule, and all of them leave the same hole: what is written about this position is not
+     * known to have been read.
+     */
+    record ValueRulesNotReached() implements BlockReason {}
+
+    /**
      * The comparison relates two positions rather than dividing one.
      *
      * <p>Nothing is missing from the carrier: both sides are ordered, and a line drawn on either

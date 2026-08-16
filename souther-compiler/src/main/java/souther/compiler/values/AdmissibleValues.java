@@ -38,9 +38,10 @@ import java.util.Set;
  *
  * <p>Two things spoil it, and the second is the one that is easy to miss.
  *
- * <p>A rule this could not read spoils the positions it names. It cannot spoil a position it does
- * not name: nothing here relates one position to another, so a rule that narrows a position names
- * it — a rule relating two of them names both, and is itself a rule this cannot read.
+ * <p>A rule this could not read spoils the positions it names, and what stopped it travels with
+ * them ({@link UnreadReason}). It cannot spoil a position it does not name: nothing here relates
+ * one position to another, so a rule that narrows a position names it — a rule relating two of them
+ * names both, and is itself a rule this cannot read.
  *
  * <p>A rule this could not read spoils, under a disjunction, every position the other branch spoke
  * about, whether or not it names them. {@code value == "A" || opaque()} leaves {@code value} at ANY
@@ -49,14 +50,21 @@ import java.util.Set;
  * position would be reported as one the model draws no distinction at, when what happened is that
  * this reading could not follow the distinction the model draws.
  */
-public record AdmissibleValues<A>(Map<A, ValueSet> values, Set<A> unread, boolean dropped) {
+public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> unread,
+                                  boolean dropped) {
 
     /**
      * @param values  what each position admits. A position at {@link ValueSet#ANY} is left out, so
      *                that what is held is what was said
-     * @param unread  the positions this reading cannot speak for
-     * @param dropped whether any rule at all was left unread, which is what a disjunction needs in
-     *                order to know that a branch widened it
+     * @param unread  the positions this reading cannot speak for, each with what stopped it. Why
+     *                and not only which: two of these are lifted by different work and reported
+     *                differently, and a reader handed the positions alone would have to go back to
+     *                the rules to find out which it was
+     * @param dropped whether a rule was left unread anywhere in this reading, which is what a
+     *                disjunction needs in order to know that a branch widened it. What stopped that
+     *                rule is not carried: a position the other branch spoke about is spoiled by
+     *                there having been an alternative it could not read, and not by whatever the
+     *                rule in that alternative was about
      */
     public AdmissibleValues {
         Map<A, ValueSet> said = new LinkedHashMap<>();
@@ -69,17 +77,17 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Set<A> unread, boolea
         // written out of these has to come out the same on two runs of the compiler, and the
         // iteration order of an immutable copy does not.
         values = Collections.unmodifiableMap(said);
-        unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
+        unread = Collections.unmodifiableMap(new LinkedHashMap<>(unread));
     }
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
-        return new AdmissibleValues<>(Map.of(), Set.of(), false);
+        return new AdmissibleValues<>(Map.of(), Map.of(), false);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
-        return new AdmissibleValues<>(Map.of(atom, set), Set.of(), false);
+        return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false);
     }
 
     /**
@@ -89,8 +97,10 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Set<A> unread, boolea
      * <p>{@code named} may be empty — a rule reaching no position this can name is still a rule that
      * was not read, and what that costs is settled where it is joined rather than here.
      */
-    public static <A> AdmissibleValues<A> unreadable(Set<A> named) {
-        return new AdmissibleValues<>(Map.of(), named, true);
+    public static <A> AdmissibleValues<A> unreadable(Set<A> named, UnreadReason why) {
+        Map<A, UnreadReason> spoiled = new LinkedHashMap<>();
+        named.forEach(each -> spoiled.put(each, why));
+        return new AdmissibleValues<>(Map.of(), spoiled, true);
     }
 
     /** What {@code atom} may hold, everything being admitted where nothing was said. */
@@ -103,7 +113,12 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Set<A> unread, boolea
      * answer this reading could not narrow.
      */
     public boolean speaksFor(A atom) {
-        return !unread.contains(atom);
+        return !unread.containsKey(atom);
+    }
+
+    /** What stopped this reading from speaking for {@code atom}, or null where nothing did. */
+    public UnreadReason whyUnread(A atom) {
+        return unread.get(atom);
     }
 
     /** Whether some position admits no value, so that nothing satisfies these rules. */
@@ -115,7 +130,8 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Set<A> unread, boolea
     public AdmissibleValues<A> meet(AdmissibleValues<A> other) {
         Map<A, ValueSet> out = new LinkedHashMap<>(values);
         other.values.forEach((atom, set) -> out.merge(atom, set, ValueSet::meet));
-        return new AdmissibleValues<>(out, union(unread, other.unread), dropped || other.dropped);
+        return new AdmissibleValues<>(out, union(unread, other.unread),
+                dropped || other.dropped);
     }
 
     /**
@@ -134,22 +150,39 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Set<A> unread, boolea
                 out.put(atom, set.join(there));
             }
         });
-        Set<A> spoiled = union(unread, other.unread);
+        Map<A, UnreadReason> spoiled = union(unread, other.unread);
+        // Spoiled by there having been an alternative this could not read, which is what happened
+        // to them: a value satisfying that branch is under no obligation from this one. Not by what
+        // the unread rule was about — a rule relating two other positions relates this one to
+        // nothing, and lending its reason here would say that it did.
         if (other.dropped) {
-            spoiled = union(spoiled, values.keySet());
+            spoiled = spoiling(spoiled, values.keySet());
         }
         if (dropped) {
-            spoiled = union(spoiled, other.values.keySet());
+            spoiled = spoiling(spoiled, other.values.keySet());
         }
         return new AdmissibleValues<>(out, spoiled, dropped || other.dropped);
     }
 
-    private static <A> Set<A> union(Set<A> these, Set<A> those) {
+    /** The same, with {@code these} left open by an alternative — where nothing has spoiled them
+     *  already. A reason already recorded for a position is a rule that named it, which is nearer
+     *  than a branch that widened it from outside. */
+    private static <A> Map<A, UnreadReason> spoiling(Map<A, UnreadReason> had, Set<A> these) {
+        if (these.isEmpty()) {
+            return had;
+        }
+        Map<A, UnreadReason> out = new LinkedHashMap<>(had);
+        these.forEach(each -> out.putIfAbsent(each, UnreadReason.ALTERNATIVE_NOT_READ));
+        return out;
+    }
+
+    private static <A> Map<A, UnreadReason> union(Map<A, UnreadReason> these,
+                                                  Map<A, UnreadReason> those) {
         if (those.isEmpty()) {
             return these;
         }
-        Set<A> out = new LinkedHashSet<>(these);
-        out.addAll(those);
+        Map<A, UnreadReason> out = new LinkedHashMap<>(these);
+        those.forEach(out::putIfAbsent);
         return out;
     }
 }

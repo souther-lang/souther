@@ -7,6 +7,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -76,12 +78,14 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
     /** {@code values} are what the position holds, and are the whole of what its rules leave it. */
     private static void wholly(ValueSet values, FieldDomains read, String path) {
-        assertEquals(new FieldDomains.Admits.EveryRuleRead(values), read.admits(path));
+        assertEquals(AdmissibleSet.complete(values), read.admits(path));
     }
 
-    /** {@code values} are what the position holds, and the rules may leave fewer. */
-    private static void asFarAsRead(ValueSet values, FieldDomains read, String path) {
-        assertEquals(new FieldDomains.Admits.SomeRuleUnread(values), read.admits(path));
+    /** {@code values} are what the position holds, the rules may leave fewer, and {@code why} is
+     *  what stopped the reading short of them. */
+    private static void asFarAsRead(ValueSet values, UnreadReason why, FieldDomains read,
+                                    String path) {
+        assertEquals(AdmissibleSet.partial(values, why), read.admits(path));
     }
 
     /** An equality names the one value the position may hold. */
@@ -123,7 +127,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant either = value == "A" || String.matches("[0-9]+", value)
                 """, "Gender");
-        asFarAsRead(ValueSet.ANY, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
     }
 
     /**
@@ -144,7 +148,29 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Pair = { left: String, right: String }
                     invariant either = left == "A" || String.matches("[0-9]+", right)
                 """, "Pair");
-        asFarAsRead(ValueSet.ANY, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "left");
+    }
+
+    /**
+     * And what such a position is told is that an alternative took it back, whatever the unread
+     * branch was about.
+     *
+     * <p>{@code left /= right} relates two positions and {@code code} is neither of them, so the
+     * reason the branch stopped is not a reason about {@code code}. Lent across, a report would
+     * tell an author that a rule compares {@code code} with another position, and no rule does.
+     */
+    @Test
+    void aPositionAnAlternativeTookBackIsNotToldWhatTheOtherBranchWasAbout() {
+        FieldDomains read = of("""
+                module demo
+
+                data Triple = { left: String, right: String, code: String }
+                    invariant either = left /= right || code == "A"
+                """, "Triple");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "code");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "right");
     }
 
     /**
@@ -165,7 +191,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant both = value == "A" && String.matches("[A-Z]", value)
                 """, "Gender");
-        asFarAsRead(ValueSet.just(A), read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.just(A), UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
     }
 
     /** And a rule it cannot read that names another position costs this one nothing at all.
@@ -182,7 +208,89 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                     invariant both = left == "A" && String.matches("[A-Z]", right)
                 """, "Pair");
         wholly(ValueSet.just(A), read, "left");
-        asFarAsRead(ValueSet.ANY, read, "right");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "right");
+    }
+
+    /**
+     * A rule relating two positions is told apart from one written in a form this cannot read.
+     *
+     * <p>Both leave the positions open and neither is the other. Nothing about {@code left /= right}
+     * was beyond this reading — both sides were recognised, and what it says is a fact about the
+     * pair, which a set of one position's values is not. A regex over one of them is a form this
+     * reading does not take apart, which is a fact about the reading and is lifted by different
+     * work.
+     *
+     * <p>Told apart where the reading gave up, since that is the only place both sides are still in
+     * hand. Recovered afterwards from the spoiled positions alone, the two would be one answer.
+     */
+    @Test
+    void aRuleRelatingTwoPositionsIsNotARuleWrittenInAFormThisCannotRead() {
+        FieldDomains related = of("""
+                module demo
+
+                data Pair = { left: String, right: String }
+                    invariant differ = left /= right
+                """, "Pair");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, related, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, related, "right");
+
+        FieldDomains shaped = of("""
+                module demo
+
+                data Pair = { left: String, right: String }
+                    invariant shape = String.matches("[A-Z]", left)
+                """, "Pair");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, shaped, "left");
+    }
+
+    /**
+     * A position compared with itself is related to nothing, and is not said to be.
+     *
+     * <p>Two operands and one position. The reading recognises the comparison and finds a position
+     * on each side, which is not the same as finding two — and the word it would be projected to
+     * says the rule relates this position to another, when the model wrote no other. What is true
+     * of it is that this reading did not take the rule in.
+     */
+    @Test
+    void aPositionComparedWithItselfIsRelatedToNothing() {
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, of("""
+                module demo
+
+                data Code = String
+                    invariant same = value == value
+                """, "Code"), FieldDomains.THE_VALUE);
+
+        FieldDomains fields = of("""
+                module demo
+
+                data Pair = { left: String, right: String }
+                    invariant same = left /= left
+                """, "Pair");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, fields, "left");
+    }
+
+    /**
+     * And a call over two positions is a form this could not read, not a relation between them.
+     *
+     * <p>What is known of {@code validPair(left, right)} is that two positions appear in something
+     * this reading could not interpret. Whether the rule says anything about how they stand against
+     * each other is exactly what was not worked out, so counting the positions and calling it a
+     * relation says more than the reading found — and the word it is projected to tells the author
+     * their rule compares one position with another.
+     */
+    @Test
+    void aCallOverTwoPositionsIsAFormNotARelation() {
+        FieldDomains read = of("""
+                module demo
+
+                let validPair (a: String, b: String) = String.length(a) == String.length(b)
+
+                data Pair = { left: String, right: String }
+                    invariant paired = validPair(left, right)
+                """, "Pair");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "right");
     }
 
     /** A rule this cannot read on its own leaves the position open, and says that it did. */
@@ -194,7 +302,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant shape = String.matches("[A-Z]", value)
                 """, "Gender");
-        asFarAsRead(ValueSet.ANY, read, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, FieldDomains.THE_VALUE);
     }
 
     /** A position with no rules at all is open, and this can say so: the model divides it in no
@@ -230,7 +338,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         // the model settled rather than one a set happened to store them in, which for an immutable
         // copy is settled afresh on every run of the compiler.
         assertEquals(List.of(read.caseNamed("Green"), read.caseNamed("Blue")),
-                List.copyOf(((ValueSet.Finite) read.domains().admits("colour").values()).values()));
+                List.copyOf(((ValueSet.Finite) read.domains().admits("colour").approximation())
+                        .values()));
     }
 
     /**
@@ -243,8 +352,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aReadingOfNothingSpeaksForNoPosition() {
-        asFarAsRead(ValueSet.ANY, FieldDomains.NONE, FieldDomains.THE_VALUE);
-        asFarAsRead(ValueSet.ANY, FieldDomains.NONE, "anything");
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, FieldDomains.NONE,
+                FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, FieldDomains.NONE, "anything");
     }
 
     /**
@@ -263,8 +373,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Pair = { left: String, right: Int }
                     invariant no = left == "A" && right == "B"
                 """, "Pair");
-        asFarAsRead(ValueSet.ANY, read, "left");
-        asFarAsRead(ValueSet.ANY, read, "right");
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "right");
     }
 
     /**
@@ -285,7 +395,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Outer = { inner: Inner }
                 """, "Outer");
-        asFarAsRead(ValueSet.ANY, read, "inner");
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "inner");
     }
 
     /**
@@ -298,7 +408,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aRuleUnderSomethingTheWalkDoesNotEnterIsARuleUnread() {
-        asFarAsRead(ValueSet.ANY, of("""
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, of("""
                 module demo
 
                 data Inner = String
@@ -306,7 +416,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Outer = { inner: Inner? }
                 """, "Outer"), "inner");
-        asFarAsRead(ValueSet.ANY, of("""
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, of("""
                 module demo
 
                 data Inner = String
@@ -314,7 +424,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Outer = { inners: List<Inner> }
                 """, "Outer"), "inners");
-        asFarAsRead(ValueSet.ANY, of("""
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, of("""
                 module demo
 
                 data Yes = { n: Int }
@@ -324,6 +434,48 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Outer = { answer: Answer }
                 """, "Outer"), "answer");
+    }
+
+    /**
+     * A stop under one field says nothing about the field beside it.
+     *
+     * <p>Where the walk stopped and not that it stopped. A rule that narrows a position names it,
+     * and a clause written inside one field can name no position outside that field — so a walk
+     * that declined to go into a list of constrained values has said nothing about the plain
+     * {@code Int} next to it, and the {@code Int} is a position nothing was written about.
+     *
+     * <p>Recorded as one answer for the whole value, this was the common shape in the corpus: a
+     * record with one field the walk stops at leaves every other field of it reported as one whose
+     * rules may have gone unread, when nothing was written about them at all.
+     */
+    @Test
+    void aStopUnderOneFieldDoesNotSpoilTheFieldBesideIt() {
+        FieldDomains read = of("""
+                module demo
+
+                data Inner = String
+                    invariant only = value == "A"
+
+                data Forecast = { inners: List<Inner>, dealCount: Int }
+                """, "Forecast");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "inners");
+        wholly(ValueSet.ANY, read, "dealCount");
+    }
+
+    /** And a clause of the value's own declaration reaches every position of it, so a stop there
+     *  leaves all of them short of their rules. */
+    @Test
+    void aStopAtTheValueItselfLeavesEveryPositionOfItShort() {
+        FieldDomains read = ofRefused("""
+                module demo
+
+                data Pair = { left: String, right: Int }
+                    invariant no = left == "A" && right == "B"
+                """, "Pair");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "right");
     }
 
     /**
