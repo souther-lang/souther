@@ -1815,28 +1815,39 @@ public final class HelperInliner {
      * WrittenAt#HERE} when the copy may keep the positions it was written at, and what it stands in
      * for when it may not.
      *
-     * <p>Asked of the one thing that decides it — whether this compile can show the reader the place
-     * those positions name ({@link CitableRegion#canShow}). It used to be asked of the module that
-     * declared the body, which is a different question that happened to have the same answer while
-     * the only body from elsewhere was the standard library's. A module of the same project answers
-     * them differently: its body is in a file the reader holds, and it was being treated as shipped
-     * source — reported at the call, with the caret sized for a construction three files away.
+     * <p>Read off the body's own position rather than worked out here. Whether the code is out of
+     * sight was settled where the text it was parsed from was turned into positions, by the caller
+     * that knew what that text was, and a second answer here would be a second authority — which is
+     * what this was: it asked whether this compile could quote the place, and before that which
+     * module declared the body. Both happened to agree while the only body from elsewhere was the
+     * standard library's, and a module of the same project told them apart by failing — its body is
+     * in a file the reader holds, and it was being treated as shipped source, reported at the call
+     * with the caret sized for a construction three files away.
+     *
+     * <p>What this is still the first to know is the name a reader here reaches the body by. A parse
+     * of a published module knows the module and not which of its declarations a caller will land
+     * on, so the provenance is refined with the call's name and its arm is kept.
      *
      * <p>A lambda is not asked. It is not a declaration and has no source of its own: one the caller
      * wrote is in the caller's file, and one written in a body from elsewhere was given the call site
      * when that body was copied. Either way its positions are the ones already decided for the body
      * holding it, and asking again would answer about the wrong thing.
+     *
+     * <p>Nor is a declaration with no position of its own — one the compiler minted rather than read.
+     * It carries no provenance to read, so there is nothing to say about where its body came from,
+     * and a copy of it keeps whatever positions it has.
      */
     private WrittenAt whereTheBodyIs(Hir.Apply call, Hir.FnDef helper) {
         if (call.answered() == null
                 || call.answered().denotes() instanceof ValueName.Local
-                || CitableRegion.canShow(helper.pos())) {
+                || helper.pos() == null
+                || !helper.pos().isOutOfSight()) {
             return WrittenAt.HERE;
         }
         // Reached rather than declared: `List.map` is what a reader here writes and what a report
         // about it should quote, and which module declares it is the other half, read off the
         // declaration rather than split back out of the name.
-        return WrittenAt.outOfSight(call.answered().reaches());
+        return helper.pos().writtenAt().reachedBy(call.answered().reaches());
     }
 
     /** {@code call}'s own place, said to stand in for a body written out of sight — what a copy that

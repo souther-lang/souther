@@ -1735,22 +1735,19 @@ public final class Adequacy {
                     // and not words in the sentence: a renderer resolves what to call its file,
                     // and a body written out of sight says so off its own coordinate.
                     //
-                    // Pointed at only where this compile can quote it. A region naming no source is
-                    // resolved against the file the diagnostic is in, so a label on one would sit on
-                    // whatever happens to be at those numbers in a file the code is not in — which
-                    // is the thing this branch is about, and the reason a place is asked before it
-                    // is pointed at rather than after.
+                    // Where the guard is in a file this compile has none of, there is nothing to
+                    // point at and the label says where the code came from instead. It used to be
+                    // dropped, on the grounds that a label naming no source would be read against
+                    // the file the diagnostic is in; a label no longer takes its file from where it
+                    // is shown, so what was left unsaid can be said.
                     rule(said).citation().ifPresent(cited -> {
-                        souther.compiler.diag.SourceRef where = switch (cited) {
-                            case souther.compiler.diag.Citation.Written w -> w.at();
-                            case souther.compiler.diag.Citation.OutOfSight o -> o.reachedFrom();
+                        souther.compiler.diag.Region where = switch (cited) {
+                            case souther.compiler.diag.Citation.Written w ->
+                                    souther.compiler.diag.Region.point(w.at().pos());
+                            case souther.compiler.diag.Citation.OutOfSight o ->
+                                    souther.compiler.diag.Region.point(o.reachedFrom().pos());
                         };
-                        if (where.sourceId() == null) {
-                            return;
-                        }
-                        built.secondaryIn(where.sourceId(),
-                                souther.compiler.diag.Region.point(where.pos()),
-                                new ExampleMessage.TheGuardThatDrawsTheLine());
+                        built.secondary(where, new ExampleMessage.TheGuardThatDrawsTheLine());
                     });
                 }
                 case ARM_UNREACHED ->

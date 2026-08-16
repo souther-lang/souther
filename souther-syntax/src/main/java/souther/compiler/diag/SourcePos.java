@@ -66,12 +66,15 @@ public record SourcePos(int line, int column, String sourceId, WrittenAt written
     }
 
     /**
-     * This coordinate, standing in for code written out of sight — what an expansion gives a copy it
-     * cannot give its own positions.
+     * This coordinate, carrying {@code out} — what an expansion gives a copy it cannot give its own
+     * positions, and what moving a report's caret gives the place it moved to.
      *
-     * <p>Set here and nowhere else that a source is read: a coordinate a parser made is where the
-     * code is, by construction, and one that says otherwise was made by a pass that put code
-     * somewhere it was not written.
+     * <p>Not where a stand-in is first decided. Whether code is out of sight is settled where a text
+     * becomes positions, by the caller that knows what the text was ({@link TextRead}), and a
+     * coordinate a parser made says so from the start — a text put back together out of what a
+     * module published is read by a parser like any other, and line 4 of it is a line of nothing
+     * anybody holds. What this does is carry an answer already given to a coordinate somewhere else:
+     * the call a body was spliced into, the import line a report was moved to.
      *
      * @throws IllegalArgumentException where {@code out} is not a stand-in. Standing in for code
      *         written at this very coordinate is not a thing to say, and a caller that reached here

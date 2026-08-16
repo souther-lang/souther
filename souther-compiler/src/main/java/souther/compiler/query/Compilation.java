@@ -9,6 +9,7 @@ import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.Citation;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -520,10 +521,11 @@ public final class Compilation {
      * {@code found} where a reader can be sent to it — itself, for the reports whose coordinate was
      * read from a source this compile holds.
      *
-     * <p>Asked of the module the question was about and not of the coordinate alone. A body copied
-     * out of a module off the path is already given the call site it was spliced into
-     * ({@link souther.compiler.diag.WrittenAt}), so a coordinate left naming no source is one read
-     * from a declaration this compile never had a file for.
+     * <p>Two questions, asked separately. Whether a reader can be sent here is whether this compile
+     * holds a file to quote, which is what naming a source is. What the place stands in for is the
+     * coordinate's own ({@link souther.compiler.diag.WrittenAt}), read off it rather than rebuilt
+     * from the module this walk was about — the module is what a route to the code is looked up by,
+     * and provenance has one authority.
      *
      * <p>What a raised report carried as the text its pass threw it with is dropped with the move
      * ({@link Report#legacyMessage}). That text was rendered with the old coordinate written into
@@ -534,7 +536,8 @@ public final class Compilation {
     private Db.Found citable(Db.Found found) {
         Diagnostic said = found.report().diagnostic();
         SourcePos at = said.pos();
-        if (at == null || at.sourceId() != null || found.module() == null) {
+        if (at == null || at.sourceId() != null || found.module() == null
+                || !(Citation.of(at) instanceof Citation.OutOfSight out)) {
             return found;
         }
         Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
@@ -542,7 +545,7 @@ public final class Compilation {
             return found;
         }
         return new Db.Found(found.module(), found.sourceId(), Report.saidAt(
-                said.reachedFrom(onThePath.reachedFrom(), found.module(),
+                said.reachedFrom(onThePath.reachedFrom(), out.provenance(),
                         new ModuleMessage.ItIsReachedFromHereToo()),
                 found.report().delivery()));
     }
@@ -715,9 +718,17 @@ public final class Compilation {
             if (!label.belongsToFinding()) {
                 continue;
             }
-            String where = label.sourceIdOr(primary);
-            if (where != null && !saidAt.contains(where)) {
-                saidAt.add(where);
+            // A label with nowhere to point puts the report in front of nobody new. It is part
+            // of what is found wrong and is in a file this compile does not have, so there is no
+            // author here to tell and no marker to place; what it has to say is said wherever the
+            // report is already said.
+            switch (label.place()) {
+                case souther.compiler.diag.DiagnosticPlace.InSource in -> {
+                    if (!saidAt.contains(in.source())) {
+                        saidAt.add(in.source());
+                    }
+                }
+                case souther.compiler.diag.DiagnosticPlace.Unavailable _ -> { }
             }
         }
         return List.copyOf(saidAt);

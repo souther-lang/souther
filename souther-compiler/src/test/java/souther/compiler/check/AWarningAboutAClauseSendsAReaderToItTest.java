@@ -4,7 +4,9 @@ import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
+import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Region;
+import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.meta.ModulePath;
 
@@ -190,7 +192,7 @@ class AWarningAboutAClauseSendsAReaderToItTest {
         LabeledRegion one = warnings.get(0).secondary().get(0);
         assertEquals(warnings.get(0).pos().sourceId(), "1",
                 "the construction is in the second source");
-        assertEquals("0", one.sourceId(),
+        assertEquals("0", ((souther.compiler.diag.DiagnosticPlace.InSource) one.place()).region().start().sourceId(),
                 "and the clause is in the first, which the label says rather than leaving the"
                         + " renderer to read the declaration's line out of the wrong file");
     }
@@ -220,8 +222,12 @@ class AWarningAboutAClauseSendsAReaderToItTest {
      *
      * <p>Its declaration comes back as text reassembled from what the module carries, so the region
      * says a line and a column of a file no reader holds. Pointing at it anyway would quote whatever
-     * sits at those numbers in the file the reader is looking at — which is why this is asked before
-     * a label is made rather than left for a renderer to fail at.
+     * sits at those numbers in the file the reader is looking at.
+     *
+     * <p>So it is said instead of pointed at. The label carries where the code came from
+     * ({@code DiagnosticPlace.Unavailable}) and the reader is told which module it is in — where
+     * before, having nothing to point at, the clause reader dropped the label and the reader was
+     * told nothing at all.
      *
      * <p>What the sentence says is unchanged. The clause has no name here as it had none there, and
      * that — not this — is what decides the spelling.
@@ -245,21 +251,31 @@ class AWarningAboutAClauseSendsAReaderToItTest {
                 .filter(one -> one.type().equals("Bound")).findFirst().orElseThrow().judgment();
         assertEquals(1, judgment.unsettled().size(),
                 "the clause is read and judged like any other: " + judgment.found());
-        assertEquals(0, InvariantChecker.Judgment.pointsTo(judgment.unsettled()).count(),
-                "and it is the citation that is missing, not the clause");
+        assertEquals(List.of(new souther.compiler.diag.DiagnosticPlace.Unavailable(
+                        new souther.compiler.diag.SourceProvenance.APublishedModule("model"))),
+                InvariantChecker.Judgment.pointsTo(judgment.unsettled()).toList(),
+                "written where this compile has no file, and saying which module that is");
 
         assertInstanceOf(InvariantMessage.TheGuardsDoNotEstablishTheInvariant.class,
                 warnings.get(0).said(), "the clause was written without a name");
         assertEquals(List.of(), lines(warnings.get(0)),
                 "and there is no source here to send the reader to");
+        assertEquals(1, warnings.get(0).secondary().size(),
+                "the label is there all the same, saying what it can");
+        assertTrue(new HumanRenderer(false)
+                        .render(warnings.get(0), new SourceContext("app.sou", USING),
+                                java.util.Locale.ENGLISH)
+                        .contains("`model`"),
+                "and a reader is told which module the clause is written in");
     }
 
     // --- reading the diagnostics --------------------------------------------------------------
 
     /** The lines the secondary regions point at, in the order they were written. */
     private static List<Integer> lines(Diagnostic d) {
-        return d.secondary().stream().map(LabeledRegion::region).map(Region::start)
-                .map(pos -> pos.line()).toList();
+        return d.secondary().stream().map(l -> l.place()).filter(pl -> pl instanceof souther.compiler.diag.DiagnosticPlace.InSource)
+                .map(pl -> ((souther.compiler.diag.DiagnosticPlace.InSource) pl).region())
+                .map(Region::start).map(pos -> pos.line()).toList();
     }
 
     private static Diagnostic warning(String source) {

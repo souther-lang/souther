@@ -8,6 +8,7 @@ import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
 
 import java.io.IOException;
@@ -312,7 +313,11 @@ public final class Prelude {
             // data the module declares. What it declares must be runtime-backed (see
             // RUNTIME_BACKED_DATA), and the names anchor to the runtime namespace where the
             // implementation classes live.
-            Ast.Module parsed = CstFrontend.parse(read(resource));
+            // The library ships with the compiler and is in no source of any compile that calls it,
+            // so its positions say they stand in for code written there from the moment they are
+            // made. A reader reaches the module by the name it imports it under.
+            Ast.Module parsed = CstFrontend.parseWhatAModulePublished(read(resource),
+                    new SourceProvenance.TheStandardLibrary(declared.moduleName()));
             Hir.Module module = Resolve.module(parsed, symbolsOf(parsed, resource));
             if (!declared.moduleName().equals(module.name())) {
                 throw new IllegalStateException("prelude resource " + resource + " declares module "

@@ -24,6 +24,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.TextRead;
 import souther.compiler.types.ConstructionOrigin;
 
 import java.math.BigDecimal;
@@ -74,15 +75,16 @@ public final class AstBuilder {
      */
     private final Map<String, Integer> rowsOfTarget = new HashMap<>();
 
-    private AstBuilder(String source, String sourceId) {
-        this.lines = new LineIndex(source, sourceId);
+    private AstBuilder(String source, TextRead read) {
+        this.lines = new LineIndex(source, read);
     }
 
     /**
      * Builds a module from a parsed source file. A header-less source is named
      * {@code defaultModuleName}; a {@code null} default makes the header required. Every position
-     * the module carries names {@code sourceId}, which is null for a source the caller has no name
-     * for — a module read off the module path, which is in no source of the compile reading it.
+     * the module carries says what {@code read} says: which source of this compile it is in, and
+     * whether that is where the code is. A module read back off the module path is in no source of
+     * the compile reading it and is not where its code is, and both halves come from here.
      *
      * <p>Requires a CST the parser accepted: every node it reads has the children the grammar gives
      * it, and a missing one is dereferenced rather than reported. {@link CstFrontend#parse} is the
@@ -90,8 +92,8 @@ public final class AstBuilder {
      * package-private, and what a second caller would have to guarantee.
      */
     static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName,
-                            String sourceId) {
-        return new AstBuilder(source, sourceId).module(sourceFile, defaultModuleName);
+                            TextRead read) {
+        return new AstBuilder(source, read).module(sourceFile, defaultModuleName);
     }
 
     /** The next construct of this source a coverage obligation can be about. Called once where a

@@ -90,12 +90,12 @@ class WhereADiagnosticIsSaidTest {
     }
 
     private static boolean hasARegionIn(Db.Found found, String id, Compilation c) {
-        String primary = c.publishSourceIdsOf(found).get(0);
-        if (id.equals(primary)) {
+        if (id.equals(c.publishSourceIdsOf(found).get(0))) {
             return true;
         }
         return found.report().diagnostic().secondary().stream()
-                .anyMatch(label -> id.equals(label.sourceIdOr(primary)));
+                .anyMatch(label -> label.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
+                        && id.equals(in.region().start().sourceId()));
     }
 
     // --- one problem, one report; two problems, two ----------------------------------------------

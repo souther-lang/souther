@@ -29,4 +29,16 @@ public sealed interface WrittenAtMessage extends Message {
      * splitting would cost what it looks like it costs.
      */
     record TheCodeIsWrittenOutOfSight(String declaration) implements WrittenAtMessage, Supporting {}
+
+    /**
+     * The same fact where there is no caret: what a label says when the code it is about is in a
+     * module this compile has no file for and no coordinate stands in for it.
+     *
+     * <p>A second wording rather than the one above, because the one above ends by saying what the
+     * place under it is — "this is where it was reached from and not where it is" — and there is no
+     * place under this one. A label about a clause of a published module points at nothing at all,
+     * so a sentence explaining a caret would be explaining something the reader cannot see.
+     */
+    record TheCodeIsWrittenWhereThisCompileCannotShowIt(String declaration)
+            implements WrittenAtMessage, Supporting {}
 }

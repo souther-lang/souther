@@ -1,6 +1,7 @@
 package souther.compiler.cst;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.TextRead;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,21 +22,28 @@ import java.util.List;
 public final class LineIndex {
 
     private final String source;
-    /** Which source this is an index of, so that every position it makes says where it was read
-     * from. Null where the caller has no name for it — a document the compile does not hold, or a
-     * reader that only wants offsets converted. */
-    private final String sourceId;
+    /** What this is an index of, so that every position it makes says which source it is in and
+     * whether that is where the code is. Both come from here because this is the one place a
+     * position is made from a text, and neither is worked out again downstream. */
+    private final TextRead read;
     /** {@code lineStart[i]} is the offset at which line {@code i} (0-based) begins. */
     private final int[] lineStart;
 
-    /** An index of a source this caller has no name for. Its positions name no source. */
+    /** An index of a text this caller has no name for — a reader that only wants offsets
+     *  converted. Its positions name no source. */
     public LineIndex(String source) {
-        this(source, null);
+        this(source, TextRead.aTextWithNoIdentity());
     }
 
+    /** An index of a file this compile holds, or of no named file when {@code sourceId} is null. */
     public LineIndex(String source, String sourceId) {
+        this(source, sourceId == null ? TextRead.aTextWithNoIdentity()
+                : TextRead.aFileOfThisCompile(sourceId));
+    }
+
+    public LineIndex(String source, TextRead read) {
         this.source = source;
-        this.sourceId = sourceId;
+        this.read = read;
         List<Integer> starts = new ArrayList<>();
         starts.add(0);
         for (int i = 0; i < source.length(); i++) {
@@ -62,7 +70,7 @@ public final class LineIndex {
     /** The compiler's 1-based line/column position for {@code offset}. */
     public SourcePos posOf(int offset) {
         int line = lineIndex(offset);
-        return new SourcePos(line + 1, offset - lineStart[line] + 1, sourceId);
+        return read.at(line + 1, offset - lineStart[line] + 1);
     }
 
     /** The 0-based line of {@code offset} (LSP). */

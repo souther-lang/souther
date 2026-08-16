@@ -1,25 +1,31 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.WrittenAt;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Three answers, not two: a place that can be quoted, a place this compile has no source for, and a
- * region that is not one place at all.
+ * Where a region is, asked once, before anything points at it.
  *
- * <p>The middle one is ordinary. A declaration read back out of a published module was written in a
- * text this compile does not hold, and a report about it says what it can without pointing. The last
- * is not ordinary, and answering it the same way would file a value no walk of one file could
- * produce under the answer given to a published declaration — after which the only sign of it would
- * be a diagnostic that quietly stopped pointing at things.
+ * <p>Four answers and not two. A place a reader can be sent to. A place this compile has no file for
+ * — a declaration read back out of a published module was written in a text nobody holds — which is
+ * an answer and not the absence of one: a report about it says where the code came from. A region
+ * that is not one place at all, which is the compiler's model contradicting itself and is refused.
+ * And a region nobody placed, which used to mean "read it in whichever file this ends up filed
+ * under" and is now a caller that has not finished answering.
+ *
+ * <p>The middle two used to be one. Both were a null source, so every reader had to guess which it
+ * had, and each of them guessed differently: a renderer read it as the diagnostic's own file, and
+ * the three sites that knew better dropped the label instead.
  */
 class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
 
@@ -27,48 +33,90 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
         return new Region(new SourcePos(3, 5, sourceId), new SourcePos(3, 20, sourceId));
     }
 
-    @Test
-    void aRegionReadOffASourceCanBeQuoted() {
-        Optional<CitableRegion> citable = CitableRegion.of(in("model.sou"));
+    /** A region read from a text put back together out of what a module published. */
+    private static Region outOfSight() {
+        WrittenAt out = WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.rule"));
+        return new Region(new SourcePos(3, 5).standingInFor(out),
+                new SourcePos(3, 20).standingInFor(out));
+    }
 
-        assertTrue(citable.isPresent());
-        assertEquals("model.sou", citable.get().region().start().sourceId(),
+    @Test
+    void aRegionReadOffASourceIsSomewhereAReaderIsSent() {
+        DiagnosticPlace place = DiagnosticPlace.of(in("model.sou"));
+
+        DiagnosticPlace.InSource sent = assertInstanceOf(DiagnosticPlace.InSource.class, place);
+        assertEquals("model.sou", sent.source(),
                 "the region names the source, which is what makes it one to point at");
-        assertEquals(in("model.sou"), citable.get().region(),
+        assertEquals(in("model.sou"), sent.region(),
                 "the region is carried as it was, not measured again");
     }
 
-    /** What a published module's declarations come back as: written somewhere, quotable nowhere. */
+    /** What a published module's declarations come back as: written somewhere, quotable nowhere,
+     *  and saying which somewhere rather than saying nothing. */
     @Test
-    void aRegionReadFromNoSourceCannotBeQuoted() {
-        assertEquals(Optional.empty(), CitableRegion.of(in(null)));
+    void aRegionOutOfSightSaysWhereTheCodeCameFrom() {
+        DiagnosticPlace place = DiagnosticPlace.of(outOfSight());
+
+        assertEquals(new SourceProvenance.APublishedModule("lib.rule"),
+                assertInstanceOf(DiagnosticPlace.Unavailable.class, place).provenance());
+        assertTrue(!(place instanceof souther.compiler.diag.DiagnosticPlace.InSource), "and there is nowhere to send a reader");
+    }
+
+    /**
+     * A region nobody placed is refused rather than answered.
+     *
+     * <p>It reads exactly like the one above — a null source — and it is a different thing. Reading
+     * the two as one is what put a label about a clause of {@code lib.rule} on a line of the file
+     * the caller was compiling.
+     */
+    @Test
+    void aRegionNamingNoSourceAndClaimingToBeThePlaceIsRefused() {
+        assertThrows(IllegalArgumentException.class, () -> DiagnosticPlace.of(in(null)));
     }
 
     @Test
-    void nothingIsQuotableWhereThereIsNoRegion() {
-        assertEquals(Optional.empty(), CitableRegion.of(null));
-        assertEquals(Optional.empty(), CitableRegion.of(new Region(null, null)));
-    }
-
-    @Test
-    void aRegionRunningBetweenTwoSourcesIsNotAnUnquotablePlace() {
-        CitableRegion.NotOnePlace refused = assertThrows(CitableRegion.NotOnePlace.class,
-                () -> CitableRegion.of(new Region(new SourcePos(3, 5, "model.sou"),
+    void aRegionRunningBetweenTwoSourcesIsNotAPlaceAtAll() {
+        DiagnosticPlace.NotOnePlace refused = assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, "model.sou"),
                         new SourcePos(3, 20, "other.sou"))));
 
         assertTrue(refused.getMessage().contains("model.sou"), refused.getMessage());
         assertTrue(refused.getMessage().contains("other.sou"), refused.getMessage());
     }
 
+    /**
+     * And the same of the other half of where a coordinate is: a region running from a copy of one
+     * module to a copy of another is two places as much as one running between two files.
+     *
+     * <p>Read off the start alone the second end's answer goes unrecorded, and the region comes back
+     * as a report about the first with nothing anywhere saying otherwise. Measured before this was
+     * written: no region in the compiler's own corpus has ends that disagree about provenance.
+     */
+    @Test
+    void aRegionWhoseEndsCameFromTwoModulesIsNotOnePlaceEither() {
+        SourcePos fromA = new SourcePos(3, 5).standingInFor(
+                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.a")));
+        SourcePos fromB = new SourcePos(3, 20).standingInFor(
+                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.b")));
+
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(fromA, fromB)));
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, "model.sou"),
+                        new SourcePos(3, 20, "model.sou").standingInFor(
+                                WrittenAt.outOfSight(
+                                        new SourceProvenance.APublishedModule("lib.a"))))));
+    }
+
     /** The same either way round: one end knowing its source and the other not is the same broken
      *  region as two ends naming two. */
     @Test
     void aRegionWithOneEndInASourceIsRefusedToo() {
-        assertThrows(CitableRegion.NotOnePlace.class,
-                () -> CitableRegion.of(new Region(new SourcePos(3, 5, "model.sou"),
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, "model.sou"),
                         new SourcePos(3, 20))));
-        assertThrows(CitableRegion.NotOnePlace.class,
-                () -> CitableRegion.of(new Region(new SourcePos(3, 5),
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5),
                         new SourcePos(3, 20, "model.sou"))));
     }
 
@@ -77,12 +125,27 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
      * over leaves the run-time check standing — so an exception thrown down there is not an
      * assertion but a behavior that quietly reports nothing, which is what a behavior whose
      * invariants all discharge reports.
+     *
+     * <p>Asked of what the failure is and not of which ones the boundary has met. The refusal is
+     * raised where regions become places and the others are raised where clauses are read, which is
+     * two layers and one question ({@code TheCompilerDisagreesWithItself}).
      */
     @Test
-    void aRegionThatIsNotOnePlaceIsNotSomethingTheCheckMayGiveUpOn() {
-        CitableRegion.NotOnePlace broken = new CitableRegion.NotOnePlace("a.sou", "b.sou");
+    void aRefusalToPlaceARegionIsNotSomethingTheCheckMayGiveUpOn() {
+        DiagnosticPlace.NotAPlace refused = assertThrows(DiagnosticPlace.NotAPlace.class,
+                () -> DiagnosticPlace.of(in(null)));
 
-        assertThrows(CitableRegion.NotOnePlace.class,
+        assertThrows(DiagnosticPlace.NotAPlace.class,
+                () -> InvariantChecker.gaveUp("a test", refused));
+    }
+
+    @Test
+    void aRegionThatIsNotOnePlaceIsNotSomethingTheCheckMayGiveUpOn() {
+        DiagnosticPlace.NotOnePlace broken = assertThrows(DiagnosticPlace.NotOnePlace.class,
+                () -> DiagnosticPlace.of(new Region(new SourcePos(1, 1, "a.sou"),
+                        new SourcePos(1, 9, "b.sou"))));
+
+        assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> InvariantChecker.gaveUp("a test", broken));
     }
 }

@@ -22,6 +22,25 @@ final class AtItsPlace extends WrittenAt {
     }
 
     @Override
+    public WrittenAt reachedBy(String name) {
+        throw new NotReachedFromElsewhere(name);
+    }
+
+    /** Marked, for the reason {@code DiagnosticPlace.NotAPlace} is: a caller that got here was
+     *  branching on something other than the question, and an analysis that falls open would
+     *  swallow an unmarked one and report a subject as having nothing wrong with it. */
+    static final class NotReachedFromElsewhere extends IllegalStateException
+            implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        NotReachedFromElsewhere(String name) {
+            super("code written at its place is not reached from elsewhere, so there is no name to"
+                    + " reach it by: " + name);
+        }
+    }
+
+    @Override
     public boolean equals(Object other) {
         return other instanceof AtItsPlace;
     }

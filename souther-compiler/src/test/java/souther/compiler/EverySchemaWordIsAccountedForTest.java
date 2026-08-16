@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WrittenAt;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
@@ -108,7 +109,7 @@ class EverySchemaWordIsAccountedForTest {
     private static Set<String> writtenAtWords() {
         SourcePos here = new SourcePos(1, 1, "s");
         return java.util.stream.Stream
-                .of(here, here.standingInFor(WrittenAt.outOfSight("List.filter")))
+                .of(here, here.standingInFor(WrittenAt.outOfSight(new SourceProvenance.TheStandardLibrary("List.filter"))))
                 .map(pos -> Citation.of(pos).writtenAtFields().get("kind"))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

@@ -22,7 +22,9 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.editor.EditorSymbols;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.DiagnosticView;
+import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Spot;
@@ -1921,7 +1923,24 @@ public final class Analyzer {
                 ? LspDiagnostic.WARNING : LspDiagnostic.ERROR;
         DiagnosticView view = DiagnosticView.of(d, primarySourceId, publishedUri);
         List<LspDiagnostic.Related> related = new ArrayList<>();
+        // A label with nothing to point at joins the message. An editor's related information is a
+        // location, and there is no location — the clause is in a module this workspace has no file
+        // for. It used to be given `publishedUri` and the numbers it was read at, which made a link
+        // the author could follow into an unrelated line of their own file.
+        //
+        // What an unlabelled related entry says stays the message as it was. Those sentences are
+        // about code somewhere else, and an entry that borrowed them would show them as the note on
+        // a location they say nothing about.
+        String aboutTheDiagnostic = message;
+        for (DiagnosticView.Unquotable said : view.unquotable()) {
+            message = message + " " + DiagnosticRenderer.saidAbout(said, EDITOR_LANGUAGE);
+        }
         for (Spot other : view.others()) {
+            // A spot naming no source can only be the primary now, and the primary's source is
+            // told rather than read off its region (`Spot.primary`) — a compile of one source names
+            // none, and the file this marker is being put in is that one. What used to reach here
+            // as well was a label, which is the defect: a label says where it is and no longer takes
+            // its file from where it is shown.
             String uri = other.sourceId() == null ? publishedUri : uriOf.apply(other.sourceId());
             LineIndex lines = linesOf.apply(other.sourceId());
             if (uri == null || lines == null || other.region() == null) {
@@ -1932,7 +1951,7 @@ public final class Analyzer {
                             ? DiagnosticRenderer.qualified(
                                     Messages.render(other.said(), EDITOR_LANGUAGE),
                                     other.region().start(), EDITOR_LANGUAGE)
-                            : message));
+                            : aboutTheDiagnostic));
         }
         Range range = view.anchor().region() != null
                 ? rangeOfRegion(view.anchor().region())

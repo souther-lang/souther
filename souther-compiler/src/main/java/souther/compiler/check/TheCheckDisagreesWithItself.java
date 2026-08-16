@@ -17,8 +17,14 @@ package souther.compiler.check;
  * new way to disagree with itself starts reporting that disagreement as an ordinary limit, and
  * nothing fails while it does. Extending this is what puts a new one on the right side of the
  * boundary.
+ *
+ * <p>What the boundary actually asks is
+ * {@link souther.compiler.diag.TheCompilerDisagreesWithItself}, which this is the check's half of.
+ * A region that is two places is refused where regions become places, which is a layer this class
+ * cannot reach, and there is one question all the same.
  */
-abstract class TheCheckDisagreesWithItself extends RuntimeException {
+abstract class TheCheckDisagreesWithItself extends RuntimeException
+        implements souther.compiler.diag.TheCompilerDisagreesWithItself {
 
     private static final long serialVersionUID = 1L;
 

@@ -43,13 +43,14 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
     }
 
     /**
-     * The code is written in {@link #declaration()}, which this compile has no source for.
+     * The code is written where {@link #provenance()} says, which this compile has no source for.
      * {@link #reachedFrom()} is where this compile met it — where to send a reader, and not where the
      * code is.
      */
     sealed interface OutOfSight extends Citation permits OutOfSightCitation {
-        /** The name a reader here reaches that code by: {@code List.filter}. */
-        String declaration();
+        /** Where that code came from, and the name a reader here reaches it by:
+         *  {@code List.filter}. */
+        SourceProvenance provenance();
 
         /** The call the body was spliced into. A place in a file the reader holds. */
         SourceRef reachedFrom();
@@ -85,11 +86,22 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
         SequencedMap<String, String> fields = new LinkedHashMap<>();
         switch (this) {
             case Written _ -> fields.put("kind", "here");
-            case OutOfSight out -> {
-                fields.put("kind", "outOfSight");
-                fields.put("declaration", out.declaration());
-            }
+            case OutOfSight out -> fields.putAll(outOfSightFields(out.provenance()));
         }
+        return fields;
+    }
+
+    /**
+     * The same fields for code out of sight, said of a provenance rather than of a citation.
+     *
+     * <p>For a report with nowhere to point: a label about a clause of a module this compile holds
+     * no file for has the provenance and no coordinate to project. One writer, so the words a
+     * document uses for "the code is elsewhere" are the same whether or not there was a caret.
+     */
+    static SequencedMap<String, String> outOfSightFields(SourceProvenance provenance) {
+        SequencedMap<String, String> fields = new LinkedHashMap<>();
+        fields.put("kind", "outOfSight");
+        fields.put("declaration", provenance.reachedBy());
         return fields;
     }
 
@@ -105,7 +117,7 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
     default String said(SourceNameResolver names, String sectionSource) {
         return switch (this) {
             case Written written -> place(written.at(), names, sectionSource);
-            case OutOfSight out -> "`" + out.declaration() + "`, reached at "
+            case OutOfSight out -> "`" + out.provenance().reachedBy() + "`, reached at "
                     + place(out.reachedFrom(), names, sectionSource);
         };
     }

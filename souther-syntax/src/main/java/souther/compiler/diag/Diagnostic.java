@@ -123,7 +123,7 @@ public final class Diagnostic {
      * several drops the report for having nowhere to file it. Both are worse than saying where the
      * code is in words, which is what this does — {@code where} is where this compile met the
      * declaration, and the coordinate it is given says it stands in for code written in
-     * {@code declaration} ({@link Citation}).
+     * {@code provenance} ({@link Citation}).
      *
      * <p>The one way to move a caret. Everything else about the finding is what it was, so the rule
      * it reports and the values it says it about do not change with how far away the code turned out
@@ -136,45 +136,31 @@ public final class Diagnostic {
      * ({@link souther.compiler.diag.msg.FindingRegion}) and is what puts the report in front of each
      * of those authors.
      *
+     * <p>The labels this already had come along unchanged. Each of them says where it is on its own
+     * ({@link DiagnosticPlace}), so none of them meant anything different while the caret was
+     * elsewhere. They used to be filtered here, because one that named no source was read in the
+     * diagnostic's file and the diagnostic's file was what this changes — a dependency between a
+     * label and where it ends up that no label has any more.
+     *
      * @throws IllegalArgumentException where {@code where} is empty. There is no such thing as
      *         reaching code from nowhere: a caller with no place to send a reader has a report to
      *         leave as it is, not one to move
      */
     public <M extends Message & FindingRegion> Diagnostic reachedFrom(List<SourcePos> where,
-                                                                     String declaration,
+                                                                     SourceProvenance provenance,
                                                                      M alsoHere) {
         if (where.isEmpty()) {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
-        WrittenAt out = WrittenAt.outOfSight(declaration);
-        List<LabeledRegion> also = new ArrayList<>(secondaryThatSurvivesTheMove());
+        WrittenAt out = WrittenAt.outOfSight(provenance);
+        List<LabeledRegion> also = new ArrayList<>(secondary);
         for (SourcePos other : where.subList(1, where.size())) {
-            also.add(new LabeledRegion(Region.point(other.standingInFor(out)), null, alsoHere));
+            also.add(new LabeledRegion(Region.point(other.standingInFor(out)), alsoHere));
         }
         return new Diagnostic(severity, code,
                 Region.point(where.get(0).standingInFor(out)), List.copyOf(also),
                 literalMessage, diff, notes, suggestion, said);
-    }
-
-    /**
-     * The second regions that survive the caret moving.
-     *
-     * <p>A label naming no source of its own is read in the diagnostic's
-     * ({@link LabeledRegion#sourceIdOr}), and that is what a hand-made position is for. It stops
-     * being true when the caret moves: the file it would be read in is no longer the file it was
-     * built against, and the label would say what it says of whatever sits at those numbers in a
-     * file the author wrote. So it is dropped here and nowhere else — a report whose caret stays put
-     * keeps every label it had, whatever any of them names.
-     */
-    private List<LabeledRegion> secondaryThatSurvivesTheMove() {
-        List<LabeledRegion> kept = new ArrayList<>();
-        for (LabeledRegion label : secondary) {
-            if (label.sourceId() != null) {
-                kept.add(label);
-            }
-        }
-        return kept;
     }
 
     /**
@@ -288,15 +274,32 @@ public final class Diagnostic {
             return this;
         }
 
-        /** A second place to point at, saying what it says as the values it is about. */
+        /**
+         * A second thing to say, about wherever {@code region} is
+         * ({@link DiagnosticPlace#of}) — a place a reader can be sent to, or a note about code this
+         * compile holds no file for.
+         *
+         * <p>The region is the whole of what settles it. There used to be a second entry taking a
+         * source beside a region that carries one, which is two authorities for one fact and is the
+         * defect this closes said in an API: a caller that passed a name and a region read from
+         * somewhere else put a marker in one file and quoted a line from another.
+         *
+         * @throws IllegalArgumentException where the region names no source and claims the code is
+         *         written at it — a position made by hand and never placed. It used to be read in
+         *         whichever file the diagnostic ended up filed under; a caller reaching here has a
+         *         place to name and has not named it
+         */
         public <M extends Message & Supporting> Builder secondary(Region region, M label) {
-            this.secondary.add(new LabeledRegion(region, null, label));
+            this.secondary.add(new LabeledRegion(region, label));
             return this;
         }
 
-        /** A second place to point at, in {@code sourceId}, saying what it says as a message. */
-        public <M extends Message & Supporting> Builder secondaryIn(String sourceId, Region region, M label) {
-            this.secondary.add(new LabeledRegion(region, sourceId, label));
+        /** A second thing to say about code this compile holds no file for: where it came from, in
+         *  place of somewhere to point. */
+        public <M extends Message & Supporting> Builder secondaryOutOfSight(
+                SourceProvenance provenance, M label) {
+            this.secondary.add(
+                    new LabeledRegion(new DiagnosticPlace.Unavailable(provenance), label));
             return this;
         }
 

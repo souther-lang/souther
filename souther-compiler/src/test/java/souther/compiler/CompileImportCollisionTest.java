@@ -62,7 +62,7 @@ class CompileImportCollisionTest {
 
         assertEquals(3, e.diagnostic().region().start().line(), "the caret is on the second import");
         assertEquals(1, e.diagnostic().secondary().size(), "the first import is labelled too");
-        assertEquals(2, e.diagnostic().secondary().get(0).region().start().line());
+        assertEquals(2, ((souther.compiler.diag.DiagnosticPlace.InSource) e.diagnostic().secondary().get(0).place()).region().start().line());
     }
 
     @Test

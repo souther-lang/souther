@@ -9,10 +9,10 @@ import java.util.Map;
  * {@link Diagnostic} says where in a file it is; which file that is belongs to the compile, not to
  * the diagnostic, so it is carried alongside.
  *
- * <p>Only the primary region. A secondary may name a source of its own
- * ({@link LabeledRegion#sourceId()}), and a diagnostic said at more than one source is read from
- * each of them in turn ({@link DiagnosticView}) — so this is not "the file this diagnostic is in",
- * and a caller holding one for a file other than this is not holding a mistake.
+ * <p>Only the primary region. A secondary says which source it is in itself
+ * ({@link DiagnosticPlace}), and a diagnostic said at more than one source is read from each of them
+ * in turn ({@link DiagnosticView}) — so this is not "the file this diagnostic is in", and a caller
+ * holding one for a file other than this is not holding a mistake.
  *
  * @param diagnostic what was found
  * @param primarySourceId the source the primary region is in, or null when it names none — which

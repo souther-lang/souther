@@ -9,6 +9,7 @@ import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Region;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WrittenAt;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.WrittenAtMessage;
@@ -105,8 +106,8 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertInstanceOf(InvariantMessage.TheClauseReachesThatConstruction.class, own.said());
         assertInstanceOf(InvariantMessage.TheClauseReachesThatConstruction.class, across.said());
-        assertEquals("invariant ok = atLeastZero(value)", quoted(ONE_MODULE, own.region()));
-        assertEquals("invariant ok = atLeastZero(value)", quoted(CALLING, across.region()));
+        assertEquals("invariant ok = atLeastZero(value)", quoted(ONE_MODULE, ((souther.compiler.diag.DiagnosticPlace.InSource) own.place()).region()));
+        assertEquals("invariant ok = atLeastZero(value)", quoted(CALLING, ((souther.compiler.diag.DiagnosticPlace.InSource) across.place()).region()));
     }
 
     /**
@@ -148,7 +149,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said(),
                 "the rule broken is the same rule");
-        assertEquals(WrittenAt.outOfSight("up.atLeastZero"), one.pos().writtenAt());
+        assertEquals(WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up", "up.atLeastZero")), one.pos().writtenAt());
         assertEquals("down.sou", one.pos().sourceId(),
                 "the caret is in the file the reader is compiling, since there is no other");
     }

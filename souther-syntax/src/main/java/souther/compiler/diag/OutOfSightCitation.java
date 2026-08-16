@@ -3,11 +3,11 @@ package souther.compiler.diag;
 import java.util.Objects;
 
 /** Code written where this compile cannot show it, met at {@code reachedFrom}. */
-record OutOfSightCitation(String declaration, SourceRef reachedFrom)
+record OutOfSightCitation(SourceProvenance provenance, SourceRef reachedFrom)
         implements Citation.OutOfSight {
 
     OutOfSightCitation {
-        Objects.requireNonNull(declaration, "code out of sight is reached by a name");
+        Objects.requireNonNull(provenance, "code out of sight came from somewhere");
         Objects.requireNonNull(reachedFrom, "a citation is about a place");
     }
 }

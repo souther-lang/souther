@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.Objects;
@@ -15,18 +16,29 @@ import java.util.Optional;
  * {@link InvariantChecker.Judgment}'s, which is why a clause is put on one of its sides rather than
  * carrying a verdict here.
  *
- * <p>{@code name} and {@code at} are both optional and are optional for different reasons, which is
- * what {@link #merge} turns on. An absent name is a fact about the declaration: the author wrote
- * none, and every reading of that declaration finds none. An absent {@code at} is a fact about this
- * compile: the clause was written somewhere, and whether that somewhere can be quoted depends on
- * which representation the clause was reached through.
+ * <p>{@code name} is optional and {@code at} is not. An absent name is a fact about the
+ * declaration: the author wrote none, and every reading of that declaration finds none. Where the
+ * clause is written is always answered — a clause of a published module is
+ * {@link DiagnosticPlace.Unavailable}, which says where the code came from rather than being the
+ * absence of an answer. It used to be absent, and absent is what every reader turned into silence.
+ *
+ * <p>{@code at} is the same for every reading of one clause, which is what {@link #merge} rests on.
+ * Where a clause is written is settled where its text became positions and follows from the
+ * declaration it is on, so a walk reaching it down two branches finds one answer twice.
  */
-record Clause(Id id, Optional<ClauseName> name, Optional<CitableRegion> at) {
+record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
 
     Clause {
         Objects.requireNonNull(id, "a clause is one clause");
         Objects.requireNonNull(name, "a clause was written with a name or without one");
-        Objects.requireNonNull(at, "a clause can be pointed at or it cannot");
+        Objects.requireNonNull(at, "a clause is written somewhere, quotable here or not");
+        // As the declaration knows it, with no reader's route in it. Where the clause is written is
+        // a fact about the declaration and the same for every reading of it; the name a reading
+        // reached the code by is a fact about that reading. Carried, two readings of one clause are
+        // two values, and `merge` stops being the same operation whichever way round it is asked.
+        if (at instanceof DiagnosticPlace.Unavailable out) {
+            at = new DiagnosticPlace.Unavailable(out.provenance().asDeclared());
+        }
     }
 
     /**
@@ -52,9 +64,19 @@ record Clause(Id id, Optional<ClauseName> name, Optional<CitableRegion> at) {
      * branches of a conditional read one construction once each, and a first-wins union would let
      * the walk's order decide whether a warning points anywhere.
      *
-     * <p>What may differ between two readings is {@code at} and only {@code at}, because only it is
-     * knowledge this compile has rather than something the declaration says. Everything else
-     * differing is this compiler having called two clauses one clause, or one clause two.
+     * <p>Two readings of one clause say the same thing about it, or the model contradicts itself.
+     * Nothing here picks between them, which is what makes the three properties above hold rather
+     * than being claimed: an operation that preferred one reading to another is a first-wins union
+     * whichever rule it prefers by, and one that refused some disagreements while absorbing others
+     * finds a contradiction or not depending on which pair was merged first.
+     *
+     * <p>It used to prefer the reading that could point somewhere, and there used to be a reason: a
+     * reading that could not was an absent value, so which representation a clause was reached
+     * through decided how much a reading knew. Where a clause is written is now settled where its
+     * text became positions and is the same for every reading of it — a clause is quotable or it is
+     * out of sight because of the declaration it is on, not because of the path a walk took to it,
+     * and "no place at all" is not a thing a reading can produce. Measured over the whole suite: no
+     * compile produces two readings of one clause that differ.
      */
     static Clause merge(Clause a, Clause b) {
         if (!a.id.equals(b.id)) {
@@ -64,11 +86,11 @@ record Clause(Id id, Optional<ClauseName> name, Optional<CitableRegion> at) {
             throw new NotOneClause("clause " + a.id + " is named " + a.name.orElse(null)
                     + " in one reading and " + b.name.orElse(null) + " in another");
         }
-        if (a.at.isPresent() && b.at.isPresent() && !a.at.equals(b.at)) {
-            throw new NotOneClause("clause " + a.id + " is written at " + a.at.get().start()
-                    + " in one reading and at " + b.at.get().start() + " in another");
+        if (!a.at.equals(b.at)) {
+            throw new NotOneClause("clause " + a.id + " is written at " + a.at
+                    + " in one reading and at " + b.at + " in another");
         }
-        return a.at.isPresent() ? a : b;
+        return a;
     }
 
     /**
