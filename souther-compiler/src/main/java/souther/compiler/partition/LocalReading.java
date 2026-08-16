@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.UnreadRule;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.values.AdmissibleSet;
 

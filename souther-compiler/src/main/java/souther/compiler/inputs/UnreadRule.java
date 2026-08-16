@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 /**
  * A position a rule is written about that this did not turn into a line, and what stopped it.

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;

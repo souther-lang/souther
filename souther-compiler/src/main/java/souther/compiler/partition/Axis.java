@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleSet;
 

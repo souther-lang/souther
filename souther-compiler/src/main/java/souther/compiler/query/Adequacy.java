@@ -257,7 +257,7 @@ public final class Adequacy {
                                 spec.name(), body, plan, parameters, symbols);
                 // What the positions can hold, read before any threshold is applied: a guard's own line
                 // is not what says whether that line is reachable.
-                Map<souther.compiler.partition.NumericTerm,
+                Map<souther.compiler.inputs.NumericTerm,
                         souther.compiler.numeric.NumericDomain.Bounds> admissible =
                         souther.compiler.partition.Partitions.of(spec, sig, symbols,
                                 excluded == null ? Exclusions.NONE
@@ -1598,7 +1598,7 @@ public final class Adequacy {
             // classes can still carry a statement nothing read, so this is not filtered by the list
             // above — and the walk stopping short is the one reason that comes from neither.
             List<List<Object>> unread = new ArrayList<>();
-            for (souther.compiler.partition.UnreadRule each : partition.unread()) {
+            for (souther.compiler.inputs.UnreadRule each : partition.unread()) {
                 unread.add(List.<Object>of(each.at().toString(),
                         said(souther.compiler.partition.ReportedReason.of(each.why()))));
             }

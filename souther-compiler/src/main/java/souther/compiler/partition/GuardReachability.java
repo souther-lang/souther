@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.NumericDomain;
 
 import java.util.LinkedHashSet;

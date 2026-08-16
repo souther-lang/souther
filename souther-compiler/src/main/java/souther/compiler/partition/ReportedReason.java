@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+
 /**
  * The word an adequacy document writes for a reason a derivation stopped.
  *

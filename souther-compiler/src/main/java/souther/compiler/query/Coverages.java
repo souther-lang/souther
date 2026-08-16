@@ -17,7 +17,7 @@ import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.GuardThresholds;
-import souther.compiler.partition.NumericTerm;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;

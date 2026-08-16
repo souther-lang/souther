@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.TermPath;
+
 /**
  * A position the local producers were all asked about that none of them answered, and what it is
  * left with so far.

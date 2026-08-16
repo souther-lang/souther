@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 

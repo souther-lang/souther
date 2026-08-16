@@ -11,8 +11,8 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.GuardEdge;
 import souther.compiler.partition.GuardReachability;
-import souther.compiler.partition.NumericTerm;
-import souther.compiler.partition.TermPath;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 
 import java.io.ByteArrayOutputStream;
