@@ -40,6 +40,7 @@ import souther.compiler.meta.PublishedModule;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -273,14 +274,20 @@ public final class ExampleVerifier {
      * has to be held against them. A run of this compile's own answers never calls it. */
     private final Supplier<PublishedModule.Classes> declared;
     /**
-     * What each set of declarations brought in was held to say, so one answer is not read twice.
+     * What each set of declarations was held to say for each behavior, so one answer is not read
+     * twice.
      *
      * <p>By identity of what carries them, because that is what a run has of an answer's
      * declarations — and only ever as a memo. Nothing here decides that two answers are of one build
      * because they arrived as one object: emptying this changes what is paid and not what is
      * answered.
+     *
+     * <p>By behavior as well as by classes, because that is what was asked. One jar answers several
+     * behaviors, and what each of them reaches is its own — so a memo kept by the classes alone
+     * would answer for the second behavior with what was worked out about the first.
      */
-    private final Map<PublishedModule.Classes, Agreement> agreements = new IdentityHashMap<>();
+    private final Map<PublishedModule.Classes, Map<String, Agreement>> agreements =
+            new IdentityHashMap<>();
     /** The behaviors an answer could not be established for have already been reported about. A
      * behavior's rows may be written in more than one block, and what is reported is about neither
      * the block nor the row. It is per source, which is what a verifier is: a diagnostic is said
@@ -389,7 +396,7 @@ public final class ExampleVerifier {
             }
             Answerer.Answer answer = answerer.of(name);
             return new ExampleTarget(name, requirements.getOrDefault(name, List.of()), answer,
-                    heldTo(answer));
+                    heldTo(name, answer));
         }
         return null;
     }
@@ -407,7 +414,7 @@ public final class ExampleVerifier {
      * so there is no second set of declarations. A behavior nothing applies has no declarations to
      * bring at all, and its rows are recorded rather than run whatever any build says.
      */
-    private Agreement heldTo(Answerer.Answer answer) {
+    private Agreement heldTo(String behavior, Answerer.Answer answer) {
         // A switch, so an answer this was never shown is a compile error here rather than one of the
         // two ways silently taken for it.
         return switch (answer) {
@@ -420,8 +427,10 @@ public final class ExampleVerifier {
                 case null -> new Agreement.Unreadable(module.name(),
                         Agreement.Reason.NO_ORIGIN_STATED, Agreement.Side.THE_ANSWER);
                 case TheCompilesOwn _ -> null;
-                case Origin.Published published -> agreements.computeIfAbsent(published.classes(),
-                        theirs -> DeclarationAgreement.of(module.name(), declared.get(), theirs));
+                case Origin.Published published -> agreements
+                        .computeIfAbsent(published.classes(), _ -> new LinkedHashMap<>())
+                        .computeIfAbsent(behavior, named -> DeclarationAgreement.of(module.name(),
+                                named, declared.get(), published.classes()));
             };
         };
     }

@@ -52,107 +52,27 @@ public final class DeclarationAgreement {
     private DeclarationAgreement() {}
 
     /**
-     * Whether {@code theirs} declares {@code module}, and everything its declarations reach, as
-     * {@code ours} does.
+     * Whether the declarations {@code behavior}'s crossing depends on say the same thing in both
+     * builds.
+     *
+     * <p>Asked of one behavior, because that is what an answer is of. A row is handed to what
+     * answers one behavior, and what crosses is what that behavior takes and answers with — so a
+     * declaration the behavior does not reach is one no row of it ever meets, and holding two builds
+     * to it reports a stale build for editing something else in the same file.
      *
      * <p>What a build carries and this compiler cannot read is answered ({@link Agreement.Unreadable})
      * rather than raised: an answer brings its classes from wherever it was built, and a run that let
      * that out would stop evaluating a module over one behavior's jar.
      *
-     * @param module the module being evaluated, which is where the walk starts
-     * @param ours   where the declarations the rows are written for are read from
-     * @param theirs where the declarations the answer reads values by are read from
+     * @param module   the module being evaluated
+     * @param behavior the behavior whose answer is being held to it
+     * @param ours     where the declarations the rows are written for are read from
+     * @param theirs   where the declarations the answer reads values by are read from
      */
-    public static Agreement of(String module, PublishedModule.Classes ours,
+    public static Agreement of(String module, String behavior, PublishedModule.Classes ours,
                                PublishedModule.Classes theirs) {
-        PublishedUniverse mine = PublishedUniverse.of(ours);
-        PublishedUniverse yours = PublishedUniverse.of(theirs);
-        // Read the whole closure before comparing any of it. What a declaration is read through may
-        // be a helper another module published, so which helpers are part of a declaration is not
-        // settled until every module a declaration reaches has been read.
-        Map<String, PublishedUniverse.Read> ourSide = new LinkedHashMap<>();
-        Deque<String> toRead = new ArrayDeque<>(List.of(module));
-        Set<String> read = new LinkedHashSet<>(List.of(module));
-        while (!toRead.isEmpty()) {
-            String name = toRead.removeFirst();
-            PublishedUniverse.Read here = mine.resolved(name);
-            if (here == null) {
-                return unreadable(name, mine, Agreement.Side.THE_MODULE_BEING_EVALUATED);
-            }
-            ourSide.put(name, here);
-            // The modules the compared declarations reach into, read off what the front end resolved
-            // each name to. Not the import lines: a module may import what only an unread helper
-            // wanted, and may name a declaration in full with no import at all.
-            //
-            // The standard library is in neither. Nobody publishes it, and whether two builds have
-            // the same one is what the boundary revision on each of them says.
-            for (String reached : modulesReached(here.module())) {
-                if (read.add(reached)) {
-                    toRead.addLast(reached);
-                }
-            }
-        }
-        Map<String, PublishedUniverse.Read> theirSide = new LinkedHashMap<>();
-        for (String name : ourSide.keySet()) {
-            PublishedUniverse.Read there = yours.resolved(name);
-            if (there == null) {
-                return unreadable(name, yours, Agreement.Side.THE_ANSWER);
-            }
-            theirSide.put(name, there);
-        }
-        // What a declaration is read through, of both builds. A helper only one side's declarations
-        // reach is one side's answer about what its values are, and leaving it out would compare the
-        // two builds by what only one of them says is part of a declaration.
-        Set<ValueName.Helper> readThrough = new LinkedHashSet<>(readThrough(modulesOf(ourSide)));
-        readThrough.addAll(readThrough(modulesOf(theirSide)));
-        // Reading widely and comparing widely are two different things. A name is resolved against
-        // every module the text reaches, because that is what resolution needs to answer it; what a
-        // crossing depends on is narrower — the declarations, the signatures, and the helpers those
-        // are read through. A module only an unread helper reaches was read so that helper's names
-        // could be answered, and holding two builds to it would report one as moved over something
-        // no value crossing meets.
-        for (String name : comparedModules(module, ourSide, readThrough)) {
-            Agreement said = agreed(name, ourSide.get(name), theirSide.get(name), readThrough);
-            if (!(said instanceof Agreement.Agree)) {
-                return said;
-            }
-        }
-        return new Agreement.Agree();
-    }
-
-    /**
-     * The modules whose declarations a crossing depends on, from {@code module} outwards.
-     *
-     * <p>What is followed is what the compared declarations reach: a module's own declarations, its
-     * behaviors' signatures, and the helpers those are read through. A module reached only by
-     * something not compared is not among them, however it was read.
-     */
-    private static Set<String> comparedModules(String module,
-                                               Map<String, PublishedUniverse.Read> read,
-                                               Set<ValueName.Helper> readThrough) {
-        Deque<String> toWalk = new ArrayDeque<>(List.of(module));
-        Set<String> compared = new LinkedHashSet<>(List.of(module));
-        while (!toWalk.isEmpty()) {
-            PublishedUniverse.Read here = read.get(toWalk.removeFirst());
-            if (here == null) {
-                continue;
-            }
-            for (String reached : modulesReached(here.module(), readThrough)) {
-                if (read.containsKey(reached) && compared.add(reached)) {
-                    toWalk.addLast(reached);
-                }
-            }
-        }
-        return compared;
-    }
-
-    /** The modules of what was read, for the walks that are about declarations alone. */
-    private static List<Hir.Module> modulesOf(Map<String, PublishedUniverse.Read> read) {
-        List<Hir.Module> modules = new ArrayList<>();
-        for (PublishedUniverse.Read each : read.values()) {
-            modules.add(each.module());
-        }
-        return modules;
+        return new Crossing(PublishedUniverse.of(ours), PublishedUniverse.of(theirs))
+                .heldFrom(new ValueName.Behavior(module, behavior));
     }
 
     /** Which of the two ways a module could not be read it was. */
@@ -164,68 +84,216 @@ public final class DeclarationAgreement {
                 side);
     }
 
-    /** Whether two readings of one module say the same thing about what a crossing depends on. */
-    private static Agreement agreed(String module, PublishedUniverse.Read read,
-                                    PublishedUniverse.Read theirRead,
-                                    Set<ValueName.Helper> readThrough) {
-        Hir.Module ours = read.module();
-        Hir.Module theirs = theirRead.module();
-        // Which behaviors are left to be injected is not in a declaration and does not survive as
-        // source, so it travels beside the module. It decides whether an implementation may be
-        // supplied for a behavior at all, which is as much a fact about the crossing as a
-        // behavior's signature is: two builds that disagree about it disagree about whether
-        // anything may be handed in there.
-        if (!read.injectedBehaviors().equals(theirRead.injectedBehaviors())) {
-            Set<String> only = new LinkedHashSet<>(read.injectedBehaviors());
-            only.removeAll(theirRead.injectedBehaviors());
-            if (only.isEmpty()) {
-                only = new LinkedHashSet<>(theirRead.injectedBehaviors());
-                only.removeAll(read.injectedBehaviors());
+    /**
+     * The closure of what one behavior's crossing depends on, held across two builds as it is found.
+     *
+     * <p>One walk, and everything comes out of it. What is compared, which modules have to be read
+     * for the comparing, and which helpers are part of a declaration are not three questions with
+     * three rules: they are the reachable set of one projection — {@link #crossingParts} — from one
+     * behavior. Written as three, a helper reached through an invariant was found and one reached
+     * through an encoder was not, and neither rule said anything that would have told you.
+     *
+     * <p>Both builds are followed, not one. A declaration or a helper only one side reaches is one
+     * side's answer about what its values are, and following only ours would compare the two by what
+     * only one of them says a crossing is made of.
+     */
+    private static final class Crossing {
+
+        private final PublishedUniverse mine;
+        private final PublishedUniverse yours;
+        private final Map<String, PublishedUniverse.Read> ourSide = new LinkedHashMap<>();
+        private final Map<String, PublishedUniverse.Read> theirSide = new LinkedHashMap<>();
+        private final Deque<Reached> toCompare = new ArrayDeque<>();
+        private final Set<Reached> reached = new LinkedHashSet<>();
+
+        private Crossing(PublishedUniverse mine, PublishedUniverse yours) {
+            this.mine = mine;
+            this.yours = yours;
+        }
+
+        /** What the two builds say about everything {@code behavior}'s crossing reaches. */
+        Agreement heldFrom(ValueName.Behavior behavior) {
+            reach(new Reached.ABehavior(behavior));
+            while (!toCompare.isEmpty()) {
+                Agreement said = held(toCompare.removeFirst());
+                if (!(said instanceof Agreement.Agree)) {
+                    return said;
+                }
             }
-            return new Agreement.Disagree(module, only.iterator().next());
+            return new Agreement.Agree();
         }
-        Agreement types = held(module, byName(ours.defs(), Hir.Def::name),
-                byName(theirs.defs(), Hir.Def::name), DeclarationAgreement::crossingParts);
-        if (!(types instanceof Agreement.Agree)) {
-            return types;
+
+        /** One reached thing, held across the two builds, and whatever it reaches reached. */
+        private Agreement held(Reached what) {
+            Agreement missing = notInSight(what.module());
+            if (missing != null) {
+                return missing;
+            }
+            PublishedUniverse.Read here = ourSide.get(what.module());
+            PublishedUniverse.Read there = theirSide.get(what.module());
+            List<Object> ours = what.partsIn(here.module());
+            List<Object> theirs = what.partsIn(there.module());
+            // A name only one side has is a difference in itself: a type that was removed, a helper
+            // one build's declaration is read through and the other's is not.
+            if (ours == null || theirs == null || !sameShape(ours, theirs, new Bound())) {
+                return new Agreement.Disagree(what.module(), what.name());
+            }
+            // Which behaviors are left to be injected is not in a declaration and does not survive
+            // as source, so it travels beside the module. It decides whether an implementation may
+            // be supplied for a behavior at all, which is as much a fact about the crossing as the
+            // signature is: two builds that disagree about it disagree about whether anything may
+            // be handed in there. Asked of the behaviors this crossing reaches, like everything
+            // else — the module's other behaviors are nothing a row of this one meets.
+            if (what instanceof Reached.ABehavior
+                    && here.injectedBehaviors().contains(what.name())
+                            != there.injectedBehaviors().contains(what.name())) {
+                return new Agreement.Disagree(what.module(), what.name());
+            }
+            follow(ours);
+            follow(theirs);
+            return new Agreement.Agree();
         }
-        Agreement behaviors = held(module, byName(ours.behaviors(), Hir.BehaviorDef::name),
-                byName(theirs.behaviors(), Hir.BehaviorDef::name),
-                DeclarationAgreement::crossingParts);
-        if (!(behaviors instanceof Agreement.Agree)) {
-            return behaviors;
+
+        /**
+         * Both readings of {@code module}, or the answer for a side that has none — null where both
+         * are in sight.
+         *
+         * <p>Read when the walk first reaches it rather than up front. A module is read whole by
+         * {@link PublishedUniverse}, which follows what its text reaches so that every name in it
+         * can be answered; what is asked for here is narrower and is the crossing's.
+         */
+        private Agreement notInSight(String module) {
+            if (ourSide.containsKey(module)) {
+                return null;
+            }
+            PublishedUniverse.Read here = mine.resolved(module);
+            if (here == null) {
+                return unreadable(module, mine, Agreement.Side.THE_MODULE_BEING_EVALUATED);
+            }
+            PublishedUniverse.Read there = yours.resolved(module);
+            if (there == null) {
+                return unreadable(module, yours, Agreement.Side.THE_ANSWER);
+            }
+            ourSide.put(module, here);
+            theirSide.put(module, there);
+            return null;
         }
-        // A module publishes more `let`s than a declaration is read through: what it exposes travels
-        // too, because a reader substitutes a value where it is named and expands a helper where it
-        // is called. Those are read by whatever calls them, and a row's values crossing into an
-        // answer never do — what they meet is what a declaration says, so what is compared is the
-        // helpers a declaration cannot be read without.
-        return held(module, byName(publishedHelpers(ours, readThrough), Hir.FnDef::name),
-                byName(publishedHelpers(theirs, readThrough), Hir.FnDef::name),
-                DeclarationAgreement::crossingParts);
+
+        /** Whatever {@code parts} names of a declaration, a behavior or a helper, reached. */
+        private void follow(List<Object> parts) {
+            walk(parts, new IdentityHashMap<>(), part -> {
+                switch (part) {
+                    case TypeSymbol type -> reach(new Reached.ADeclaration(type));
+                    case ValueName.Behavior behavior -> reach(new Reached.ABehavior(behavior));
+                    case ValueName.Helper helper -> reach(new Reached.AHelper(helper));
+                    default -> { }
+                }
+            });
+        }
+
+        /**
+         * Reaches one thing, once.
+         *
+         * <p>The standard library is not one of them. Nobody publishes it, and whether two builds
+         * have the same one is what the boundary revision on each of them says. Neither is anything
+         * of no module: a signature written over a primitive names no declaration.
+         */
+        private void reach(Reached what) {
+            String module = what.module();
+            if (module == null || module.isEmpty() || Prelude.isQualifier(module)) {
+                return;
+            }
+            if (reached.add(what)) {
+                toCompare.addLast(what);
+            }
+        }
     }
 
     /**
-     * The declarations of one kind held against each other, by name.
+     * One thing a crossing reaches, as what it is and where it is declared.
      *
-     * <p>A name only one side has is a difference in itself: a case added to a union, a type that was
-     * removed. It is named as the declaration that differs, which is what it is.
+     * <p>Each says what of a module it is, and a module that has no such thing says so by answering
+     * with nothing. Which is the same question for all three, asked of the three kinds of thing a
+     * declaration's parts can name.
      */
-    private static <T> Agreement held(String module, Map<String, T> ours, Map<String, T> theirs,
-                                      java.util.function.Function<T, List<Object>> parts) {
-        for (Map.Entry<String, T> ourOwn : ours.entrySet()) {
-            T theirOwn = theirs.get(ourOwn.getKey());
-            if (theirOwn == null || !sameShape(parts.apply(ourOwn.getValue()),
-                    parts.apply(theirOwn), new Bound())) {
-                return new Agreement.Disagree(module, ourOwn.getKey());
+    private sealed interface Reached {
+
+        String module();
+
+        String name();
+
+        /** What of {@code m} this is, as what a crossing depends on — null where m has no such
+         *  thing. */
+        List<Object> partsIn(Hir.Module m);
+
+        record ADeclaration(TypeSymbol type) implements Reached {
+
+            @Override
+            public String module() {
+                return type.module();
+            }
+
+            @Override
+            public String name() {
+                return type.name();
+            }
+
+            @Override
+            public List<Object> partsIn(Hir.Module m) {
+                for (Hir.Def def : m.defs()) {
+                    if (def.name().equals(name())) {
+                        return crossingParts(def);
+                    }
+                }
+                return null;
             }
         }
-        for (String name : theirs.keySet()) {
-            if (!ours.containsKey(name)) {
-                return new Agreement.Disagree(module, name);
+
+        record ABehavior(ValueName.Behavior behavior) implements Reached {
+
+            @Override
+            public String module() {
+                return behavior.module();
+            }
+
+            @Override
+            public String name() {
+                return behavior.name();
+            }
+
+            @Override
+            public List<Object> partsIn(Hir.Module m) {
+                for (Hir.BehaviorDef b : m.behaviors()) {
+                    if (b.name().equals(name())) {
+                        return crossingParts(b);
+                    }
+                }
+                return null;
             }
         }
-        return new Agreement.Agree();
+
+        record AHelper(ValueName.Helper helper) implements Reached {
+
+            @Override
+            public String module() {
+                return helper.module();
+            }
+
+            @Override
+            public String name() {
+                return helper.name();
+            }
+
+            @Override
+            public List<Object> partsIn(Hir.Module m) {
+                for (Hir.FnDef fn : m.fns()) {
+                    if (fn.name().equals(name())) {
+                        return crossingParts(fn);
+                    }
+                }
+                return null;
+            }
+        }
     }
 
     /**
@@ -307,110 +375,6 @@ public final class DeclarationAgreement {
             types.add(param.type());
         }
         return types;
-    }
-
-    /**
-     * The helpers a declaration of {@code module} cannot be read without.
-     *
-     * <p>Read off what an invariant calls, as the front end resolved it: a helper of this module is
-     * a {@link ValueName.Helper} of it, and reaching one reaches whatever it calls in turn.
-     */
-    private static Set<ValueName.Helper> readThrough(Iterable<Hir.Module> closure) {
-        Map<String, Map<String, Hir.FnDef>> byModule = new LinkedHashMap<>();
-        for (Hir.Module module : closure) {
-            byModule.put(module.name(), byName(module.fns(), Hir.FnDef::name));
-        }
-        Set<ValueName.Helper> reached = new LinkedHashSet<>();
-        for (Hir.Module module : closure) {
-            for (Hir.Def def : module.defs()) {
-                if (def instanceof Hir.Data data) {
-                    for (Hir.InvariantClause clause : data.invariants()) {
-                        reach(clause.expr(), byModule, reached);
-                    }
-                }
-            }
-        }
-        return reached;
-    }
-
-    /**
-     * Whatever {@code form} names of the closure's helpers, and what those reach in turn.
-     *
-     * <p>Whichever module declares one. A rule written in the module that owns a type and called by
-     * a reader's invariant is as much a part of what the reader's values are as one written beside
-     * it, and the front end says which module each name is of.
-     */
-    private static void reach(Object form, Map<String, Map<String, Hir.FnDef>> byModule,
-                              Set<ValueName.Helper> reached) {
-        for (ValueName.Helper named : helpersNamedIn(form)) {
-            Hir.FnDef fn = byModule.getOrDefault(named.module(), Map.of()).get(named.name());
-            if (fn != null && reached.add(named)) {
-                reach(fn.body(), byModule, reached);
-            }
-        }
-    }
-
-    /** The helpers a form names, as the front end answered each name. */
-    private static Set<ValueName.Helper> helpersNamedIn(Object form) {
-        Set<ValueName.Helper> named = new LinkedHashSet<>();
-        walk(form, new IdentityHashMap<>(), part -> {
-            if (part instanceof ValueName.Helper helper) {
-                named.add(helper);
-            }
-        });
-        return named;
-    }
-
-    /** The published helpers of {@code module} that are among {@code readThrough}. */
-    private static List<Hir.FnDef> publishedHelpers(Hir.Module module,
-                                                    Set<ValueName.Helper> readThrough) {
-        List<Hir.FnDef> kept = new ArrayList<>();
-        for (Hir.FnDef fn : module.fns()) {
-            if (readThrough.contains(new ValueName.Helper(module.name(), fn.name()))) {
-                kept.add(fn);
-            }
-        }
-        return kept;
-    }
-
-    /**
-     * The modules the compared declarations of {@code module} reach into.
-     *
-     * <p>Off what the front end resolved each name to: a type is the declaration it is, and a value
-     * is the module's value it is. So a module reached by a name written out in full is here as
-     * surely as one an import brought in, and one nothing compared names is not here however it was
-     * imported.
-     */
-    private static Set<String> modulesReached(Hir.Module module) {
-        return modulesReached(module, null);
-    }
-
-    /**
-     * The modules {@code module}'s declarations reach, of the parts of it {@code readThrough} says
-     * are compared — or of all of it, where nothing has been settled yet and the answer is what has
-     * to be read for a name to be resolved at all.
-     */
-    private static Set<String> modulesReached(Hir.Module module,
-                                              Set<ValueName.Helper> readThrough) {
-        List<Object> compared = new ArrayList<>(module.defs());
-        compared.addAll(module.behaviors());
-        compared.addAll(readThrough == null ? module.fns()
-                : publishedHelpers(module, readThrough));
-        Set<String> reached = new LinkedHashSet<>();
-        walk(compared, new IdentityHashMap<>(), part -> {
-            if (part instanceof TypeSymbol type) {
-                reached.add(type.module());
-            }
-            if (part instanceof ValueName.Helper helper) {
-                reached.add(helper.module());
-            }
-            if (part instanceof ValueName.Behavior behavior) {
-                reached.add(behavior.module());
-            }
-        });
-        reached.remove(module.name());
-        reached.removeIf(name -> name == null || name.isEmpty() || Prelude.isQualifier(name));
-        return reached;
     }
 
     /**

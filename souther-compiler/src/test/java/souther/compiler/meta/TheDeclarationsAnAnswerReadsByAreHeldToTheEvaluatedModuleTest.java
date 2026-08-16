@@ -121,6 +121,11 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             data Tag = String
                 invariant trim = String.length(value) > 0
 
+            behavior retag : (t: Tag) -> Tag
+                constructs Tag
+
+            let retag (t) = Tag(t.value)
+
             let keep (t: Tag) : String = trim(t.value)
             """;
 
@@ -143,6 +148,43 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             let price (a) = Priced { of = a }
 
             let settle (p) = p.of
+            """;
+
+    /** A model with a declaration beside the behavior that nothing the behavior crosses reaches. */
+    private static final String BESIDE = """
+            module example.beside
+            import String ( length )
+
+            data Title = String
+                invariant length(value) > 0
+
+            data Made = { title: Title }
+
+            data Unrelated = { text: String }
+
+            behavior make : (t: Title) -> Made
+                constructs Made
+
+            let make (t) = Made { title = t }
+            """;
+
+    /** A model whose behavior names another behavior it takes injected. */
+    private static final String DEPENDING = """
+            module example.depending
+            import String ( length )
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Band = String
+
+            behavior bandOf : (a: Amount) -> Band
+
+            behavior charge : (a: Amount) -> Amount
+                constructs Amount
+                depends on bandOf
+
+            let charge (a, bandOf) = Amount(length(bandOf(a).value))
             """;
 
     /** A module publishing a value whose name a reader also uses as a field name. */
@@ -210,6 +252,11 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
             data Title = String
                 invariant length(value) > 0
 
+            behavior retitle : (t: Title) -> Title
+                constructs Title
+
+            let retitle (t) = Title(t.value)
+
             let describe (t: Title) : String = decorate(t.value)
             """;
 
@@ -232,6 +279,11 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
             data Checked = { range: Range }
                 invariant valid(range)
+
+            behavior check : (c: Checked) -> Checked
+                constructs Checked
+
+            let check (c) = Checked { range = c.range }
 
             let valid (r: Range) : Bool = r.min >= 0
             """;
@@ -280,7 +332,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     @Test
     void twoBuildsOfOneSourceAgree() {
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "rename",
                 declarationsOf(MODEL), declarationsOf(MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -299,7 +351,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String narrowed = MODEL.replace("invariant length(value) > 0",
                 "invariant length(value) > 3");
 
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "rename",
                 declarationsOf(narrowed), declarationsOf(MODEL));
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
@@ -322,7 +374,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                         "data Todo = {\n    title:   Title,\n    done:    Bool\n}")
                 .replace("data Title = String", "// what a todo is called\ndata Title = String");
 
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "rename",
                 declarationsOf(spaced), declarationsOf(MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -341,7 +393,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String rewritten = MODEL.replace("let rename (t, to) = Todo { title = to, done = t.done }",
                 "let rename (t, to) = Todo { done = t.done, title = to }");
 
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "rename",
                 declarationsOf(rewritten), declarationsOf(MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -362,7 +414,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String answering = UNION_MODEL.replace("data Outcome = Todo | NotFound",
                 "data Outcome = Todo | NotFound | Archived");
 
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "find",
                 declarationsOf(answering), declarationsOf(UNION_MODEL));
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
@@ -380,7 +432,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String renamed = MODEL.replace("done: Bool", "finished: Bool")
                 .replace("done = t.done", "finished = t.finished");
 
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "rename",
                 declarationsOf(renamed), declarationsOf(MODEL));
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
@@ -400,7 +452,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 "behavior rename : (t: Todo, to: Title, also: Bool) -> Todo")
                 .replace("let rename (t, to) =", "let rename (t, to, also) =");
 
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "rename",
                 declarationsOf(moved), declarationsOf(MODEL));
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held);
@@ -421,7 +473,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String moved = EXPOSING_MODEL.replace("let describe (t: Title) : String = trim(t.value)",
                 "let describe (t: Title) : String = trim(trim(t.value))");
 
-        Agreement held = DeclarationAgreement.of("example.published",
+        Agreement held = DeclarationAgreement.of("example.published", "rename",
                 declarationsOf(moved), declarationsOf(EXPOSING_MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -434,7 +486,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String moved = EXPOSING_MODEL.replace("let longEnough (s: String) : Bool = length(s) > 0",
                 "let longEnough (s: String) : Bool = length(s) > 3");
 
-        Agreement held = DeclarationAgreement.of("example.published",
+        Agreement held = DeclarationAgreement.of("example.published", "rename",
                 declarationsOf(moved), declarationsOf(EXPOSING_MODEL));
 
         assertInstanceOf(Agreement.Disagree.class, held,
@@ -452,7 +504,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String reordered = ROOT.replace("import example.shared ( Title, Note )",
                 "import example.shared ( Note, Title )");
 
-        Agreement held = DeclarationAgreement.of("example.root",
+        Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(List.of(SHARED, reordered)), declarationsOf(List.of(SHARED, ROOT)));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -474,7 +526,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("let describe (t: Title) : String = trim(t.value)",
                         "let describe (t: Title) : String = t.value");
 
-        Agreement held = DeclarationAgreement.of("example.published",
+        Agreement held = DeclarationAgreement.of("example.published", "rename",
                 declarationsOf(withoutIt), declarationsOf(EXPOSING_MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -492,7 +544,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     void aDecimalWrittenWithAnotherScaleIsNotADisagreement() {
         String written = DECIMAL_MODEL.replace("value >= 1.0m", "value >= 1.00m");
 
-        Agreement held = DeclarationAgreement.of("example.rates",
+        Agreement held = DeclarationAgreement.of("example.rates", "raise",
                 declarationsOf(written), declarationsOf(DECIMAL_MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -504,7 +556,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     void aDecimalBoundThatMovedIsADisagreement() {
         String raised = DECIMAL_MODEL.replace("value >= 1.0m", "value >= 1.5m");
 
-        Agreement held = DeclarationAgreement.of("example.rates",
+        Agreement held = DeclarationAgreement.of("example.rates", "raise",
                 declarationsOf(raised), declarationsOf(DECIMAL_MODEL));
 
         assertInstanceOf(Agreement.Disagree.class, held);
@@ -524,7 +576,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String narrowed = SHARED.replace("invariant length(value) > 0",
                 "invariant length(value) > 3");
 
-        Agreement held = DeclarationAgreement.of("example.root",
+        Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(List.of(SHARED, QUALIFYING_ROOT)),
                 declarationsOf(List.of(narrowed, QUALIFYING_ROOT)));
 
@@ -544,7 +596,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     @Test
     void aNameReachedThroughAnAliasIsTheNameItReaches() {
-        Agreement held = DeclarationAgreement.of("example.root",
+        Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(List.of(SHARED, ALIASING_ROOT)),
                 declarationsOf(List.of(SHARED, QUALIFYING_ROOT)));
 
@@ -565,7 +617,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("import String ( trim )\n", "")
                 .replace("trim(t.value)", "String.trim(t.value)");
 
-        Agreement held = DeclarationAgreement.of("example.literal",
+        Agreement held = DeclarationAgreement.of("example.literal", "retag",
                 declarationsOf(withoutIt), declarationsOf(LITERAL_MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -589,13 +641,13 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                         "let price (a) = Priced { of = a, twice = a }");
 
         assertInstanceOf(Agreement.Agree.class,
-                DeclarationAgreement.of("example.composing",
+                DeclarationAgreement.of("example.composing", "priceAndSettle",
                         declarationsOf(COMPOSING_MODEL), declarationsOf(COMPOSING_MODEL)),
                 "two builds of one composition agree");
         assertInstanceOf(Agreement.Disagree.class,
-                DeclarationAgreement.of("example.composing",
+                DeclarationAgreement.of("example.composing", "price",
                         declarationsOf(moved), declarationsOf(COMPOSING_MODEL)),
-                "and what its stages answer with having moved is a disagreement");
+                "and what a stage answers with having moved is a disagreement for that stage");
     }
 
     /**
@@ -611,7 +663,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("let longEnough (s: String) : Bool = length(s) > 0",
                         "let longEnough (text: String) : Bool = length(text) > 0");
 
-        Agreement held = DeclarationAgreement.of("example.published",
+        Agreement held = DeclarationAgreement.of("example.published", "rename",
                 declarationsOf(renamed), declarationsOf(EXPOSING_MODEL));
 
         assertInstanceOf(Agreement.Agree.class, held,
@@ -631,7 +683,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
                 .replace("import example.shared ( Title, note )\n",
                         "import example.shared ( Title )\n");
 
-        Agreement held = DeclarationAgreement.of("example.shadowing",
+        Agreement held = DeclarationAgreement.of("example.shadowing", "rename",
                 declarationsOf(List.of(SHADOWING_SHARED, withoutIt)),
                 declarationsOf(List.of(SHADOWING_SHARED, SHADOWING_MODEL)));
 
@@ -651,7 +703,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     void aHelperOfAnotherModuleAnInvariantReadsThroughIsADisagreement() {
         String tightened = OFFERING.replace("a.value >= 1.0m", "a.value >= 5.0m");
 
-        Agreement held = DeclarationAgreement.of("example.order",
+        Agreement held = DeclarationAgreement.of("example.order", "price",
                 declarationsOf(List.of(tightened, READING)),
                 declarationsOf(List.of(OFFERING, READING)));
 
@@ -673,7 +725,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     void aHelperReadingAnotherFieldIsADisagreement() {
         String other = READING_A_FIELD.replace("r.min >= 0", "r.max >= 0");
 
-        Agreement held = DeclarationAgreement.of("example.range",
+        Agreement held = DeclarationAgreement.of("example.range", "check",
                 declarationsOf(other), declarationsOf(READING_A_FIELD));
 
         assertInstanceOf(Agreement.Disagree.class, held,
@@ -691,7 +743,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     void aBehaviorLeftOpenInOneBuildAndImplementedInTheOtherIsADisagreement() {
         String implemented = INJECTING + "\nlet charge (a) = Amount(a.value)\n";
 
-        Agreement held = DeclarationAgreement.of("example.injecting",
+        Agreement held = DeclarationAgreement.of("example.injecting", "charge",
                 declarationsOf(implemented), declarationsOf(INJECTING));
 
         assertInstanceOf(Agreement.Disagree.class, held,
@@ -712,7 +764,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String moved = FORMATTING.replace("invariant length(value) > 0",
                 "invariant length(value) > 3");
 
-        Agreement held = DeclarationAgreement.of("example.model",
+        Agreement held = DeclarationAgreement.of("example.model", "retitle",
                 declarationsOf(List.of(FORMATTING, USING_FORMAT)),
                 declarationsOf(List.of(moved, USING_FORMAT)));
 
@@ -733,7 +785,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         String narrowed = SHARED.replace("invariant length(value) > 0",
                 "invariant length(value) > 3");
 
-        Agreement held = DeclarationAgreement.of("example.root",
+        Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(List.of(SHARED, ROOT)), declarationsOf(List.of(narrowed, ROOT)));
 
         Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
@@ -745,7 +797,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     /** Two builds of a model spread over two modules agree, one import deep. */
     @Test
     void twoBuildsOfAModelWithAnImportAgree() {
-        Agreement held = DeclarationAgreement.of("example.root",
+        Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(List.of(SHARED, ROOT)), declarationsOf(List.of(SHARED, ROOT)));
 
         assertInstanceOf(Agreement.Agree.class, held);
@@ -760,7 +812,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     @Test
     void classesCarryingNoDeclarationsCannotBeToldEitherWay() {
-        Agreement held = DeclarationAgreement.of("example.stale",
+        Agreement held = DeclarationAgreement.of("example.stale", "rename",
                 declarationsOf(MODEL), _ -> null);
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
@@ -781,12 +833,66 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         PublishedModule.Classes incomplete = missing("example.stale.Title",
                 declarationsOf(MODEL));
 
-        Agreement held = DeclarationAgreement.of("example.stale", declarationsOf(MODEL), incomplete);
+        Agreement held = DeclarationAgreement.of("example.stale", "rename", declarationsOf(MODEL), incomplete);
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "a declaration was published and the class carrying it is not there");
         assertEquals(Agreement.Reason.NOT_READABLE_HERE, said.reason());
         assertEquals(Agreement.Side.THE_ANSWER, said.side());
+    }
+
+    /**
+     * A declaration the behavior's crossing does not reach is not held to.
+     *
+     * <p>An answer answers one behavior, and a row of it is handed what that behavior takes and
+     * given back what it answers with. A declaration written beside it that nothing crossing meets
+     * is not part of that, and holding two builds to it reports a stale build for editing something
+     * else in the same file — which is the report this whole check exists to stop being made for
+     * reasons nobody can act on.
+     *
+     * <p>The second half is what keeps the first honest. The same edit made to what the behavior
+     * does reach is a disagreement, so the module is being compared and not skipped.
+     */
+    @Test
+    void aDeclarationTheCrossingDoesNotReachIsNotHeldTo() {
+        String beside = BESIDE.replace("data Unrelated = { text: String }",
+                "data Unrelated = { text: String, more: Int }");
+        String reached = BESIDE.replace("data Made = { title: Title }",
+                "data Made = { title: Title, more: Int }")
+                .replace("let make (t) = Made { title = t }",
+                        "let make (t) = Made { title = t, more = 1 }");
+
+        assertInstanceOf(Agreement.Agree.class,
+                DeclarationAgreement.of("example.beside", "make",
+                        declarationsOf(beside), declarationsOf(BESIDE)),
+                "nothing a row of `make` meets is declared by `Unrelated`");
+        assertInstanceOf(Agreement.Disagree.class,
+                DeclarationAgreement.of("example.beside", "make",
+                        declarationsOf(reached), declarationsOf(BESIDE)),
+                "and the same edit to what it answers with is one");
+    }
+
+    /**
+     * A behavior this one takes injected, whose signature has moved.
+     *
+     * <p>What a row supplies for a dependency crosses into the answer as surely as its inputs do, so
+     * the dependency's signature — and the declarations that signature names — are part of what this
+     * behavior's crossing depends on. Reached through the {@code depends on} clause, which is what
+     * the behavior says about it.
+     */
+    @Test
+    void aDependencyWhoseSignatureMovedIsADisagreement() {
+        // What it admits, not what it holds: a body that reads the dependency's answer goes on
+        // reading it, so what differs is the declaration and nothing around it.
+        String moved = DEPENDING.replace("data Band = String",
+                "data Band = String\n    invariant length(value) > 0");
+
+        Agreement held = DeclarationAgreement.of("example.depending", "charge",
+                declarationsOf(moved), declarationsOf(DEPENDING));
+
+        Agreement.Disagree said = assertInstanceOf(Agreement.Disagree.class, held,
+                "what answers the dependency hands back is read by the row that supplied it");
+        assertEquals("Band", said.declaration());
     }
 
     /** {@code classes} with {@code absent} not on it, as an incomplete jar has it. */

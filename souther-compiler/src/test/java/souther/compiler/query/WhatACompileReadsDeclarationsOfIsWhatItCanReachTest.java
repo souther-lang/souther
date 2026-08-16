@@ -65,7 +65,7 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
     void twoBuildsImportingOneCompiledModuleAgree() {
         Map<String, byte[]> onThePath = Compiler.compile(SHARED);
 
-        Agreement held = DeclarationAgreement.of("example.root",
+        Agreement held = DeclarationAgreement.of("example.root", "rename",
                 declarationsOf(ROOT, onThePath), declarationsOf(ROOT, onThePath));
 
         assertInstanceOf(Agreement.Agree.class, held,
