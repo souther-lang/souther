@@ -17,6 +17,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
@@ -36,6 +37,8 @@ import souther.compiler.observe.Stage;
 import souther.compiler.meta.Agreement;
 import souther.compiler.meta.DeclarationAgreement;
 import souther.compiler.meta.PublishedClasses;
+import souther.compiler.meta.Readback;
+import souther.compiler.meta.ReadbackReasons;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -418,8 +421,7 @@ public final class ExampleVerifier {
                 // be refused rather than a state of this compiler. Saying nothing is not saying
                 // "this compile's own": read that way, an implementation would be out of the
                 // question by returning null, which is what the abstract accessor was for.
-                case null -> new Agreement.Unreadable(module.name(),
-                        Agreement.Reason.NO_ORIGIN_STATED, Agreement.Side.THE_ANSWER);
+                case null -> new Agreement.NoOriginStated(module.name());
                 case TheCompilesOwn _ -> null;
                 case Origin.Published published -> agreements
                         .computeIfAbsent(published.classes(), _ -> new LinkedHashMap<>())
@@ -447,27 +449,152 @@ public final class ExampleVerifier {
                             differs.declaration()))
                     .hint(new ExampleMessage.BuildWhatAnswersItAgainstThisRevision(differs.module()))
                     .build();
-            case Agreement.Unreadable unreadable -> Diagnostic.at(ex.pos())
+            case Agreement.NoOriginStated stated -> Diagnostic.at(ex.pos())
                     .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(target,
-                            unreadable.module()))
-                    // Which side could not be read decides what the reader is to do about it, so the
-                    // hint says whose declarations they are. Naming the answer's build for what this
-                    // compile could not read would send someone to rebuild what is not in question.
-                    .hint(switch (unreadable.side()) {
-                        case THE_ANSWER -> switch (unreadable.reason()) {
-                            case NOTHING_PUBLISHED ->
-                                    new ExampleMessage.ItsClassesCarryNoDeclarations(unreadable.module());
-                            case NOT_READABLE_HERE ->
-                                    new ExampleMessage.WhatItPublishedCannotBeReadHere(unreadable.module());
-                            case NO_ORIGIN_STATED ->
-                                    new ExampleMessage.ItDidNotSayWhichBuildItReadsBy(unreadable.module());
-                        };
-                        case THE_MODULE_BEING_EVALUATED ->
-                                new ExampleMessage.ThisCompileCannotReadItsOwnDeclarationsOf(
-                                        unreadable.module());
-                    })
+                            stated.module()))
+                    .hint(new ExampleMessage.ItDidNotSayWhichBuildItReadsBy(stated.module()))
                     .build();
+            case Agreement.Unreadable unreadable -> cannotBeTold(ex, target, unreadable);
         };
+    }
+
+    /**
+     * What a row is told when a set of declarations could not be read.
+     *
+     * <p>Three questions and one answer each: whose declarations could not be read, why they could
+     * not, and what there is to do about it. Kept apart because they are answered from different
+     * things — the side, the reading's own reason, and the two together — and a reader given only
+     * the first two has been told what happened and not what to do.
+     */
+    private static Diagnostic cannotBeTold(Hir.Example ex, String target,
+                                           Agreement.Unreadable unreadable) {
+        Diagnostic.Builder said = Diagnostic.at(ex.pos())
+                .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(
+                        target, unreadable.module()));
+        return whatToDoAbout(
+                whyItCannotBeTold(whoseDeclarations(said, unreadable), unreadable.reading()),
+                unreadable)
+                .build();
+    }
+
+    /**
+     * Whose declarations could not be read.
+     *
+     * <p>Which side it was decides what the reader is to do about it, so this says whose they are.
+     * Naming the answer's build for what this compile could not read would send someone to rebuild
+     * the one thing that is not in question.
+     */
+    private static Diagnostic.Builder whoseDeclarations(Diagnostic.Builder said,
+                                                       Agreement.Unreadable unreadable) {
+        return switch (unreadable.side()) {
+            case THE_ANSWER -> switch (unreadable.reading()) {
+                case Readback.NotReady.SaysNothing<?> _ -> said.hint(
+                        new ExampleMessage.ItsClassesCarryNoDeclarations(unreadable.module()));
+                case Readback.NotReady.Unreadable<?> _ -> said.hint(
+                        new ExampleMessage.WhatItPublishedCannotBeReadHere(unreadable.module()));
+            };
+            case THE_MODULE_BEING_EVALUATED -> said.hint(
+                    new ExampleMessage.ThisCompileCannotReadItsOwnDeclarationsOf(
+                            unreadable.module()));
+        };
+    }
+
+    /**
+     * What there is to do about it, which is not the same for every way a reading stops.
+     *
+     * <p>Two things and one question between them: whether the classes are short of a module they
+     * could carry, or whether what they do carry is wrong. Short of one, the artifact is fine and
+     * there is a module to supply — and which module is the whole of what the reader needs. Wrong,
+     * there is nothing to supply and the artifact has to be built again. Said as one sentence for
+     * both, a run whose answer was built without a dependency is told to rebuild something that was
+     * never at fault, with the module that is missing named nowhere.
+     *
+     * <p>Only a module can be supplied, which is what puts the line between the two where it is. An
+     * artifact naming a declaration whose class is not there is short of something too, and it is a
+     * class of its own module — nobody adds one, so what there is to do is build the artifact that
+     * left it out.
+     *
+     * <p>Decided here rather than beside the reason, because it is this reader's. What a failure is
+     * is the same fact wherever it is read ({@link ReadbackReasons}); what to do about it is not. A
+     * compilation reading its path is told which module is missing by the walk over the path
+     * itself, and there is no such walk behind an answer's classes.
+     *
+     * <p>A switch over every failure there is, and over every way a line can fail, with nothing to
+     * fall through to. Either is a way a reading can stop, and one that reached here with nothing to
+     * say would be a reader told what happened and left to guess what to do.
+     */
+    private static Diagnostic.Builder whatToDoAbout(Diagnostic.Builder said,
+                                                    Agreement.Unreadable unreadable) {
+        Agreement.Side side = unreadable.side();
+        return switch (unreadable.reading()) {
+            // Nothing at all under the name: what is short is the module itself.
+            case Readback.NotReady.SaysNothing<?>(String module) -> supply(said, module, side);
+            case Readback.NotReady.Unreadable<?>(String module, Readback.Failure why) ->
+                    switch (why) {
+                        case Readback.Failure.InvalidExposure(
+                                Readback.Exposure line, List<Readback.Exposure> _) ->
+                                switch (line) {
+                                    case Readback.Exposure.NoSuchModule(String needed) ->
+                                            supply(said, needed, side);
+                                    case Readback.Exposure.NoSuchLibraryFunction _,
+                                         Readback.Exposure.NotExposed _,
+                                         Readback.Exposure.NoSuchName _,
+                                         Readback.Exposure.AliasTaken _,
+                                         Readback.Exposure.BroughtTwice _,
+                                         Readback.Exposure.CollidesWithADeclaration _ ->
+                                            buildItAgain(said, module, side);
+                                };
+                        case Readback.Failure.Incompatible _,
+                             Readback.Failure.DeclarationMissing _,
+                             Readback.Failure.AnotherModule _,
+                             Readback.Failure.UnreadableMetadata _,
+                             Readback.Failure.InvalidPublishedSyntax _,
+                             Readback.Failure.UnresolvedPublishedNames _,
+                             Readback.Failure.InvalidDeclarations _ ->
+                                buildItAgain(said, module, side);
+                    };
+        };
+    }
+
+    /** The classes are short of {@code module}: it is put where they are read from. */
+    private static Diagnostic.Builder supply(Diagnostic.Builder said, String module,
+                                             Agreement.Side side) {
+        return switch (side) {
+            case THE_ANSWER ->
+                    said.hint(new ExampleMessage.BuildWhatAnswersItAgainstAPathThatCarries(module));
+            case THE_MODULE_BEING_EVALUATED ->
+                    said.hint(new ModuleMessage.AddItToThisProjectsDependencies(module));
+        };
+    }
+
+    /** What {@code module}'s classes carry is wrong: the artifact is built again. */
+    private static Diagnostic.Builder buildItAgain(Diagnostic.Builder said, String module,
+                                                   Agreement.Side side) {
+        return switch (side) {
+            case THE_ANSWER ->
+                    said.hint(new ExampleMessage.BuildWhatAnswersItAgainstThisRevision(module));
+            case THE_MODULE_BEING_EVALUATED ->
+                    said.hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(module));
+        };
+    }
+
+    /**
+     * The reading's own reason, under what the reader was told about whose declarations they are.
+     *
+     * <p>Said here and not left out. What a run has to go on when an answer cannot be held to this
+     * module is why its declarations could not be read — a dependency the classes leave out and an
+     * artifact from another compiler are two things to do something about, and a reader told only
+     * that what was published cannot be read here has been given neither. Said of whichever side
+     * could not be read, because the reason is a fact about that side's classes either way; which
+     * side it is decides what the reader is to do about it and is said above this. Nothing is added
+     * for a set of classes that carry nothing: what would be said is that they carry nothing, which
+     * the hint above it already says.
+     */
+    private static Diagnostic.Builder whyItCannotBeTold(Diagnostic.Builder said,
+                                                        Readback.NotReady<?> reading) {
+        return reading instanceof Readback.NotReady.Unreadable<?>(String _, Readback.Failure why)
+                ? ReadbackReasons.said(said, why)
+                : said;
     }
 
     /** The injected behavior named {@code name} in this module — a valid target for a fake; null if

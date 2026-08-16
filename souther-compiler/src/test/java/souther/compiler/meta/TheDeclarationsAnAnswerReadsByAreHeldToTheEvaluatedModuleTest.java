@@ -817,7 +817,9 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "nothing was published, so nothing was established");
-        assertEquals(Agreement.Reason.NOTHING_PUBLISHED, said.reason());
+        assertInstanceOf(Readback.NotReady.SaysNothing.class, said.reading(),
+                "the classes say nothing about it, which is not their saying something unreadable");
+        assertEquals("example.stale", said.module());
         assertEquals(Agreement.Side.THE_ANSWER, said.side(),
                 "and it is the answer's classes that carry none");
     }
@@ -837,8 +839,37 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
 
         Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
                 "a declaration was published and the class carrying it is not there");
-        assertEquals(Agreement.Reason.NOT_READABLE_HERE, said.reason());
+        // Which declaration, and not only that something could not be read: the reading found it
+        // and the answer carries what it found.
+        assertEquals(new Readback.Failure.DeclarationMissing("Title"),
+                assertInstanceOf(Readback.NotReady.Unreadable.class, said.reading()).why());
         assertEquals(Agreement.Side.THE_ANSWER, said.side());
+    }
+
+    /**
+     * A module the answer's classes carry, whose dependency they do not.
+     *
+     * <p>The plainest way an answer's classes come up short, and the one this said nothing about.
+     * Its import line names a module those classes have nothing for, so the module cannot be read —
+     * and what a reader had to go on was that what it published cannot be read here, the same
+     * sentence an artifact from another compiler gets. There is a module to put on the answer's path
+     * and nothing said which.
+     */
+    @Test
+    void aDependencyTheAnswersClassesLeaveOutIsSaidAsThat() {
+        PublishedClasses ours = declarationsOf(List.of(SHARED, ROOT));
+
+        Agreement held = DeclarationAgreement.of("example.root", "rename", ours,
+                without("example.shared", declarationsOf(List.of(SHARED, ROOT))));
+
+        Agreement.Unreadable said = assertInstanceOf(Agreement.Unreadable.class, held,
+                "the module is carried and the module its import line names is not");
+        assertEquals(Agreement.Side.THE_ANSWER, said.side());
+        assertEquals("example.root", said.module());
+        assertEquals(new Readback.Failure.InvalidExposure(
+                        new Readback.Exposure.NoSuchModule("example.shared"), List.of()),
+                assertInstanceOf(Readback.NotReady.Unreadable.class, said.reading()).why(),
+                "and which module is short is what the reader is given");
     }
 
     /**
@@ -935,6 +966,13 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     /** {@code classes} with {@code absent} not on it, as an incomplete jar has it. */
     private static PublishedClasses missing(String absent, PublishedClasses classes) {
         return binaryName -> binaryName.equals(absent)
+                ? new PublishedClasses.Carried.NoSuchClass() : classes.of(binaryName);
+    }
+
+    /** {@code classes} with nothing of {@code module} on them, as a jar that left a dependency
+     *  out has it. */
+    private static PublishedClasses without(String module, PublishedClasses classes) {
+        return binaryName -> binaryName.equals(module) || binaryName.startsWith(module + ".")
                 ? new PublishedClasses.Carried.NoSuchClass() : classes.of(binaryName);
     }
 

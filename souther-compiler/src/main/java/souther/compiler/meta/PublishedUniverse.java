@@ -38,16 +38,32 @@ import java.util.Set;
 public final class PublishedUniverse {
 
     private final PublishedClasses classes;
-    // What each module gave, as the one value a reading answers with. Three maps filled at one
-    // statement apiece is three places to remember, and the fact they hold is one fact: this is
-    // what reading that module came back with.
-    private final Map<String, ReadableModule> read = new LinkedHashMap<>();
-    private final Map<String, Read> resolved = new LinkedHashMap<>();
-    private final Set<String> unreadable = new LinkedHashSet<>();
-    // What was reached and gave no reading, told apart the way a universe tells them apart: a name
-    // these classes carry and this compiler could not read is not a name they say nothing about,
-    // and an import of the second is the importer's mistake while an import of the first is not.
-    private final Map<String, ModuleUniverse.InSight> beyondReading = new LinkedHashMap<>();
+    /**
+     * What reading each module off these classes came back with — the one record of it, and what
+     * everything else here is derived from.
+     *
+     * <p>One map and not several. What a module gave used to be kept in four: the ones that were
+     * read, the ones that were resolved, the names of the ones that were not, and what a universe
+     * was to say about those. They hold one fact between them, and holding it four times is four
+     * places to write it and three chances to write it in one of them and not the rest — which is
+     * what let a reading that had a reason arrive at a caller as a name in a set.
+     */
+    private final Map<String, Readback<ReadableModule>> readbacks = new LinkedHashMap<>();
+    /**
+     * The same modules with their names answered, derived from {@link #readbacks} and from nothing
+     * else.
+     *
+     * <p>A cache and not a second record: a module that could not be read is not resolved, and what
+     * this holds for one is what the reading already said, restated as the answer of this stage
+     * ({@link Readback.NotReady#asTheAnswerOf}). Nothing is learned here that the reading did not
+     * have.
+     *
+     * <p>Both maps are written once per name. A module is read whole — everything its declarations
+     * reach is read with it — so what it resolves against does not grow between one caller asking
+     * for it and the next, and an entry replaced later would be this class answering two things
+     * about one module over the life of one universe.
+     */
+    private final Map<String, Readback<Read>> resolutions = new LinkedHashMap<>();
 
     private PublishedUniverse(PublishedClasses classes) {
         this.classes = classes;
@@ -59,54 +75,40 @@ public final class PublishedUniverse {
     }
 
     /**
-     * {@code module} as the front end reads it, or null where these classes do not declare it or
-     * this compiler cannot read what they published.
+     * {@code module} as the front end reads it, in the same three states reading one off these
+     * classes answers with.
+     *
+     * <p>A reading that got no further than the classes is answered as the reading found it, and
+     * one that got as far as this stage and stopped says why here. Answered with a null instead,
+     * every reason found on this side of the seam — an import line naming a module these classes do
+     * not carry, one asking for a name a module does not declare, a spelling two lines both bring
+     * in — had nowhere to be said, and a caller could tell the states apart only by asking the
+     * classes something else and reading the answer as a reason.
      *
      * <p>Read once. A module is resolved against every module its declarations reach, so asking for
      * one reads the ones it names — and the modules those name, since a type of an imported type is
      * reached the same way.
      */
-    public Read resolved(String module) {
-        Read already = resolved.get(module);
-        if (already != null || unreadable.contains(module)) {
+    public Readback<Read> resolved(String module) {
+        Readback<Read> already = resolutions.get(module);
+        if (already != null) {
             return already;
         }
         readReaching(module);
-        if (!read.containsKey(module)) {
-            unreadable.add(module);
-            return null;
-        }
         ModuleUniverse universe = universe();
         Registry<Ast.Def> registry = declaredBy();
-        for (String name : Set.copyOf(read.keySet())) {
-            if (resolved.containsKey(name)) {
-                continue;
+        // Every module that has been read and not yet resolved, and not this one alone: they are
+        // resolved against each other, and one left out would be a neighbour whose declarations
+        // this answers questions about without having answered its own names.
+        for (Map.Entry<String, Readback<ReadableModule>> each
+                : Map.copyOf(readbacks).entrySet()) {
+            if (resolutions.containsKey(each.getKey())) {
+                continue;   // written once: what was answered for a name stays that answer
             }
-            Hir.Module hir = resolve(universe, registry, name);
-            if (hir == null) {
-                unreadable.add(name);
-            } else {
-                resolved.put(name, new Read(hir, read.get(name).injectedBehaviors()));
-            }
+            resolutions.put(each.getKey(),
+                    resolutionOf(universe, registry, each.getKey(), each.getValue()));
         }
-        return resolved.get(module);
-    }
-
-    /**
-     * Whether these classes say anything at all about {@code module}, as against saying something
-     * this compiler cannot read.
-     *
-     * <p>Asked of the classes rather than of what was read: a module whose declarations came back
-     * unreadable is one these classes do carry, and a reader deciding what to say about it needs the
-     * two apart. Nothing is published for a name is one thing to tell someone; what is published
-     * cannot be read here is another.
-     */
-    public boolean declares(String module) {
-        // The same question the readback answers with `SaysNothing`, asked of the same function: a
-        // class of that name with no declarations on it is a class this compiler put nothing on, not
-        // something it failed to read. Two spellings of it would come apart, and a reader would be
-        // sent to look for a boundary revision that has nothing to do with it.
-        return ModuleReadback.carry(module, classes);
+        return resolutions.get(module);
     }
 
     /** Reads {@code module} and everything its declarations name, as far as these classes go. */
@@ -115,19 +117,17 @@ public final class PublishedUniverse {
         Set<String> tried = new LinkedHashSet<>(Set.of(module));
         while (!toRead.isEmpty()) {
             String name = toRead.removeFirst();
-            if (read.containsKey(name) || unreadable.contains(name)) {
+            if (readbacks.containsKey(name)) {
                 continue;
             }
-            // Which of the two a name is comes off the reading itself. It used to be asked again of
-            // the classes afterwards, because a reading that failed answered null however it failed.
-            Readback readback = ModuleReadback.read(name, classes);
-            if (!(readback instanceof Readback.Ready(ReadableModule readable))) {
-                unreadable.add(name);
-                beyondReading.put(name, readback instanceof Readback.Unreadable
-                        ? ModuleUniverse.InSight.UNREADABLE : ModuleUniverse.InSight.UNKNOWN);
+            // What the reading answered, kept as it answered it. Which of the states a name is in
+            // used to be asked again of the classes afterwards, because a reading that failed
+            // answered null however it failed.
+            Readback<ReadableModule> readback = ModuleReadback.read(name, classes);
+            readbacks.put(name, readback);
+            if (!(readback instanceof Readback.Ready<ReadableModule>(ReadableModule readable))) {
                 continue;
             }
-            read.put(name, readable);
             // Which modules a module's declarations name, answered where the compiler answers it:
             // an import line names one, and so does a type or a behavior written with a qualifier,
             // which needs no import at all.
@@ -160,11 +160,19 @@ public final class PublishedUniverse {
      * can go wrong at the moment a universe is assembled.
      */
     private ModuleUniverse universe() {
-        Map<String, ModuleUniverse.InSight> modules = new LinkedHashMap<>(beyondReading);
-        for (Map.Entry<String, ReadableModule> each : read.entrySet()) {
-            modules.put(each.getKey(), ModuleUniverse.InSight.Read.of(
-                    each.getValue().module(), declaredBy(each.getValue())));
-        }
+        Map<String, ModuleUniverse.InSight> modules = new LinkedHashMap<>();
+        // Read off the readings and nothing else. What a universe says about a name is which of the
+        // three a reading of it came back as, and the two kinds of absence are told apart the way a
+        // universe tells them apart: a name these classes carry and this compiler could not read is
+        // not a name they say nothing about, and an import of the second is the importer's mistake
+        // while an import of the first is not.
+        readbacks.forEach((name, readback) -> modules.put(name, switch (readback) {
+            case Readback.Ready<ReadableModule>(ReadableModule readable) ->
+                    ModuleUniverse.InSight.Read.of(readable.module(), declaredBy(readable));
+            case Readback.NotReady.Unreadable<ReadableModule> _ ->
+                    ModuleUniverse.InSight.UNREADABLE;
+            case Readback.NotReady.SaysNothing<ReadableModule> _ -> ModuleUniverse.InSight.UNKNOWN;
+        }));
         return new ModuleUniverse.OfWhatIsRead(modules);
     }
 
@@ -177,9 +185,11 @@ public final class PublishedUniverse {
      */
     private Registry<Ast.Def> declaredBy() {
         Map<String, Registry.Declared<Ast.Def>> declared = new LinkedHashMap<>();
-        for (Map.Entry<String, ReadableModule> each : read.entrySet()) {
-            declared.put(each.getKey(), declaredBy(each.getValue()));
-        }
+        readbacks.forEach((name, readback) -> {
+            if (readback instanceof Readback.Ready<ReadableModule>(ReadableModule readable)) {
+                declared.put(name, declaredBy(readable));
+            }
+        });
         return Registry.ofRead(declared);
     }
 
@@ -191,7 +201,25 @@ public final class PublishedUniverse {
     }
 
     /**
-     * {@code module} with every name it writes answered, or null where a name could not be.
+     * What this stage answers for one module, given what reading it answered.
+     *
+     * <p>A module the reading could not hand over is answered with what the reading said, as this
+     * stage's answer. The reason travels rather than being worked out again: a caller that was
+     * handed nothing here used to ask the classes whether they carry the name at all and read that
+     * as the reason, which says only which of two coarse things happened and says it from a
+     * question that has nothing to do with the reading.
+     */
+    private Readback<Read> resolutionOf(ModuleUniverse universe, Registry<Ast.Def> registry,
+                                        String module, Readback<ReadableModule> readback) {
+        return switch (readback) {
+            case Readback.NotReady<ReadableModule> notRead -> notRead.asTheAnswerOf();
+            case Readback.Ready<ReadableModule>(ReadableModule readable) ->
+                    resolve(universe, registry, module, readable);
+        };
+    }
+
+    /**
+     * {@code module} with every name it writes answered, or why none of them could be.
      *
      * <p>The scope is {@link Scoping}'s and not this class's. What an import line brought in, what a
      * bare type name denotes, what a bare name in the value namespace reaches — a reader that worked
@@ -199,26 +227,36 @@ public final class PublishedUniverse {
      * answers, and the two came to differ: a model compiled in the project that wrote it and refused
      * to be imported anywhere else.
      *
-     * <p>A refusal is this reader taking the module as one it cannot read. Nothing is said about it:
-     * a published module was compiled before it was published, so an import line that cannot do its
-     * job here says something about what these classes carry rather than about what an author wrote,
-     * and whoever asked is the one to decide what that means.
+     * <p>A refusal is this reader taking the module as one it cannot read, and saying why. A
+     * published module was compiled before it was published, so an import line that cannot do its
+     * job here is a fact about what these classes carry rather than about what an author wrote —
+     * which is what makes it one of the facts a reading answers with, told to whoever asked in the
+     * words the reading uses for every other one. Left as nothing at all, which reason a reader was
+     * given followed from which side of this seam the refusal was found on: the lines that name the
+     * standard library are read where no other module has to be in sight, so those had a name and
+     * the rest did not.
      */
-    private Hir.Module resolve(ModuleUniverse universe, Registry<Ast.Def> registry, String module) {
-        if (!(universe.module(module) instanceof ModuleUniverse.InSight.Read observed)) {
-            return null;
-        }
+    private Readback<Read> resolve(ModuleUniverse universe, Registry<Ast.Def> registry,
+                                   String module, ReadableModule readable) {
         // The module itself comes from the reading this universe was built out of, and not from
         // what the universe answers about it: a neighbour is settled facts, and only the module
         // being scoped is read from.
-        ReadableModule readable = this.read.get(module);
         Scoping.Scoped scoped = Scoping.of(universe, new Scoping.Subject(readable.module(),
                 declaredBy(readable), readable.libraryClaims()));
         if (!scoped.refused().isEmpty()) {
-            return null;
+            return new Readback.NotReady.Unreadable<>(module,
+                    ScopeRefusals.of(scoped.refused()));
         }
         Resolve.Resolution resolution = Resolve.resolving(readable.module(),
                 scoped.writtenSymbols(registry), scoped.values());
-        return resolution.unresolved().isEmpty() ? resolution.module() : null;
+        if (!resolution.unresolved().isEmpty()) {
+            // What resolution has for each of them is a report, written for an author holding the
+            // file and quoting the line — a line of the text this reading assembled. So what
+            // crosses is that they did not resolve, and nothing taken out of a diagnostic.
+            return new Readback.NotReady.Unreadable<>(module,
+                    new Readback.Failure.UnresolvedPublishedNames());
+        }
+        return new Readback.Ready<>(new Read(resolution.module(),
+                readable.injectedBehaviors()));
     }
 }

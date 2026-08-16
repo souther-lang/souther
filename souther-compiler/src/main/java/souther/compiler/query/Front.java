@@ -21,6 +21,7 @@ import souther.compiler.meta.PublishedClasses;
 import souther.compiler.meta.ModuleReadback;
 import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
+import souther.compiler.meta.ReadbackReasons;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -445,8 +446,8 @@ public final class Front {
                 if (layout.idOfModule().containsKey(name) || !tried.add(name)) {
                     continue;
                 }
-                Readback readback = ModuleReadback.read(name, classes);
-                if (readback instanceof Readback.SaysNothing) {
+                Readback<ReadableModule> readback = ModuleReadback.read(name, classes);
+                if (readback instanceof Readback.NotReady.SaysNothing<ReadableModule>) {
                     continue;   // absent; which of its importers minds is worked out below
                 }
                 // Two questions about one artifact, and neither answers the other. Whether the name
@@ -463,14 +464,15 @@ public final class Front {
                             reserved.atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(name))
                                     .build());
                 }
-                if (readback instanceof Readback.Unreadable(String about, Readback.Failure why)) {
+                if (readback instanceof Readback.NotReady.Unreadable<ReadableModule>(
+                        String about, Readback.Failure why)) {
                     unreadable.put(about, why);
                     continue;
                 }
                 if (reserved != null) {
                     continue;   // readable, and still not a name this compilation will take
                 }
-                ReadableModule module = ((Readback.Ready) readback).module();
+                ReadableModule module = ((Readback.Ready<ReadableModule>) readback).value();
                 read.put(name, module);
                 List<String> reaches = List.copyOf(reaches(module.module()).keySet());
                 edges.put(name, reaches);
@@ -684,34 +686,15 @@ public final class Front {
      * "a published module agrees with this compiler" as the rule they are in breach of has been
      * handed somebody else's obligation.
      *
-     * <p>A switch over every failure there is, with nothing to fall through to. A readback failure
-     * added later is a failure this has to have something to say about, and one that reached here
-     * with nothing to say would be a module quietly missing from the compile.
+     * <p>Which failure it was is said by {@link ReadbackReasons} and not here. The fact is about the
+     * artifact and is the same fact wherever it is read, so it is written once and every reader of
+     * a readback failure says the same sentence for it; what is this one's is the report around it —
+     * whose module it is about, and that there is one thing to do about any of them.
      */
     static Diagnostic cannotBeReadBack(String module, Readback.Failure why) {
-        Diagnostic.Builder said = Diagnostic
-                .say(new ModuleMessage.TheModuleCannotBeReadBack(module));
-        Diagnostic.Builder because = switch (why) {
-            case Readback.Failure.Incompatible(String by) ->
-                    said.hint(new ModuleMessage.ItWasBuiltBy(by));
-            case Readback.Failure.DeclarationMissing(String declaration) ->
-                    said.hint(new ModuleMessage.AClassItSaysItDeclaresIsNotOnThePath(declaration));
-            case Readback.Failure.UnreadableMetadata _ ->
-                    said.hint(new ModuleMessage.ItsMetadataCannotBeReadHere());
-            case Readback.Failure.AnotherModule(String named) ->
-                    said.hint(new ModuleMessage.ItDeclaresAnotherModule(named));
-            case Readback.Failure.InvalidPublishedSyntax _ ->
-                    said.hint(new ModuleMessage
-                            .WhatItPublishedIsNotSourceThisCompilerParses());
-            case Readback.Failure.InvalidExposure(Readback.Exposure line, List<Readback.Exposure> _) ->
-                    said.hint(new ModuleMessage.AnImportLineOfItsCannotBeReadHere(
-                            line.name(), line.from()));
-            case Readback.Failure.InvalidDeclarations(
-                    Readback.DeclarationRejection first, List<Readback.DeclarationRejection> _) ->
-                    said.hint(new ModuleMessage.ADeclarationOfItsCannotBeReadHere(
-                            first.declaration()));
-        };
-        return because.hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(module))
+        return ReadbackReasons
+                .said(Diagnostic.say(new ModuleMessage.TheModuleCannotBeReadBack(module)), why)
+                .hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(module))
                 .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
                 .build();
     }

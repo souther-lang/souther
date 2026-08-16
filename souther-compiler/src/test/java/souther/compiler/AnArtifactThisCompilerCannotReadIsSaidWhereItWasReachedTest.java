@@ -7,6 +7,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.ModuleReadback;
 import souther.compiler.meta.PublishedClasses;
+import souther.compiler.meta.ReadableModule;
 import souther.compiler.meta.Readback;
 import souther.compiler.query.Compilation;
 import souther.compiler.source.SourceId;
@@ -517,10 +518,12 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 module lib.ok exposing ( Held )
                 data Held = String
                 """);
-        Readback readback = ModuleReadback.read("lib.ok",
+        var readback = ModuleReadback.read("lib.ok",
                 ((ModulePath) built::get).declarations());
 
         assertEquals("lib.ok",
-                assertInstanceOf(Readback.Ready.class, readback).module().module().name());
+                assertInstanceOf(ReadableModule.class,
+                        assertInstanceOf(Readback.Ready.class, readback).value())
+                        .module().name());
     }
 }

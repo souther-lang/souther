@@ -4,11 +4,13 @@ package souther.compiler.meta;
  * Whether two sets of declarations say the same thing about everything a value crossing between them
  * depends on.
  *
- * <p>Three answers and not two, because "they differ" and "it cannot be told" are different things to
- * have found out. A difference is established: both sides were read and one of them says something
- * else, and what to do about it is to build again. Being unable to tell is not a difference — nothing
- * has been established about the two at all — and a reader that reports it as one says a build is
- * stale on evidence it does not have.
+ * <p>More than two, because "they differ" and "it cannot be told" are different things to have found
+ * out. A difference is established: both sides were read and one of them says something else, and
+ * what to do about it is to build again. Being unable to tell is not a difference — nothing has been
+ * established about the two at all — and a reader that reports it as one says a build is stale on
+ * evidence it does not have. Which is why the ways of not being able to tell are kept apart from
+ * each other too: a set of declarations that could not be read carries why, and an answer that never
+ * said which build it reads by is not a reading that failed.
  */
 public sealed interface Agreement {
 
@@ -31,18 +33,54 @@ public sealed interface Agreement {
     record Disagree(String module, String declaration) implements Agreement {}
 
     /**
-     * Whether they agree could not be established.
+     * Whether they agree could not be established, because a set of declarations could not be read.
      *
      * <p>Not a disagreement. The classes may well be of exactly the module being evaluated; what is
      * known is that nothing here can say so, and a run that went ahead would be running rows against
      * something it was unable to check.
+     *
+     * <p>What could not be read is carried as the reading answered it, and the module it is about
+     * comes from inside that answer. Named beside it here as well, the two would be a pair nothing
+     * holds together — a module said to be unreadable while the reading that says so is about
+     * another. Only a reading that has nothing to hand over is a reason to be here at all, which is
+     * why it is that type and not a whole {@link Readback}: given one that is ready, this would be
+     * a refusal built around a reading that succeeded.
      *
      * @param side which of the two could not be read, because what a reader does about it is not the
      *             same. Declarations the answer brings are the answer's build to fix; declarations
      *             this compile reads are its own path, and reporting that as the answer's would send
      *             someone to rebuild the one thing that is not in question
      */
-    record Unreadable(String module, Reason reason, Side side) implements Agreement {}
+    record Unreadable(Readback.NotReady<?> reading, Side side) implements Agreement {
+
+        public Unreadable {
+            java.util.Objects.requireNonNull(reading,
+                    "what could not be read is the reading that could not be made");
+            java.util.Objects.requireNonNull(side, "declarations belong to one side or the other");
+        }
+
+        /** The module whose declarations could not be read — the reading's answer, not a second
+         *  name kept beside it. */
+        public String module() {
+            return reading.module();
+        }
+    }
+
+    /**
+     * The answer did not say which declarations it reads a row's values by.
+     *
+     * <p>Told apart from a reading that could not be read, because it is not one: nothing was read
+     * and there was nothing to read. Saying which build it answers by is the whole of what an answer
+     * of another build is asked, and the accessor is abstract so that an implementation which does
+     * not say it is refused where it is written. What is left is one that answers with nothing,
+     * which no reading turns into a second set of declarations.
+     *
+     * <p>Here rather than raised, and not read as the compile's own. An answerer is written outside
+     * this package, so its answering with nothing is a thing to be refused rather than a state of
+     * this compiler — raised, it would stop a compile over one implementation; taken for the
+     * compile's own, an implementation would be out of the question by returning null.
+     */
+    record NoOriginStated(String module) implements Agreement {}
 
     /** Whose declarations could not be read. */
     enum Side {
@@ -50,45 +88,5 @@ public sealed interface Agreement {
         THE_ANSWER,
         /** The ones the module being evaluated is read by — this compile's own, or its path's. */
         THE_MODULE_BEING_EVALUATED
-    }
-
-    /** Why declarations could not be read back. */
-    enum Reason {
-
-        /**
-         * Nothing was published for the module: no class carries its declarations.
-         *
-         * <p>A jar from before modules carried them is one way to arrive here, and a name that is
-         * not a compiled Souther module at all is another. Neither can be told from the other, and
-         * neither leaves anything to compare.
-         */
-        NOTHING_PUBLISHED,
-
-        /**
-         * A module was published and this compiler cannot read what it published: the declarations
-         * were written at another boundary revision, or the classes carrying them are not all there.
-         *
-         * <p>One reason and not two, because what a reader does about either is the same. What is
-         * published travels as source and is read back by the front end, so what a jar promises is
-         * recorded under {@link souther.compiler.codegen.Backend#BOUNDARY_VERSION} — and declarations
-         * this compiler cannot read are not a stale build of the same model, they are a build it
-         * cannot say anything about.
-         */
-        NOT_READABLE_HERE,
-
-        /**
-         * The answer did not say which declarations it reads a row's values by.
-         *
-         * <p>Saying it is the whole of what an answer of another build is asked, and the accessor is
-         * abstract so that an implementation which does not say it is refused where it is written.
-         * What is left is one that answers with nothing, which no reading turns into a second set of
-         * declarations.
-         *
-         * <p>Here rather than raised, and not read as the compile's own. An answerer is written
-         * outside this package, so its answering with nothing is a thing to be refused rather than a
-         * state of this compiler — raised, it would stop a compile over one implementation; taken
-         * for the compile's own, an implementation would be out of the question by returning null.
-         */
-        NO_ORIGIN_STATED
     }
 }

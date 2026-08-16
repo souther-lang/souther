@@ -75,10 +75,11 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
                 data Code = Int
                     invariant atLeastOne = value >= 1
                 """));
-        ReadableModule read = assertInstanceOf(Readback.Ready.class,
-                ModuleReadback.read("lib.rule",
-                        ((souther.compiler.meta.ModulePath) classes::get).declarations()),
-                "the module was published and is on the path").module();
+        ReadableModule read = assertInstanceOf(ReadableModule.class,
+                assertInstanceOf(Readback.Ready.class,
+                        ModuleReadback.read("lib.rule",
+                                ((souther.compiler.meta.ModulePath) classes::get).declarations()),
+                        "the module was published and is on the path").value());
 
         List<SourcePos> positions = new ArrayList<>();
         clausesOf(read.module(), positions);
