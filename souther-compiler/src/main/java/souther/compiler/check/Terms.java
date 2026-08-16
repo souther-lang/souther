@@ -1074,7 +1074,15 @@ final class Terms {
             // of one is a call to the operation that builds it. Rendered here for the same reason
             // every other written form is: it is a value the author wrote, and a reader handed
             // nothing for it reads the rule around it as a rule about something unknown.
-            case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+            //
+            // Held to the calls that answer a temporal, which is what a temporal literal is. Every
+            // call to a resolved name would be a wider claim than the one this makes: the contract
+            // above is that what is computed answers with nothing, and the fold beneath it
+            // (`ConstEval`) is written against that. Which calls those are is read off the type
+            // rather than a list of names, so a temporal added to the language is one of these
+            // without anybody remembering to say so.
+            case Core.Call call when call.fn() instanceof Core.Reached reached
+                    && temporal(call.type()) -> {
                 List<Hir.Expr> args = written(call.args());
                 yield args == null ? null
                         : new Hir.Apply(reached.denotes().name(), reached.denotes(), reached.name(),
@@ -1087,6 +1095,12 @@ final class Terms {
                     new ReachName.Bare(unit.data().name()), unit.pos(), null);
             case null, default -> null;
         };
+    }
+
+    /** Whether {@code type} is one a temporal literal answers. */
+    private static boolean temporal(Type type) {
+        return type == Type.DATE || type == Type.TIME || type == Type.DATETIME
+                || type == Type.INSTANT;
     }
 
     /** Every argument as it was written, or null where any of them was computed. */

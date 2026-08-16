@@ -32,11 +32,17 @@ import java.util.Map;
  * enum equality, enum ordering, numeric ordering and date ordering at once, which is four readings
  * wearing one name.
  *
- * <p><b>Every position starts at everything its order has.</b> Not at an unbounded range: what is
- * below the empty string is nothing, and a reading that started open below would take
- * {@code value < ""} for a rule leaving room underneath. The extent is the scale's
- * ({@link OrderScale#extent}), so a rule stating an end the order does not reach comes out as a
- * position holding nothing, which is what it is.
+ * <p><b>Every range this puts on a position is inside what the order holds.</b> Not an unbounded
+ * range narrowed at the end: what is below the empty string is nothing, and a reading open below
+ * would take {@code value < ""} for a rule leaving room underneath. The extent is the scale's
+ * ({@link OrderScale#extent}) and it is applied where a rule becomes a range, which is the one place
+ * a position is spoken about.
+ *
+ * <p>Applied there and not once around the whole reading, because whether an <em>alternative</em>
+ * admits anything is asked of each branch. A branch left short of the order's own ends is a branch
+ * whose emptiness nothing can see, and the choice between two such branches then turned on whether
+ * they happened to be empty at the same position: {@code a < "" || a < ""} was refused and
+ * {@code a < "" || b < ""} was not.
  *
  * <p><b>Equalities are read and disequalities are not.</b> An equality states both ends at once,
  * which is a range with one value in it and is exactly what this holds; {@code /=} states neither
@@ -71,12 +77,7 @@ final class OrderedReading {
             }
         });
         OrderedReading reading = new OrderedReading(terms, at, scales);
-        // Every ordered position at everything its order holds, before any rule is read. A position
-        // left out here would start unbounded, and unbounded is not what an order with a least value
-        // leaves below that value.
-        Map<Term, OrderedInterval> extents = new LinkedHashMap<>();
-        scales.forEach((name, scale) -> extents.put(name, scale.extent()));
-        OrderedIntervals<Term> out = new OrderedIntervals<>(extents);
+        OrderedIntervals<Term> out = OrderedIntervals.top();
         for (Core clause : clauses) {
             out = out.meet(reading.read(clause, true));
         }
@@ -138,23 +139,35 @@ final class OrderedReading {
         if (said == Hir.BinOp.EQ) {
             Place only = written == null ? null : scale.literalOf(written);
             return only == null ? OrderedIntervals.top()
-                    : OrderedIntervals.at(position, new OrderedInterval(
+                    : leaves(position, scale, new OrderedInterval(
                             Endpoint.inclusive(only), Endpoint.inclusive(only)));
         }
         if (!InvariantBound.ordering(said)) {
             return OrderedIntervals.top();
         }
         return switch (InvariantBound.at(said, written, scale)) {
-            case InvariantBound.Read.AnEnd it -> OrderedIntervals.at(position, it.bound().lower()
+            case InvariantBound.Read.AnEnd it -> leaves(position, scale, it.bound().lower()
                     ? new OrderedInterval(it.bound().end(), null)
                     : new OrderedInterval(null, it.bound().end()));
             // The rule names an end the order does not reach, so the position holds nothing. Said as
             // a range of this order with no value in it, which is the same kind of answer two rules
             // whose ends cross come to.
             case InvariantBound.Read.PastWhereTheOrderStops _ ->
-                    OrderedIntervals.at(position, scale.nothing());
+                    leaves(position, scale, scale.nothing());
             case InvariantBound.Read.NoEnd _ -> OrderedIntervals.top();
         };
+    }
+
+    /**
+     * What one rule leaves a position, inside what the order itself holds.
+     *
+     * <p>The one place a position is spoken about, which is what makes the order's own ends part of
+     * every answer rather than something applied once at the end. A reader adding a second such
+     * place has to remember the extent; this one cannot forget it.
+     */
+    private static OrderedIntervals<Term> leaves(Term position, OrderScale scale,
+                                                 OrderedInterval range) {
+        return OrderedIntervals.at(position, scale.extent().meet(range));
     }
 
     /** The comparison that holds exactly where {@code op} does not. */

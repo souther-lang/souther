@@ -548,7 +548,7 @@ public final class DataChecker {
             case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _ ->
                     at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.EmptyOrderedInterval _ ->
-                    at.say(new DataMessage.NothingLiesBetweenTheEndsItsRulesPlace(
+                    at.say(new DataMessage.NothingIsLeftForThatPositionToHold(
                             data, written(path)));
             case Emptiness.SetRequiresTooManyDistinctValues it ->
                     at.say(new DataMessage.ASetCannotBeFilledFromItsElement(

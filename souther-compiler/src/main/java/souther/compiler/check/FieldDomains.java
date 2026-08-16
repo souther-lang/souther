@@ -263,6 +263,11 @@ public final class FieldDomains {
         // Every name a position answers to, filed under the place it sits at, in the order the
         // value declares its positions. A proof that names a place is settled by this order: read
         // off a domain's own map, the place named would be the one whose clause was read first.
+        //
+        // The order is the walk's, and the walk's is the declaration's. `positions` is the keys
+        // followed by the atoms, and that is the keys: an atom is named from a body key, so a
+        // position with an atom has a key and the second pass adds nothing. A size has no key and
+        // is not one of these — it is a number taken of a position rather than a position.
         SequencedMap<Term, String> placeOf = new LinkedHashMap<>();
         positions.forEach(field ->
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));

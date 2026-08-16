@@ -582,13 +582,13 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      * <p>There is no field here to make optional. The sentence about self-reference was the only one
      * written, so every way of coming to no value was told the way one of them came to it.
      *
-     * <p>The sentence names the position and the pair of ends, because the reading that showed it
-     * can. {@link souther.compiler.diag.msg.DataMessage.ItsRulesCannotAllHold} is what a domain
-     * that could show only that the rules contradict leaves.
+     * <p>The sentence names the position, because the reading that showed it can.
+     * {@link souther.compiler.diag.msg.DataMessage.ItsRulesCannotAllHold} is what a domain that
+     * could show only that the rules contradict leaves.
      */
     @Test
     void aDeclarationWhoseRulesCannotAllHoldIsNotToldItRefersToItself() {
-        assertEquals(List.of("NothingLiesBetweenTheEndsItsRulesPlace"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
                 module demo
 
                 data Bad = Int
@@ -608,7 +608,7 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      */
     @Test
     void aDeclarationWhoseEqualitiesAdmitNoValueIsToldItsRulesCannotAllHold() {
-        assertEquals(List.of("NothingLiesBetweenTheEndsItsRulesPlace"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
                 module demo
 
                 data Gender = String

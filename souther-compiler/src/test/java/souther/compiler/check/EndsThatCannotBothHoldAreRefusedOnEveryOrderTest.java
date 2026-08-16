@@ -58,15 +58,75 @@ class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
      * <p>Both readings of an {@code Int}'s ends can show this, and the ordering is the one that can
      * name what it found. So the sentence is the same one wherever the position sits and whatever
      * carries it, which is what the two issues closed here are about.
+     *
+     * <p>And it says what was shown rather than one of the ways of showing it. Three shapes reach
+     * this proof — two ends that cross, one end the order does not reach, and two equalities naming
+     * different values — and only the first of them writes a pair of bounds. A sentence about a pair
+     * of bounds sends the author of the other two looking for a rule the model does not contain.
      */
     @Test
-    void theRefusalNamesThePositionTheEndsLeftNothing() {
-        assertEquals(List.of("NothingLiesBetweenTheEndsItsRulesPlace"),
+    void theRefusalNamesThePositionTheRulesLeftNothing() {
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
                 saidBy(newtype("Int", "value > 5 && value < 3")));
-        assertEquals(List.of("NothingLiesBetweenTheEndsItsRulesPlace"),
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
                 saidBy(newtype("Date",
                         "value > Date(\"2020-01-01\") && value < Date(\"2010-01-01\")")),
                 "and the same sentence over an order the numbers do not carry");
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
+                saidBy(newtype("Time", "value > Time(\"23:59:59\")")),
+                "and where one rule names an end the order does not reach");
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"),
+                saidBy(newtype("String", "value == \"A\" && value == \"B\"")),
+                "and where two equalities name different values");
+    }
+
+    /**
+     * A choice between alternatives none of which admits anything.
+     *
+     * <p>An alternative that admits nothing is one nobody can take, so a choice among such
+     * alternatives is a rule nothing satisfies. Whether a branch admits anything is a question about
+     * the whole of what is known at its positions — the rules it states and where their orders stop
+     * — and a reading that added the orders only after the alternatives were joined could not ask it
+     * of a branch. Then the answer turned on whether the branches happened to be empty at the same
+     * position: {@code a < "" || a < ""} was refused and {@code a < "" || b < ""} was not.
+     */
+    @Test
+    void aChoiceAmongAlternativesNoneOfWhichAdmitsAnythingIsRefused() {
+        refuses("a choice between two positions neither of which can hold anything", """
+                module demo
+
+                data X = { a: String, b: String }
+                    invariant no = a < "" || b < ""
+                """);
+        refuses("a choice between two rules about one position, neither holding anything", """
+                module demo
+
+                data X = { a: String }
+                    invariant no = a < "" || a > "b" && a < "a"
+                """);
+    }
+
+    /**
+     * And an alternative that does admit something leaves the choice open.
+     *
+     * <p>The negative control for the one above. Dropping an impossible alternative must leave the
+     * other one standing rather than the whole rule refused, and a position only one alternative
+     * speaks about is one the two of them together leave open.
+     */
+    @Test
+    void aChoiceWithOneAlternativeThatAdmitsSomethingIsNotRefused() {
+        admits("a choice where the second alternative can be taken", """
+                module demo
+
+                data X = { a: String, b: String }
+                    invariant no = a < "" || b == "x"
+                """);
+        admits("a choice where both alternatives can be taken", """
+                module demo
+
+                data X = { a: String, b: String }
+                    invariant no = a > "" || b > ""
+                """);
     }
 
     /** Which sentence a refusal is, named by the message rather than by its wording. */
