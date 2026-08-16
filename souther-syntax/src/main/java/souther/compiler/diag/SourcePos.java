@@ -65,10 +65,9 @@ public record SourcePos(int line, int column, Placement placement) {
     /**
      * Which source of this compilation this is read from, and what to say where it is none.
      *
-     * <p>The one way to ask which file a position is in. What used to be asked of a source identity
+     * <p>The one way to ask which file a position is in. It used to be asked of a source identity
      * that could be null, by five consumers that each read the absence as an answer to a question of
-     * their own — {@link QuotedFrom} says why there is no file, and leaves what to do about it where
-     * it belongs.
+     * their own — this says why there is no file, and leaves what to do about it where it belongs.
      */
     public QuotedFrom quotedFrom() {
         return placement.quotedFrom();

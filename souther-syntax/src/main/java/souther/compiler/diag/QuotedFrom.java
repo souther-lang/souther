@@ -41,13 +41,19 @@ public sealed interface QuotedFrom {
     }
 
     /**
-     * A text put back together out of what a module published. There is no file to quote and there is
-     * something to say: the code is written in {@code from}.
+     * A text put back together out of what {@code publishedBy} published. There is no file to quote,
+     * and which module's text it is, is what can be said instead.
+     *
+     * <p>Which module's <em>text</em>, and not where the code at a position in it is written. Those
+     * are two questions and they have different answers for a body spliced into that text while the
+     * module was being read back: the text is the module's and the code is the spliced body's.
+     * {@link Citation} answers the second, and a reader that took this for it would be putting them
+     * back together — which is the inference the position's own components exist to keep apart.
      */
-    record TextItCannotShow(SourceProvenance from) implements QuotedFrom {
+    record TextItCannotShow(SourceProvenance publishedBy) implements QuotedFrom {
 
         public TextItCannotShow {
-            Objects.requireNonNull(from, "code out of sight came from somewhere");
+            Objects.requireNonNull(publishedBy, "a published text is a module's");
         }
     }
 

@@ -1707,8 +1707,7 @@ public final class Adequacy {
          */
         private static Report warning(Finding finding) {
             List<Object> said = finding.args();
-            souther.compiler.diag.Diagnostic.Builder built = souther.compiler.diag.Diagnostic
-                    .at(sentTo(finding.at()))
+            souther.compiler.diag.Diagnostic.Builder built = pointedAt(finding.at())
                     .say(switch (finding.kind()) {
                         case OUTPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowExpectsThatCase(
                                 text(said, 0), text(said, 1));
@@ -1777,20 +1776,19 @@ public final class Adequacy {
          * off the coordinate it is built at — which carries the same provenance this reads, so the
          * two cannot come apart.
          */
-        private static SourcePos sentTo(Citation cited) {
-            // Null where the finding is about code inside a module's own text, which the one caller
-            // takes: a diagnostic may be about no place, and the reading that puts a report where a
-            // reader can be sent moves this one to the import line that reached it. A caller that
-            // put this somewhere requiring a position would be building a place out of nothing.
+        static souther.compiler.diag.Diagnostic.Builder pointedAt(Citation cited) {
             return switch (cited) {
-                case Citation.Written written -> written.at();
-                case Citation.Unplaced unplaced -> unplaced.at();
-                case Citation.Reached reached -> reached.at();
-                case Citation.UnplacedElsewhere out -> out.at();
-                // Nowhere: the finding is about code inside a module's own text. The warning is
-                // filed against the module all the same, and the reading that puts a report where a
-                // reader can be sent moves it to the import line that reached it.
-                case Citation.OutOfSight _ -> null;
+                case Citation.Written written -> souther.compiler.diag.Diagnostic.at(written.at());
+                case Citation.Unplaced unplaced ->
+                        souther.compiler.diag.Diagnostic.at(unplaced.at());
+                case Citation.Reached reached -> souther.compiler.diag.Diagnostic.at(reached.at());
+                case Citation.UnplacedElsewhere out -> souther.compiler.diag.Diagnostic.at(out.at());
+                // Nowhere to point, and which module wrote the code is known. Said as that rather
+                // than as no place at all: the reading that moves a report to where a reader can be
+                // sent needs the answer this finding already has, and would otherwise work it out
+                // again from whichever module the report was filed under.
+                case Citation.OutOfSight out ->
+                        souther.compiler.diag.Diagnostic.atCodeWrittenOutOfSight(out.provenance());
             };
         }
 

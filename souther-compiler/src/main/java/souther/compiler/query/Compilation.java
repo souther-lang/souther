@@ -12,6 +12,8 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.meta.ModulePath;
 
@@ -523,8 +525,8 @@ public final class Compilation {
      */
     private Db.Found citable(Db.Found found) {
         Diagnostic said = found.report().diagnostic();
-        SourcePos at = said.pos();
-        if (found.module() == null || !needsAPlace(at)) {
+        SourceProvenance about = whatToMove(said, found.module());
+        if (about == null) {
             return found;
         }
         Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
@@ -532,49 +534,46 @@ public final class Compilation {
             return found;
         }
         return new Db.Found(found.module(), found.sourceId(), Report.of(
-                said.reachedFrom(onThePath.reachedFrom(), whereTheCodeIs(at, found.module()),
+                said.reachedFrom(onThePath.reachedFrom(), about,
                         new ModuleMessage.ItIsReachedFromHereToo())));
     }
 
     /**
-     * Where the code a moved report is about is written.
+     * Where the code a report is about is written, for a report this reading should move — and null
+     * for one it should leave alone.
      *
-     * <p>The report's own answer wherever it has one. A position carries which text it is in and
-     * whose code it holds separately, so a report from a body spliced into a module's published text
-     * says the body's module and not the text's — and reading the module this walk was about instead
-     * would put them back together, which is the inference this whole change removes: that code in a
-     * module's text is that module's code.
+     * <p>One question rather than a test for whether to move and a second for what to say with, since
+     * the answer to the first is the answer to the second: a report is moved when this compilation
+     * has nowhere to send a reader, and what it is moved with is what that report already says about
+     * where its code is.
      *
-     * <p>The module only for a report with no position at all. There is nothing to read one off, and
-     * the module the report was filed under is what is known about it.
+     * <p>Its own answer wherever it has one. A position carries which text it is in and whose code it
+     * holds separately, so a report from a body spliced into a module's published text says the
+     * body's module and not the text's — and reading the module this walk was about instead would put
+     * them back together, which is the inference this whole change removes.
+     *
+     * <p>The module only where nothing was pointed at at all. There is nothing to read an answer off,
+     * and the module the report was filed under is the whole of what is known about it.
+     *
+     * <p>A report in a text this compilation cannot name is left where it is. Its position is one
+     * whoever handed the text over can use and this is not being read by them — but nothing about it
+     * says where its code came from, and moving it would mean answering that from the module, which
+     * is the inference again. Whether such a position is a place at all is the open question about a
+     * primary region, and this does not decide it.
      */
-    static SourceProvenance whereTheCodeIs(SourcePos at, String module) {
-        if (at != null && Citation.of(at) instanceof Citation.Elsewhere elsewhere) {
-            return elsewhere.provenance();
+    static SourceProvenance whatToMove(Diagnostic said, String module) {
+        if (module == null) {
+            return null;
         }
-        return souther.compiler.meta.ModuleReadback.provenanceOf(module);
-    }
-
-    /**
-     * Whether a report pointing at {@code at} has nowhere a reader can be sent.
-     *
-     * <p>Every way of having nowhere, asked of the citation rather than listed. A report with no
-     * region points at nothing. One inside a module's own published text points at a line nobody
-     * holds. One in a text this compilation cannot name points at a place only whoever handed the
-     * text over could use, and this is not being read by them. Naming two of those and leaving the
-     * others is how the third comes to be delivered as a place — so the arms that do offer a place
-     * are the ones named, and anything else is moved.
-     *
-     * <p>What it is moved to comes from the module this walk was about rather than from whatever the
-     * report happened to carry, so a report with nothing to read it off is moved on the same terms as
-     * one that had a position.
-     */
-    private static boolean needsAPlace(SourcePos at) {
-        return at == null || switch (Citation.of(at)) {
-            case Citation.Written _, Citation.Reached _ -> false;
-            case Citation.Unplaced _, Citation.UnplacedElsewhere _, Citation.OutOfSight _ -> true;
+        return switch (said.primary()) {
+            case null -> souther.compiler.meta.ModuleReadback.provenanceOf(module);
+            case Primary.Unavailable(SourceProvenance from) -> from;
+            case Primary.AtARegion(Region region) ->
+                    Citation.of(region.start()) instanceof Citation.OutOfSight out
+                            ? out.provenance() : null;
         };
     }
+
 
     /** The one failure these sources have, or null when they have none. */
     public CompileException failure() {

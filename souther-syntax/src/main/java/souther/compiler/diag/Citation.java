@@ -33,8 +33,10 @@ import java.util.SequencedMap;
  *       it is in. An editor's unsaved buffer is one, and so is a snippet somebody parsed.
  *   <li>{@link Reached} — the file is one the reader holds, and what is written there is a call the
  *       code was reached through. {@link Elsewhere#provenance()} says where the code is.
- *   <li>{@link OutOfSight} — the code is elsewhere and there is no text to point at: the position is
- *       inside the code, in a text put back together out of what a module published.
+ *   <li>{@link UnplacedElsewhere} — the code is elsewhere, and the position is in a text this
+ *       compilation cannot name: only whoever handed that text over can use it.
+ *   <li>{@link OutOfSight} — the code is elsewhere and there is nothing to point at: the position is
+ *       in a text put back together out of what a module published, which no reader holds.
  * </ul>
  *
  * <p>{@link Reached} and {@link OutOfSight} used to be one arm, whose accessor said its position was

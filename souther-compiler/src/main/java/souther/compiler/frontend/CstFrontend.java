@@ -33,7 +33,7 @@ public final class CstFrontend {
      * Parses one compilation unit of a text nobody has named, naming a header-less source
      * {@code defaultModuleName} (a {@code null} default makes the {@code module} header required).
      *
-     * <p>The positions it makes name no source and say the code is written at them, which is what a
+     * <p>The positions it makes name no source and carry the code written at them, which is what a
      * text somebody wrote and nobody filed is. A caller that has a name for the text — a compile
      * reading one of its own sources — parses through
      * {@link #parseWithSlices(String, String, SourceId)}; a caller reading a text put back together
@@ -52,11 +52,16 @@ public final class CstFrontend {
     /**
      * Parses the text a module published, put back together by whoever is reading it back.
      *
-     * <p>Every position it makes says it stands in for code written in {@code provenance}, from the
-     * moment it is made. The text is real and its line 4 is a real line of it; no reader holds a
-     * file for that line, so nothing downstream may read the position as a place. This is where that
-     * is settled, and it is settled once — the pass that splices such a body into a caller reads the
-     * answer rather than working it out from the source being absent.
+     * <p>Every position it makes says it is in {@code provenance}'s text, from the moment it is
+     * made. The text is real and its line 4 is a real line of it, carrying the code that module's
+     * author wrote there; what no reader has is a file for it, so nothing downstream may read the
+     * position as a place. This is where that is settled, and it is settled once — the pass that
+     * splices such a body into a caller reads the answer rather than working it out from the source
+     * being absent.
+     *
+     * <p>Which is not the same as saying the code was copied here. Nothing moved these positions:
+     * they are where that module's code is written, and being unable to show a text is the other
+     * question ({@link souther.compiler.diag.Placement}).
      *
      * <p>The header is required: a published text carries one, and a default module name here would
      * be a name this compile made up for a module that has one.

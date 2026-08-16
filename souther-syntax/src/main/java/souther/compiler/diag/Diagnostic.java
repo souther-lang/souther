@@ -28,7 +28,7 @@ public final class Diagnostic {
 
     private final Severity severity;
     private final DiagnosticCode code;
-    private final Region region;
+    private final Primary primary;
     private final List<LabeledRegion> secondary;
     private final String literalMessage;
     private final Message said;
@@ -36,12 +36,12 @@ public final class Diagnostic {
     private final List<Note> notes;
     private final String suggestion;
 
-    private Diagnostic(Severity severity, DiagnosticCode code, Region region,
+    private Diagnostic(Severity severity, DiagnosticCode code, Primary primary,
                        List<LabeledRegion> secondary, String literalMessage,
                        TypeComparison diff, List<Note> notes, String suggestion, Message said) {
         this.severity = severity;
         this.code = code;
-        this.region = region;
+        this.primary = primary;
         this.secondary = secondary;
         this.literalMessage = literalMessage;
         this.diff = diff;
@@ -84,8 +84,16 @@ public final class Diagnostic {
         return code == null ? null : code.titleKey();
     }
 
+    /** Where this points, or null where it points nowhere. A report that has something to say
+     *  instead says it through {@link #primary()}; every surface that only wanted a region reads
+     *  this and is told the same nothing it was told before. */
     public Region region() {
-        return region;
+        return Primary.regionOf(primary);
+    }
+
+    /** What this points at, which is a region or is nowhere and where the code is. */
+    public Primary primary() {
+        return primary;
     }
 
     public List<LabeledRegion> secondary() {
@@ -110,6 +118,7 @@ public final class Diagnostic {
 
     /** The primary source position (the region's start). */
     public SourcePos pos() {
+        Region region = region();
         return region == null ? null : region.start();
     }
 
@@ -159,7 +168,8 @@ public final class Diagnostic {
             also.add(new LabeledRegion(Region.point(other.standingInFor(declaring)), alsoHere));
         }
         return new Diagnostic(severity, code,
-                Region.point(where.get(0).standingInFor(declaring)), List.copyOf(also),
+                new Primary.AtARegion(Region.point(where.get(0).standingInFor(declaring))),
+                List.copyOf(also),
                 literalMessage, diff, notes, suggestion, said);
     }
 
@@ -171,12 +181,12 @@ public final class Diagnostic {
      * store's own de-duplication, which keeps one report per identity — so leaving the values out
      * drops a real diagnostic rather than a repeat of one.
      */
-    public record Identity(Severity severity, String code, String titleKey, Region region,
+    public record Identity(Severity severity, String code, String titleKey, Primary primary,
                            List<LabeledRegion> secondary, String literalMessage,
                            TypeComparison diff, List<Note> notes, String suggestion, Message said) {}
 
     public Identity identity() {
-        return new Identity(severity, code(), titleKey(), region,
+        return new Identity(severity, code(), titleKey(), primary,
                 secondary == null ? List.of() : secondary, literalMessage, diff,
                 notes == null ? List.of() : notes, suggestion, said);
     }
@@ -185,7 +195,8 @@ public final class Diagnostic {
      * has not yet been moved onto a catalog key. It carries no code and no title: a site with
      * either of those has a catalog key by now. {@code pos} may be null for a position-less error. */
     public static Diagnostic literal(SourcePos pos, String message) {
-        return new Diagnostic(Severity.ERROR, null, pos == null ? null : Region.point(pos),
+        return new Diagnostic(Severity.ERROR, null,
+                pos == null ? null : new Primary.AtARegion(Region.point(pos)),
                 List.of(), message, null, List.of(), null, null);
     }
 
@@ -208,6 +219,12 @@ public final class Diagnostic {
         return new Builder().at(pos);
     }
 
+    /** A diagnostic with nowhere to point, about code written in {@code from} — which
+     *  {@link Builder#say} then gives what it says. */
+    public static Builder atCodeWrittenOutOfSight(SourceProvenance from) {
+        return new Builder().atCodeWrittenOutOfSight(from);
+    }
+
     /** The same, over the {@code width} UTF-16 code units from {@code pos} — the length of the text
      * it is about, which is what a {@link Region} is measured in. Not a width on a screen: how much
      * room that text takes is the renderer's to work out, from the line it is quoting. */
@@ -219,7 +236,7 @@ public final class Diagnostic {
     public static final class Builder {
         private DiagnosticCode code;
         private Message said;
-        private Region region;
+        private Primary primary;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private TypeComparison diff;
         private final List<Note> notes = new ArrayList<>();
@@ -245,7 +262,20 @@ public final class Diagnostic {
         }
 
         public Builder at(SourcePos pos) {
-            this.region = pos == null ? null : Region.point(pos);
+            this.primary = pos == null ? null : new Primary.AtARegion(Region.point(pos));
+            return this;
+        }
+
+        /**
+         * The report points nowhere, and the code it is about is written in {@code from}.
+         *
+         * <p>What a finding about code inside a module's published text says. The position it was
+         * found at is a line of a text no reader holds, so there is nothing to offer — and saying so
+         * with no region at all would drop the one thing that is known, which is which module wrote
+         * it. The same thing {@link #secondaryOutOfSight} says of a label.
+         */
+        public Builder atCodeWrittenOutOfSight(SourceProvenance from) {
+            this.primary = new Primary.Unavailable(from);
             return this;
         }
 
@@ -264,15 +294,16 @@ public final class Diagnostic {
          */
         public Builder at(SourcePos pos, int width) {
             if (pos == null) {
-                this.region = null;
+                this.primary = null;
             } else {
-                this.region = pos.wasCopiedHere() ? Region.point(pos) : Region.ofWidth(pos, width);
+                this.primary = new Primary.AtARegion(
+                        pos.wasCopiedHere() ? Region.point(pos) : Region.ofWidth(pos, width));
             }
             return this;
         }
 
         public Builder at(Region region) {
-            this.region = region;
+            this.primary = region == null ? null : new Primary.AtARegion(region);
             return this;
         }
 
@@ -319,7 +350,7 @@ public final class Diagnostic {
             if (code == null) {
                 throw new IllegalStateException("a diagnostic reports a rule; call `say`");
             }
-            return new Diagnostic(code.severity(), code, region, List.copyOf(secondary), null,
+            return new Diagnostic(code.severity(), code, primary, List.copyOf(secondary), null,
                     diff, List.copyOf(notes), suggestion, said);
         }
     }
