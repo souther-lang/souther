@@ -135,6 +135,37 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 "and the mistake in the author's own file is still said: " + codes);
     }
 
+    /**
+     * The caret is the `import` line that reaches the module, and not a place inside the artifact.
+     *
+     * <p>Which file the report is filed under is what the rest of these measure, and it is the
+     * weaker half: a report anchored nowhere still lands somewhere once a compile decides where to
+     * put it. This is the other half — the line under the caret is the one the author wrote, in the
+     * source they hold.
+     */
+    @Test
+    void itIsSaidAtTheImportThatReachesTheModule() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.uses
+
+
+
+
+                import lib.pub ( Held )
+
+                data Page = { held: Held }
+                """), new Fabricated(Map.of(
+                        "lib.pub.$Module", moduleClass(Backend.BOUNDARY_VERSION + 1, "lib.pub",
+                                List.of(), List.of("Held"), List.of()),
+                        "lib.pub.Held", dataClass("data Held = String"))));
+
+        Located said = compilation.diagnostics().get(new SourceId("0")).stream()
+                .filter(d -> d.diagnostic().code().equals("E1509")).findFirst().orElseThrow();
+
+        assertEquals(6, said.diagnostic().pos().line(), "the import line naming the module");
+        assertEquals(1, said.diagnostic().pos().column());
+    }
+
     /** The boundary revision does not agree. */
     @Test
     void oneBuiltByACompilerThatDisagrees() {
@@ -197,15 +228,15 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
     }
 
     /**
-     * Its classes are not class files this Java runtime reads.
+     * One of its classes carries metadata this compiler cannot read.
      *
      * <p>The one failure found before anything about Souther has been read, and the one that used to
-     * escape from further out than any of the others: the class-file reader raises, and reading a
-     * module begins by asking it for the declarations class. Told as an absence instead, the author
-     * would be shown "no such module" for a dependency their build file does name.
+     * escape from further out than any of the others: reading a class raises, and reading a module
+     * begins by asking for the declarations class. Told as an absence instead, the author would be
+     * shown "no such module" for a dependency their build file does name.
      */
     @Test
-    void oneWhoseClassesThisJvmDoesNotRead() {
+    void oneWhoseMetadataCannotBeReadAtAll() {
         bothAreSaidOnTheSource(
                 binaryName -> binaryName.equals("lib.pub.$Module") ? NOT_A_CLASS_FILE : null);
     }
@@ -220,7 +251,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
      * thing to do about it.
      */
     @Test
-    void oneWhoseDeclarationsClassThisJvmDoesNotRead() {
+    void oneWhoseDeclarationsClassCarriesMetadataThatCannotBeRead() {
         Map<String, byte[]> built = Compiler.compile("""
                 module lib.pub exposing ( Held )
                 data Held = String

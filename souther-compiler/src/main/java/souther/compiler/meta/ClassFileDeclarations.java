@@ -46,22 +46,37 @@ public final class ClassFileDeclarations implements PublishedClasses {
         }
     }
 
-    /** What one class was annotated with, read off its bytes. Raises where they are not something
-     *  this compiler can read the metadata off. */
+    /** The descriptors {@link ModuleMetadata} writes. Matched whole rather than by their last
+     *  segment: a {@code SoutherData} of somebody else's package is not one of these, and reading it
+     *  as one would take a stranger's annotation for a declaration of ours. */
+    private static final String MODULE = "Lsouther/runtime/meta/SoutherModule;";
+    private static final String DATA = "Lsouther/runtime/meta/SoutherData;";
+    private static final String BEHAVIOR = "Lsouther/runtime/meta/SoutherBehavior;";
+
+    /**
+     * What one class was annotated with, read off its bytes.
+     *
+     * <p>Raises where the bytes are not something this compiler can read the metadata off — which
+     * covers the class file being malformed and the metadata on it not being the shape this compiler
+     * writes. The two are one question here: what was asked for is a declaration of ours, and an
+     * annotation of our name carrying something else is no more one than a class file that will not
+     * parse. Read as a default instead, a {@code @SoutherData} with no {@code value} came back as a
+     * declaration whose text is empty, and the reading went on to answer {@code Ready} for it.
+     */
     private static PublishedClasses.Declarations declarationsIn(byte[] bytes) {
         PublishedClasses.SoutherModuleView module = null;
         String data = null;
         String signature = null;
         Boolean injected = null;
         for (Annotation a : annotations(bytes)) {
-            String type = a.className().stringValue();
-            if (type.endsWith("/SoutherModule;")) {
-                module = moduleView(a);
-            } else if (type.endsWith("/SoutherData;")) {
-                data = string(a, "value");
-            } else if (type.endsWith("/SoutherBehavior;")) {
-                signature = string(a, "signature");
-                injected = bool(a, "injected");
+            switch (a.className().stringValue()) {
+                case MODULE -> module = moduleView(a);
+                case DATA -> data = required(a, "value");
+                case BEHAVIOR -> {
+                    signature = required(a, "signature");
+                    injected = requiredFlag(a, "injected");
+                }
+                default -> { }
             }
         }
         return new PublishedClasses.Declarations(module, data, signature, injected);
@@ -74,15 +89,29 @@ public final class ClassFileDeclarations implements PublishedClasses {
                 .orElse(List.of());
     }
 
+    /**
+     * The {@code $Module} annotation's members.
+     *
+     * <p>{@code compat} and {@code header} left out read as the values the reading takes for a
+     * writer this compiler does not agree with — there is no boundary revision to compare and no
+     * header to parse, which is what that says. The rest of the schema's defaults are its own.
+     */
     private static PublishedClasses.SoutherModuleView moduleView(Annotation a) {
         return new PublishedClasses.SoutherModuleView(
-                integer(a, "compat"), string(a, "compiler"), string(a, "header"),
+                moduleInt(a, "compat", -1), moduleString(a, "compiler", ""),
+                moduleString(a, "header", ""),
                 strings(a, "imports"), strings(a, "types"), strings(a, "behaviors"),
                 strings(a, "invariantHelpers"));
     }
 
-    /** An absent member means the writer left it at its default, which for every member here is
-     * empty; a reader older than the writer sees the same thing. */
+    /**
+     * The value written under {@code name}, or null where the writer wrote none.
+     *
+     * <p>Absent and wrong are different answers and are told apart by every reader below. A member
+     * a writer left out is the annotation's default, which is how a reader newer than the writer
+     * goes on reading what it does carry; a member written as something the schema does not declare
+     * has no default to fall back to, and the annotation is not one of ours.
+     */
     private static AnnotationValue member(Annotation a, String name) {
         for (AnnotationElement e : a.elements()) {
             if (e.name().stringValue().equals(name)) {
@@ -92,27 +121,75 @@ public final class ClassFileDeclarations implements PublishedClasses {
         return null;
     }
 
-    private static String string(Annotation a, String name) {
-        return member(a, name) instanceof AnnotationValue.OfString s ? s.stringValue() : "";
+    /** A string member the schema declares with no default: absent or otherwise is unreadable. */
+    private static String required(Annotation a, String name) {
+        if (member(a, name) instanceof AnnotationValue.OfString s) {
+            return s.stringValue();
+        }
+        throw notOurs(name);
     }
 
-    private static boolean bool(Annotation a, String name) {
-        return member(a, name) instanceof AnnotationValue.OfBoolean b && b.booleanValue();
+    /** A boolean member the schema declares with no default. */
+    private static boolean requiredFlag(Annotation a, String name) {
+        if (member(a, name) instanceof AnnotationValue.OfBoolean b) {
+            return b.booleanValue();
+        }
+        throw notOurs(name);
     }
 
-    private static int integer(Annotation a, String name) {
-        return member(a, name) instanceof AnnotationValue.OfInt i ? i.intValue() : -1;
+    /**
+     * A string member of {@code SoutherModule}, or {@code absent} where the writer wrote none.
+     *
+     * <p>The sentinel is what a writer older than this reader leaves behind, and what the reading
+     * takes as a boundary the two do not share. Written as something else, it is not that: nothing
+     * older wrote a header as a number, and there is no version of this schema it belongs to.
+     */
+    private static String moduleString(Annotation a, String name, String absent) {
+        AnnotationValue value = member(a, name);
+        if (value == null) {
+            return absent;
+        }
+        if (value instanceof AnnotationValue.OfString s) {
+            return s.stringValue();
+        }
+        throw notOurs(name);
     }
 
+    private static int moduleInt(Annotation a, String name, int absent) {
+        AnnotationValue value = member(a, name);
+        if (value == null) {
+            return absent;
+        }
+        if (value instanceof AnnotationValue.OfInt i) {
+            return i.intValue();
+        }
+        throw notOurs(name);
+    }
+
+    /** A member the schema declares {@code default {}}: absent is empty, and anything that is not an
+     *  array of strings is not this schema's. */
     private static List<String> strings(Annotation a, String name) {
+        AnnotationValue value = member(a, name);
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof AnnotationValue.OfArray array)) {
+            throw notOurs(name);
+        }
         List<String> out = new ArrayList<>();
-        if (member(a, name) instanceof AnnotationValue.OfArray array) {
-            for (AnnotationValue v : array.values()) {
-                if (v instanceof AnnotationValue.OfString s) {
-                    out.add(s.stringValue());
-                }
+        for (AnnotationValue v : array.values()) {
+            if (!(v instanceof AnnotationValue.OfString s)) {
+                throw notOurs(name);
             }
+            out.add(s.stringValue());
         }
         return out;
+    }
+
+    /** Raised for metadata of this compiler's name that is not this compiler's shape. Caught where
+     *  the bytes are read, and answered as {@link PublishedClasses.Carried.UnreadableMetadata}. */
+    private static IllegalArgumentException notOurs(String member) {
+        return new IllegalArgumentException(
+                "`" + member + "` is not what this compiler writes there");
     }
 }
