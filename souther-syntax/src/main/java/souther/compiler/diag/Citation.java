@@ -203,9 +203,10 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      *  writer used to have is gone rather than carried over, and a fallback standing in for it would
      *  read as a case somebody had thought about. */
     private static String place(SourcePos at, SourceNameResolver names, SourceId sectionSource) {
-        if (at.sourceId() == null || at.sourceId().equals(sectionSource)) {
+        if (!(at.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file))
+                || file.equals(sectionSource)) {
             return String.valueOf(at);
         }
-        return names.nameOf(at.sourceId()) + ":" + at;
+        return names.nameOf(file) + ":" + at;
     }
 }
