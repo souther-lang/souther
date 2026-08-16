@@ -7,6 +7,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -233,16 +234,28 @@ public final class TypeScope {
         return scope.keySet();
     }
 
+    /**
+     * Every bare spelling that reaches a name here, and the name it reaches.
+     *
+     * <p>The pair, which is what resolving a name answers. A spelling in scope standing for nothing
+     * is not here — it reaches no name — and it is still reachable, which {@link #namesInScope}
+     * answers. Two absences, two questions: whether a spelling may be written is the second, and
+     * what writing it would mean is this one.
+     */
+    public Map<String, TypeSymbol> denotedNames() {
+        Map<String, TypeSymbol> named = new LinkedHashMap<>();
+        scope.forEach((spelling, denotation) -> {
+            if (denotation instanceof Denotation.Denotes d) {
+                named.put(spelling, d.type());
+            }
+        });
+        return named;
+    }
+
     /** The names reachable here, canonical. A name in scope standing for nothing names no
      * declaration, so it is reachable and not among these. */
     public Collection<TypeSymbol> visibleNames() {
-        Set<TypeSymbol> named = new LinkedHashSet<>();
-        for (Denotation denotation : scope.values()) {
-            if (denotation instanceof Denotation.Denotes d) {
-                named.add(d.type());
-            }
-        }
-        return named;
+        return new LinkedHashSet<>(denotedNames().values());
     }
 
     /** Whether the module that declares {@code name} exposes it — its own names always count. */

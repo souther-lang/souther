@@ -3,20 +3,19 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * A {@link Scope} and a {@link Declarations} together, for the readers that have both to hand.
  *
  * <p>Not a thing of its own. It answers nothing itself except the one question that genuinely needs
- * both — {@link #visible} takes the identities a bare name reaches here and asks what each is — and
- * hands over its two parts otherwise. The two answer different questions and fail in different ways:
+ * both — {@link #reachable} takes the identities a bare name reaches here and asks what each is —
+ * and hands over its two parts otherwise. The two answer different questions and fail in different ways:
  * a spelling nothing here writes is not a declaration that did not come out, and while one object
  * answered both, which of them a reader was holding was something it worked out for itself.
  */
@@ -90,20 +89,32 @@ public final class Symbols implements NameSense {
     }
 
     /**
-     * The definitions reachable here by a bare name: this module\'s own plus the imported ones.
+     * Every bare spelling that reaches a definition here, and the definition it reaches — this
+     * module\'s own plus the imported ones.
      *
      * <p>The one question that is both. What is reachable is the scope\'s to say and what each of
      * them is a declaration of is not, so this is written where both are to hand rather than in
      * either of them.
+     *
+     * <p>The pair and not either half. Which declaration a bare name denotes is what resolving it
+     * answers, and a reader given only the declarations has to pair each back with a spelling of its
+     * own — the same guess about which module declares what, made outside the only place that knows.
+     * A spelling that reaches nothing is absent here and present in
+     * {@code scope().namesInScope()}, those being two questions.
      */
-    public Collection<Hir.Def> visible() {
-        List<Hir.Def> defs = new ArrayList<>();
-        for (TypeSymbol name : scope.visibleNames()) {
+    public Map<String, Hir.Def> reachable() {
+        Map<String, Hir.Def> reached = new LinkedHashMap<>();
+        scope.denotedNames().forEach((spelling, name) -> {
             Hir.Def def = declarations.declaration(name.key());
             if (def != null) {
-                defs.add(def);
+                reached.put(spelling, def);
             }
-        }
-        return defs;
+        });
+        return reached;
+    }
+
+    /** The definitions reachable here by a bare name, without the spellings they are reached by. */
+    public Collection<Hir.Def> visible() {
+        return new ArrayList<>(reachable().values());
     }
 }
