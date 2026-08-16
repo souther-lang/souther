@@ -48,6 +48,7 @@ import souther.lsp.protocol.Range;
 import souther.lsp.protocol.TextEdit;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -229,7 +230,7 @@ public final class Analyzer {
 
         Map<String, List<Located>> byUri;
         try {
-            byUri = compileOf(path, compileSet, brokenModules).diagnostics();
+            byUri = compileOf(graph, path, compileSet, brokenModules).diagnostics();
         } catch (RuntimeException | StackOverflowError e) {
             // Which file broke the walk is not known here, so every file that entered the compile is
             // marked. Silence would leave the whole workspace looking clean.
@@ -263,9 +264,25 @@ public final class Analyzer {
         return out;
     }
 
-    /** The workspace's compile, brought up to date with what the documents now say. */
-    private Compilation compileOf(souther.compiler.meta.ModulePath path,
+    /**
+     * The workspace's compile, brought up to date with what the documents now say.
+     *
+     * <p>Where this analyzer is told which documents the workspace holds, and so where what it
+     * remembers about a document it no longer holds is dropped. {@code sources} is not that set —
+     * it is the documents that could join the compile — and a document held out for its syntax
+     * errors is one this still has. The graph is, which is why it is taken rather than worked out
+     * from the two maps.
+     *
+     * <p>A document is named by its URI and a URI can be used again, so what was remembered has to
+     * be dropped while the document is gone rather than when the next one arrives — by then the two
+     * are both "the document at this URI" and nothing tells them apart. Every request that arrives
+     * with a workspace comes through here, and a file created or deleted on disk reaches it as a
+     * diagnose, so the gap is observed wherever there is one.
+     */
+    private Compilation compileOf(ModuleGraph graph, souther.compiler.meta.ModulePath path,
                                   Map<String, String> sources, Set<String> broken) {
+        elsewhere.forgetAllBut(graph.uris());
+        readings.keySet().retainAll(Set.copyOf(graph.uris()));
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
             workspaceCompile = Compilation.ofDocuments(sources, broken, path);
             workspaceCompile.measure(measure);
@@ -287,23 +304,50 @@ public final class Analyzer {
         Set<String> broken = new HashSet<>();
         for (String uri : graph.uris()) {
             String text = graph.text(uri);
-            boolean readable;
-            try {
-                readable = CstParser.parse(text).errors().isEmpty();
-            } catch (RuntimeException | StackOverflowError e) {
-                readable = false;
-            }
-            if (readable) {
+            Reading reading = readingOf(uri, text);
+            if (reading.parses()) {
                 clean.put(uri, text);
-            } else {
-                String name = Compiler.moduleNameFromHeader(text);
-                if (name != null) {
-                    broken.add(name);
-                }
+            } else if (reading.declares() != null) {
+                broken.add(reading.declares());
             }
         }
-        return compileOf(compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY
+        return compileOf(graph, compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY
                 : compiledAgainst, clean, broken);
+    }
+
+    /**
+     * What one document was found to be: whether it can join a compile, and — where it cannot — the
+     * module its header names, which is what keeps an importer from being told the module is
+     * unknown.
+     *
+     * <p>Kept with the text it was read from. Every request that arrives with the workspace sorts it
+     * into what can be compiled and what cannot, and a request arrives for each keystroke while
+     * completion is open; reading every file in the workspace again on each of them is work whose
+     * answer cannot have changed, since one text parses one way. On the crm example — seven sources,
+     * 3898 lines — it was 7.3 of the 9.3 milliseconds a completion took, and it grows with the
+     * workspace rather than with the edit.
+     */
+    private record Reading(String text, boolean parses, String declares) {}
+
+    /** Documents this analyzer has already read, by URI. Dropped along with everything else it
+     * remembers about a document the workspace no longer holds. */
+    private final Map<String, Reading> readings = new HashMap<>();
+
+    private Reading readingOf(String uri, String text) {
+        Reading had = readings.get(uri);
+        if (had != null && had.text().equals(text)) {
+            return had;
+        }
+        boolean parses;
+        try {
+            parses = CstParser.parse(text).errors().isEmpty();
+        } catch (RuntimeException | StackOverflowError e) {
+            parses = false;
+        }
+        Reading now = new Reading(text, parses,
+                parses ? null : Compiler.moduleNameFromHeader(text));
+        readings.put(uri, now);
+        return now;
     }
 
     /** Where the cursor is, in the terms the compiler answers about: a place in a file, not a line
@@ -1160,15 +1204,14 @@ public final class Analyzer {
         Compilation compilation = compileOf(graph);
         String module = moduleOf(compilation, graph, uri);
         List<CompletionItem> declared = declaredIn(root, module);
-        elsewhere.forgetAllBut(graph.uris());
         List<CompletionItem> fromElsewhere =
                 elsewhere.of(compilation, uri, module, labelsOf(declared));
 
         LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
-        SyntaxNode enclosing =
-                enclosingDef(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());
+        SyntaxNode enclosing = enclosingDef(root, cursor);
         if (enclosing != null) {
-            collectLocalBindings(enclosing, byLabel);
+            collectLocalBindings(enclosing, cursor, byLabel);
         }
         for (CompletionItem item : declared) {
             byLabel.putIfAbsent(item.label(), item);
@@ -1231,11 +1274,33 @@ public final class Analyzer {
         return null;
     }
 
-    /** Adds every param and {@code let} name bound anywhere inside {@code node} as a variable candidate. */
-    private void collectLocalBindings(SyntaxNode node, Map<String, CompletionItem> out) {
+    /**
+     * Adds the params and {@code let} names in force at {@code offset} as variable candidates.
+     *
+     * <p>In force, and not every name bound anywhere in the definition. A binding is what its
+     * spelling denotes where it holds, which is what lets a candidate offered from here stand ahead
+     * of one an import brought in — so the two have to be the same set. A name bound in an arm of a
+     * {@code match} the cursor is not in denotes nothing where the cursor is, and offering it there
+     * both says something untrue and takes the place of the name that spelling does denote.
+     *
+     * <p>A construct that confines what it binds is walked into only when the cursor is inside it,
+     * and what it binds is offered only then. Everything else is walked through: a pattern is not a
+     * scope of its own, and the names it binds hold over the arm that holds the cursor.
+     *
+     * <p>A binding written after the cursor is not in force yet either. That is read off where it
+     * starts, so the {@code let} on the line below is not offered as though it had already been
+     * written.
+     */
+    private void collectLocalBindings(SyntaxNode node, int offset,
+                                      Map<String, CompletionItem> out) {
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
-                if (VALUE_BINDINGS.contains(child.kind())) {
+                boolean holds = !BINDING_SCOPES.contains(child.kind())
+                        || (offset >= child.start() && offset <= child.end());
+                if (!holds) {
+                    continue;
+                }
+                if (VALUE_BINDINGS.contains(child.kind()) && child.start() <= offset) {
                     SyntaxToken bound = firstIdent(child);
                     if (bound != null) {
                         // A binding comes from nowhere else, so it has no origin to show.
@@ -1243,10 +1308,15 @@ public final class Analyzer {
                                 new CompletionItem(nameOf(bound), CompletionItem.VARIABLE, null));
                     }
                 }
-                collectLocalBindings(child, out);
+                collectLocalBindings(child, offset, out);
             }
         }
     }
+
+    /** Node kinds that confine what they bind: a name bound in one holds inside it and nowhere else.
+     * A pattern is not among them — it binds over the arm that holds it, not over itself. */
+    private static final java.util.Set<SyntaxKind> BINDING_SCOPES = java.util.Set.of(
+            SyntaxKind.BLOCK_EXPR, SyntaxKind.MATCH_CASE, SyntaxKind.LAMBDA_EXPR);
 
     /** Whether {@code name} is a legal rename target: a single identifier token, not a keyword. The
      * lexer decides, so a non-ASCII name (Souther identifiers may be Japanese) is judged correctly. */

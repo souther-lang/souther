@@ -191,6 +191,40 @@ class WhatMayBeWrittenHereIsAskedOfTheCompileTest {
         assertTrue(items.containsKey("length"), "the import that is still written is not");
     }
 
+    /**
+     * The fallback lasts exactly as long as the compiler cannot answer, in both directions.
+     *
+     * <p>Whether a document can join the compile is read from its text, and a document is read once
+     * per text rather than once per request — so what is held here is that the reading follows the
+     * text. A document first seen while it will not parse rejoins the compile the moment it does,
+     * and one edited into a state that will not parse leaves it.
+     */
+    @Test
+    void whetherTheCompilerCanAnswerFollowsWhatTheDocumentNowSays() {
+        Analyzer analyzer = new Analyzer();
+
+        List<CompletionItem> whileBroken = analyzer.completions(
+                DOWN_URI, IN_THE_BODY, graphOf(UP_URI, UP, DOWN_URI, broken(DOWN)));
+        assertEquals(List.of(), fromElsewhere(whileBroken, "down"),
+                "seen first in a state it cannot be compiled in, and never answered about");
+
+        Map<String, CompletionItem> mended = byLabel(analyzer.completions(
+                DOWN_URI, IN_THE_BODY, graphOf(UP_URI, UP, DOWN_URI, DOWN)));
+        assertTrue(mended.containsKey("Amount"),
+                "it parses now, so the compile answers about it: " + mended.keySet());
+
+        String withoutTheImport = DOWN.replace("import up ( Amount, Colour, price )\n", "");
+        Map<String, CompletionItem> brokenAgain = byLabel(analyzer.completions(
+                DOWN_URI, IN_THE_BODY, graphOf(UP_URI, UP, DOWN_URI, broken(withoutTheImport))));
+        assertTrue(brokenAgain.containsKey("Amount"),
+                "an import taken out while it will not parse is what goes stale, by design");
+
+        Map<String, CompletionItem> mendedAgain = byLabel(analyzer.completions(
+                DOWN_URI, IN_THE_BODY, graphOf(UP_URI, UP, DOWN_URI, withoutTheImport)));
+        assertFalse(mendedAgain.containsKey("Amount"),
+                "and it stops being stale the moment the document parses: " + mendedAgain.keySet());
+    }
+
     @Test
     void aDocumentTheWorkspaceNoLongerHoldsIsForgotten() {
         Analyzer analyzer = new Analyzer();
@@ -204,6 +238,30 @@ class WhatMayBeWrittenHereIsAskedOfTheCompileTest {
         assertEquals(List.of(), fromElsewhere(items, "down"));
     }
 
+    /**
+     * A URI names a document and can be used again, so what is remembered has to go while the
+     * document is gone. By the time another one arrives at the same URI, the two are both "the
+     * document at this URI" and nothing tells them apart.
+     *
+     * <p>Nothing here asks for completion while the file is missing, which is the case the eviction
+     * has to survive: it is not completion that observes a workspace losing a file. A file created
+     * or deleted on disk reaches this server as a diagnose, so that is what stands here for the gap.
+     */
+    @Test
+    void aDocumentRemovedAndWrittenAgainAtTheSameUriDoesNotInheritTheOldOnesNames() {
+        Analyzer analyzer = new Analyzer();
+        analyzer.completions(DOWN_URI, IN_THE_BODY, graphOf(UP_URI, UP, DOWN_URI, DOWN));
+
+        analyzer.diagnostics(graphOf(UP_URI, UP));   // down.sou is deleted; the server diagnoses
+
+        String different = "module other\n\nlet f (x) = ((((\n";
+        List<CompletionItem> items = analyzer.completions(
+                DOWN_URI, new Position(2, 12), graphOf(UP_URI, UP, DOWN_URI, different));
+
+        assertEquals(List.of(), fromElsewhere(items, "other"),
+                "a different document is now at that URI, and it has never compiled");
+    }
+
     @Test
     void aBindingInForceShadowsAnImportOfTheSameSpelling() {
         String shadowing = DOWN.replace("let f (x) = x", "let f (length) = length");
@@ -215,6 +273,65 @@ class WhatMayBeWrittenHereIsAskedOfTheCompileTest {
                 "the param is what `length` means in this body, so it is what is offered");
         assertEquals(1, items.values().stream().filter(i -> i.label().equals("length")).count(),
                 "and only once");
+    }
+
+    /**
+     * A binding is offered ahead of an import of the same spelling because it is what that spelling
+     * denotes where the cursor is. So the two have to be the same set: a name bound somewhere the
+     * cursor is not denotes nothing there, and offering it would both say something untrue and take
+     * the place of the name that spelling does denote.
+     */
+    @Test
+    void aBindingInAnotherArmIsNotInForceAndDoesNotDisplaceTheImport() {
+        String twoArms = """
+                module down
+
+                import up ( Amount, Colour, price )
+                import String ( length )
+
+                behavior f : (c: Colour) -> Int
+                let f (c) = match c with
+                    | Red -> {
+                        let price = 0
+                        price
+                      }
+                    | Green -> 1
+                """;
+        Analyzer analyzer = new Analyzer();
+        // the cursor is on the `1` of the Green arm, outside the block the Red arm binds in
+        Map<String, CompletionItem> items = byLabel(analyzer.completions(
+                DOWN_URI, new Position(10, 15), graphOf(UP_URI, UP, DOWN_URI, twoArms)));
+
+        assertEquals(new CompletionItem("price", CompletionItem.FUNCTION, "up"), items.get("price"),
+                "the import is what `price` denotes here: " + items.get("price"));
+        assertEquals(CompletionItem.VARIABLE, items.get("c").kind(),
+                "the param is in force over the whole body");
+    }
+
+    /** The other direction, so the test above is not passed by never offering a binding at all. */
+    @Test
+    void aBindingIsOfferedWhereItIsInForce() {
+        String shadowingInsideTheArm = """
+                module down
+
+                import up ( Amount, Colour, price )
+                import String ( length )
+
+                behavior f : (c: Colour) -> Int
+                let f (c) = match c with
+                    | Red -> {
+                        let price = 0
+                        price
+                      }
+                    | Green -> 1
+                """;
+        Analyzer analyzer = new Analyzer();
+        // the cursor is on the `price` that reads the binding, inside the block that made it
+        Map<String, CompletionItem> items = byLabel(analyzer.completions(
+                DOWN_URI, new Position(9, 12), graphOf(UP_URI, UP, DOWN_URI, shadowingInsideTheArm)));
+
+        assertEquals(CompletionItem.VARIABLE, items.get("price").kind(),
+                "inside the block, `price` is the binding: " + items.get("price"));
     }
 
     // --- a module written across two documents ---

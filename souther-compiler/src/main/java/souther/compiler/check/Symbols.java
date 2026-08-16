@@ -4,8 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -111,10 +109,5 @@ public final class Symbols implements NameSense {
             }
         });
         return reached;
-    }
-
-    /** The definitions reachable here by a bare name, without the spellings they are reached by. */
-    public Collection<Hir.Def> visible() {
-        return new ArrayList<>(reachable().values());
     }
 }
