@@ -3,6 +3,7 @@ package souther.compiler.meta;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
@@ -212,7 +213,7 @@ public final class ModuleReadback {
                     crossed.get(0), crossed.subList(1, crossed.size())));
         }
         return new Readback.Ready(
-                new AsRead(checked.module(), declared.declarations(), injected, checked.exposed()));
+                new AsRead(checked.module(), declared.declarations(), injected, checked.claims()));
     }
 
     /**
@@ -224,14 +225,14 @@ public final class ModuleReadback {
      */
     record AsRead(Ast.Module module, Map<String, Ast.Def> declarations,
                   Set<String> injectedBehaviors,
-                  Map<String, ValueName.Stdlib> libraryNames) implements ReadableModule {
+                  java.util.List<Scoping.Claim> libraryNames) implements ReadableModule {
 
         /** Copied, because this is an answer a compilation remembers and an answer it remembers is
          *  a value. */
         AsRead {
             declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
             injectedBehaviors = Collections.unmodifiableSet(new LinkedHashSet<>(injectedBehaviors));
-            libraryNames = Collections.unmodifiableMap(new LinkedHashMap<>(libraryNames));
+            libraryNames = List.copyOf(libraryNames);
         }
     }
 
@@ -278,11 +279,6 @@ public final class ModuleReadback {
         return switch (refusal) {
             case Exposing.Refusal.NoSuchLibraryFunction r ->
                     new Readback.Exposure.NoSuchLibraryFunction(r.imp().module(), r.name());
-            case Exposing.Refusal.BroughtTwice r ->
-                    new Readback.Exposure.BroughtTwice(r.imp().module(), r.name(),
-                            r.earlier().qualified());
-            case Exposing.Refusal.CollidesWithADeclaration r ->
-                    new Readback.Exposure.CollidesWithADeclaration(r.imp().module(), r.name());
         };
     }
 

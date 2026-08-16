@@ -385,7 +385,7 @@ public final class Front {
                 return read.injectedBehaviors();
             }
 
-            public Map<String, ValueName.Stdlib> libraryNames() {
+            public List<Scoping.Claim> libraryNames() {
                 return read.libraryNames();
             }
         }
@@ -575,21 +575,21 @@ public final class Front {
      * carried; a module off the path carries it the same way, and answering an empty table there
      * left every bare name in a published invariant denoting nothing.
      */
-    public record LibraryNames(String name) implements Key<Map<String, ValueName.Stdlib>> {
+    public record LibraryNames(String name) implements Key<List<Scoping.Claim>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, ValueName.Stdlib>> compute(Db db) {
+        public Answer<List<Scoping.Claim>> compute(Db db) {
             Answer<Exposing.Checked> checked = db.ask(new Checked(name));
             if (checked.present()) {
-                return Answer.of(Ordered.map(checked.value().exposed()));
+                return Answer.of(List.copyOf(checked.value().claims()));
             }
             FromPath.OnThePath onThePath = onThePath(db, name);
             return onThePath == null ? Answer.absent()
-                    : Answer.of(Ordered.map(onThePath.libraryNames()));
+                    : Answer.of(List.copyOf(onThePath.libraryNames()));
         }
     }
 
@@ -727,18 +727,6 @@ public final class Front {
                     Report.raised(Diagnostic.at(imp.pos())
                             .say(new ImportMessage.NameIsNotAStandardLibraryFunction(
                                     named, imp.module()))
-                            .build());
-            case Exposing.Refusal.BroughtTwice(Ast.Import imp, String named,
-                                               ValueName.Stdlib earlier,
-                                               ValueName.Stdlib andThis) ->
-                    Report.raised(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.NameIsPublishedByTwoModules(
-                                    named, earlier.qualified(), andThis.qualified()))
-                            .build());
-            case Exposing.Refusal.CollidesWithADeclaration(Ast.Import imp, String named) ->
-                    Report.of(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(named))
-                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
                             .build());
         };
     }

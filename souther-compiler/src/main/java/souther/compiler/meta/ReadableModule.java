@@ -2,6 +2,8 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.types.ValueName;
+import souther.compiler.check.Scoping;
+import java.util.List;
 
 import java.util.Map;
 import java.util.Set;
@@ -51,5 +53,5 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
     Set<String> injectedBehaviors();
 
     /** What its library import lines brought in, which the module itself no longer says. */
-    Map<String, ValueName.Stdlib> libraryNames();
+    List<Scoping.Claim> libraryNames();
 }

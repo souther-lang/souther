@@ -5,6 +5,7 @@ import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Scoping;
 import souther.compiler.types.ValueName;
+import java.util.List;
 
 import java.util.Map;
 import java.util.Set;
@@ -57,7 +58,7 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
         if (declared == null) {
             return null;
         }
-        Map<String, ValueName.Stdlib> library = db.ask(new Front.LibraryNames(name)).value();
+        List<Scoping.Claim> library = db.ask(new Front.LibraryNames(name)).value();
         // The three are one reading. A module whose table this compilation cannot answer is not one
         // a scope can be assembled for: answered emptily instead, every bare name its import lines
         // brought in would denote nothing.

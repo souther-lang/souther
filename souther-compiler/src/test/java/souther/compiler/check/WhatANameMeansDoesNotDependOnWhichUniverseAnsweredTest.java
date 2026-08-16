@@ -185,7 +185,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         Map<String, ModuleUniverse.InSight> readings = readings(db);
         Scoping.Subject full = CompilationUniverse.subject(db, "scope.down");
         Scoping.Subject withoutTheTable =
-                new Scoping.Subject(full.module(), full.declared(), Map.of());
+                new Scoping.Subject(full.module(), full.declared(), java.util.List.of());
 
         Scoping.Scoped scoped =
                 Scoping.of(new ModuleUniverse.OfWhatIsRead(readings), withoutTheTable);

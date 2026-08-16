@@ -59,7 +59,12 @@ public final class Scoping {
         for (Ast.FnDef fn : m.fns()) {
             ownNames.add(fn.name());
         }
-        List<Claim> claims = claimsOf(universe, m, aliases, refused);
+        // Every claim on a spelling, whichever kind of line made it. Which provider a claim came
+        // from is what makes it, and settles nothing after that: two lines asking for one spelling
+        // are one contest, and reading the library ones apart from the rest is how `map` could
+        // arrive from a library import and a user module at once with nobody saying so.
+        List<Claim> claims = new ArrayList<>(subject.libraryClaims());
+        claims.addAll(claimsOf(universe, m, aliases, refused));
         Map<String, Settled> settled = adjudicate(claims, ownNames, refused);
 
         Map<String, Denotation> denotations = new LinkedHashMap<>();
@@ -95,7 +100,7 @@ public final class Scoping {
      * read first-wins, the same two lines in the other order give one mistaken program two
      * meanings, and every pass below reads whichever meaning the order happened to give.
      */
-    private sealed interface Claim {
+    public sealed interface Claim {
 
         /** The line this was written on. */
         Ast.Import imp();
@@ -130,6 +135,10 @@ public final class Scoping {
 
         /** A definition the module hands over, which a reader writes bare. */
         record AHelper(ValueName.Helper name) implements Brought {}
+
+        /** An operation of the standard library, which an {@code import List ( map )} line lets a
+         *  reader write without its qualifier. */
+        record ALibraryOperation(ValueName.Stdlib name) implements Brought {}
     }
 
     /** What a spelling means here once every claim on it has been read. */
@@ -312,10 +321,10 @@ public final class Scoping {
      * edit to a library import line in a module it imports from.
      */
     public record Subject(Ast.Module module, Registry.Declared<Ast.Def> declared,
-                          Map<String, ValueName.Stdlib> libraryNames) {
+                          List<Claim> libraryClaims) {
 
         public Subject {
-            libraryNames = Collections.unmodifiableMap(new LinkedHashMap<>(libraryNames));
+            libraryClaims = List.copyOf(libraryClaims);
         }
     }
 
@@ -475,6 +484,7 @@ public final class Scoping {
         for (String own : behaviorNames) {
             behaviors.put(own, new ValueName.Behavior(m.name(), own));
         }
+        Map<String, ValueName.Stdlib> library = new LinkedHashMap<>();
         Set<String> nothing = new LinkedHashSet<>();
         // What the import lines settled, read rather than worked out again. A definition another
         // module publishes is written here bare, like one of this module's own — a value
@@ -486,14 +496,12 @@ public final class Scoping {
                         helpers.putIfAbsent(spelling, named);
                 case Settled.Brings(Brought.ABehavior(ValueName.Behavior named)) ->
                         behaviors.putIfAbsent(spelling, named);
+                case Settled.Brings(Brought.ALibraryOperation(ValueName.Stdlib named)) ->
+                        library.putIfAbsent(spelling, named);
                 // A data reaches the value namespace through the type namespace, which answers for
                 // it before this table is read.
                 case Settled.Brings _ -> { }
-                case Settled.StandsForNothing _ -> {
-                    if (!helpers.containsKey(spelling) && !behaviors.containsKey(spelling)) {
-                        nothing.add(spelling);
-                    }
-                }
+                case Settled.StandsForNothing _ -> nothing.add(spelling);
             }
         });
         boolean whole = true;
@@ -502,8 +510,7 @@ public final class Scoping {
                 whole = false;
             }
         }
-        return new Resolve.Reachable(m.name(), helpers, behaviors, nothing, whole,
-                subject.libraryNames());
+        return new Resolve.Reachable(m.name(), helpers, behaviors, nothing, whole, library);
     }
 
     /**
