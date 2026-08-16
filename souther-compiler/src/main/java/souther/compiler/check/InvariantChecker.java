@@ -403,7 +403,12 @@ public final class InvariantChecker {
         // Which of the clauses place an edge, asked once the positions have names to be recognised
         // by.
         Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt);
-        ConstraintState constraints = k.constraints();
+        // And which values each position is left, off the same clauses and at the same moment. What
+        // reached this value is the walk's answer and is given to both readings; what each of them
+        // makes of a clause is its own, so neither can widen the other's idea of what it was handed.
+        ConstraintState constraints = k.constraints().taking(AdmissibleReading.of(
+                written.stream().map(Written::clause).toList(), c.terms, at,
+                positions(atoms, keys, typeAt), symbols));
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             Term atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());
@@ -481,6 +486,31 @@ public final class InvariantChecker {
                     under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
+    }
+
+    /**
+     * The type at each position of a value, keyed by what that position is called.
+     *
+     * <p>Every position that has a name, and not only the ones that are numbers. Which values a
+     * boolean or an enumeration has is as much an answer as which values an integer has, and a
+     * reading keyed by the numeric atoms alone had no word for the first two. Where a position has
+     * both names — a number is called one thing by the interval algebra and another by everything
+     * else — both are filed, since a clause reaching it may be recognised by either.
+     */
+    private static Map<Term, Type> positions(Map<String, Term> atoms, Map<String, Term> keys,
+                                             Map<String, Type> typeAt) {
+        Map<Term, Type> out = new LinkedHashMap<>();
+        typeAt.forEach((path, type) -> {
+            Term key = keys.get(path);
+            if (key != null) {
+                out.put(key, type);
+            }
+            Term atom = atoms.get(path);
+            if (atom != null) {
+                out.put(atom, type);
+            }
+        });
+        return out;
     }
 
     /** A field of the value at {@code path}. The root of a newtype's own reading is the value it

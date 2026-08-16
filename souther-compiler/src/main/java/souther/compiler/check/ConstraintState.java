@@ -4,6 +4,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.values.AdmissibleValues;
 
 import java.util.Map;
 
@@ -24,11 +25,13 @@ import java.util.Map;
  * later is a component of this and an arm of {@link #isBottom}, and every such reader has it without
  * being touched.
  */
-record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts) {
+record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
+                       AdmissibleValues<Term> values) {
 
     /** Nothing taken in, so nothing ruled out. */
     static ConstraintState top() {
-        return new ConstraintState(NumericDomain.top(), PredicateFacts.none());
+        return new ConstraintState(NumericDomain.top(), PredicateFacts.none(),
+                AdmissibleValues.top());
     }
 
     /**
@@ -39,16 +42,21 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts) {
      * contradiction, and one found nowhere is only what these readings were able to show.
      */
     boolean isBottom() {
-        return numbers.isBottom() || facts.isBottom();
+        return numbers.isBottom() || facts.isBottom() || values.isBottom();
     }
 
     /** This, with {@code f rel 0} taken as holding. */
     ConstraintState taking(LinearForm<Term> f, Rel rel, Map<Term, Granularity> kinds) {
-        return new ConstraintState(numbers.assume(f, rel, kinds), facts);
+        return new ConstraintState(numbers.assume(f, rel, kinds), facts, values);
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
     ConstraintState taking(Term key, boolean positive) {
-        return new ConstraintState(numbers, facts.assume(key, positive));
+        return new ConstraintState(numbers, facts.assume(key, positive), values);
+    }
+
+    /** This, with {@code admitted} taken as holding of the positions it speaks about. */
+    ConstraintState taking(AdmissibleValues<Term> admitted) {
+        return new ConstraintState(numbers, facts, values.meet(admitted));
     }
 }

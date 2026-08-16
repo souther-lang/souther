@@ -249,6 +249,196 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 """);
     }
 
+    /**
+     * Equalities that name two values, over a carrier no interval is read of.
+     *
+     * <p>An invariant written with {@code ==} says which values the type admits, and two of them
+     * stated together admit what both do. Where they name different values that is nothing, and the
+     * carrier has no part in it: what a reading of the numbers could show about {@code Int} is what
+     * a reading of the values shows about anything whose values can be compared at all.
+     */
+    @Test
+    void twoEqualitiesNamingDifferentValuesAreRefused() {
+        refuses("Gender", """
+                module demo
+
+                data Gender = String
+                    invariant value == "A" && value == "B"
+                """);
+    }
+
+    /** And where they are written as two clauses rather than as one. */
+    @Test
+    void twoEqualitiesWrittenAsSeparateClausesAreRefused() {
+        refuses("Gender", """
+                module demo
+
+                data Gender = String
+                    invariant a = value == "A"
+                    invariant b = value == "B"
+                """);
+    }
+
+    /** And over a boolean, which has two values and no order to read them by. */
+    @Test
+    void twoEqualitiesOverABooleanAreRefused() {
+        refuses("Flag", """
+                module demo
+
+                data Flag = Bool
+                    invariant no = value == true && value == false
+                """);
+    }
+
+    /**
+     * And denying both of a boolean's values, which leaves it none.
+     *
+     * <p>What makes this a refusal is that the values can be written out. The same two denials over
+     * a string leave every string but two, which is the test below.
+     */
+    @Test
+    void denyingEveryValueABooleanHasIsRefused() {
+        refuses("Flag", """
+                module demo
+
+                data Flag = Bool
+                    invariant no = value /= true && value /= false
+                """);
+    }
+
+    /** And over an enumeration, whose values are its cases. */
+    @Test
+    void twoEqualitiesOverAnEnumerationAreRefused() {
+        refuses("Painted", """
+                module demo
+
+                data Red
+                data Green
+                data Blue
+                data Colour = Red | Green | Blue
+
+                data Painted = { colour: Colour }
+                    invariant no = colour == Red && colour == Green
+                """);
+    }
+
+    /** And denying every case of one. */
+    @Test
+    void denyingEveryCaseAnEnumerationHasIsRefused() {
+        refuses("Painted", """
+                module demo
+
+                data Red
+                data Green
+                data Blue
+                data Colour = Red | Green | Blue
+
+                data Painted = { colour: Colour }
+                    invariant no = colour /= Red && colour /= Green && colour /= Blue
+                """);
+    }
+
+    /** Denying all but one of them leaves that one, and refuses nothing. */
+    @Test
+    void denyingAllButOneCaseIsAdmitted() {
+        admits("""
+                module demo
+
+                data Red
+                data Green
+                data Blue
+                data Colour = Red | Green | Blue
+
+                data Painted = { colour: Colour }
+                    invariant blue = colour /= Red && colour /= Green
+                """);
+    }
+
+    /**
+     * Two denials over a carrier whose values are not written out refuse nothing.
+     *
+     * <p>The other side of the reading above. What made the boolean a refusal was having its values
+     * in hand to take away from; a string has no end of values, and a reading that answered the two
+     * shapes alike would refuse this one.
+     */
+    @Test
+    void twoDenialsOverAStringAreAdmitted() {
+        admits("""
+                module demo
+
+                data Gender = String
+                    invariant no = value /= "A" && value /= "B"
+                """);
+    }
+
+    /** Equalities stated as alternatives admit both values. */
+    @Test
+    void twoEqualitiesAsAlternativesAreAdmitted() {
+        admits("""
+                module demo
+
+                data Gender = String
+                    invariant either = value == "A" || value == "B"
+                """);
+    }
+
+    /**
+     * And an alternative to a rule this cannot read admits everything.
+     *
+     * <p>The place a reading of values goes wrong. A value satisfying the rule that was not read is
+     * under no obligation from the one that was, so nothing narrows here at all — and a reading that
+     * kept what the readable side said would refuse whatever the unreadable side would have
+     * allowed.
+     */
+    @Test
+    void anAlternativeToARuleThatCannotBeReadIsAdmitted() {
+        admits("""
+                module demo
+
+                data Gender = String
+                    invariant either = value == "A" || String.matches("[0-9]+", value)
+                """);
+    }
+
+    /** And a rule this cannot read stated beside one it can narrows nothing further. */
+    @Test
+    void aRuleThatCannotBeReadBesideOneThatCanIsAdmitted() {
+        admits("""
+                module demo
+
+                data Gender = String
+                    invariant both = value == "A" && String.matches("[A-Z]", value)
+                """);
+    }
+
+    /** Two positions named one value each contradict nothing. */
+    @Test
+    void twoPositionsNamedOneValueEachAreAdmitted() {
+        admits("""
+                module demo
+
+                data Pair = { left: String, right: String }
+                    invariant both = left == "A" && right == "B"
+                """);
+    }
+
+    /** A value written as an expression is the value it comes to, on both sides of the reading. */
+    @Test
+    void aValueWrittenAsAnExpressionIsTheValueItComesTo() {
+        refuses("Joined", """
+                module demo
+
+                data Joined = String
+                    invariant no = value == "A" ++ "B" && value == "AC"
+                """);
+        admits("""
+                module demo
+
+                data Joined = String
+                    invariant fine = value == "A" ++ "B" && value == "AB"
+                """);
+    }
+
     @Test
     void aNumberWithOneValueLeftIsAdmitted() {
         admits("""
@@ -399,6 +589,25 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
 
                 data Bad = Int
                     invariant no = value >= 2 && value <= 1
+                """));
+    }
+
+    /**
+     * A declaration whose equalities admit no value is told the same thing, and told it once.
+     *
+     * <p>The sentence is about the rules and not about the carrier, since neither is the count.
+     * What holds the record beside it out of the report is that granting the name a value leaves
+     * the record with one: the record is not what the author has to change.
+     */
+    @Test
+    void aDeclarationWhoseEqualitiesAdmitNoValueIsToldItsRulesCannotAllHold() {
+        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
+                module demo
+
+                data Gender = String
+                    invariant no = value == "A" && value == "B"
+
+                data Person = { gender: Gender }
                 """));
     }
 

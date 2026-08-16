@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.lang.reflect.RecordComponent;
 import java.math.BigDecimal;
@@ -29,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhetherAValueExistsIsAskedOfEveryDomainTest {
 
-    private static final Term A_PREDICATE = new Term.Interner().written("some predicate");
+    private static final Term.Interner NAMES = new Term.Interner();
+    private static final Term A_PREDICATE = NAMES.written("some predicate");
+    private static final Term A_POSITION = NAMES.written("some position");
 
     /** Nothing taken in leaves every value there was. */
     @Test
@@ -51,6 +56,14 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         assertFalse(factsAtBottom().numbers().isBottom(), "and the other domain is untouched");
     }
 
+    /** A position left no value it may hold, which no number and no predicate has a word for. */
+    @Test
+    void aPositionWithNoValueLeftLeavesNothing() {
+        assertTrue(valuesAtBottom().isBottom());
+        assertFalse(valuesAtBottom().numbers().isBottom(), "and the other domains are untouched");
+        assertFalse(valuesAtBottom().facts().isBottom());
+    }
+
     private static ConstraintState numbersAtBottom() {
         // `1 <= 0`, which is how a reading already says that what it stands in is never reached.
         return ConstraintState.top()
@@ -59,6 +72,12 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
 
     private static ConstraintState factsAtBottom() {
         return ConstraintState.top().taking(A_PREDICATE, true).taking(A_PREDICATE, false);
+    }
+
+    private static ConstraintState valuesAtBottom() {
+        return ConstraintState.top()
+                .taking(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A"))))
+                .taking(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))));
     }
 
     /**
@@ -73,7 +92,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     @Test
     void everyDomainOfTheStateIsOneThisTestPutAtItsOwnBottom() {
         RecordComponent[] domains = ConstraintState.class.getRecordComponents();
-        assertEquals(2, domains.length,
+        assertEquals(3, domains.length,
                 "each domain of the state needs a case above putting that one, and only that one, "
                         + "at its bottom");
     }
