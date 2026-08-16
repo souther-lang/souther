@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
@@ -94,7 +96,7 @@ class AnAnsweredCaseIsReadOffTheValueAndNotResolvedHereTest {
     private static List<TypeSymbol> armsAnsweredIn(String module, String source) {
         Compilation compilation = Compilation.ofSources(List.of(LIB, source), ModulePath.EMPTY);
         compilation.answerEverything();
-        String sourceId = compilation.exampleSourcesOf(module).get(0);
+        SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples(module, sourceId, Output.CoverageMode.NONE))
                 .value().rows();

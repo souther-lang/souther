@@ -310,7 +310,6 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                "Main",
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 (generated, compiled) -> answerer);

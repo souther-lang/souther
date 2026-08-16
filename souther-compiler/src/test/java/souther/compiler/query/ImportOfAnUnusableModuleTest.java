@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
@@ -44,14 +46,14 @@ class ImportOfAnUnusableModuleTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("evil.sou", RESERVED);
         byId.put("main.sou", IMPORTER);
-        Map<String, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
+        Map<SourceId, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
 
-        assertEquals(1, found.get("evil.sou").size(),
-                "the module that took a reserved name is what is wrong: " + found.get("evil.sou"));
-        assertTrue(found.get("evil.sou").stream()
+        assertEquals(1, found.get(new SourceId("evil.sou")).size(),
+                "the module that took a reserved name is what is wrong: " + found.get(new SourceId("evil.sou")));
+        assertTrue(found.get(new SourceId("evil.sou")).stream()
                         .anyMatch(d -> d.said() instanceof ModuleMessage.TheModuleIsInTheReservedNamespace));
-        assertEquals(List.of(), found.get("main.sou"),
+        assertEquals(List.of(), found.get(new SourceId("main.sou")),
                 "app.main can see the module; what is wrong with it is not app.main's to hear: "
-                        + found.get("main.sou"));
+                        + found.get(new SourceId("main.sou")));
     }
 }

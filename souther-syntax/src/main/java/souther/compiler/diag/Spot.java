@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.Message;
 
 import java.util.Objects;
@@ -32,11 +34,11 @@ import java.util.Objects;
  */
 public final class Spot {
 
-    private final String sourceId;
+    private final SourceId sourceId;
     private final Region region;
     private final Message said;
 
-    private Spot(String sourceId, Region region, Message said) {
+    private Spot(SourceId sourceId, Region region, Message said) {
         this.sourceId = sourceId;
         this.region = region;
         this.said = said;
@@ -44,7 +46,7 @@ public final class Spot {
 
     /** The primary region of {@code d}, in {@code sourceId} — which the caller says, holding the
      *  files, and which is none for a compile that names none. */
-    public static Spot primary(Diagnostic d, String sourceId) {
+    public static Spot primary(Diagnostic d, SourceId sourceId) {
         return new Spot(sourceId, d.region(), null);
     }
 
@@ -56,7 +58,7 @@ public final class Spot {
     }
 
     /** The source this is in, or none where a compile of one file named none. */
-    public String sourceId() {
+    public SourceId sourceId() {
         return sourceId;
     }
 

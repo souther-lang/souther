@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
@@ -207,7 +209,7 @@ class CompileImportCollisionTest {
      */
     @Test
     void aNameTheSourceDoesNotExposeIsNotAlsoACollision() {
-        Map<String, List<Diagnostic>> diagnostics = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of(
+        Map<SourceId, List<Diagnostic>> diagnostics = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of(
                 "up.sou", """
                         module up exposing ( other )
                         data Thing = { a: Int }
@@ -221,7 +223,7 @@ class CompileImportCollisionTest {
                         """)));
 
         assertEquals(List.of("module.the-module-does-not-expose-it"),
-                diagnostics.get("c.sou").stream().map(d -> MessageKeys.of(d.said())).toList());
+                diagnostics.get(new SourceId("c.sou")).stream().map(d -> MessageKeys.of(d.said())).toList());
     }
 
     /**
@@ -232,7 +234,7 @@ class CompileImportCollisionTest {
      */
     @Test
     void theCollisionIsReportedWithoutStoppingTheOtherFiles() {
-        Map<String, List<Diagnostic>> diagnostics = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of(
+        Map<SourceId, List<Diagnostic>> diagnostics = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of(
                 "c.sou", """
                         module probe.c
                         import List ( map )
@@ -244,9 +246,9 @@ class CompileImportCollisionTest {
                         """)));
 
         assertEquals(List.of("import.imported-name-collides-with-a-declaration"),
-                diagnostics.get("c.sou").stream().map(d -> MessageKeys.of(d.said())).toList());
+                diagnostics.get(new SourceId("c.sou")).stream().map(d -> MessageKeys.of(d.said())).toList());
         assertEquals(List.of("name.no-type-of-that-name"),
-                diagnostics.get("d.sou").stream().map(d -> MessageKeys.of(d.said())).toList());
+                diagnostics.get(new SourceId("d.sou")).stream().map(d -> MessageKeys.of(d.said())).toList());
     }
 
     private static String refused(List<String> modules) {

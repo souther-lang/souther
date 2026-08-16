@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import org.junit.jupiter.api.Test;
@@ -71,11 +73,11 @@ class CompileMultiModuleExampleFailuresTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(SHARED, ONE, TWO)));
 
-        Set<String> named = java.util.stream.IntStream.range(0, e.diagnostics().size())
+        Set<SourceId> named = java.util.stream.IntStream.range(0, e.diagnostics().size())
                 .mapToObj(e::sourceIdOf)
                 .collect(Collectors.toSet());
 
-        assertEquals(Set.of("0", "1", "2"), named,
+        assertEquals(Set.of(new SourceId("0"), new SourceId("1"), new SourceId("2")), named,
                 "three modules, three sources — a renderer quotes each one's own file");
     }
 
@@ -91,7 +93,7 @@ class CompileMultiModuleExampleFailuresTest {
                         """)));
 
         assertEquals(1, e.diagnostics().size());
-        assertEquals("0", e.sourceId(), "the stale fixture is in the first source");
+        assertEquals(new SourceId("0"), e.sourceId(), "the stale fixture is in the first source");
     }
 
     @Test

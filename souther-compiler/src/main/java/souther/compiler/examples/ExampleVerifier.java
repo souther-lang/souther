@@ -22,7 +22,6 @@ import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
@@ -135,7 +134,7 @@ public final class ExampleVerifier {
                                      Supplier<PublishedModule.Classes> declared,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
-                                     String sourceId, Deadline deadline, EvaluationPolicy policy,
+                                     Deadline deadline, EvaluationPolicy policy,
                                      Answering answering) {
         if (!artifact.implementations().module().equals(module.name())) {
             throw new IllegalArgumentException("the rows are `" + module.name()
@@ -148,7 +147,6 @@ public final class ExampleVerifier {
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
                 deadline, policy, answering.over(artifact.implementations(), loader), declared);
-        v.sourceId = sourceId;
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
@@ -175,7 +173,7 @@ public final class ExampleVerifier {
                 incompleteness.add(new Incompleteness(leftUndecidedBy(outcome.failurePhase()),
                         new souther.compiler.observe.Target.OfBehavior(outcome.target()),
                         java.util.Optional.of(
-                                souther.compiler.diag.Citation.of(outcome.at().pos()))));
+                                souther.compiler.diag.Citation.of(outcome.at()))));
             }
         }
         return new Observations(failures, rows, incompleteness);
@@ -256,10 +254,6 @@ public final class ExampleVerifier {
     private final MemoryClassLoader loader;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
-    /** Which source the rows being evaluated are written in. A module's rows come from its own source
-     * and from any number of attached {@code examples for} files, and a position alone stops saying
-     * which once they are gathered under the module's name. */
-    private String sourceId;
     /** What one row gets to be evaluated within ({@link #checkRow}). Carried rather than looked up,
      * so two compiles in one JVM need not agree on it. Reading a written statement is held to a
      * deadline of its own, which is {@link ExampleStatements}'. */
@@ -669,7 +663,7 @@ public final class ExampleVerifier {
     /** What the row turned out to be, from the state its worker left. */
     private RowOutcome outcomeOf(ExampleTarget target, Hir.ExampleRow row, RowState state) {
         Reached reached = state.reached;
-        return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.identity(),
+        return new RowOutcome(row.pos(), target.name(), row.identity(),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
                 state.resultArm, state.inputCases, state.inputs,
                 ran(reached, new Counting.Read(state.stepsSpent, state.hits)));
@@ -700,7 +694,7 @@ public final class ExampleVerifier {
                           List<Diagnostic> out, List<RowOutcome> rows) {
         RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
         switch (deadline.given(
-                new Deadline.Work.Row(target.name(), sourceId, row.pos(), row.identity()),
+                new Deadline.Work.Row(target.name(), row.pos(), row.identity()),
                 evaluation)) {
             case Deadline.Outcome.Finished(List<Diagnostic> found) -> {
                 out.addAll(found);
@@ -726,7 +720,7 @@ public final class ExampleVerifier {
                 // while it runs would be some of what it spent rather than what it spent. That is
                 // what the row says — not zero, which is what a row that passed no counted point
                 // says.
-                rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
+                rows.add(new RowOutcome(row.pos(), target.name(),
                         row.identity(), reached.stage(), Disposition.INCOMPLETE,
                         FailurePhase.TIMEOUT, null, null, List.of(), List.of(),
                         ran(reached, new Counting.Unread())));

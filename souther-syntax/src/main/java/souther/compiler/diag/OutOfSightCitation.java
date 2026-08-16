@@ -3,7 +3,7 @@ package souther.compiler.diag;
 import java.util.Objects;
 
 /** Code written where this compile cannot show it, met at {@code reachedFrom}. */
-record OutOfSightCitation(SourceProvenance provenance, SourceRef reachedFrom)
+record OutOfSightCitation(SourceProvenance provenance, SourcePos reachedFrom)
         implements Citation.OutOfSight {
 
     OutOfSightCitation {

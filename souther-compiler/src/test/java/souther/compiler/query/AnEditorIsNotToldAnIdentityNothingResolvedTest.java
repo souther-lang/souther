@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -70,11 +72,11 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
     }
 
     private static TypeSymbol typeAt(int line, int column) {
-        return (TypeSymbol) under(TYPES, new Names.TypeAt(new SourcePos(line, column, ID)));
+        return (TypeSymbol) under(TYPES, new Names.TypeAt(new SourcePos(line, column, new SourceId(ID))));
     }
 
     private static ValueName valueAt(int line, int column) {
-        return (ValueName) under(VALUES, new Names.ValueAt(new SourcePos(line, column, ID)));
+        return (ValueName) under(VALUES, new Names.ValueAt(new SourcePos(line, column, new SourceId(ID))));
     }
 
     /** Both names are written in one field list, so what separates them is what they name. */
@@ -88,8 +90,8 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
     @Test
     void aClauseEntryIsAnsweredAndOneNamingNothingIsNot() {
         assertEquals(TypeSymbols.declared(new TypeKey("m", "A")),
-                (TypeSymbol) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 16, ID))));
-        assertNull((TypeSymbol) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 19, ID))),
+                (TypeSymbol) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 16, new SourceId(ID)))));
+        assertNull((TypeSymbol) under(CONSTRUCTS, new Names.TypeAt(new SourcePos(6, 19, new SourceId(ID)))),
                 "no declaration is named `Nowhere`, so the clause names none");
     }
 

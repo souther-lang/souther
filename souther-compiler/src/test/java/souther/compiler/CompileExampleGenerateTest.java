@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -655,7 +657,7 @@ class CompileExampleGenerateTest {
     private static List<souther.compiler.observe.RowOutcome> outcomes(Compilation compilation) {
         List<souther.compiler.observe.RowOutcome> rows = new ArrayList<>();
         for (String name : compilation.modules()) {
-            for (String sourceId : compilation.exampleSourcesOf(name)) {
+            for (SourceId sourceId : compilation.exampleSourcesOf(name)) {
                 souther.compiler.query.Output.Examples.Of observed = compilation.db()
                         .ask(souther.compiler.query.Output.Examples.asked(
                                 compilation.db(), name, sourceId)).value();

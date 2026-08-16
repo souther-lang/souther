@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.diag.CompileException;
 import souther.compiler.observe.Disposition;
@@ -73,7 +75,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     }
 
     private static RowOutcome onlyRowOf(Compilation compilation, String module) {
-        String sourceId = compilation.exampleSourcesOf(module).get(0);
+        SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<RowOutcome> rows =
                 compilation.db().ask(new Output.Examples(module, sourceId, Output.CoverageMode.NONE)).value().rows();
         assertEquals(1, rows.size(), rows.toString());

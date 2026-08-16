@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.examples.ExampleStatements;
@@ -453,8 +455,6 @@ class CompileFakeExampleDisagreementTest {
                         name, souther.compiler.query.Output.CoverageMode.NONE)).value().classes(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
-                c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),
-                c.db().ask(new souther.compiler.query.Front.FakeOrigins(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT);
     }
@@ -821,11 +821,12 @@ class CompileFakeExampleDisagreementTest {
         assertEquals(1, found.size(), found.toString());
         Diagnostic one = found.get(0).diagnostic();
         assertEquals(1, one.secondary().size(), one.secondary().toString());
-        String primary = found.get(0).primarySourceId();
-        String other = ((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).region().start().sourceId();
+        souther.compiler.source.SourceId primary = found.get(0).primarySourceId();
+        souther.compiler.source.SourceId other = ((souther.compiler.diag.DiagnosticPlace.InSource)
+                one.secondary().get(0).place()).region().start().sourceId();
         assertNotNull(other, why + ": the second region names the file it is in");
         assertNotEquals(primary, other, why + ": the two statements are in different sources");
-        assertEquals(java.util.Set.of("0", "1"), java.util.Set.of(primary, other),
+        assertEquals(java.util.Set.of(new SourceId("0"), new SourceId("1")), java.util.Set.of(primary, other),
                 why + ": " + primary + " and " + other);
     }
 

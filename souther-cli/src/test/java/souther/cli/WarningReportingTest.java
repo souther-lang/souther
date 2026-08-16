@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Located;
 import org.junit.jupiter.api.Test;
 

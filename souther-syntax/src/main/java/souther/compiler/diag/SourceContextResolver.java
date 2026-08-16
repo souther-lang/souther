@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -26,7 +28,7 @@ import java.util.function.Function;
 public interface SourceContextResolver {
 
     /** The text and display name for {@code sourceId}, or null when there is none to quote. */
-    SourceContext sourceOf(String sourceId);
+    SourceContext sourceOf(SourceId sourceId);
 
     /** Nothing to quote for anything — a caller that has no sources to hand. */
     static SourceContextResolver none() {
@@ -34,8 +36,8 @@ public interface SourceContextResolver {
     }
 
     /** A resolver that asks {@code loader} once per id and keeps the answer, absence included. */
-    static SourceContextResolver memoized(Function<String, SourceContext> loader) {
-        Map<String, SourceContext> known = new HashMap<>();
+    static SourceContextResolver memoized(Function<SourceId, SourceContext> loader) {
+        Map<SourceId, SourceContext> known = new HashMap<>();
         return id -> {
             if (known.containsKey(id)) {
                 return known.get(id);

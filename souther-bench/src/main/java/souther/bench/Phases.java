@@ -1,5 +1,7 @@
 package souther.bench;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -63,8 +65,8 @@ final class Phases {
         Map<String, Long> micros = new LinkedHashMap<>();
         long mark = System.nanoTime();
 
-        List<String> ids = compilation.sourceIds();
-        for (String id : ids) {
+        List<SourceId> ids = compilation.sourceIds();
+        for (SourceId id : ids) {
             compilation.db().ask(new Front.Parsed(id));
         }
         mark = charge(micros, "parse", mark);
@@ -97,7 +99,7 @@ final class Phases {
         mark = charge(micros, "const construction", mark);
 
         for (String module : modules) {
-            for (String id : compilation.exampleSourcesOf(module)) {
+            for (SourceId id : compilation.exampleSourcesOf(module)) {
                 compilation.db().ask(Output.Examples.asked(compilation.db(), module, id));
             }
         }

@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -62,7 +64,7 @@ public record DiagnosticView(Spot anchor, List<Spot> others, List<Unquotable> un
      *
      * @throws IllegalArgumentException when no region of {@code d} is in {@code publishedSourceId}
      */
-    public static DiagnosticView of(Diagnostic d, String primarySourceId, String publishedSourceId) {
+    public static DiagnosticView of(Diagnostic d, SourceId primarySourceId, SourceId publishedSourceId) {
         List<Spot> spots = new ArrayList<>();
         List<Unquotable> unquotable = new ArrayList<>();
         spots.add(Spot.primary(d, primarySourceId));

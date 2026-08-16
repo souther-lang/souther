@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Nothing in the diagnostics layer takes a source identity beside something that already answers
@@ -30,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  *
  * <p>Two questions rather than one, because a source is a {@code String} and so is a message, and
  * nothing in a signature tells them apart — the build keeps no parameter names, and there is no type
- * that means "a source" (which is {@link SourceRef}'s defect and #762's subject). So each half is
+ * that means "a source". So each half is
  * asked where the answer follows from what the thing is: a value that <em>is</em> a place must not
  * take a source at all beside what it holds, and a builder of places must not take one beside a
  * region.
@@ -54,16 +53,6 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
      *  answers to one question. */
     private static final Set<Class<?>> ANSWERS_FOR_A_SOURCE =
             Set.of(Region.class, SourcePos.class, DiagnosticPlace.InSource.class);
-
-    /**
-     * The one exception, and it is a defect rather than a shape this rule does not cover.
-     *
-     * <p>{@code SourceRef(String sourceId, SourcePos pos)} puts an identity beside a coordinate that
-     * carries one. Measured across this suite: 14002 of 14017 constructions redundant, and the 15
-     * that disagree mix a compilation identity with a caller-supplied name. Filed as #762 with the
-     * evidence, and left out of #760 because it reaches into the example and partition layers.
-     */
-    private static final Set<Class<?>> KNOWN_AND_FILED = Set.of(SourceRef.class);
 
     @Test
     void noValueThatIsAPlaceTakesASourceBesideWhatItHolds() {
@@ -93,15 +82,6 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
         assertEquals(List.of(), holding,
                 "a site handing over a source and a region separately is a marker in one file with"
                         + " its line read from another");
-    }
-
-    /** And the exception is one this names on purpose, so it goes when #762 does rather than
-     *  outliving it as a rule nobody remembers writing. */
-    @Test
-    void theOneExceptionIsStillTheOneThatWasFiled() {
-        assertEquals(Set.of(SourceRef.class), KNOWN_AND_FILED);
-        assertFalse(PLACES.contains(SourceRef.class),
-                "SourceRef is named as the exception rather than checked and skipped");
     }
 
     private static boolean takesBoth(Executable made) {

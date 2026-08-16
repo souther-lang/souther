@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.meta.ModulePath;
 
@@ -18,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class EverySourceKnowsWhichModuleItIsPartOfTest {
 
-    private static final String MODEL_ID = "m.sou";
-    private static final String ATTACHED_ID = "m.examples.sou";
+    private static final SourceId MODEL_ID = new SourceId("m.sou");
+    private static final SourceId ATTACHED_ID = new SourceId("m.examples.sou");
 
     private static final String MODEL = """
             module m
@@ -37,8 +39,8 @@ class EverySourceKnowsWhichModuleItIsPartOfTest {
 
     private static Compilation compiled() {
         Map<String, String> byId = new LinkedHashMap<>();
-        byId.put(MODEL_ID, MODEL);
-        byId.put(ATTACHED_ID, ATTACHED);
+        byId.put(MODEL_ID.value(), MODEL);
+        byId.put(ATTACHED_ID.value(), ATTACHED);
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 
@@ -54,7 +56,7 @@ class EverySourceKnowsWhichModuleItIsPartOfTest {
 
     @Test
     void aSourceThisCompilationDoesNotHaveIsPartOfNothing() {
-        assertNull(compiled().db().ask(new Front.ModuleOf("elsewhere.sou")).value());
+        assertNull(compiled().db().ask(new Front.ModuleOf(new SourceId("elsewhere.sou"))).value());
     }
 
     @Test

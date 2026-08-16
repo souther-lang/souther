@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.Diagnostic;
@@ -64,7 +66,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
     private static List<Diagnostic> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get("a.sou");
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get(new SourceId("a.sou"));
     }
 
     private static Diagnostic cycleIn(List<Diagnostic> found) {

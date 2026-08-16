@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -120,19 +122,19 @@ class ACompileAnswersWithEveryErrorItFoundTest {
             """;
 
     private static Db.Found errorAt(int line, int column, String says) {
-        return errorIn("a.sou", line, column, says);
+        return errorIn(new SourceId("a.sou"), line, column, says);
     }
 
-    private static Db.Found errorIn(String sourceId, int line, int column, String says) {
+    private static Db.Found errorIn(SourceId sourceId, int line, int column, String says) {
         return new Db.Found("m.c", sourceId,
                 Report.of(Diagnostic.literal(new SourcePos(line, column, sourceId), says)));
     }
 
     /** A warning, which is not what a compile fails with however many of them there are. */
     private static Db.Found warningAt(int line, String says) {
-        return new Db.Found("m.c", "a.sou", Report.of(Diagnostic
+        return new Db.Found("m.c", new SourceId("a.sou"), Report.of(Diagnostic
                 .say(new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(says))
-                .at(new SourcePos(line, 1, "a.sou")).build()));
+                .at(new SourcePos(line, 1, new SourceId("a.sou"))).build()));
     }
 
     private static Compilation ofOneSource() {

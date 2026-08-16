@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.Deadline;
 import org.junit.jupiter.api.Test;
 
@@ -724,7 +726,7 @@ class CompilePartialAdequacyTest {
     @Test
     void theUnfinishedRowIsStillReported() {
         Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
-        String sourceId = compilation.exampleSourcesOf("example.loop").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.loop").getFirst();
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
                 .ask(souther.compiler.query.Output.Examples.asked(

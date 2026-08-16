@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.Objects;
 
 /**
@@ -22,10 +24,10 @@ import java.util.Objects;
  */
 public final class TextRead {
 
-    private final String sourceId;
+    private final SourceId sourceId;
     private final WrittenAt writtenAt;
 
-    private TextRead(String sourceId, WrittenAt writtenAt) {
+    private TextRead(SourceId sourceId, WrittenAt writtenAt) {
         this.sourceId = sourceId;
         this.writtenAt = Objects.requireNonNull(writtenAt,
                 "a parse says whether what it reads is where the code is");
@@ -33,7 +35,7 @@ public final class TextRead {
 
     /** A file this compile holds, under the identity it holds it by. Its positions are where the
      *  code is, and they say which file they are in. */
-    public static TextRead aFileOfThisCompile(String sourceId) {
+    public static TextRead aFileOfThisCompile(SourceId sourceId) {
         return new TextRead(Objects.requireNonNull(sourceId, "a file of this compile is named"),
                 WrittenAt.HERE);
     }

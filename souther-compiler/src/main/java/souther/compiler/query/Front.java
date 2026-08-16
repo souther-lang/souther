@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
@@ -19,6 +21,7 @@ import souther.compiler.meta.PublishedModule;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
@@ -27,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -47,12 +51,12 @@ public final class Front {
 
     /** Every source id this compilation was given, in the order they were given. The order is the
      * index a diagnostic names when it says which file it came from. */
-    public record Ids() implements Input<List<String>> {}
+    public record Ids() implements Input<List<SourceId>> {}
 
     /** The text of one source. */
-    public record Text(String id) implements Input<String> {
+    public record Text(SourceId id) implements Input<String> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return id;
         }
     }
@@ -127,9 +131,9 @@ public final class Front {
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
      * what comes back names this source, so a writing that later joins another file's module still
      * says where it was written. */
-    public record Parsed(String id) implements Key<CstFrontend.Parsed> {
+    public record Parsed(SourceId id) implements Key<CstFrontend.Parsed> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return id;
         }
 
@@ -163,20 +167,20 @@ public final class Front {
          * @param exampleFilesOf the {@code examples for} sources contributing to each module
          * @param exampleFileTargets the module each {@code examples for} source names, by source id
          */
-        public record Of(Map<String, String> idOfModule,
-                         Map<String, List<String>> exampleFilesOf,
-                         Map<String, String> exampleFileTargets) {}
+        public record Of(Map<String, SourceId> idOfModule,
+                         Map<String, List<SourceId>> exampleFilesOf,
+                         Map<SourceId, String> exampleFileTargets) {}
 
         @Override
         public Answer<Of> compute(Db db) {
-            List<String> ids = db.ask(new Ids()).value();
+            List<SourceId> ids = db.ask(new Ids()).value();
             if (ids == null) {
                 return Answer.absent();
             }
-            Map<String, String> idOfModule = new LinkedHashMap<>();
-            Map<String, List<String>> exampleFilesOf = new LinkedHashMap<>();
-            Map<String, String> exampleFileTargets = new LinkedHashMap<>();
-            for (String id : ids) {
+            Map<String, SourceId> idOfModule = new LinkedHashMap<>();
+            Map<String, List<SourceId>> exampleFilesOf = new LinkedHashMap<>();
+            Map<SourceId, String> exampleFileTargets = new LinkedHashMap<>();
+            for (SourceId id : ids) {
                 Answer<CstFrontend.Parsed> parsed = db.ask(new Parsed(id));
                 if (!parsed.present()) {
                     continue;   // reported where it was parsed
@@ -221,7 +225,7 @@ public final class Front {
             if (layout == null) {
                 return Answer.absent();
             }
-            String id = layout.idOfModule().get(name);
+            SourceId id = layout.idOfModule().get(name);
             if (id == null) {
                 return Answer.absent();   // not declared by any source; the path may still have it
             }
@@ -265,7 +269,7 @@ public final class Front {
          * an attached file is not a module and is not imported, and the values it declares are in no
          * {@code exposing}.
          */
-        private Ast.Module withAttachedRows(Db db, Ast.Module m, List<String> files) {
+        private Ast.Module withAttachedRows(Db db, Ast.Module m, List<SourceId> files) {
             if (files.isEmpty()) {
                 return m;
             }
@@ -276,7 +280,7 @@ public final class Front {
             for (Ast.FnDef fn : m.fns()) {
                 taken.add(fn.name());
             }
-            for (String id : files) {
+            for (SourceId id : files) {
                 Answer<CstFrontend.Parsed> file = db.ask(new Parsed(id));
                 if (!file.present()) {
                     continue;
@@ -695,9 +699,9 @@ public final class Front {
      * the same module is the one reported: the first has a claim on the name, and the message
      * belongs on the file the author would have to change.
      */
-    public record Declares(String id) implements Key<String> {
+    public record Declares(SourceId id) implements Key<String> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return id;
         }
 
@@ -719,68 +723,48 @@ public final class Front {
     }
 
     /**
-     * Which source each of a module's example rows was written in, in the order the rows appear.
-     * A row that came from an {@code examples for} file is reported on that file, not on the module
-     * it contributes to.
-     */
-    public record ExampleOrigins(String name) implements Key<List<String>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<List<String>> compute(Db db) {
-            return origins(db, name, m -> m.examples());
-        }
-    }
-
-    /**
-     * Which source wrote each of the things {@code written} takes off a module, in the order
-     * {@link Prepared} gathers them: the module's own first, then each attached file's, in the order
-     * the layout holds them. Read together with what it gathered, by index.
-     */
-    private static Answer<List<String>> origins(Db db, String name,
-                                                Function<Ast.Module, List<?>> written) {
-        Layout.Of layout = db.ask(new Layout()).value();
-        if (layout == null) {
-            return Answer.of(List.of());
-        }
-        List<String> origins = new ArrayList<>();
-        String own = layout.idOfModule().get(name);
-        List<String> sources = new ArrayList<>();
-        if (own != null) {
-            sources.add(own);
-        }
-        sources.addAll(layout.exampleFilesOf().getOrDefault(name, List.of()));
-        for (String id : sources) {
-            CstFrontend.Parsed parsed = db.ask(new Parsed(id)).value();
-            if (parsed == null) {
-                continue;
-            }
-            origins.addAll(java.util.Collections.nCopies(written.apply(parsed.module()).size(), id));
-        }
-        return Answer.of(List.copyOf(origins));
-    }
-
-    /**
-     * Which source each of a module's fakes was written in, in the order they appear — the same
-     * order {@link Prepared} gathers them in, so the two are read together by index.
+     * The sources that wrote any of a module's {@code example} blocks or {@code fake} tables, in the
+     * order the layout holds them: the module's own first, then each attached {@code examples for}
+     * file.
      *
-     * <p>A fake is written in the module or in any attached file, as a row is, and once they are
-     * gathered under the module's name a position alone no longer says which file it came from. What
-     * needs to know is what reads a fake against a row: the two may be in different sources, and each
-     * is reported where it is written.
+     * <p>Which sources, and not which block came from where. A block carries a position and a
+     * position says which source it is in, so a list running alongside the blocks is that answer
+     * written a second time, held in step by nothing but two walks agreeing on an order — and a
+     * reader of the pair had to say what a length that did not match meant. What is asked of this is
+     * which sources have something to report on, which is a question about the set.
+     *
+     * <p>A source that wrote neither is not one of them. It has nothing said about it, so a run over
+     * it would report on a file with nothing to report.
      */
-    public record FakeOrigins(String name) implements Key<List<String>> {
+    public record ExampleSources(String name) implements Key<SequencedSet<SourceId>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<List<String>> compute(Db db) {
-            return origins(db, name, m -> m.fakes());
+        public Answer<SequencedSet<SourceId>> compute(Db db) {
+            Layout.Of layout = db.ask(new Layout()).value();
+            if (layout == null) {
+                return Answer.of(Collections.unmodifiableSequencedSet(new LinkedHashSet<>()));
+            }
+            SequencedSet<SourceId> wrote = new LinkedHashSet<>();
+            SourceId own = layout.idOfModule().get(name);
+            List<SourceId> sources = new ArrayList<>();
+            if (own != null) {
+                sources.add(own);
+            }
+            sources.addAll(layout.exampleFilesOf().getOrDefault(name, List.of()));
+            for (SourceId id : sources) {
+                CstFrontend.Parsed parsed = db.ask(new Parsed(id)).value();
+                if (parsed == null) {
+                    continue;
+                }
+                if (!parsed.module().examples().isEmpty() || !parsed.module().fakes().isEmpty()) {
+                    wrote.add(id);
+                }
+            }
+            return Answer.of(Collections.unmodifiableSequencedSet(wrote));
         }
     }
 
@@ -788,9 +772,9 @@ public final class Front {
      * Whether an {@code examples for} file has a module to attach to. The rows contribute to a
      * module this compilation does not have, so there is nothing to run them against.
      */
-    public record AttachedTo(String id) implements Key<String> {
+    public record AttachedTo(SourceId id) implements Key<String> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return id;
         }
 
@@ -827,9 +811,9 @@ public final class Front {
      * <p>No reports of its own: what is wrong with the source is already said by {@link Declares}
      * and {@link AttachedTo}, and saying it a second time here would put two markers on one line.
      */
-    public record ModuleOf(String id) implements Key<String> {
+    public record ModuleOf(SourceId id) implements Key<String> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return id;
         }
 
@@ -845,7 +829,7 @@ public final class Front {
                         ? Answer.of(attached)
                         : Answer.absent();   // names a module this compilation does not have
             }
-            for (Map.Entry<String, String> declared : layout.idOfModule().entrySet()) {
+            for (Map.Entry<String, SourceId> declared : layout.idOfModule().entrySet()) {
                 if (declared.getValue().equals(id)) {
                     return Answer.of(declared.getKey());
                 }
@@ -876,13 +860,13 @@ public final class Front {
      * file, and the module's key could only be quoted against the module's own (the reason
      * {@link Output.Examples} reports a duplicate value name the same way).
      */
-    public record RowNames(String id) implements Key<Boolean> {
+    public record RowNames(SourceId id) implements Key<Boolean> {
 
         /** One name, as one behavior's rows carry it. */
         private record Carried(String target, String name) {}
 
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return id;
         }
 
@@ -895,7 +879,7 @@ public final class Front {
                 return Answer.of(Boolean.TRUE);   // what is wrong with the source is said where it is read
             }
             Map<Carried, Integer> carried = new LinkedHashMap<>();
-            for (String source : sourcesOf(layout, module)) {
+            for (SourceId source : sourcesOf(layout, module)) {
                 CstFrontend.Parsed parsed = db.ask(new Parsed(source)).value();
                 if (parsed != null) {
                     forEachNamedRow(parsed.module(),
@@ -914,9 +898,9 @@ public final class Front {
         }
 
         /** The sources that write this module's rows: its own, and every file attached to it. */
-        private static List<String> sourcesOf(Layout.Of layout, String module) {
-            List<String> sources = new ArrayList<>();
-            String own = layout.idOfModule().get(module);
+        private static List<SourceId> sourcesOf(Layout.Of layout, String module) {
+            List<SourceId> sources = new ArrayList<>();
+            SourceId own = layout.idOfModule().get(module);
             if (own != null) {
                 sources.add(own);
             }

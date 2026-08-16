@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -59,7 +61,7 @@ class ARecursionIsHeldToItsDepthAndNotToTheStackTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
         compilation.answerEverything();
-        String sourceId = compilation.exampleSourcesOf("example.deep").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.deep").getFirst();
         List<RowOutcome> rows =
                 compilation.db().ask(new Output.Examples("example.deep", sourceId, Output.CoverageMode.NONE)).value().rows();
         assertEquals(1, rows.size(), rows.toString());

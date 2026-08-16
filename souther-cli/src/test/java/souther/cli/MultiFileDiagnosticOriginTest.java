@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -46,7 +48,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(A, B)));
 
-        assertEquals("1", e.sourceId(), "the error is in the second source");
+        assertEquals(new SourceId("1"), e.sourceId(), "the error is in the second source");
     }
 
     @Test
@@ -60,7 +62,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(broken, B)));
 
-        assertEquals("0", e.sourceId());
+        assertEquals(new SourceId("0"), e.sourceId());
     }
 
     @Test
@@ -94,7 +96,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(target, examples)));
 
-        assertEquals("0", e.sourceId(), "the type error is in the module's own body");
+        assertEquals(new SourceId("0"), e.sourceId(), "the type error is in the module's own body");
     }
 
     @Test
@@ -120,7 +122,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(target, examples)));
 
-        assertEquals("0", e.sourceId(),
+        assertEquals(new SourceId("0"), e.sourceId(),
                 "the rejected construction is written in the module, not in the example file");
     }
 
@@ -142,7 +144,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(target, examples)));
 
-        assertEquals("1", e.sourceId(),
+        assertEquals(new SourceId("1"), e.sourceId(),
                 "the row is written in the `examples for` file, so that is the file quoted");
     }
 

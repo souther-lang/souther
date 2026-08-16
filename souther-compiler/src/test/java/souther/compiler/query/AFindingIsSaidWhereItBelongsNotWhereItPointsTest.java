@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
@@ -49,7 +51,7 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     }
 
     private static SourcePos in(String sourceId) {
-        return new SourcePos(2, 1, sourceId);
+        return new SourcePos(2, 1, new SourceId(sourceId));
     }
 
     /** A report found about {@code module}, its caret in {@code caretIn}, pointing at {@code
@@ -107,9 +109,9 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     void aRuleTheFindingIsJudgedAgainstIsOnlyAnExplanation() {
         Compilation c = twoModules();
 
-        List<String> saidAt = c.publishSourceIdsOf(judgedAgainstARuleIn("b", "a.sou", "b.sou"));
+        List<SourceId> saidAt = c.publishSourceIdsOf(judgedAgainstARuleIn("b", "a.sou", "b.sou"));
 
-        assertEquals(List.of("a.sou"), saidAt,
+        assertEquals(List.of(new SourceId("a.sou")), saidAt,
                 "the value is what is judged; the clause is what it was judged by");
     }
 
@@ -118,9 +120,9 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     void aDefinitionPointedAtToExplainTheFindingIsOnlyAnExplanation() {
         Compilation c = twoModules();
 
-        List<String> saidAt = c.publishSourceIdsOf(pointingAtADefinition("b", "a.sou", "b.sou"));
+        List<SourceId> saidAt = c.publishSourceIdsOf(pointingAtADefinition("b", "a.sou", "b.sou"));
 
-        assertEquals(List.of("a.sou"), saidAt,
+        assertEquals(List.of(new SourceId("a.sou")), saidAt,
                 "the caret left module b, which says nothing about where the problem is written");
     }
 
@@ -132,9 +134,9 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     void bothEndsOfAForbiddenRelationBelongToTheFinding() {
         Compilation c = twoModules();
 
-        List<String> saidAt = c.publishSourceIdsOf(aForbiddenRelationBetween("b", "a.sou", "b.sou"));
+        List<SourceId> saidAt = c.publishSourceIdsOf(aForbiddenRelationBetween("b", "a.sou", "b.sou"));
 
-        assertEquals(List.of("a.sou", "b.sou"), saidAt);
+        assertEquals(List.of(new SourceId("a.sou"), new SourceId("b.sou")), saidAt);
     }
 
     /** Two statements that contradict: which of them the model is to be held to is not readable
@@ -143,9 +145,9 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     void twoConflictingStatementsBothBelongToTheFinding() {
         Compilation c = twoModules();
 
-        List<String> saidAt = c.publishSourceIdsOf(twoStatementsDisagreeingIn("b", "a.sou", "b.sou"));
+        List<SourceId> saidAt = c.publishSourceIdsOf(twoStatementsDisagreeingIn("b", "a.sou", "b.sou"));
 
-        assertEquals(List.of("a.sou", "b.sou"), saidAt);
+        assertEquals(List.of(new SourceId("a.sou"), new SourceId("b.sou")), saidAt);
     }
 
     // --- and nothing about which module was being walked -----------------------------------------
@@ -159,8 +161,8 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     void theSameTwoRegionsAreSaidInTheSameFilesWhicheverModuleIsBeingChecked() {
         Compilation c = twoModules();
 
-        List<String> caretAway = c.publishSourceIdsOf(aForbiddenRelationBetween("b", "a.sou", "b.sou"));
-        List<String> caretHere = c.publishSourceIdsOf(aForbiddenRelationBetween("a", "a.sou", "b.sou"));
+        List<SourceId> caretAway = c.publishSourceIdsOf(aForbiddenRelationBetween("b", "a.sou", "b.sou"));
+        List<SourceId> caretHere = c.publishSourceIdsOf(aForbiddenRelationBetween("a", "a.sou", "b.sou"));
 
         assertEquals(caretAway, caretHere,
                 "which module was being checked is not part of where a problem is written");
@@ -172,8 +174,8 @@ class AFindingIsSaidWhereItBelongsNotWhereItPointsTest {
     void twoRegionsInOneFileStillMakeOnePublication() {
         Compilation c = twoModules();
 
-        List<String> saidAt = c.publishSourceIdsOf(aForbiddenRelationBetween("a", "a.sou", "a.sou"));
+        List<SourceId> saidAt = c.publishSourceIdsOf(aForbiddenRelationBetween("a", "a.sou", "a.sou"));
 
-        assertEquals(List.of("a.sou"), saidAt);
+        assertEquals(List.of(new SourceId("a.sou")), saidAt);
     }
 }

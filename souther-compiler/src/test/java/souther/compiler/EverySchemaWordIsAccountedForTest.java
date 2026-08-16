@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.CoverageSites;
@@ -107,7 +109,7 @@ class EverySchemaWordIsAccountedForTest {
      * agreeing with the copy after the writer had stopped saying it.
      */
     private static Set<String> writtenAtWords() {
-        SourcePos here = new SourcePos(1, 1, "s");
+        SourcePos here = new SourcePos(1, 1, new SourceId("s"));
         return java.util.stream.Stream
                 .of(here, here.standingInFor(WrittenAt.outOfSight(new SourceProvenance.TheStandardLibrary("List.filter"))))
                 .map(pos -> Citation.of(pos).writtenAtFields().get("kind"))

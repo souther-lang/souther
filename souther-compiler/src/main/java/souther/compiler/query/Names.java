@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -767,7 +769,7 @@ public final class Names {
          */
         private static List<Ast.Import> writtenImports(Db db, String module) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            String id = layout == null ? null : layout.idOfModule().get(module);
+            SourceId id = layout == null ? null : layout.idOfModule().get(module);
             if (id == null) {
                 return List.of();
             }
@@ -862,7 +864,7 @@ public final class Names {
      */
     public record DenotedAt(SourcePos at) implements Key<Resolve.TypeUse> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return at == null ? null : at.sourceId();
         }
 
@@ -900,7 +902,7 @@ public final class Names {
      */
     public record TypeAt(SourcePos at) implements Key<TypeSymbol> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return at == null ? null : at.sourceId();
         }
 
@@ -957,7 +959,7 @@ public final class Names {
      */
     public record ValueDenotedAt(SourcePos at) implements Key<Resolve.ValueUse> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return at == null ? null : at.sourceId();
         }
 
@@ -1020,7 +1022,7 @@ public final class Names {
      */
     public record ValueAt(SourcePos at) implements Key<ValueName> {
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return at == null ? null : at.sourceId();
         }
 

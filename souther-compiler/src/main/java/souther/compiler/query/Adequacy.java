@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -919,20 +921,20 @@ public final class Adequacy {
      * is settled.
      */
     static Map<String, Observed> rowsOf(Db db, String module) {
-        List<String> origins = db.ask(new Front.ExampleOrigins(module)).value();
+        java.util.SequencedSet<SourceId> origins = db.ask(new Front.ExampleSources(module)).value();
         Map<String, List<RowOutcome>> rows = new LinkedHashMap<>();
         Map<String, List<Incompleteness>> stopped = new LinkedHashMap<>();
         List<Incompleteness> everywhere = new ArrayList<>();
         if (origins == null) {
             return Map.of();
         }
-        for (String sourceId : new LinkedHashSet<>(origins)) {
+        for (SourceId sourceId : origins) {
             Output.Examples.Of observed = db.ask(Output.Examples.asked(db, module, sourceId)).value();
             if (observed == null) {
                 // The source was not evaluated at all. Which behaviors it wrote rows for is exactly
                 // what cannot be read, so it counts against every one of them.
-                everywhere.add(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                        Incompleteness.Scope.SOURCE, sourceId));
+                everywhere.add(Incompleteness.ofSource(
+                        Incompleteness.Code.OBSERVATION_ABSENT, sourceId));
                 continue;
             }
             for (RowOutcome row : observed.rows()) {
@@ -1743,9 +1745,9 @@ public final class Adequacy {
                     rule(said).citation().ifPresent(cited -> {
                         souther.compiler.diag.Region where = switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
-                                    souther.compiler.diag.Region.point(w.at().pos());
+                                    souther.compiler.diag.Region.point(w.at());
                             case souther.compiler.diag.Citation.OutOfSight o ->
-                                    souther.compiler.diag.Region.point(o.reachedFrom().pos());
+                                    souther.compiler.diag.Region.point(o.reachedFrom());
                         };
                         built.secondary(where, new ExampleMessage.TheGuardThatDrawsTheLine());
                     });
@@ -1767,8 +1769,8 @@ public final class Adequacy {
          */
         private static SourcePos sentTo(Citation cited) {
             return switch (cited) {
-                case Citation.Written written -> written.at().pos();
-                case Citation.OutOfSight out -> out.reachedFrom().pos();
+                case Citation.Written written -> written.at();
+                case Citation.OutOfSight out -> out.reachedFrom();
             };
         }
 

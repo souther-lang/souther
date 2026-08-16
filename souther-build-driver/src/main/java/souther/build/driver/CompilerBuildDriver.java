@@ -1,5 +1,7 @@
 package souther.build.driver;
 
+import souther.compiler.source.SourceId;
+
 import souther.build.BuildDiagnostic;
 import souther.build.BuildDiagnostic.Severity;
 import souther.build.BuildRequest;
@@ -102,7 +104,7 @@ public final class CompilerBuildDriver implements SoutherBuildDriver {
 
     /** Which of the sources handed over an id names, or -1 when it names none of them. A compile of
      *  one source names none, and the one file it was given is the answer however it is tagged. */
-    private static int indexOf(List<Source> sources, String sourceId) {
+    private static int indexOf(List<Source> sources, SourceId sourceId) {
         if (sources.size() == 1) {
             return 0;
         }

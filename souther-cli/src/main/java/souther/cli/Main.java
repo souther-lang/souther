@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.Compiler;
 import souther.compiler.Reserved;
@@ -663,7 +665,7 @@ public final class Main {
      * <p>A compile of one source names none, and the one file it was given is the answer however the
      * diagnostic is tagged — which is why one item is not read as "the source called 0, or nothing".
      */
-    private static Path pathOf(List<Path> sources, String sourceId) {
+    private static Path pathOf(List<Path> sources, SourceId sourceId) {
         int at = indexOf(sources, sourceId);
         return at < 0 ? null : sources.get(at);
     }
@@ -701,7 +703,7 @@ public final class Main {
                     return names.get(i);
                 }
             }
-            return id;
+            return id.value();
         };
     }
 
@@ -717,7 +719,7 @@ public final class Main {
      * nothing, so the single file is the answer whatever the id reads. Not for a reason in a report,
      * which always names one — {@link #namesOf} matches on the id alone.
      */
-    private static int indexOf(List<Path> sources, String sourceId) {
+    private static int indexOf(List<Path> sources, SourceId sourceId) {
         if (sources.size() == 1) {
             return 0;
         }

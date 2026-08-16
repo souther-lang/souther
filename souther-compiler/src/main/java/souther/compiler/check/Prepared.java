@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 
@@ -206,26 +208,22 @@ public final class Prepared {
     }
 
     /**
-     * The same over the rows {@code sourceId} wrote, {@code origins} saying which source each of
-     * this module's blocks came from.
+     * The same over the rows {@code sourceId} wrote, which each block says of itself.
      *
      * <p>The selection is made here rather than handed in. A module's rows come from its own file
      * and from every {@code examples for} file naming it, and a run reports on one of those files at
      * a time — so what varies is which of these rows, and an operation that took a list of them
      * would be a way to put any rows at all into the state that says these are the module's.
      *
-     * <p>Where {@code origins} does not line up with the blocks, all of them are the answer: the
-     * origins are a parallel record, and one that does not match is one that says nothing about
-     * which row is whose.
+     * <p>Read off each block's own place. A parallel record of where the blocks came from would be
+     * the same answer kept somewhere else, and a caller holding one that had fallen out of step had
+     * no way to know.
      */
-    public ExampleExecution forExamplesWrittenIn(List<String> origins, String sourceId) {
-        if (origins == null || origins.size() != examples.size()) {
-            return forExamples();
-        }
+    public ExampleExecution forExamplesWrittenIn(SourceId sourceId) {
         List<Rows> mine = new ArrayList<>();
-        for (int i = 0; i < origins.size(); i++) {
-            if (origins.get(i).equals(sourceId)) {
-                mine.add(examples.get(i));
+        for (Rows block : examples) {
+            if (sourceId.equals(block.read().pos().sourceId())) {
+                mine.add(block);
             }
         }
         return new ExampleExecution(this, mine);

@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.List;
 
 /**
@@ -21,24 +23,24 @@ public class CompileException extends RuntimeException {
 
     /** A position is a line and a column, so a compile that was handed several sources also has to
      *  say which one — otherwise there is nothing to quote the line from. */
-    private static final String NO_SOURCE = Located.NO_SOURCE;
+    private static final SourceId NO_SOURCE = Located.NO_SOURCE;
 
     private final transient List<Diagnostic> diagnostics;
     /** One entry per diagnostic: which source it came from, or {@link #NO_SOURCE}. A compile that
      *  reports several modules at once has a diagnostic per module, and each quotes its own file.
      *  Parallel to {@link #diagnostics}, so the order here is that list's order and nothing else. */
-    private final transient List<String> sources;
+    private final transient List<SourceId> sources;
 
     /** Throws with a fully structured diagnostic (a migrated site). */
     public CompileException(Diagnostic diagnostic, String legacyMessage) {
         this(List.of(diagnostic), legacyMessage, NO_SOURCE);
     }
 
-    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, String sourceId) {
+    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, SourceId sourceId) {
         this(diagnostics, legacyMessage, java.util.Collections.nCopies(diagnostics.size(), sourceId));
     }
 
-    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, List<String> sources) {
+    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, List<SourceId> sources) {
         super(legacyMessage);
         this.diagnostics = diagnostics;
         // Not List.copyOf: an entry is NO_SOURCE for a diagnostic that names none, and that is null.
@@ -79,7 +81,7 @@ public class CompileException extends RuntimeException {
      * module's. {@code sources} has one entry per diagnostic, {@link Located#NO_SOURCE} for one that
      * names none.
      */
-    public static CompileException ofAllInSources(List<Diagnostic> diagnostics, List<String> sources,
+    public static CompileException ofAllInSources(List<Diagnostic> diagnostics, List<SourceId> sources,
                                                   String legacyBody) {
         if (diagnostics == null || diagnostics.isEmpty()) {
             throw new IllegalArgumentException("a compile error carries at least one diagnostic");
@@ -123,13 +125,13 @@ public class CompileException extends RuntimeException {
      * in from an {@code examples for} file. A caller reads null as "quote no line", never as "the
      * first source".
      */
-    public String sourceId() {
+    public SourceId sourceId() {
         return sources.isEmpty() ? NO_SOURCE : sources.get(0);
     }
 
     /** Which source the {@code i}-th of {@link #diagnostics()} came from, or null when it names
      *  none. A renderer walking the list quotes each diagnostic's own file. */
-    public String sourceIdOf(int i) {
+    public SourceId sourceIdOf(int i) {
         return sources == null || i >= sources.size() ? NO_SOURCE : sources.get(i);
     }
 
@@ -156,7 +158,7 @@ public class CompileException extends RuntimeException {
      * @param moreSources one entry per added diagnostic, {@link Located#NO_SOURCE} for one that
      *                    names no source
      */
-    public CompileException alsoReporting(List<Diagnostic> more, List<String> moreSources) {
+    public CompileException alsoReporting(List<Diagnostic> more, List<SourceId> moreSources) {
         if (more.isEmpty()) {
             return this;
         }
@@ -165,7 +167,7 @@ public class CompileException extends RuntimeException {
         }
         List<Diagnostic> all = new java.util.ArrayList<>(diagnostics);
         all.addAll(more);
-        List<String> allSources = new java.util.ArrayList<>(sources);
+        List<SourceId> allSources = new java.util.ArrayList<>(sources);
         allSources.addAll(moreSources);
         CompileException joined = new CompileException(all, getMessage(), allSources);
         joined.setStackTrace(getStackTrace());
@@ -176,11 +178,11 @@ public class CompileException extends RuntimeException {
      * The same error, tagged with the source being compiled when it was thrown. The first tag wins:
      * an inner phase that already named its source keeps it, so a surrounding loop may tag freely.
      */
-    public CompileException inSource(String sourceId) {
+    public CompileException inSource(SourceId sourceId) {
         if (sourceId == null || sources.stream().allMatch(src -> src != NO_SOURCE)) {
             return this;   // already named, or nothing to name it with
         }
-        List<String> filled = sources.stream().map(src -> src == NO_SOURCE ? sourceId : src).toList();
+        List<SourceId> filled = sources.stream().map(src -> src == NO_SOURCE ? sourceId : src).toList();
         CompileException tagged = new CompileException(diagnostics, getMessage(), filled);
         tagged.setStackTrace(getStackTrace());
         return tagged;

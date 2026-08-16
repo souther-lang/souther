@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -82,8 +84,8 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
     private static final Clause.Id SECOND = new Clause.Id(BOUND, 1);
 
     private static DiagnosticPlace at(String sourceId, int line) {
-        return DiagnosticPlace.of(new Region(new SourcePos(line, 5, sourceId),
-                new SourcePos(line, 30, sourceId)));
+        return DiagnosticPlace.of(new Region(new SourcePos(line, 5, new SourceId(sourceId)),
+                new SourcePos(line, 30, new SourceId(sourceId))));
     }
 
     /** A clause of a module this compile holds no file for: written somewhere, quotable nowhere. */

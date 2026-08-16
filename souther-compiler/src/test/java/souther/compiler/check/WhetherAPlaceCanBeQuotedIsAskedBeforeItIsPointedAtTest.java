@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -29,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
 
-    private static Region in(String sourceId) {
+    private static Region in(SourceId sourceId) {
         return new Region(new SourcePos(3, 5, sourceId), new SourcePos(3, 20, sourceId));
     }
 
@@ -42,12 +44,12 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
 
     @Test
     void aRegionReadOffASourceIsSomewhereAReaderIsSent() {
-        DiagnosticPlace place = DiagnosticPlace.of(in("model.sou"));
+        DiagnosticPlace place = DiagnosticPlace.of(in(new SourceId("model.sou")));
 
         DiagnosticPlace.InSource sent = assertInstanceOf(DiagnosticPlace.InSource.class, place);
-        assertEquals("model.sou", sent.source(),
+        assertEquals(new SourceId("model.sou"), sent.source(),
                 "the region names the source, which is what makes it one to point at");
-        assertEquals(in("model.sou"), sent.region(),
+        assertEquals(in(new SourceId("model.sou")), sent.region(),
                 "the region is carried as it was, not measured again");
     }
 
@@ -77,8 +79,8 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
     @Test
     void aRegionRunningBetweenTwoSourcesIsNotAPlaceAtAll() {
         DiagnosticPlace.NotOnePlace refused = assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, "model.sou"),
-                        new SourcePos(3, 20, "other.sou"))));
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
+                        new SourcePos(3, 20, new SourceId("other.sou")))));
 
         assertTrue(refused.getMessage().contains("model.sou"), refused.getMessage());
         assertTrue(refused.getMessage().contains("other.sou"), refused.getMessage());
@@ -102,8 +104,8 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(fromA, fromB)));
         assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, "model.sou"),
-                        new SourcePos(3, 20, "model.sou").standingInFor(
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
+                        new SourcePos(3, 20, new SourceId("model.sou")).standingInFor(
                                 WrittenAt.outOfSight(
                                         new SourceProvenance.APublishedModule("lib.a"))))));
     }
@@ -113,11 +115,11 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
     @Test
     void aRegionWithOneEndInASourceIsRefusedToo() {
         assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, "model.sou"),
+                () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
                         new SourcePos(3, 20))));
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5),
-                        new SourcePos(3, 20, "model.sou"))));
+                        new SourcePos(3, 20, new SourceId("model.sou")))));
     }
 
     /**
@@ -142,8 +144,8 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
     @Test
     void aRegionThatIsNotOnePlaceIsNotSomethingTheCheckMayGiveUpOn() {
         DiagnosticPlace.NotOnePlace broken = assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(1, 1, "a.sou"),
-                        new SourcePos(1, 9, "b.sou"))));
+                () -> DiagnosticPlace.of(new Region(new SourcePos(1, 1, new SourceId("a.sou")),
+                        new SourcePos(1, 9, new SourceId("b.sou")))));
 
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> InvariantChecker.gaveUp("a test", broken));

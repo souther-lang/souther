@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
@@ -107,7 +109,7 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
                     | "一つ" : (都道府県 { 名前 = "北海道" }, 数) -> 送料 { 円 = 100 }
                 """);
 
-        assertEquals("1", e.sourceId(), "the field is given its value in the attached file");
+        assertEquals(new SourceId("1"), e.sourceId(), "the field is given its value in the attached file");
         assertEquals(3, e.diagnostic().pos().line());
     }
 
@@ -124,8 +126,8 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
                     | "壊れている" : (
                 """);
 
-        assertEquals("1", e.sourceId());
-        assertEquals("1", e.diagnostic().pos().sourceId(),
+        assertEquals(new SourceId("1"), e.sourceId());
+        assertEquals(new SourceId("1"), e.diagnostic().pos().sourceId(),
                 "the position itself says which file, which is what the id is read off");
     }
 
@@ -142,7 +144,7 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
                 """;
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(MODEL, attached)));
-        SourceContextResolver sources = id -> switch (id) {
+        SourceContextResolver sources = id -> switch (id.value()) {
             case "0" -> new SourceContext("shippingfee.sou", MODEL);
             case "1" -> new SourceContext("shippingfee.examples.sou", attached);
             default -> null;
@@ -169,7 +171,7 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
                             | "一つ" : (都道府県 { 名前 = "北海道" }, 数量 { 個数 = 1 }) -> 送料 { 円 = 100 }
                         """)));
 
-        assertEquals("0", e.sourceId(), "it is written in the model file, attached file or not");
+        assertEquals(new SourceId("0"), e.sourceId(), "it is written in the model file, attached file or not");
     }
 
     /** One problem is one marker however many questions found it — a helper is checked on its own
@@ -183,11 +185,11 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
                     | "北海道" : (北海道沖縄, 数量 { 個数 = 1 }) -> 送料 { 円 = 100 }
                 """);
 
-        Map<String, List<Located>> found = Compiler.diagnoseModules(byId);
+        Map<SourceId, List<Located>> found = Compiler.diagnoseModules(byId);
 
-        assertEquals(List.of(), found.get("shippingfee.sou"),
+        assertEquals(List.of(), found.get(new SourceId("shippingfee.sou")),
                 "the model file is clean: " + found);
-        assertEquals(1, found.get("shippingfee.examples.sou").size(),
+        assertEquals(1, found.get(new SourceId("shippingfee.examples.sou")).size(),
                 "one problem, one marker: " + found);
     }
 }

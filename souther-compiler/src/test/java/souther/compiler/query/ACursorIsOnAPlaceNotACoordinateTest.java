@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Resolve;
 import souther.compiler.diag.SourcePos;
@@ -30,8 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class ACursorIsOnAPlaceNotACoordinateTest {
 
-    private static final String MODEL_ID = "m.sou";
-    private static final String ATTACHED_ID = "m.examples.sou";
+    private static final SourceId MODEL_ID = new SourceId("m.sou");
+    private static final SourceId ATTACHED_ID = new SourceId("m.examples.sou");
 
     /** `もと` is read by the row on line 8, at column 14. */
     private static final String MODEL = """
@@ -60,15 +62,15 @@ class ACursorIsOnAPlaceNotACoordinateTest {
 
     private static Compilation compiled() {
         Map<String, String> byId = new LinkedHashMap<>();
-        byId.put(MODEL_ID, MODEL);
-        byId.put(ATTACHED_ID, ATTACHED);
+        byId.put(MODEL_ID.value(), MODEL);
+        byId.put(ATTACHED_ID.value(), ATTACHED);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         c.answerEverything();
         return c;
     }
 
     /** What the compiler says is under a cursor at line 8 column 14 of {@code inFile}. */
-    private static Resolve.ValueUse under(String inFile) {
+    private static Resolve.ValueUse under(SourceId inFile) {
         return compiled().db()
                 .ask(new Names.ValueDenotedAt(new SourcePos(8, 14, inFile))).value();
     }

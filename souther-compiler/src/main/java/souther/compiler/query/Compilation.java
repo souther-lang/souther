@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -33,12 +35,12 @@ public final class Compilation {
 
     private final Db db = new Db();
     /** Which source each id was, for a caller that identifies sources by index. */
-    private final Map<String, Integer> indexOfId = new LinkedHashMap<>();
+    private boolean saysWhichSource = true;
+    private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** Whether a diagnostic of this compilation says which source it is in. A compile of one source
      *  does not: the caller knows the file it handed over. */
-    private boolean saysWhichSource = true;
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
-    private final Set<String> held = new LinkedHashSet<>();
+    private final Set<SourceId> held = new LinkedHashSet<>();
     /** The loader over the classes as they were when it was made, and those classes — held so that
      *  {@link #loader()} can tell whether the one it has is still a loader over what there is. */
     private ClassLoader loader;
@@ -55,9 +57,9 @@ public final class Compilation {
      * An import naming no module among them is resolved against {@code path}. */
     public static Compilation ofSources(List<String> sources, ModulePath path) {
         Compilation c = new Compilation();
-        List<String> ids = new ArrayList<>();
+        List<SourceId> ids = new ArrayList<>();
         for (int i = 0; i < sources.size(); i++) {
-            String id = idOfSourceIndex(i);
+            SourceId id = idOfSourceIndex(i);
             ids.add(id);
             c.indexOfId.put(id, i);
             c.db.set(new Front.Text(id), sources.get(i));
@@ -79,8 +81,8 @@ public final class Compilation {
      * reader, so a renderer asks for it. A report printed this number where a file name belongs for
      * as long as that was left unsaid.
      */
-    public static String idOfSourceIndex(int i) {
-        return String.valueOf(i);
+    public static SourceId idOfSourceIndex(int i) {
+        return new SourceId(String.valueOf(i));
     }
 
     /** A compile of one source. A source with no {@code module} header takes
@@ -118,12 +120,12 @@ public final class Compilation {
                                           ModulePath path) {
         Compilation c = new Compilation();
         for (Map.Entry<String, String> e : byId.entrySet()) {
-            c.db.set(new Front.Text(e.getKey()), e.getValue());
+            c.db.set(new Front.Text(new SourceId(e.getKey())), e.getValue());
         }
-        c.db.set(new Front.Ids(), List.copyOf(byId.keySet()));
+        c.db.set(new Front.Ids(), byId.keySet().stream().map(SourceId::new).toList());
         c.db.set(new Front.Broken(), Set.copyOf(broken));
         c.db.set(new Front.Path(), path);
-        c.held.addAll(byId.keySet());
+        c.held.addAll(byId.keySet().stream().map(SourceId::new).toList());
         return c;
     }
 
@@ -138,27 +140,27 @@ public final class Compilation {
     public void update(Map<String, String> byId, Set<String> broken) {
         // A source that is gone is forgotten, along with the module it declared. Which module that
         // was has to be read before the layout is told the source is gone.
-        for (String gone : List.copyOf(held)) {
-            if (!byId.containsKey(gone)) {
+        for (SourceId gone : List.copyOf(held)) {
+            if (!byId.containsKey(gone.value())) {
                 db.forget(gone, moduleDeclaredBy(gone));
                 held.remove(gone);
             }
         }
         for (Map.Entry<String, String> e : byId.entrySet()) {
-            db.set(new Front.Text(e.getKey()), e.getValue());
+            db.set(new Front.Text(new SourceId(e.getKey())), e.getValue());
         }
-        db.set(new Front.Ids(), List.copyOf(byId.keySet()));
+        db.set(new Front.Ids(), byId.keySet().stream().map(SourceId::new).toList());
         db.set(new Front.Broken(), Set.copyOf(broken));
-        held.addAll(byId.keySet());
+        held.addAll(byId.keySet().stream().map(SourceId::new).toList());
     }
 
     /** The module {@code id} declares, as this compilation currently has it. */
-    private String moduleDeclaredBy(String id) {
+    private String moduleDeclaredBy(SourceId id) {
         Front.Layout.Of layout = db.ask(new Front.Layout()).value();
         if (layout == null) {
             return null;
         }
-        for (Map.Entry<String, String> e : layout.idOfModule().entrySet()) {
+        for (Map.Entry<String, SourceId> e : layout.idOfModule().entrySet()) {
             if (e.getValue().equals(id)) {
                 return e.getKey();
             }
@@ -254,8 +256,8 @@ public final class Compilation {
     }
 
     /** Every source id this compilation was given, in order. */
-    public List<String> sourceIds() {
-        List<String> ids = db.ask(new Front.Ids()).value();
+    public List<SourceId> sourceIds() {
+        List<SourceId> ids = db.ask(new Front.Ids()).value();
         return ids == null ? List.of() : ids;
     }
 
@@ -271,7 +273,7 @@ public final class Compilation {
         db.ask(new Output.All());
         for (String module : modules()) {
             db.ask(new Output.ConstConstructions(module));
-            for (String id : exampleSourcesOf(module)) {
+            for (SourceId id : exampleSourcesOf(module)) {
                 db.ask(new Front.RowNames(id));
                 db.ask(Output.Examples.asked(db, module, id));
             }
@@ -303,17 +305,10 @@ public final class Compilation {
      * said about it: a fake that answers otherwise than a row records is reported at both, and the
      * fake's side is this source's to say.
      */
-    public List<String> exampleSourcesOf(String module) {
-        Set<String> distinct = new LinkedHashSet<>();
-        List<String> rows = db.ask(new Front.ExampleOrigins(module)).value();
-        List<String> fakes = db.ask(new Front.FakeOrigins(module)).value();
-        if (rows != null) {
-            distinct.addAll(rows);
-        }
-        if (fakes != null) {
-            distinct.addAll(fakes);
-        }
-        return List.copyOf(distinct);
+    public java.util.SequencedSet<SourceId> exampleSourcesOf(String module) {
+        java.util.SequencedSet<SourceId> wrote = db.ask(new Front.ExampleSources(module)).value();
+        return wrote == null
+                ? java.util.Collections.unmodifiableSequencedSet(new LinkedHashSet<>()) : wrote;
     }
 
     /** What this compilation was asked to measure. Set before anything is asked; the answers are
@@ -396,7 +391,7 @@ public final class Compilation {
     }
 
     /** The id of the source that declares {@code module}, or null when nothing here does. */
-    public String sourceIdOf(String module) {
+    public SourceId sourceIdOf(String module) {
         Front.Layout.Of layout = db.ask(new Front.Layout()).value();
         return layout == null ? null : layout.idOfModule().get(module);
     }
@@ -408,7 +403,7 @@ public final class Compilation {
      * <p>The other direction of {@link #sourceIdOf}, and not its inverse: a module is declared in
      * one source, and several sources may be part of it.
      */
-    public String moduleOf(String sourceId) {
+    public String moduleOf(SourceId sourceId) {
         return db.ask(new Front.ModuleOf(sourceId)).value();
     }
 
@@ -425,7 +420,7 @@ public final class Compilation {
         for (Report report : layout.reports()) {
             found.add(new Db.Found(null, null, report));
         }
-        for (String id : sourceIds()) {
+        for (SourceId id : sourceIds()) {
             for (Report report : db.ask(new Front.Declares(id)).reports()) {
                 found.add(new Db.Found(null, id, report));
             }
@@ -461,22 +456,22 @@ public final class Compilation {
      * other half. A reader turns that pair into what to quote and what to link to
      * ({@link souther.compiler.diag.DiagnosticView}).
      */
-    public Map<String, List<Located>> diagnostics() {
+    public Map<SourceId, List<Located>> diagnostics() {
         answerEverything();
-        Map<String, List<Located>> byId = new LinkedHashMap<>();
-        for (String id : sourceIds()) {
+        Map<SourceId, List<Located>> byId = new LinkedHashMap<>();
+        for (SourceId id : sourceIds()) {
             byId.put(id, new ArrayList<>());
         }
         for (Db.Found found : reports()) {
-            String primary = locatedSourceIdOf(found);
-            for (String id : publishSourceIdsOf(found)) {
+            SourceId primary = locatedSourceIdOf(found);
+            for (SourceId id : publishSourceIdsOf(found)) {
                 List<Located> on = byId.get(id);
                 if (on != null) {
                     on.add(new Located(found.report().diagnostic(), primary));
                 }
             }
         }
-        Map<String, List<Located>> published = new LinkedHashMap<>();
+        Map<SourceId, List<Located>> published = new LinkedHashMap<>();
         byId.forEach((id, found) -> published.put(id, List.copyOf(found)));
         return published;
     }
@@ -515,7 +510,7 @@ public final class Compilation {
 
     /** One thing said once: what {@link Db#allReports()} tells apart before a report is read for
      *  where it may be said, asked again of what that reading left. */
-    private record Repeat(String module, String sourceId, Diagnostic.Identity problem) {}
+    private record Repeat(String module, SourceId sourceId, Diagnostic.Identity problem) {}
 
     /**
      * {@code found} where a reader can be sent to it — itself, for the reports whose coordinate was
@@ -544,10 +539,9 @@ public final class Compilation {
         if (onThePath == null || onThePath.reachedFrom().isEmpty()) {
             return found;
         }
-        return new Db.Found(found.module(), found.sourceId(), Report.saidAt(
+        return new Db.Found(found.module(), found.sourceId(), Report.of(
                 said.reachedFrom(onThePath.reachedFrom(), out.provenance(),
-                        new ModuleMessage.ItIsReachedFromHereToo()),
-                found.report().delivery()));
+                        new ModuleMessage.ItIsReachedFromHereToo())));
     }
 
     /** The one failure these sources have, or null when they have none. */
@@ -622,7 +616,7 @@ public final class Compilation {
                 .thenComparingInt(f -> columnOf(f.report().diagnostic())));
         Db.Found first = errors.get(0);
         List<Diagnostic> rest = new ArrayList<>();
-        List<String> restSources = new ArrayList<>();
+        List<SourceId> restSources = new ArrayList<>();
         for (Db.Found f : errors.subList(1, errors.size())) {
             rest.add(f.report().diagnostic());
             restSources.add(sourceIdOf(f));
@@ -671,8 +665,8 @@ public final class Compilation {
      * on that code, because that is what the report is about. Where it is said is
      * {@link #publishSourceIdsOf(Db.Found)}.
      */
-    private String locatedSourceIdOf(Db.Found found) {
-        String claimed = found.claimedSourceId();
+    private SourceId locatedSourceIdOf(Db.Found found) {
+        SourceId claimed = found.claimedSourceId();
         if (claimed != null && sourceIds().contains(claimed)) {
             return claimed;
         }
@@ -683,7 +677,7 @@ public final class Compilation {
      * Which source a report's primary region is in, as a caller holding its own list of files is
      * told — none, for a compile of one source, where that caller knows the file it handed over.
      */
-    public String sourceIdOf(Db.Found found) {
+    public SourceId sourceIdOf(Db.Found found) {
         return saysWhichSource ? locatedSourceIdOf(found) : null;
     }
 
@@ -708,9 +702,9 @@ public final class Compilation {
      * them was being checked — reading the traversal would put a marker in front of one author and
      * not the other for a difference neither of them wrote.
      */
-    public List<String> publishSourceIdsOf(Db.Found found) {
-        String primary = locatedSourceIdOf(found);
-        List<String> saidAt = new ArrayList<>();
+    public List<SourceId> publishSourceIdsOf(Db.Found found) {
+        SourceId primary = locatedSourceIdOf(found);
+        List<SourceId> saidAt = new ArrayList<>();
         if (primary != null) {
             saidAt.add(primary);
         }
@@ -737,7 +731,7 @@ public final class Compilation {
     /** Where a report sits in the order the sources were given, or -1 when it names none. Only for
      * ordering: which file a reader is sent to is {@link #sourceIdOf(Db.Found)}. */
     private int indexOf(Db.Found found) {
-        String id = locatedSourceIdOf(found);
+        SourceId id = locatedSourceIdOf(found);
         if (id == null) {
             return -1;
         }

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
@@ -57,13 +59,13 @@ class StaleReportTest {
     @Test
     void anExampleFailureGoesAwayWhenItsRowIsDeleted() {
         Compilation c = Compilation.ofDocuments(workspace(FAILING_ROWS), Set.of(), ModulePath.EMPTY);
-        Map<String, List<souther.compiler.diag.Diagnostic>> first = Located.diagnosticsOf(c.diagnostics());
-        assertEquals(1, first.get("cart-examples.sou").size(),
+        Map<SourceId, List<souther.compiler.diag.Diagnostic>> first = Located.diagnosticsOf(c.diagnostics());
+        assertEquals(1, first.get(new SourceId("cart-examples.sou")).size(),
                 "the failing row is reported on the file it is written in");
 
         c.update(workspace(NO_ROWS), Set.of());
 
-        assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get("cart-examples.sou"),
+        assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get(new SourceId("cart-examples.sou")),
                 "the row is gone, so its failure is gone");
     }
 

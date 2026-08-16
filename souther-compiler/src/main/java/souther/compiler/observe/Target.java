@@ -1,5 +1,7 @@
 package souther.compiler.observe;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.SourceNameResolver;
 
 /**
@@ -49,7 +51,7 @@ public sealed interface Target {
      * writes down keeps that account where it writes them, and nothing here knows one is being
      * written.
      */
-    java.util.Optional<String> sourceIdentity();
+    java.util.Optional<SourceId> sourceIdentity();
 
     /** Which kind of thing {@link #subject} identifies. */
     Incompleteness.Scope scope();
@@ -82,7 +84,7 @@ public sealed interface Target {
         }
 
         @Override
-        public java.util.Optional<String> sourceIdentity() {
+        public java.util.Optional<SourceId> sourceIdentity() {
             return java.util.Optional.empty();
         }
 
@@ -107,11 +109,11 @@ public sealed interface Target {
      * <p>What it holds is not part of it either: which behaviors wrote rows in it is the
      * compilation's answer rather than the id's.
      */
-    record OfSource(String sourceId) implements Target {
+    record OfSource(SourceId sourceId) implements Target {
 
         @Override
         public String subject() {
-            return sourceId;
+            return sourceId.value();
         }
 
         @Override
@@ -120,7 +122,7 @@ public sealed interface Target {
         }
 
         @Override
-        public java.util.Optional<String> sourceIdentity() {
+        public java.util.Optional<SourceId> sourceIdentity() {
             return java.util.Optional.of(sourceId);
         }
 
@@ -149,7 +151,7 @@ public sealed interface Target {
         }
 
         @Override
-        public java.util.Optional<String> sourceIdentity() {
+        public java.util.Optional<SourceId> sourceIdentity() {
             return java.util.Optional.empty();
         }
 
@@ -178,7 +180,7 @@ public sealed interface Target {
         }
 
         @Override
-        public java.util.Optional<String> sourceIdentity() {
+        public java.util.Optional<SourceId> sourceIdentity() {
             return java.util.Optional.empty();
         }
 
@@ -202,7 +204,7 @@ public sealed interface Target {
     static Target of(Incompleteness.Scope scope, String subject) {
         return switch (scope) {
             case BEHAVIOR -> new OfBehavior(subject);
-            case SOURCE -> new OfSource(subject);
+            case SOURCE -> new OfSource(new SourceId(subject));
             case MODULE -> new OfModule(subject);
             case POSITION -> throw new IllegalArgumentException(
                     "a position needs the behavior it is in: " + subject);

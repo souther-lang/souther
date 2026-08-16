@@ -1,5 +1,7 @@
 package souther.compiler.report;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.SourceNameResolver;
 
 import java.util.LinkedHashMap;
@@ -35,16 +37,16 @@ import java.util.Set;
 public final class DocumentSources {
 
     private final SourceNameResolver names;
-    private final Set<String> referenced = new LinkedHashSet<>();
+    private final Set<SourceId> referenced = new LinkedHashSet<>();
 
     public DocumentSources(SourceNameResolver names) {
         this.names = names;
     }
 
     /** The identity to write, recorded as one this document has to explain. */
-    public String written(String sourceId) {
+    public String written(SourceId sourceId) {
         referenced.add(sourceId);
-        return sourceId;
+        return sourceId.value();
     }
 
     /**
@@ -57,8 +59,8 @@ public final class DocumentSources {
      */
     public Map<String, String> table() {
         Map<String, String> table = new LinkedHashMap<>();
-        for (String sourceId : referenced) {
-            table.put(sourceId, names.nameOf(sourceId));
+        for (SourceId sourceId : referenced) {
+            table.put(sourceId.value(), names.nameOf(sourceId));
         }
         return table;
     }

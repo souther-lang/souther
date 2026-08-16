@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.LinkedHashMap;
 import java.util.SequencedMap;
 
@@ -39,7 +41,7 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
     /** The code is written at {@link #at()}, which is therefore both where to send a reader and
      *  where the code is. */
     sealed interface Written extends Citation permits WrittenCitation {
-        SourceRef at();
+        SourcePos at();
     }
 
     /**
@@ -53,17 +55,17 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
         SourceProvenance provenance();
 
         /** The call the body was spliced into. A place in a file the reader holds. */
-        SourceRef reachedFrom();
+        SourcePos reachedFrom();
     }
 
     /**
      * What a report may say about where {@code pos} names code written.
      *
-     * <p>Of the coordinate, and never of a {@link SourceRef} over one. A reference carries a source
-     * beside the one the coordinate has, the two can disagree, and a citation that took the pair
-     * would hold both — which is how a report came to write one source's identity beside another
-     * source's line and column. The coordinate has said which source it is in since positions were
-     * gathered across files, so there is nothing the second one adds and one thing it can do.
+     * <p>Of the coordinate, and a citation holds that coordinate with nothing beside it. The
+     * coordinate has said which source it is in since positions were gathered across files, so an
+     * identity held next to one is a second answer to a question already answered, the two can
+     * disagree, and a citation holding both is a place that is two places — which is how a report
+     * came to write one source's identity beside another source's line and column.
      */
     static Citation of(SourcePos pos) {
         return pos.writtenAt().cite(pos);
@@ -114,7 +116,7 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
      * source, printed bare, points at whatever happens to sit at those numbers in the one the reader
      * has in mind.
      */
-    default String said(SourceNameResolver names, String sectionSource) {
+    default String said(SourceNameResolver names, SourceId sectionSource) {
         return switch (this) {
             case Written written -> place(written.at(), names, sectionSource);
             case OutOfSight out -> "`" + out.provenance().reachedBy() + "`, reached at "
@@ -125,10 +127,10 @@ public sealed interface Citation permits Citation.Written, Citation.OutOfSight {
     /** Never handed a null: both arms require the place they are about. The tolerance the report's
      *  own writer used to have is gone rather than carried over, and a fallback standing in for it
      *  would read as a case somebody had thought about. */
-    private static String place(SourceRef ref, SourceNameResolver names, String sectionSource) {
-        if (ref.sourceId() == null || ref.sourceId().equals(sectionSource)) {
-            return String.valueOf(ref.pos());
+    private static String place(SourcePos at, SourceNameResolver names, SourceId sectionSource) {
+        if (at.sourceId() == null || at.sourceId().equals(sectionSource)) {
+            return String.valueOf(at);
         }
-        return names.nameOf(ref.sourceId()) + ":" + ref.pos();
+        return names.nameOf(at.sourceId()) + ":" + at;
     }
 }

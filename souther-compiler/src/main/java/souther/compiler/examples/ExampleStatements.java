@@ -1,5 +1,7 @@
 package souther.compiler.examples;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
@@ -11,7 +13,6 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Region;
-import souther.compiler.diag.SourceRef;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
@@ -109,8 +110,7 @@ public final class ExampleStatements {
      *
      * <p>{@code module} is the whole module — every row and every fake, whichever source wrote it. A
      * fake and the rows it disagrees with need not be in one file, so neither side can be found from
-     * one source's share of them. {@code exampleOrigins} and {@code fakeOrigins} say which source each
-     * came from, in the order {@code module} holds them.
+     * one source's share of them. Which source each came from is what its own place says.
      *
      * <p>No behavior is applied. What a fake answers for an input is decided by the rule the fake
      * itself dispatches with ({@link Standins#answering}) — the same rule, not a second reading of it — and
@@ -119,12 +119,8 @@ public final class ExampleStatements {
     public static Readings disagreements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
-                                         List<String> exampleOrigins,
-                                         List<String> fakeOrigins, Deadline deadline,
-                                         EvaluationPolicy policy) {
-        if (module.examples().isEmpty()
-                || exampleOrigins.size() != module.examples().size()
-                || fakeOrigins.size() != module.fakes().size()) {
+                                         Deadline deadline, EvaluationPolicy policy) {
+        if (module.examples().isEmpty()) {
             return Readings.NONE;
         }
         // Which behaviors have both a stand-in and rows of their own, read off the text. Two written
@@ -139,7 +135,7 @@ public final class ExampleStatements {
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy);
         try {
-            return v.collectDisagreements(exampleOrigins, fakeOrigins, contested);
+            return v.collectDisagreements(contested);
         } catch (LinkageError e) {
             // Comparing what two statements answer runs the generated values' own equality, and on a
             // host with no runtime that is the first thing here to touch it: a row's fixtures build
@@ -173,21 +169,19 @@ public final class ExampleStatements {
      * a dependency. A second written for the same name stands in for nothing and is read by nobody,
      * so building it here would hold a table to something no reader of it would ever ask.
      *
-     * <p>{@code fakeOrigins} says which source wrote each of {@code module.fakes()}, in that order —
-     * every fake, since which one answers for a dependency is a fact about the module and not about
-     * one of its files. Where it does not line up with them, every table that answers is built here:
-     * a report in the wrong file is a report, and the reason to know the file is to place it, while
-     * nothing else would say what is wrong with the table at all.
+     * <p>{@code module} holds every fake, since which one answers for a dependency is a fact about
+     * the module and not about one of its files, and {@code sourceId} is the file this run reports
+     * on. Which of them a fake is written in is what its own place says, so the two are never out of
+     * step.
      */
     public static List<Diagnostic> fakeTables(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
-                                              List<String> fakeOrigins, String sourceId,
+                                              SourceId sourceId,
                                               Deadline deadline, EvaluationPolicy policy) {
         if (module.fakes().isEmpty()) {
             return List.of();
         }
-        boolean placed = fakeOrigins.size() == module.fakes().size();
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
                 new MemoryClassLoader(classes, parent), values, deadline, policy);
         List<Diagnostic> said = new ArrayList<>();
@@ -197,7 +191,7 @@ public final class ExampleStatements {
             if (!answering.add(fk.target())) {
                 continue;   // a second table for one dependency answers nothing, here as anywhere
             }
-            if (placed && !fakeOrigins.get(i).equals(sourceId)) {
+            if (!sourceId.equals(fk.pos().sourceId())) {
                 continue;   // written in another source, and built by that source's own reading
             }
             Sig sig = sigs.get(fk.target());
@@ -216,7 +210,7 @@ public final class ExampleStatements {
                     }
                 }
                 return wrong;
-            }, new Deadline.Work.Table(fk.target(), sourceId, fk.pos()));
+            }, new Deadline.Work.Table(fk.target(), fk.pos()));
             switch (read) {
                 case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
                 case Read.Overspent(FailurePhase which, long limit) ->
@@ -412,15 +406,14 @@ public final class ExampleStatements {
     /** One recorded row, read as far as it can be without running it. What it says is left as written
      * — rendering it builds the fixture a second time, and only a row that turns out to disagree is
      * ever shown. */
-    private record RecordedRow(SourceRef at, Hir.Expr expected, Object[] arguments, Answered answer) {}
+    private record RecordedRow(SourcePos at, Hir.Expr expected, Object[] arguments, Answered answer) {}
 
-    private Readings collectDisagreements(List<String> exampleOrigins,
-                                          List<String> fakeOrigins, Set<String> contested) {
+    private Readings collectDisagreements(Set<String> contested) {
         Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
         for (int i = 0; i < module.examples().size(); i++) {
             Hir.Example ex = module.examples().get(i).read();
             if (contested.contains(ex.target())) {
-                readRecorded(ex, exampleOrigins.get(i), recorded);
+                readRecorded(ex, recorded);
             }
         }
         if (recorded.isEmpty()) {
@@ -436,11 +429,11 @@ public final class ExampleStatements {
         for (int j = 0; j < module.fakes().size(); j++) {
             Hir.Fake fk = module.fakes().get(j).read();
             if (answering.add(fk.target())) {
-                againstFake(fk, fakeOrigins.get(j), recorded, found, timedOut);
+                againstFake(fk, recorded, found, timedOut);
             }
         }
         for (int i = 0; i < module.examples().size(); i++) {
-            againstWiths(module.examples().get(i).read(), exampleOrigins.get(i), recorded, found);
+            againstWiths(module.examples().get(i).read(), recorded, found);
         }
         return new Readings(found, timedOut);
     }
@@ -454,7 +447,7 @@ public final class ExampleStatements {
      * arm or fixture error it is where the row is evaluated — and a row read otherwise here than there
      * would be held to a stand-in on an assertion the model itself refuses.
      */
-    private void readRecorded(Hir.Example ex, String origin, Map<String, List<RecordedRow>> into) {
+    private void readRecorded(Hir.Example ex, Map<String, List<RecordedRow>> into) {
         Sig sig = sigs.get(ex.target());
         if (sig == null) {
             return;
@@ -471,10 +464,8 @@ public final class ExampleStatements {
                 }
                 Answered answer = readExpected(reader, row.expected(), sig.out(), cases);
                 return answer instanceof Answered.Unreadable ? null
-                        : new RecordedRow(new SourceRef(origin, row.expected().pos()),
-                                row.expected(), arguments, answer);
-            }, new Deadline.Work.Fixtures(ex.target(), origin, row.pos(),
-                    row.identity()));
+                        : new RecordedRow(row.expected().pos(), row.expected(), arguments, answer);
+            }, new Deadline.Work.Fixtures(ex.target(), row.pos(), row.identity()));
             // A reading that did not finish is not said here, whichever reason ended it. The same row
             // is evaluated where the example is checked, which builds these fixtures and then runs the
             // behavior on top of them, so a fixture that overruns this overruns that too and is E1910
@@ -488,7 +479,7 @@ public final class ExampleStatements {
     }
 
     /** One fake against the rows recorded for the behavior it stands in for. */
-    private void againstFake(Hir.Fake fk, String origin, Map<String, List<RecordedRow>> recorded,
+    private void againstFake(Hir.Fake fk, Map<String, List<RecordedRow>> recorded,
                              List<Disagreement> found, List<UnreadFake> timedOut) {
         List<RecordedRow> rows = recorded.get(fk.target());
         Sig sig = sigs.get(fk.target());
@@ -498,7 +489,7 @@ public final class ExampleStatements {
         // The whole table, built the one way the proxy builds it.
         Read<BuiltTable> read = within(
                 reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
-                new Deadline.Work.Table(fk.target(), origin, fk.pos()));
+                new Deadline.Work.Table(fk.target(), fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
         switch (read) {
@@ -508,17 +499,17 @@ public final class ExampleStatements {
             // unsaid here would leave "the two agree" as the answer to a comparison never made.
             // The caret goes on the target, which is what `fk.pos()` is.
             case Read.Overspent(FailurePhase which, long limit) -> {
-                timedOut.add(new UnreadFake(fk.target(), new SourceRef(origin, fk.pos()),
+                timedOut.add(new UnreadFake(fk.target(), fk.pos(),
                         fk.target().length(), Unread.overspending(which, limit)));
                 return;
             }
             case Read.StackRanOut(int depthLimit) -> {
-                timedOut.add(new UnreadFake(fk.target(), new SourceRef(origin, fk.pos()),
+                timedOut.add(new UnreadFake(fk.target(), fk.pos(),
                         fk.target().length(), new Unread.StackRanOut(depthLimit)));
                 return;
             }
             case Read.Unanswered(long budgetMs) -> {
-                timedOut.add(new UnreadFake(fk.target(), new SourceRef(origin, fk.pos()),
+                timedOut.add(new UnreadFake(fk.target(), fk.pos(),
                         fk.target().length(), new Unread.DidNotAnswer(budgetMs)));
                 return;
             }
@@ -552,8 +543,8 @@ public final class ExampleStatements {
                 // The output, not the row: what disagrees is the answer, and the marker lands on it
                 // the way a row's does on its expected.
                 found.add(new Disagreement(fk.target(),
-                        said(row.at().sourceId(), row.expected(), row.answer()),
-                        said(origin, answering.row().output(), stood),
+                        said(row.expected(), row.answer()),
+                        said(answering.row().output(), stood),
                         false));
             }
         }
@@ -583,7 +574,7 @@ public final class ExampleStatements {
      * statement about the same behavior, written for every other row and every other run, and a
      * {@code with} beside it does not settle what it states.
      */
-    private void againstWiths(Hir.Example ex, String origin, Map<String, List<RecordedRow>> recorded,
+    private void againstWiths(Hir.Example ex, Map<String, List<RecordedRow>> recorded,
                               List<Disagreement> found) {
         for (Hir.ExampleRow row : ex.rows()) {
             for (Hir.With w : row.withs()) {
@@ -598,16 +589,15 @@ public final class ExampleStatements {
                 Answered constant = within(
                         reader -> readStandIn(reader, w.value(), depSig.out(),
                                 outCases(depSig.outputType())),
-                        new Deadline.Work.With(w.dep(), origin, w.value().pos())).orNull();
+                        new Deadline.Work.With(w.dep(), w.value().pos())).orNull();
                 if (constant == null || constant instanceof Answered.Unreadable) {
                     continue;
                 }
                 for (RecordedRow recordedRow : rows) {
                     if (differs(recordedRow.answer(), constant)) {
                         found.add(new Disagreement(w.dep(),
-                                said(recordedRow.at().sourceId(), recordedRow.expected(),
-                                        recordedRow.answer()),
-                                said(origin, w.value(), constant),
+                                said(recordedRow.expected(), recordedRow.answer()),
+                                said(w.value(), constant),
                                 true));
                     }
                 }
@@ -624,8 +614,8 @@ public final class ExampleStatements {
      * date is its ISO form, a qualified case name is its short one — so a marker measured from it
      * underlines the wrong columns and can run past the end of the line.
      */
-    private Statement said(String sourceId, Hir.Expr written, Answered asserted) {
-        return new Statement(sourceId, written.reportedAt(), shown(asserted));
+    private Statement said(Hir.Expr written, Answered asserted) {
+        return new Statement(written.reportedAt(), shown(asserted));
     }
 
     /** What an answer says, from what was already read. Rendering from the text again would build
@@ -662,7 +652,7 @@ public final class ExampleStatements {
      * <p>{@code answer} is rendered here rather than at the report, because reading it needs the
      * decoders and the module's classes and the report has neither.
      */
-    public record Statement(String sourceId, Region region, String answer) {}
+    public record Statement(Region region, String answer) {}
 
     /**
      * One input for which two written statements about a behavior answer differently.
@@ -693,7 +683,7 @@ public final class ExampleStatements {
      *
      * @param at where the fake names the behavior it stands in for, which is what the report marks
      */
-    public record UnreadFake(String target, SourceRef at, int width, Unread why) {}
+    public record UnreadFake(String target, SourcePos at, int width, Unread why) {}
 
     /**
      * Why a written statement was not read.

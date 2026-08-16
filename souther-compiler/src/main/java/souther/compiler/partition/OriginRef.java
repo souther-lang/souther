@@ -1,8 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.diag.SourceRef;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -21,19 +22,8 @@ public sealed interface OriginRef {
     /** The cases of a sum, or the two values of a {@code Bool}: the type itself says the partition. */
     record TypeOrigin(TypeSymbol type) implements OriginRef {}
 
-    /**
-     * A clause of a {@code data}'s invariant.
-     *
-     * @param at empty for a type that arrived from a module compiled elsewhere, whose clause has no
-     *           position in this compilation
-     */
-    record InvariantOrigin(Optional<SourceRef> at, TypeSymbol type, String clause)
-            implements OriginRef {
-
-        public InvariantOrigin {
-            at = at == null ? Optional.empty() : at;
-        }
-    }
+    /** A clause of a {@code data}'s invariant. */
+    record InvariantOrigin(TypeSymbol type, String clause) implements OriginRef {}
 
     /**
      * A comparison in a behavior's body, and the {@code if} it is the condition of.
@@ -167,7 +157,7 @@ public sealed interface OriginRef {
      * <p>A type and an invariant have names, and a name is the same wherever it is read, so they take
      * no resolver and are given one only because this is one question.
      */
-    default String describe(SourceNameResolver names, String sectionSource) {
+    default String describe(SourceNameResolver names, SourceId sectionSource) {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";

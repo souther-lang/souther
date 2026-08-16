@@ -2,6 +2,8 @@ package souther.compiler.diag;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.source.SourceId;
+
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnErrorKeepsTheMessageItWasRaisedWithTest {
 
     private static Diagnostic at(int line, String says) {
-        return Diagnostic.literal(new SourcePos(line, 1, "a.sou"), says);
+        return Diagnostic.literal(new SourcePos(line, 1, new SourceId("a.sou")), says);
     }
 
     @Test
@@ -42,11 +44,11 @@ class AnErrorKeepsTheMessageItWasRaisedWithTest {
         CompileException raised = CompileException.of(at(3, "first"));
 
         CompileException joined = raised.alsoReporting(List.of(at(5, "second"), at(7, "third")),
-                java.util.Arrays.asList("b.sou", Located.NO_SOURCE));
+                java.util.Arrays.asList(new SourceId("b.sou"), Located.NO_SOURCE));
 
         assertEquals(List.of("first", "second", "third"),
                 joined.diagnostics().stream().map(DiagnosticRenderer::legacyBody).toList());
-        assertEquals("b.sou", joined.sourceIdOf(1));
+        assertEquals(new SourceId("b.sou"), joined.sourceIdOf(1));
         assertEquals(Located.NO_SOURCE, joined.sourceIdOf(2));
     }
 
@@ -54,10 +56,10 @@ class AnErrorKeepsTheMessageItWasRaisedWithTest {
     void anUnnamedSourceIsStillTaggedAfterwards() {
         CompileException joined = CompileException.of(at(3, "first"))
                 .alsoReporting(List.of(at(5, "second")), java.util.Arrays.asList(Located.NO_SOURCE))
-                .inSource("a.sou");
+                .inSource(new SourceId("a.sou"));
 
-        assertEquals("a.sou", joined.sourceIdOf(0));
-        assertEquals("a.sou", joined.sourceIdOf(1));
+        assertEquals(new SourceId("a.sou"), joined.sourceIdOf(0));
+        assertEquals(new SourceId("a.sou"), joined.sourceIdOf(1));
     }
 
     @Test
@@ -73,7 +75,7 @@ class AnErrorKeepsTheMessageItWasRaisedWithTest {
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> raised.alsoReporting(List.of(at(5, "second"), at(7, "third")),
-                        List.of("b.sou")));
+                        List.of(new SourceId("b.sou"))));
         assertTrue(e.getMessage().contains("one source per diagnostic"), e.getMessage());
     }
 }

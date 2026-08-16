@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -76,7 +78,7 @@ class AnEditorIsOnlyToldAboutNamesTheAuthorWroteTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db()
-                .ask(new Names.ValueAt(new SourcePos(line, column, ID))).value();
+                .ask(new Names.ValueAt(new SourcePos(line, column, new SourceId(ID)))).value();
     }
 
     /** What the cursor is on across a whole span, as one string: `X` where something is, `.` where

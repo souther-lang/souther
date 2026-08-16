@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 /**
  * What to call a source id in front of a person.
  *
@@ -24,7 +26,7 @@ public interface SourceNameResolver {
 
     /** What to call {@code sourceId}. An id this does not know stands for itself, so a rendering
      *  still says which of them it is about rather than dropping the subject. */
-    String nameOf(String sourceId);
+    String nameOf(SourceId sourceId);
 
     /**
      * A caller with no names to give: every id stands for itself.
@@ -33,6 +35,6 @@ public interface SourceNameResolver {
      * rendering a report over sources it did not read off a disk.
      */
     static SourceNameResolver identity() {
-        return id -> id;
+        return SourceId::value;
     }
 }

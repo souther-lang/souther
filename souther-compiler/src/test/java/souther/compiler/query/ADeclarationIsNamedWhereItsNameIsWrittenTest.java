@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -41,7 +43,7 @@ class ADeclarationIsNamedWhereItsNameIsWrittenTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, SOURCE);
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db()
-                .ask(new Names.TypeAt(new SourcePos(line, column, ID))).value();
+                .ask(new Names.TypeAt(new SourcePos(line, column, new SourceId(ID)))).value();
     }
 
     @Test

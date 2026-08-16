@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
@@ -50,7 +52,7 @@ class ANameThatDenotesNothingCostsOneDefinitionTest {
             """;
 
     private static List<Located> diagnosed(String source) {
-        return Compiler.diagnoseModules(Map.of("demo", source)).getOrDefault("demo", List.of());
+        return Compiler.diagnoseModules(Map.of("demo", source)).getOrDefault(new SourceId("demo"), List.of());
     }
 
     private static List<String> messageKeys(String source) {

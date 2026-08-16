@@ -1,5 +1,7 @@
 package souther.cli;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
@@ -27,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -243,7 +244,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 new BoundaryObligation(
                         new BoundaryTarget.AtPlace(new AxisId("weigh", "w.a"), Carrier.WHOLE,
                                 Count.of(100)),
-                        new OriginRef.InvariantOrigin(Optional.empty(),
+                        new OriginRef.InvariantOrigin(
                                 TypeSymbols.declared(new TypeKey("example.rate", "Amount")), "value <= 100"),
                         BoundaryObligation.BoundarySide.AT),
                 new BoundaryAssessment.Coverage.Hit(),
@@ -280,7 +281,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
                 MeasurementStatus.COMPLETE,
-                List.of(new AdequacyReport.ModuleReport("example.wide", "wide.sou", MeasurementStatus.COMPLETE,
+                List.of(new AdequacyReport.ModuleReport("example.wide", new SourceId("wide.sou"), MeasurementStatus.COMPLETE,
                         List.of(), List.of(behavior))))
                 .adequacy();
     }

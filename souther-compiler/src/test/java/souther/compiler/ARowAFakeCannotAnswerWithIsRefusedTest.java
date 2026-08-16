@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
@@ -98,7 +100,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         compilation.answerEverything();
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
-            for (String id : compilation.exampleSourcesOf(module)) {
+            for (SourceId id : compilation.exampleSourcesOf(module)) {
                 Output.Examples.Of ran = compilation.db()
                         .ask(Output.Examples.asked(compilation.db(), module, id)).value();
                 if (ran != null) {

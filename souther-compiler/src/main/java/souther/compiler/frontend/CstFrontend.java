@@ -1,5 +1,7 @@
 package souther.compiler.frontend;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.ast.Ast;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
@@ -99,7 +101,7 @@ public final class CstFrontend {
      * read from. Read at the one place a position is made from a text, the answer never has to be
      * worked out again.
      */
-    public static Parsed parseWithSlices(String source, String defaultModuleName, String sourceId) {
+    public static Parsed parseWithSlices(String source, String defaultModuleName, SourceId sourceId) {
         TextRead read = sourceId == null ? TextRead.aTextWithNoIdentity()
                 : TextRead.aFileOfThisCompile(sourceId);
         CstParser.Result result = CstParser.parse(source);

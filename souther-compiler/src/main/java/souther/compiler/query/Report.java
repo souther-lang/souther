@@ -24,41 +24,8 @@ import java.util.List;
  *
  * @param diagnostic what was found
  * @param legacyMessage the text the pass raised it with, or null when it was not raised
- * @param delivery where this is said, when the key that found it does not say
  */
-public record Report(Diagnostic diagnostic, String legacyMessage, Delivery delivery) {
-
-    /**
-     * Which file a report is anchored in, for the reports that cannot be left to their key.
-     *
-     * <p>Nearly nothing needs this. A report's primary region was read from a file and says so, and
-     * that file is the one whose line is quoted under the caret — so leaving it alone is right
-     * whenever the caret is where the key that found it was asked about. What this is for is a
-     * report anchored somewhere the key does not name.
-     *
-     * <p>{@code primarySourceId} is null for "wherever the report points", which is what a report
-     * built any other way carries.
-     *
-     * <p>Where else a report is said is not here. That a problem is written in two files is
-     * something the check that found it says about the regions it points at
-     * ({@link souther.compiler.diag.msg.FindingRegion}), and it says it in the diagnostic, which
-     * reaches a reader however the diagnostic travelled — a warning handed over as a list, or an
-     * error thrown and caught. Carried here as well it would be a second answer, on a value only
-     * one of those two routes can set.
-     *
-     * <p>This is the declaration. What it resolves to against a particular key is
-     * {@link Db.Found#claimedSourceId()} and {@link Compilation#publishSourceIdsOf(Db.Found)}.
-     */
-    public record Delivery(String primarySourceId) {
-
-        /** Anchored wherever the key that found it says: the ordinary report. */
-        public static final Delivery BY_KEY = new Delivery(null);
-
-        /** Anchored in {@code primarySourceId}. */
-        public static Delivery at(String primarySourceId) {
-            return new Delivery(primarySourceId);
-        }
-    }
+public record Report(Diagnostic diagnostic, String legacyMessage) {
 
     public boolean isError() {
         return diagnostic.severity() == Severity.ERROR;
@@ -66,12 +33,7 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
 
     /** A report with no raised text of its own. */
     public static Report of(Diagnostic diagnostic) {
-        return new Report(diagnostic, null, Delivery.BY_KEY);
-    }
-
-    /** A report that says where it is said, rather than leaving it to the key that found it. */
-    public static Report saidAt(Diagnostic diagnostic, Delivery delivery) {
-        return new Report(diagnostic, null, delivery);
+        return new Report(diagnostic, null);
     }
 
     /**
@@ -80,8 +42,7 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
      * moved.
      */
     public static Report raised(Diagnostic diagnostic) {
-        return new Report(diagnostic, CompileException.of(diagnostic).getMessage(),
-                Delivery.BY_KEY);
+        return new Report(diagnostic, CompileException.of(diagnostic).getMessage());
     }
 
     /** A thrown error as reports, one per diagnostic it carries. The exception's message belongs to
@@ -89,11 +50,10 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
     public static List<Report> of(CompileException e) {
         List<Diagnostic> diagnostics = e.diagnostics();
         if (diagnostics.isEmpty()) {
-            return List.of(new Report(Diagnostic.literal(null, e.getMessage()), e.getMessage(),
-                    Delivery.BY_KEY));
+            return List.of(new Report(Diagnostic.literal(null, e.getMessage()), e.getMessage()));
         }
         List<Report> reports = new ArrayList<>();
-        reports.add(new Report(diagnostics.get(0), e.getMessage(), Delivery.BY_KEY));
+        reports.add(new Report(diagnostics.get(0), e.getMessage()));
         for (int i = 1; i < diagnostics.size(); i++) {
             reports.add(of(diagnostics.get(i)));
         }
