@@ -697,15 +697,20 @@ public final class InvariantChecker {
         // cannot be asked of the other side's name: what a clause compares a coordinate to may be a
         // position deeper than this names, or arithmetic over several, and neither is a number an
         // edge can be put at. So the end is attempted and what fails to be one may have moved one.
-        Optional<InvariantBound> end = found == null || !InvariantBound.ordering(op)
-                ? Optional.empty()
+        // A line is placed only where an end was read. A rule stating an end past the last value of
+        // the order places none — there is no value to draw a line at — and it is not a relation
+        // either: what it compares the coordinate to is a constant this read perfectly. So it falls
+        // out here rather than being filed as a clause that could have moved an edge.
+        InvariantBound.Read end = found == null || !InvariantBound.ordering(op)
+                ? new InvariantBound.Read.NoEnd()
                 : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
-        if (end.isEmpty()) {
+        if (end instanceof InvariantBound.Read.NoEnd) {
             relating(clause, from, at, byName, narrowers);
             return;
         }
-        Coordinate on = found;
-        end.ifPresent(read -> out.add(new Direct(on.path(), on.measured(), from, read)));
+        if (end instanceof InvariantBound.Read.AnEnd placed) {
+            out.add(new Direct(found.path(), found.measured(), from, placed.bound()));
+        }
     }
 
     /**
@@ -834,10 +839,10 @@ public final class InvariantChecker {
                     // asked. Every other carrier is measured one way, and asking the second reader
                     // as well would call a rule read that no measure took in.
                     boolean read = carrier instanceof Carrier.Text
-                            ? InvariantBound.of(each, carrier).isPresent()
+                            ? readAsABound(each, carrier)
                                     || souther.compiler.codegen.InvariantConstraints
                                             .of(each, base).isPresent()
-                            : carrier != null ? InvariantBound.of(each, carrier).isPresent()
+                            : carrier != null ? readAsABound(each, carrier)
                                     : souther.compiler.codegen.InvariantConstraints
                                             .of(each, base).isPresent();
                     if (!read) {
@@ -847,6 +852,18 @@ public final class InvariantChecker {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether the ordered reading took {@code clause} in, however it turned out.
+     *
+     * <p>A rule stating an end past the last value of the order was read: what it says is that
+     * nothing satisfies it, which is as much an account of the clause as an end is. Counted as
+     * unread, it would say the bounds are not the whole story about a declaration whose rules this
+     * understood completely.
+     */
+    private static boolean readAsABound(Hir.Expr clause, OrderScale scale) {
+        return !(InvariantBound.of(clause, scale) instanceof InvariantBound.Read.NoEnd);
     }
 
     /** A position read from no source, for the reads this makes to stand at. */

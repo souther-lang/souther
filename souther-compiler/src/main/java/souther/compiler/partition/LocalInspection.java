@@ -395,15 +395,28 @@ public final class LocalInspection {
                 // what carries it. The carrier, asked of the carrier, as a guard's is.
                 return new BlockReason.UnreadComparisonDomain();
             }
-            return InvariantBound.of(clause, carried).isPresent()
-                    ? null : new BlockReason.UnreadComparisonForm();
+            return unreadFormOf(InvariantBound.of(clause, carried));
         }
         if (measure != null && InvariantBound.statesAnEnd(clause, measure)) {
             // A size is a whole number whatever it is a size of, so nothing here is about a carrier.
-            return InvariantBound.ofSize(clause, measure).isPresent() ? null
-                    : new BlockReason.UnreadComparisonForm();
+            return unreadFormOf(InvariantBound.ofSize(clause, measure));
         }
         return null;
+    }
+
+    /**
+     * What a reading of an ordered rule leaves for the report to say about it.
+     *
+     * <p>Nothing where an end was read, and nothing where the rule states an end past the last value
+     * of the order: that rule was read, and what it says is that the declaration has no value, which
+     * is refused where counts are taken. Naming it as a form nothing could read would send an author
+     * after a bound this understood perfectly.
+     */
+    private static BlockReason unreadFormOf(InvariantBound.Read read) {
+        return switch (read) {
+            case InvariantBound.Read.AnEnd _, InvariantBound.Read.PastWhereTheOrderStops _ -> null;
+            case InvariantBound.Read.NoEnd _ -> new BlockReason.UnreadComparisonForm();
+        };
     }
 
     /**
