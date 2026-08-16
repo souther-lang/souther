@@ -1,4 +1,4 @@
-package souther.compiler.numeric;
+package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * turn on are kept, and everything else is rounded up to the next one that is.
  *
  * <p>Up and never down. A rounded count says the type may have more values than was shown, which
- * leaves a set that cannot be filled looking as though it might be — the direction that admits.
+ * leaves a set that cannot be filled looking as though it might be — the direction that admits. That
+ * a count of none is never rounded to anything is not asserted here: rounding takes and gives a
+ * {@link Cardinality.Standing}, so there is no such call to make.
  */
 class ARoundedCountKeepsTheComparisonsThatDecideTest {
 
@@ -27,7 +29,7 @@ class ARoundedCountKeepsTheComparisonsThatDecideTest {
         // A set of two turns on whether its element has two, so one and none are told apart.
         CardinalityCuts cuts = CardinalityCuts.keeping(Set.of(2L));
         assertEquals(Cardinality.atMost(1), cuts.round(Cardinality.atMost(1)));
-        assertTrue(cuts.round(Cardinality.atMost(1)).noWiderThan(1), "still too small to fill it");
+        assertEquals(1, cuts.round(Cardinality.atMost(1)).boundOr(-1), "still too small to fill it");
     }
 
     @Test
@@ -45,10 +47,8 @@ class ARoundedCountKeepsTheComparisonsThatDecideTest {
     }
 
     @Test
-    void neitherEndIsRoundedAway() {
-        CardinalityCuts cuts = CardinalityCuts.keeping(Set.of(2L));
-        assertEquals(Cardinality.NO_VALUE, cuts.round(Cardinality.NO_VALUE));
-        assertEquals(Cardinality.UNKNOWN, cuts.round(Cardinality.UNKNOWN));
+    void havingNoBoundIsNotRoundedAway() {
+        assertEquals(Cardinality.UNKNOWN, CardinalityCuts.keeping(Set.of(2L)).round(Cardinality.UNKNOWN));
     }
 
     /** What the walk rises through, which is what makes it stop. */
@@ -68,12 +68,11 @@ class ARoundedCountKeepsTheComparisonsThatDecideTest {
     @Test
     void roundingIsMonotone() {
         CardinalityCuts cuts = CardinalityCuts.keeping(List.of(2L, 1000L));
-        List<Cardinality> rising = List.of(Cardinality.NO_VALUE, Cardinality.atMost(1),
-                Cardinality.atMost(2), Cardinality.atMost(999), Cardinality.atMost(1000),
-                Cardinality.UNKNOWN);
+        List<Cardinality.Standing> rising = List.of(Cardinality.atMost(1), Cardinality.atMost(2),
+                Cardinality.atMost(999), Cardinality.atMost(1000), Cardinality.UNKNOWN);
         for (int each = 1; each < rising.size(); each++) {
-            assertTrue(cuts.round(rising.get(each))
-                            .atLeastAsWideAs(cuts.round(rising.get(each - 1))),
+            assertTrue(cuts.round(rising.get(each)).boundOr(Long.MAX_VALUE)
+                            >= cuts.round(rising.get(each - 1)).boundOr(Long.MAX_VALUE),
                     "rounding " + rising.get(each) + " after " + rising.get(each - 1));
         }
     }

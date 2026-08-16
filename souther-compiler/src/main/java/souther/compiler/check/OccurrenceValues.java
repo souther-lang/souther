@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.numeric.Cardinality;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -89,7 +88,7 @@ public final class OccurrenceValues {
         }
         BigDecimal span = most.subtract(least).add(BigDecimal.ONE);
         if (span.signum() <= 0) {
-            return Cardinality.NO_VALUE;
+            return Cardinality.none(new Emptiness.EmptyNumericInterval());
         }
         try {
             return Cardinality.atMost(span.longValueExact());

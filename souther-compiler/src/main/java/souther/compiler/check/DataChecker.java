@@ -483,22 +483,117 @@ public final class DataChecker {
      * and rules that cannot all hold leave none. All of them are one count coming to nothing.
      *
      * <p>What that count is and how it is reached is {@link TypeCardinality}; which of the
-     * declarations with no value to say so about is {@link UninhabitableTypes}. What is left here is
-     * saying it.
+     * declarations with no value to say so about, and what showed it of the one the report sits at,
+     * is {@link UninhabitableTypes}. What is left here is saying it.
+     *
+     * <p>The proof arrives with the group and nothing here reads the declaration again to work out
+     * which sentence to write. That is the whole of why it arrives: a reader that picked between two
+     * sentences by looking at the declaration a second time would be a second reader of a question
+     * the count already answered, free to pick the sentence the count did not mean.
      */
     static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols) {
+        List<UninhabitableTypes.UninhabitableGroup> groups = UninhabitableTypes.withNoValueOfTheirOwn(
+                declarations, TypeCardinality.solve(declarations, symbols));
+        // How many of the lacks reported here each declaration is part of. A declaration in one of
+        // them is a declaration whose lack the group accounts for entirely, and a suggestion about
+        // that group is a way out. A declaration in two is in neither's: what a group is established
+        // by is a reading with every other lack granted, so undoing one leaves the other where it
+        // was, and a suggestion read off either would be an untrue way out written as a certainty.
+        Map<TypeSymbol, Integer> lacks = new HashMap<>();
+        for (UninhabitableTypes.UninhabitableGroup group : groups) {
+            group.members().forEach(each -> lacks.merge(each, 1, Integer::sum));
+        }
         List<CompileException> found = new ArrayList<>();
-        for (List<TypeSymbol> group : UninhabitableTypes.withNoValueOfTheirOwn(declarations,
-                TypeCardinality.solve(declarations, symbols))) {
-            // The group is one thing to say and is said at the first of them the module declares.
-            // Which one that is settles where the report sits and not what it is about: the others
-            // have no value in the same way and for the same reason.
-            Hir.Def at = (Hir.Def) symbols.declarations().declaration(group.get(0).key());
-            found.add(CompileException.of(Diagnostic.at(at.pos())
-                    .say(new DataMessage.DataCannotBeConstructed(at.name()))
-                    .build()));
+        for (UninhabitableTypes.UninhabitableGroup group : groups) {
+            Hir.Def at = (Hir.Def) symbols.declarations().declaration(group.reportedAt().key());
+            found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
+                    FieldDomains.THE_VALUE, group.why(),
+                    lacks.get(group.reportedAt()) == 1).build()));
         }
         return found;
+    }
+
+    /**
+     * The one place a proof of having no value is read as a sentence.
+     *
+     * <p>Exhaustive over {@link Emptiness}, which is what makes a proof added later a build that
+     * stops here rather than a refusal quietly told one of the sentences already written.
+     *
+     * <p>{@link Emptiness.AtAField} is descended through and the rest are not. It says where a lack
+     * sits and states nothing of its own, so the sentence is its child's and the position it names is
+     * carried down for the child to write; every other shape asserts something — a sum has none
+     * because all of its cases do, and picking one of them to speak for the rest would answer a
+     * question about which case is at fault that nothing asked.
+     *
+     * <p>Three of the arms have no model that reaches them. A declaration is reported for a group no
+     * smaller group holds inside, and a proof of its that stops at a name — on its own, under a
+     * collection, or across every case — names only declarations in the group; had any of those been
+     * shown something, the group without this one would hold and this group would not be the
+     * smallest. So what reaches those arms today is nothing, and they are written because being
+     * exhaustive over the proofs is what makes the next proof a build that stops here. Do not read
+     * the switch as a list of sentences anybody has seen.
+     *
+     * @param path where in the declaration the proof so far has reached
+     * @param alone whether the declaration this is said at has no other lack reported of it, which
+     *              is what a suggestion has to be true of
+     */
+    private static Diagnostic.Builder told(Diagnostic.Builder at, String data, String path,
+                                           Emptiness why, boolean alone) {
+        return switch (why) {
+            case Emptiness.AtAField it -> told(at, data, it.path(), it.under(), alone);
+            case Emptiness.NoBaseInComponent it -> {
+                Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));
+                yield alone ? suggested(said, data, it.through()) : said;
+            }
+            case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _ ->
+                    at.say(new DataMessage.ItsRulesCannotAllHold(data));
+            case Emptiness.SetRequiresTooManyDistinctValues it ->
+                    at.say(new DataMessage.ASetCannotBeFilledFromItsElement(
+                            data, written(path), it.available()));
+            case Emptiness.NoAllowedCollectionSize _ ->
+                    at.say(new DataMessage.NoSizeItsRulesAdmit(data, written(path)));
+            case Emptiness.NonEmptyCollectionWithNoElement _ ->
+                    at.say(new DataMessage.ACollectionThatCannotBeEmptyHasNothingToHold(
+                            data, written(path)));
+            case Emptiness.AcrossEveryCase _ -> at.say(new DataMessage.NoCaseOfItHasAValue(data));
+            case Emptiness.TheNameHasNone it ->
+                    at.say(new DataMessage.ItHoldsATypeWithNoValue(data, it.name().name()));
+        };
+    }
+
+    /**
+     * What would give a self-referring declaration a value, where anything can be said.
+     *
+     * <p>Read off how this one reaches the others and not off the refusal. What makes a recursion
+     * bottom out depends on the way round it runs, and one suggestion written for all of them told
+     * an author holding a non-empty list of itself to write a list. Where the shape is one nothing
+     * safe can be said about, nothing is: a refusal owes the author the reason and does not owe an
+     * invented way out.
+     *
+     * <p>What a newtype wraps is one of those. It is at no position of its own, and writing the `?`
+     * there is refused where a newtype is read — so the way out is at whatever uses the name, which
+     * is not something this can say without reading declarations it is not looking at.
+     */
+    private static Diagnostic.Builder suggested(Diagnostic.Builder at, String data,
+                                                Emptiness through) {
+        return switch (through) {
+            case Emptiness.AtAField it when it.under() instanceof Emptiness.TheNameHasNone
+                    && !FieldDomains.THE_VALUE.equals(it.path()) ->
+                    at.hint(new DataMessage.ItWouldHaveOneIfTheFieldCouldBeAbsent(
+                            data, written(it.path())));
+            case Emptiness.AtAField it
+                    when it.under() instanceof Emptiness.NonEmptyCollectionWithNoElement ->
+                    at.hint(new DataMessage.ItWouldHaveOneIfTheCollectionCouldBeEmpty(
+                            data, written(it.path())));
+            case Emptiness.AcrossEveryCase _ ->
+                    at.hint(new DataMessage.ACaseThatDoesNotHoldItWouldGiveItOne(data));
+            default -> at;
+        };
+    }
+
+    /** How a position is written in the model, what a newtype wraps being spelled `value`. */
+    private static String written(String path) {
+        return FieldDomains.THE_VALUE.equals(path) ? "value" : path;
     }
 
     static void checkData(CheckContext ctx,

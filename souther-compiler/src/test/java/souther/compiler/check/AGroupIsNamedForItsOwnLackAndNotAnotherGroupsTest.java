@@ -33,7 +33,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
         return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
                         TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
                                 compilation.symbols("demo")))
-                .stream().map(each -> each.stream().map(TypeSymbol::name).toList()).toList();
+                .stream().map(each -> each.members().stream().map(TypeSymbol::name).toList()).toList();
     }
 
     @Test

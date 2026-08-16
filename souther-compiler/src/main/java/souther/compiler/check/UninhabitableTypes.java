@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.numeric.Cardinality;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -43,20 +42,49 @@ import java.util.Set;
  * inside it, every member outside the smaller one can be taken away with the smaller one left whole,
  * so some single removal leaves something holding; and where no single removal does, there is
  * nothing smaller to find.
+ *
+ * <p>The search carries no proofs. Which members hold together is a question about the sets, and a
+ * proof picked up along the way would be whichever of them the search reached the group by. The
+ * proof is taken once the group and the declaration to report it at are both settled, from the one
+ * reading that establishes the group: everything outside it granted, and the answer that member came
+ * to under that granting.
  */
 public final class UninhabitableTypes {
 
     private UninhabitableTypes() {}
 
     /**
-     * The groups of declarations to report, each in the order {@code declarations} are written in.
+     * A group of declarations with no value of their own, and what shows it.
+     *
+     * @param members    every declaration the lack is shared between, wherever they are declared,
+     *                   the ones this module writes first and in the order it writes them
+     * @param reportedAt the first of them this module declares, which is where the refusal sits
+     * @param why        what {@code reportedAt} was shown by, with every lack outside the group
+     *                   granted. A proof of the group's own lack and not of the whole module's:
+     *                   which member it belongs to is settled before it is taken, so a suggestion
+     *                   read off it is about the declaration the refusal points at.
+     */
+    public record UninhabitableGroup(List<TypeSymbol> members, TypeSymbol reportedAt, Emptiness why) {
+
+        public UninhabitableGroup {
+            members = List.copyOf(members);
+            if (why == null) {
+                throw new IllegalArgumentException(
+                        "a declaration reported for having no value was shown to have none: "
+                                + reportedAt);
+            }
+        }
+    }
+
+    /**
+     * The groups to report, each at the first of {@code declarations} it holds.
      *
      * <p>Only groups holding one of {@code declarations}: a type of another module having no value
      * is that module's to report, and a type here that has none because of it is left to come right
      * when it does. So what the caller passes is the declarations the report is being made for, and
      * nothing about the rest of the module is read.
      */
-    public static List<List<TypeSymbol>> withNoValueOfTheirOwn(List<Hir.Def> declarations,
+    public static List<UninhabitableGroup> withNoValueOfTheirOwn(List<Hir.Def> declarations,
                                                              TypeCardinality.Cardinalities solved) {
         Map<TypeSymbol, Integer> declaredAt = new LinkedHashMap<>();
         for (Hir.Def def : declarations) {
@@ -75,17 +103,28 @@ public final class UninhabitableTypes {
                 smallestThatHold(together, none, solved, found);
             }
         }
-        List<List<TypeSymbol>> reported = new ArrayList<>();
+        List<UninhabitableGroup> reported = new ArrayList<>();
         for (List<TypeSymbol> group : found) {
             List<TypeSymbol> here = new ArrayList<>(group);
             here.removeIf(each -> !declaredAt.containsKey(each));
             if (here.isEmpty()) {
                 continue;
             }
+            // The group is one thing to say and is said at the first of them the module declares.
+            // Which one that is settles where the report sits and what it is about: the others have
+            // no value in the same way, and how each of them reaches the rest is its own.
             here.sort(Comparator.comparingInt(declaredAt::get));
-            reported.add(List.copyOf(here));
+            TypeSymbol at = here.get(0);
+            List<TypeSymbol> members = new ArrayList<>(here);
+            group.forEach(each -> {
+                if (!declaredAt.containsKey(each)) {
+                    members.add(each);   // another module's, and named after the ones written here
+                }
+            });
+            reported.add(new UninhabitableGroup(
+                    members, at, establishing(group, none, solved).get(at).why()));
         }
-        reported.sort(Comparator.comparingInt(each -> declaredAt.get(each.get(0))));
+        reported.sort(Comparator.comparingInt(each -> declaredAt.get(each.reportedAt())));
         return List.copyOf(reported);
     }
 
@@ -145,9 +184,7 @@ public final class UninhabitableTypes {
     /** Which of {@code these} still have no value once every lack outside them is granted. */
     private static List<TypeSymbol> leftWithNone(List<TypeSymbol> these, Set<TypeSymbol> none,
                                                TypeCardinality.Cardinalities solved) {
-        Set<TypeSymbol> elsewhere = new LinkedHashSet<>(none);
-        elsewhere.removeAll(these);
-        Map<TypeSymbol, Cardinality> granted = solved.granting(elsewhere);
+        Map<TypeSymbol, Cardinality> granted = establishing(these, none, solved);
         List<TypeSymbol> still = new ArrayList<>();
         for (TypeSymbol each : these) {
             if (none.contains(each) && granted.getOrDefault(each, Cardinality.UNKNOWN).none()) {
@@ -155,5 +192,20 @@ public final class UninhabitableTypes {
             }
         }
         return still;
+    }
+
+    /**
+     * Everything answered again with every lack outside {@code these} granted.
+     *
+     * <p>The reading a group is established by, and so the reading its proofs are taken from. What
+     * is granted is settled by the group alone, so asking twice about one group gives one answer and
+     * the search reaching it by two paths cannot make it two.
+     */
+    private static Map<TypeSymbol, Cardinality> establishing(List<TypeSymbol> these,
+                                                             Set<TypeSymbol> none,
+                                                             TypeCardinality.Cardinalities solved) {
+        Set<TypeSymbol> elsewhere = new LinkedHashSet<>(none);
+        elsewhere.removeAll(these);
+        return solved.granting(elsewhere);
     }
 }

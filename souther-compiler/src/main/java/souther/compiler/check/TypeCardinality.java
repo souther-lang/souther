@@ -1,13 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.numeric.Cardinality;
-import souther.compiler.numeric.CardinalityCuts;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -23,10 +20,11 @@ import java.util.Set;
  * reachable — a set cannot be filled from an element with fewer values than it holds, and knowing
  * that means counting the element.
  *
- * <p>Rising from none rather than narrowing from anything. A value of a type is built, and a type
- * written in terms of itself with nowhere to stop is one no building ever finishes — so the reading
- * starts by granting nothing and grants a value only where one is shown. Each round bounds the values
- * built in one more step than the last, and where nothing moves, nothing further can be built.
+ * <p>Rising from nothing shown rather than narrowing from anything. A value of a type is built, and a
+ * type written in terms of itself with nowhere to stop is one no building ever finishes — so the
+ * reading starts by granting nothing and grants a value only where one is shown. Each round bounds
+ * the values built in one more step than the last, and where nothing moves, nothing further can be
+ * built.
  *
  * <p>Two kinds of place, told apart because only one of them needs the rising. Declarations written
  * in terms of each other are answered together and their answers are rounded to the counts some rule
@@ -34,6 +32,14 @@ import java.util.Set;
  * settles the answers one at a time, and nothing is rounded: a sum of two values is two, and rounding
  * it up to the next count anybody asked about would leave a set drawing on it unable to say it is too
  * small.
+ *
+ * <p>The bottom the rising starts from is not an answer and never becomes one. A member the rising
+ * has not finished with is at the bottom in {@link Answers}, and a reading resting on one of those is
+ * a reading resting on an assumption: writing it down as a proof would have {@code A} shown to have
+ * no value because {@code B} has none and {@code B} because {@code A} has, which shows neither.
+ * What is true once the rising stops is that the least fixed point was reached with those members
+ * still at nothing, so no value of any of them is built in finitely many steps — and that is
+ * {@link Emptiness.NoBaseInComponent}, written here and nowhere else.
  *
  * <p>This says nothing about which declaration is at fault for an answer of none. That is a question
  * about the graph rather than about any one type, and it is asked of these answers rather than while
@@ -124,7 +130,9 @@ public final class TypeCardinality {
          * been: a record whose only field is an absent value has one value because what the field
          * would hold has none, and one is too few to fill a set of two — so a set with no value can
          * be a set nothing is the matter with, and no reading of which names it reads directly finds
-         * that out. Granting the names and taking the answers afresh does.
+         * that out. Granting the names and taking the answers afresh does. The proofs come back with
+         * the counts, so what a declaration is shown by under one supposing is not read off what it
+         * was shown by under another.
          */
         Map<TypeSymbol, Cardinality> granting(Set<TypeSymbol> granted) {
             return pass(components, declared, edges, cuts, symbols, granted);
@@ -145,12 +153,12 @@ public final class TypeCardinality {
                                                    Map<TypeSymbol, Set<TypeSymbol>> edges,
                                                    CardinalityCuts cuts, Symbols symbols,
                                                    Set<TypeSymbol> granted) {
-        Map<TypeSymbol, Cardinality> solution = new HashMap<>();
+        Answers answers = Answers.empty();
         for (List<TypeSymbol> component : components) {
             List<TypeSymbol> asked = new ArrayList<>();
             for (TypeSymbol each : component) {
                 if (granted.contains(each)) {
-                    solution.put(each, Cardinality.UNKNOWN);
+                    answers.settle(each, Cardinality.UNKNOWN);
                 } else {
                     asked.add(each);
                 }
@@ -160,13 +168,13 @@ public final class TypeCardinality {
             }
             if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
                 TypeSymbol one = asked.get(0);
-                solution.put(one, CardinalityTransfer.upperOf(
-                        one, declared.get(one), symbols, solution, granted::contains));
+                answers.settle(one, CardinalityTransfer.upperOf(
+                        one, declared.get(one), symbols, answers, granted::contains));
                 continue;
             }
-            rise(asked, declared, symbols, cuts, solution, granted);
+            rise(asked, declared, symbols, cuts, answers, granted);
         }
-        return solution;
+        return answers.everySettled();
     }
 
     /**
@@ -178,22 +186,95 @@ public final class TypeCardinality {
      */
     private static void rise(List<TypeSymbol> component, Map<TypeSymbol, Hir.Def> declared,
                              Symbols symbols, CardinalityCuts cuts,
-                             Map<TypeSymbol, Cardinality> solution, Set<TypeSymbol> granted) {
-        for (TypeSymbol each : component) {
-            solution.put(each, Cardinality.NO_VALUE);
-        }
+                             Answers answers, Set<TypeSymbol> granted) {
+        component.forEach(answers::atBottom);
         boolean moved = true;
         while (moved) {
             moved = false;
             for (TypeSymbol each : component) {
-                Cardinality next = cuts.round(CardinalityTransfer.upperOf(
-                        each, declared.get(each), symbols, solution, granted::contains));
-                if (!next.equals(solution.get(each))) {
-                    solution.put(each, next);
+                Cardinality before = answers.settledAt(each);
+                Cardinality next = round(cuts, CardinalityTransfer.upperOf(
+                        each, declared.get(each), symbols, answers, granted::contains));
+                // Written every round, and the rising is over the counts alone. Two readings that
+                // come to none are the same answer to rise through however they were shown, so
+                // comparing the proofs would keep a settled rising moving; and taking the earlier
+                // proof would leave a declaration carrying what it was shown by before the answers
+                // it rests on were what they are.
+                answers.settle(each, next);
+                if (before == null || !sameCount(before, next)) {
                     moved = true;
                 }
             }
         }
+        discharge(component, answers);
+    }
+
+    /** Whether two answers are the same one to rise through, which the proofs have no part in. */
+    private static boolean sameCount(Cardinality one, Cardinality other) {
+        return one instanceof Cardinality.None
+                ? other instanceof Cardinality.None : one.equals(other);
+    }
+
+    private static Cardinality round(CardinalityCuts cuts, Cardinality of) {
+        return of instanceof Cardinality.Standing standing ? cuts.round(standing) : of;
+    }
+
+    /**
+     * The members left with nothing to bottom out, told what showed it once the rising has stopped.
+     *
+     * <p>A member whose proof rests on another member of the same component was, while the rising
+     * ran, resting on an assumption. Which of them were shown something is asked here: a member with
+     * a count is one, and so is a member whose proof reaches outside the component or stops at rules
+     * of its own — and then any member resting only on those, and so on until nothing more is added.
+     * What is left is a set every member of which needs the others, which is a lack no finite
+     * building bottoms out of, and the least fixed point having been reached is the proof of it.
+     */
+    private static void discharge(List<TypeSymbol> component, Answers answers) {
+        Set<TypeSymbol> shown = new HashSet<>();
+        Set<TypeSymbol> within = Set.copyOf(component);
+        boolean added = true;
+        while (added) {
+            added = false;
+            for (TypeSymbol each : component) {
+                if (shown.contains(each)) {
+                    continue;
+                }
+                Cardinality count = answers.settledAt(each);
+                if (!(count instanceof Cardinality.None it) || restsOn(it.why(), within, shown)) {
+                    shown.add(each);
+                    added = true;
+                }
+            }
+        }
+        if (shown.size() == component.size()) {
+            return;
+        }
+        List<TypeSymbol> without = component.stream().filter(each -> !shown.contains(each)).toList();
+        for (TypeSymbol each : without) {
+            answers.settle(each, Cardinality.none(new Emptiness.NoBaseInComponent(
+                    without, answers.settledAt(each).why())));
+        }
+    }
+
+    /** Whether every member of {@code within} this proof reaches has been shown something. */
+    private static boolean restsOn(Emptiness why, Set<TypeSymbol> within, Set<TypeSymbol> shown) {
+        return switch (why) {
+            case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
+                 Emptiness.SetRequiresTooManyDistinctValues _,
+                 Emptiness.NoAllowedCollectionSize _ -> true;
+            case Emptiness.TheNameHasNone it ->
+                    !within.contains(it.name()) || shown.contains(it.name());
+            // Not reachable. A proof read here was built from what a name answers, which is the
+            // proof that stops at the name, and this is the only writer of the other one. Answered
+            // the way that keeps a member out of the set that was shown something, which is what it
+            // would mean if it ever were reached.
+            case Emptiness.NoBaseInComponent _ -> false;
+            case Emptiness.AtAField it -> restsOn(it.under(), within, shown);
+            case Emptiness.NonEmptyCollectionWithNoElement it ->
+                    restsOn(it.element(), within, shown);
+            case Emptiness.AcrossEveryCase it ->
+                    it.cases().stream().allMatch(each -> restsOn(each, within, shown));
+        };
     }
 
     /**
