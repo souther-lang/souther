@@ -143,6 +143,48 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
                 "a stranger's annotation is not a declaration this compiler published");
     }
 
+    /**
+     * One place reads a class file, and it is not the one that decides what a lookup answers.
+     *
+     * <p>Whether a malformed artifact ends the compilation comes down to whether every read of it
+     * happens inside the guard that turns a raise into an answer. Java cannot say that, and a test
+     * that corrupts bytes and watches can only ever sample it — the reading that escaped the guard
+     * before this was the lazy half, and a sample that dies on the eager half stays green over it.
+     *
+     * <p>So the guard is a file boundary. {@code SoutherAnnotations} is the whole of the reading and
+     * is called once, from inside the guard; {@code ClassFileDeclarations} decides what is answered
+     * and names nothing of the class-file API, so a read hoisted into it is an import this reads.
+     *
+     * <p>Written over the sources for the reason {@code EveryDiagnosticCodeIsReadableTest} says of
+     * its own rule: the next one of these is a failing test rather than a malformed artifact quietly
+     * ending a compile again.
+     */
+    @Test
+    void oneFileInThisPackageReadsAClassFile() throws java.io.IOException {
+        List<String> reading = new ArrayList<>();
+        for (java.nio.file.Path source : souther.compiler.diag
+                .EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            String path = source.toString().replace('\\', '/')
+                    .replaceAll(".*/src/main/java/", "");
+            if (!path.startsWith("souther/compiler/meta/")) {
+                continue;
+            }
+            if (java.nio.file.Files.readString(source, java.nio.charset.StandardCharsets.UTF_8)
+                    .contains("java.lang.classfile")) {
+                reading.add(path);
+            }
+        }
+        java.util.Collections.sort(reading);
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                List.of("souther/compiler/meta/ModuleMetadata.java",
+                        "souther/compiler/meta/SoutherAnnotations.java"),
+                reading,
+                "one writes the metadata and one reads it; anything else here that touches a class"
+                        + " file is a read outside the guard that answers a malformed one, which is"
+                        + " how a jar ended the compilation instead of being reported");
+    }
+
     /** And the metadata this compiler does write is read. */
     @Test
     void whatThisCompilerWritesIsRead() {

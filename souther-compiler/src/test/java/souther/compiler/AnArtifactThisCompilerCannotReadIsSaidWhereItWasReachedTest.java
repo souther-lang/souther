@@ -92,7 +92,14 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 parsed = true;
                 for (Annotation a : read) {
                     a.className().stringValue();
-                    a.elements().forEach(e -> e.name().stringValue());
+                    for (java.lang.classfile.AnnotationElement e : a.elements()) {
+                        e.name().stringValue();
+                        // The values too, and not only the names. What escaped the guard before
+                        // this was a read that happens later than the one a shallower sweep makes,
+                        // so a sweep that stops at the names measures the half that was never the
+                        // problem.
+                        drain(e.value());
+                    }
                 }
             } catch (IllegalArgumentException _) {
                 if (parsed) {
@@ -102,6 +109,18 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
         }
         throw new IllegalStateException(
                 "no corruption of these bytes parses and then refuses an accessor");
+    }
+
+    /** Every value under {@code value}, so that a corruption anywhere the reader looks is found. */
+    private static void drain(java.lang.classfile.AnnotationValue value) {
+        switch (value) {
+            case java.lang.classfile.AnnotationValue.OfString s -> s.stringValue();
+            case java.lang.classfile.AnnotationValue.OfArray a -> a.values().forEach(
+                    AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest::drain);
+            case java.lang.classfile.AnnotationValue.OfAnnotation a ->
+                    a.annotation().elements().forEach(e -> drain(e.value()));
+            default -> value.tag();
+        }
     }
 
     private static PublishedClasses.Declarations dataClass(String declaration) {
