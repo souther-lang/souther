@@ -561,7 +561,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                   SourceId declaredIn, SourceNameResolver names) {
         PartitionEvidence partition = behavior.partition();
         if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
-                && partition.notDerivable().isEmpty())) {
+                && partition.notDerivable().isEmpty() && partition.claimsOffAxis().isEmpty())) {
             return;
         }
         if (!partition.partitioned().status().counted()) {
@@ -607,17 +607,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             claim.classId(), because(claim.reasons()), unproven(claim.why())));
                 }
             }
-            // And the claims about positions this report has no axis for. Named by their position,
-            // since there is no axis above them to have said which one it is.
-            for (PartitionEvidence.ClaimOffAxis claim : partition.claimsOffAxis()) {
-                out.append(claim.why() == null
-                        ? String.format("      · `%s` at `%s` is declared unreachable%s%n",
-                                claim.classId(), claim.at(), because(claim.reasons()))
-                        : String.format("      · `%s` at `%s` is declared unreachable%s, and nothing"
-                                        + " here proves it: %s%n",
-                                claim.classId(), claim.at(), because(claim.reasons()),
-                                unproven(claim.why())));
-            }
+        }
+        // And the claims about positions this report has no axis for, named by their position since
+        // there is no axis above them to have said which one it is. Outside the arm above, because
+        // a claim is not a number: a behavior whose positions were all dropped or never read has
+        // nothing to count and the same claims to answer for, and printing them only beside a count
+        // is how a verdict came to be reached and then not said.
+        for (PartitionEvidence.ClaimOffAxis claim : partition.claimsOffAxis()) {
+            out.append(claim.why() == null
+                    ? String.format("      · `%s` at `%s` is declared unreachable%s%n",
+                            claim.classId(), claim.at(), because(claim.reasons()))
+                    : String.format("      · `%s` at `%s` is declared unreachable%s, and nothing"
+                                    + " here proves it: %s%n",
+                            claim.classId(), claim.at(), because(claim.reasons()),
+                            unproven(claim.why())));
         }
         undivided(out, behavior);
         // Counted where both questions have an answer: the line was measured against the rows, and

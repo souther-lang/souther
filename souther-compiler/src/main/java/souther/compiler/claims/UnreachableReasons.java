@@ -3,7 +3,6 @@ package souther.compiler.claims;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -20,11 +19,10 @@ import java.util.List;
  * reason this value did not arrive — it is text that never runs. Paths that a fork keeps apart are
  * all read, because each of them is a way this expression fails to answer.
  *
- * <p>Which of them is first is the order the values are <em>evaluated</em> in, and for a construction
- * that is the order the fields are declared rather than the order the initializers are written: the
- * emitter walks the declared fields and picks each one's initializer out. {@code Core.forEachChild}
- * hands over the slots of a node and is not an account of evaluation, so nothing here takes it for
- * one where the two can differ.
+ * <p>Which of them is first is the order the values are <em>evaluated</em> in, which is
+ * {@link Evaluated}'s to say — for a construction that is the order the fields are declared rather
+ * than the order the initializers are written, and asking it there is what keeps this reader and the
+ * one that finds a body's first fork from disagreeing about what runs before what.
  */
 public final class UnreachableReasons {
 
@@ -87,7 +85,7 @@ public final class UnreachableReasons {
             // Anything else answers nothing because something it evaluates first does, and the rest
             // of what is written in it never runs.
             default -> {
-                Core stops = firstThatAborts(children(e));
+                Core stops = firstThatAborts(Evaluated.inOrder(e));
                 if (stops != null) {
                     collect(stops, into);
                 }
@@ -103,7 +101,7 @@ public final class UnreachableReasons {
      * worked out again from how the fields were written.
      */
     private static Core evaluated(Core.Construct nd) {
-        return firstThatAborts(nd.values().stream().map(Core.FieldValue::value).toList());
+        return firstThatAborts(Evaluated.inOrder(nd));
     }
 
     /** The first of a run of strict positions that does not answer, which is where evaluation stops
@@ -117,13 +115,6 @@ public final class UnreachableReasons {
         return null;
     }
 
-    /** The slots of a node, which for everything reaching here is a run of strict positions in the
-     * order they are evaluated. */
-    private static List<Core> children(Core e) {
-        List<Core> out = new ArrayList<>();
-        Core.forEachChild(e, out::add);
-        return out;
-    }
 
     private UnreachableReasons() {}
 }

@@ -369,6 +369,65 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         return partition;
     }
 
+    /**
+     * Several refusals arrive in the order the module declares them.
+     *
+     * <p>What a reader meets first is what they read first, and a file is read from the top. The
+     * order is the module's and not the one a table of behaviors happened to iterate in — the names
+     * here are spelled so that the two differ.
+     */
+    @Test
+    void refusalsComeInTheOrderTheModuleDeclaresThem() {
+        String three = """
+                module example.probe
+
+                data A
+                data B
+                data Kind = A | B
+                data Answer = Int
+
+                behavior zeta : (kz: Kind) -> Answer
+                    constructs Answer
+
+                let zeta (kz) = match kz with
+                    | A -> Answer(1)
+                    | B -> unreachable "zeta never sees B"
+
+                behavior alpha : (ka: Kind) -> Answer
+                    constructs Answer
+
+                let alpha (ka) = match ka with
+                    | A -> Answer(2)
+                    | B -> unreachable "alpha never sees B"
+
+                behavior mu : (km: Kind) -> Answer
+                    constructs Answer
+
+                let mu (km) = match km with
+                    | A -> Answer(3)
+                    | B -> unreachable "mu never sees B"
+                """;
+
+        assertEquals(List.of("E1326", "E1326", "E1326"), errorsIn(three));
+        assertEquals(List.of("kz", "ka", "km"), positionsRefused(three),
+                "read from the top, as a file is");
+    }
+
+    /** The position each refusal names, in the order the reports arrive. */
+    private static List<String> positionsRefused(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        List<String> out = new ArrayList<>();
+        for (Db.Found found : compilation.db().allReports()) {
+            if (found.report().isError() && "E1326".equals(found.report().diagnostic().code())) {
+                found.report().diagnostic().values().values().stream()
+                        .map(String::valueOf).filter(each -> each.startsWith("k"))
+                        .findFirst().ifPresent(out::add);
+            }
+        }
+        return out;
+    }
+
     /** The gap that is real is still reported; the one no row can fill is not. */
     @Test
     void theCaseWithAnAnswerIsStillOwedARow() {

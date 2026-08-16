@@ -57,14 +57,53 @@ public final class UnreachableClaims {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
-        // The body's own first fork, found down the spine — what a `let` binds is evaluated on the
-        // way to the answer, so a `match` under one is still the first thing this body does. It is
-        // named by identity and the whole body is walked once, rather than walked twice from two
-        // starting points, which is how a claim came to be collected under both standings.
-        Core first = spine(body, InputReads.of(read)).at();
+        // The fork this body reaches first, and the whole body walked once. Named by identity
+        // rather than by where it sits in a shape, because what makes it the first is the order
+        // things run in.
+        Core first = firstFork(body);
         claimedUnder(body, InputReads.of(read), symbols,
                 first instanceof Core.Match match ? match : null, found);
         return found.isEmpty() ? NONE : new UnreachableClaims(found);
+    }
+
+    /**
+     * The fork evaluation reaches first however the body goes, or null where it reaches none.
+     *
+     * <p>An order and not a shape. What a {@code let} binds runs before the body it binds it for,
+     * so a {@code match} written as a binding's value is the first thing this body does — read as a
+     * shape, the walk stepped over it to the end of the spine and called a later fork the first
+     * one, which let a claim at the fork every caller reaches escape being refused.
+     *
+     * <p>A fork's own arms are not entered. What runs before a fork is its scrutinee or its
+     * condition, and what runs after is whichever arm was taken, which is the thing being decided.
+     */
+    private static Core firstFork(Core e) {
+        if (e == null) {
+            return null;
+        }
+        if (e instanceof Core.Match match) {
+            Core inScrutinee = firstFork(match.scrutinee());
+            return inScrutinee != null ? inScrutinee : match;
+        }
+        if (e instanceof Core.If iff) {
+            Core inCondition = firstFork(iff.cond());
+            return inCondition != null ? inCondition : iff;
+        }
+        if (e instanceof Core.IfConstructed ic) {
+            Core inConstruction = firstIn(Evaluated.inOrder(ic.construct()));
+            return inConstruction != null ? inConstruction : ic;
+        }
+        return firstIn(Evaluated.inOrder(e));
+    }
+
+    private static Core firstIn(List<Core> evaluated) {
+        for (Core each : evaluated) {
+            Core found = firstFork(each);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     /**
@@ -124,24 +163,5 @@ public final class UnreachableClaims {
         return claims;
     }
 
-    /**
-     * What a body answers with, with the bindings around it removed.
-     *
-     * <p>Only what is evaluated on the way to the answer is stepped over. Nothing here enters a fork,
-     * and nothing enters a {@code Core.Block} either: a block is a function value, and what it
-     * matches on when something calls it is about its own parameters rather than about this
-     * behavior's inputs.
-     */
-    private static Spine spine(Core body, InputReads reads) {
-        Core at = body;
-        InputReads inside = reads;
-        while (at instanceof Core.LetIn let) {
-            inside = inside.and(let.binder(), let.value());
-            at = let.body();
-        }
-        return new Spine(at, inside);
-    }
 
-    /** Where the spine ended, and what it bound on the way. */
-    private record Spine(Core at, InputReads reads) {}
 }

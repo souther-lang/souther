@@ -1249,7 +1249,10 @@ public final class Bodies {
             out.put(behavior.name(), souther.compiler.claims.Claims.of(
                     souther.compiler.claims.UnreachableClaims.of(body, read, scope.value()), read));
         }
-        return Map.copyOf(out);
+        // In the order the module declares them, which is the order a reader meets the diagnostics
+        // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
+        // module with two refused claims reported them in whichever order the hashes fell.
+        return Ordered.map(out);
     }
 
     /** The claims a model's own rules contradict, as reports. Read from the judging above rather

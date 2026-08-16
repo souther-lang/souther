@@ -41,6 +41,17 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
      *  divides into are decided here, and a claim reaching either is a claim moving a measure. */
     private static final List<String> WHERE_DENOMINATORS_ARE = List.of("inputs", "partition");
 
+    /**
+     * And the files that count one inside a package that also reports.
+     *
+     * <p>{@code query} holds both halves — the measures and what a report says about them — so the
+     * package alone is too coarse a line. These two count: {@code Adequacy} the cases a signature is
+     * owed, {@code Coverages} the classes a position is owed. What a body claimed is put beside
+     * their answers afterwards, by a file that counts nothing.
+     */
+    private static final List<String> WHAT_COUNTS_ONE =
+            List.of("query/Adequacy.java", "query/Coverages.java");
+
     @Test
     void everyReadingOfAnInputComesFromTheOneQueryThatMakesThem() throws IOException {
         List<Path> sources = mainSources();
@@ -66,17 +77,21 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
         List<String> reading = new ArrayList<>();
         List<String> naming = new ArrayList<>();
         for (Path source : sources) {
-            String where = source.getParent().getFileName().toString();
-            if (!WHERE_DENOMINATORS_ARE.contains(where)) {
+            String where = source.getParent().getFileName() + "/" + source.getFileName();
+            if (!WHERE_DENOMINATORS_ARE.contains(source.getParent().getFileName().toString())
+                    && !WHAT_COUNTS_ONE.contains(where)) {
                 continue;
             }
-            reading.add(source.getFileName().toString());
+            reading.add(where);
             if (Files.readString(source, StandardCharsets.UTF_8).contains("souther.compiler.claims")) {
-                naming.add(where + "/" + source.getFileName());
+                naming.add(where);
             }
         }
         assertTrue(reading.size() > 20, () -> "the scan found only " + reading.size()
                 + " sources where a denominator is counted, which is not the tree");
+        assertTrue(reading.containsAll(WHAT_COUNTS_ONE),
+                () -> "the two files that count a denominator beside a report were not scanned: "
+                        + reading);
         assertEquals(List.of(), naming,
                 "a claim cannot narrow what a row is owed, and these can reach one");
     }
@@ -92,9 +107,9 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
                 readers.add(source.getParent().getFileName() + "/" + source.getFileName());
             }
         }
-        assertEquals(List.of("query/Adequacy.java", "query/Bodies.java", "query/Coverages.java"),
+        assertEquals(List.of("query/Bodies.java", "query/ClaimReport.java"),
                 readers.stream().sorted().toList(),
-                "a claim is judged where the bodies are checked and printed where they are reported");
+                "a claim is judged where the bodies are checked and said where a report is decorated");
     }
 
     private static List<Path> mainSources() throws IOException {

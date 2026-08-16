@@ -26,7 +26,6 @@ import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.claims.Claims;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowClasses;
@@ -235,37 +234,6 @@ public final class Adequacy {
                 : read.getOrDefault(spec.name(), InputDomain.NONE);
     }
 
-    /** One behavior's judged claims, or none where the module's could not be made. */
-    private static Claims claimsOf(Map<String, Claims> judged, Hir.SpecBehavior spec) {
-        return judged == null ? Claims.NONE : judged.getOrDefault(spec.name(), Claims.NONE);
-    }
-
-    /**
-     * What each behavior of one module declares cannot arrive, and what its own rules say about it.
-     *
-     * <p>Asked once, here, and read by the diagnostic that refuses a contradicted claim and by the
-     * report that prints a confirmed or an unproven one. Nothing else reads it: what a row is owed
-     * at comes off {@link Inputs}, before this runs and after it, so a claim cannot move a
-     * denominator whatever it says.
-     */
-    public record Claimed(String name) implements Key<Map<String, Claims>> {
-
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Map<String, Claims>> compute(Db db) {
-            // Read from the check that made them, and not made again here. The refusal of a
-            // contradicted claim is that check's report and this is the same judging projected for
-            // the measures — asked twice, a build could refuse a claim the report called unproven.
-            souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
-            return checked == null ? Answer.absent() : Answer.of(Ordered.map(checked.claims()));
-        }
-    }
-
     /**
      * The arms of every behavior of one module that the model's own rules prove nothing reaches.
      *
@@ -462,7 +430,6 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
-            Map<String, Claims> claimed = db.ask(new Claimed(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
@@ -478,11 +445,15 @@ public final class Adequacy {
                     continue;
                 }
                 Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
-                out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig, scope.value(),
-                        bodies.get(spec.name()), plan, seen,
-                        boundaries == null ? List.of()
-                                : boundaries.getOrDefault(spec.name(), List.of()),
-                        claimsOf(claimed, spec)));
+                // Counted with nothing a body claims in scope, and decorated with what it claimed
+                // afterwards. The two are separate calls because they are separate answers: one is
+                // what the rows are held to, and the other is what the model said about it.
+                out.put(spec.name(), ClaimReport.decorate(
+                        Coverages.of(spec, domainOf(readInputs, spec), sig, scope.value(),
+                                bodies.get(spec.name()), plan, seen,
+                                boundaries == null ? List.of()
+                                        : boundaries.getOrDefault(spec.name(), List.of())),
+                        checked, spec.name()));
             }
             return Answer.of(Ordered.map(out));
         }
