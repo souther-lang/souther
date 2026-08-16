@@ -24,7 +24,7 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.TextRead;
+import souther.compiler.diag.Placement;
 import souther.compiler.types.ConstructionOrigin;
 
 import java.math.BigDecimal;
@@ -75,7 +75,7 @@ public final class AstBuilder {
      */
     private final Map<String, Integer> rowsOfTarget = new HashMap<>();
 
-    private AstBuilder(String source, TextRead read) {
+    private AstBuilder(String source, Placement read) {
         this.lines = new LineIndex(source, read);
     }
 
@@ -92,7 +92,7 @@ public final class AstBuilder {
      * package-private, and what a second caller would have to guarantee.
      */
     static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName,
-                            TextRead read) {
+                            Placement read) {
         return new AstBuilder(source, read).module(sourceFile, defaultModuleName);
     }
 

@@ -151,7 +151,7 @@ public final class BottomInfer {
                 && fn.params().get(seed).equals(fn.result());
         if (foldShaped
                 && isEmptyCollectionLiteral(args.get(seed))
-                && !args.get(seed).pos().isOutOfSight()
+                && !args.get(seed).pos().wasCopiedHere()
                 && Type.mentions(TypeOps.substitute(fn.params().get(seed), bind), BottomInfer::isBottom)) {
             return seed;
         }

@@ -45,6 +45,14 @@ public final class JsonRenderer implements DiagnosticRenderer {
         if (view.anchor().region() != null) {
             obj.put("region", region(view.anchor().region()));
         }
+        // A report with nowhere to point says where the code is written, in the words a document
+        // already uses for it. Beside the diagnostic rather than inside a region, there being no
+        // region — and written rather than left to the message, because a tool reading this reads
+        // values and not sentences.
+        if (d.primary() instanceof Primary.Unavailable(SourceProvenance from)) {
+            obj.put("writtenAt", new LinkedHashMap<String, String>(
+                    Citation.outOfSightFields(from)));
+        }
         if (!view.others().isEmpty() || !view.unquotable().isEmpty()) {
             List<Object> secs = new ArrayList<>();
             for (Spot other : view.others()) {

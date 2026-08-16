@@ -92,7 +92,7 @@ class ARuleAConstructionIsJudgedAgainstIsNotWhereTheReportIsSaidTest {
 
         assertTrue(said.secondary().stream()
                         .anyMatch(l -> l.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
-                                && new SourceId("lib.sou").equals(in.region().start().sourceId())),
+                                && in.region().start().isIn(new SourceId("lib.sou"))),
                 "the report points at the clause in the library: " + said.secondary());
     }
 }

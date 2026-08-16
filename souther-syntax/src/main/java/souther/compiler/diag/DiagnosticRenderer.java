@@ -86,6 +86,14 @@ public interface DiagnosticRenderer {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
         String said = d.literalMessage() != null ? d.literalMessage()
                 : d.said() == null ? "" : Messages.render(d.said(), locale);
+        // Asked of what the report points at rather than of a position, because one of the answers
+        // is that there is no position and the code is written somewhere this compile cannot show.
+        // Read off the position alone that came back as nothing to say, and a reader was left with a
+        // sentence about a place, no place, and no account of why.
+        if (d.primary() instanceof Primary.Unavailable(SourceProvenance from)) {
+            return with(said, new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
+                    from.reachedBy()), locale);
+        }
         return qualified(said, d.pos(), locale);
     }
 
@@ -108,13 +116,21 @@ public interface DiagnosticRenderer {
      */
     static String qualified(String said, SourcePos at, Locale locale) {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
-        if (at == null || !(Citation.of(at) instanceof Citation.OutOfSight out)) {
+        // Both arms that say the code is elsewhere, because this sentence is about where the code is
+        // written and the two agree about that. What they differ about is whether there was anywhere
+        // to point, which is the caret's question and not this one.
+        if (at == null || !(Citation.of(at) instanceof Citation.Elsewhere out)) {
             return said;
         }
-        String about = Messages.render(
-                new WrittenAtMessage.TheCodeIsWrittenOutOfSight(out.provenance().reachedBy()),
-                locale);
-        return said.isEmpty() ? about : said + " " + about;
+        return with(said, new WrittenAtMessage.TheCodeIsWrittenOutOfSight(
+                out.provenance().reachedBy()), locale);
+    }
+
+    /** {@code said} with {@code about} after it, or {@code about} alone where there was nothing to
+     *  put it after. */
+    private static String with(String said, WrittenAtMessage about, Locale locale) {
+        String rendered = Messages.render(about, locale);
+        return said.isEmpty() ? rendered : said + " " + rendered;
     }
 
     /**
@@ -125,10 +141,8 @@ public interface DiagnosticRenderer {
      * nothing, so explaining a caret would be explaining something the reader cannot see.
      */
     static String saidAbout(DiagnosticView.Unquotable unquotable, Locale locale) {
-        String said = Messages.render(unquotable.said(), locale);
-        String about = Messages.render(
+        return with(Messages.render(unquotable.said(), locale),
                 new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
                         unquotable.place().provenance().reachedBy()), locale);
-        return said.isEmpty() ? about : said + " " + about;
     }
 }

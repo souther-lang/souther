@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.HumanRenderer;
@@ -127,7 +128,8 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
                 """);
 
         assertEquals(new SourceId("1"), e.sourceId());
-        assertEquals(new SourceId("1"), e.diagnostic().pos().sourceId(),
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("1")),
+                e.diagnostic().pos().quotedFrom(),
                 "the position itself says which file, which is what the id is read off");
     }
 

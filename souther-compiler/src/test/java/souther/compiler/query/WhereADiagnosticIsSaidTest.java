@@ -105,7 +105,7 @@ class WhereADiagnosticIsSaidTest {
         }
         return found.report().diagnostic().secondary().stream()
                 .anyMatch(label -> label.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
-                        && id.equals(in.region().start().sourceId()));
+                        && in.region().start().isIn(id));
     }
 
     // --- one problem, one report; two problems, two ----------------------------------------------

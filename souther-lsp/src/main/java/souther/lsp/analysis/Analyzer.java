@@ -416,8 +416,14 @@ public final class Analyzer {
      * module is one file, and nothing checks that it is.
      */
     private String documentOf(SourcePos written, String moduleUri, ModuleGraph graph) {
-        String uri = written != null && written.sourceId() != null
-                ? written.sourceId().value() : moduleUri;
+        String uri = written == null ? moduleUri : switch (written.quotedFrom()) {
+            case souther.compiler.diag.QuotedFrom.ASourceThisCompileHolds(var source) ->
+                    source.value();
+            // A place with no file of its own is shown against the module's, which is the file this
+            // answer was asked of. Right while a module is one file, and nothing checks that it is.
+            case souther.compiler.diag.QuotedFrom.TextItCannotShow _,
+                 souther.compiler.diag.QuotedFrom.TextItCannotName _ -> moduleUri;
+        };
         return uri != null && graph.text(uri) != null ? uri : null;
     }
 

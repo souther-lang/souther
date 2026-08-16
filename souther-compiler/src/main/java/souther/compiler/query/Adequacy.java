@@ -1707,8 +1707,7 @@ public final class Adequacy {
          */
         private static Report warning(Finding finding) {
             List<Object> said = finding.args();
-            souther.compiler.diag.Diagnostic.Builder built = souther.compiler.diag.Diagnostic
-                    .at(sentTo(finding.at()))
+            souther.compiler.diag.Diagnostic.Builder built = pointedAt(finding.at())
                     .say(switch (finding.kind()) {
                         case OUTPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowExpectsThatCase(
                                 text(said, 0), text(said, 1));
@@ -1743,13 +1742,23 @@ public final class Adequacy {
                     // the file the diagnostic is in; a label no longer takes its file from where it
                     // is shown, so what was left unsaid can be said.
                     rule(said).citation().ifPresent(cited -> {
-                        souther.compiler.diag.Region where = switch (cited) {
+                        switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
-                                    souther.compiler.diag.Region.point(w.at());
-                            case souther.compiler.diag.Citation.OutOfSight o ->
-                                    souther.compiler.diag.Region.point(o.reachedFrom());
-                        };
-                        built.secondary(where, new ExampleMessage.TheGuardThatDrawsTheLine());
+                                    built.secondary(souther.compiler.diag.Region.point(w.at()),
+                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                            case souther.compiler.diag.Citation.Reached r ->
+                                    built.secondary(souther.compiler.diag.Region.point(r.at()),
+                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                            // Nowhere this compilation can put a marker. Where the guard is written
+                            // out of sight the label says so instead; where it is in a text the
+                            // caller handed over there is no declaration to name and nothing to say,
+                            // so there is no label. A marker over such a region is not an option:
+                            // a place a reader is sent to names its source, and this one cannot.
+                            case souther.compiler.diag.Citation.Elsewhere e ->
+                                    built.secondaryOutOfSight(e.provenance(),
+                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                            case souther.compiler.diag.Citation.Unplaced _ -> { }
+                        }
                     });
                 }
                 case ARM_UNREACHED ->
@@ -1767,10 +1776,19 @@ public final class Adequacy {
          * off the coordinate it is built at — which carries the same provenance this reads, so the
          * two cannot come apart.
          */
-        private static SourcePos sentTo(Citation cited) {
+        static souther.compiler.diag.Diagnostic.Builder pointedAt(Citation cited) {
             return switch (cited) {
-                case Citation.Written written -> written.at();
-                case Citation.OutOfSight out -> out.reachedFrom();
+                case Citation.Written written -> souther.compiler.diag.Diagnostic.at(written.at());
+                case Citation.Unplaced unplaced ->
+                        souther.compiler.diag.Diagnostic.at(unplaced.at());
+                case Citation.Reached reached -> souther.compiler.diag.Diagnostic.at(reached.at());
+                case Citation.UnplacedElsewhere out -> souther.compiler.diag.Diagnostic.at(out.at());
+                // Nowhere to point, and which module wrote the code is known. Said as that rather
+                // than as no place at all: the reading that moves a report to where a reader can be
+                // sent needs the answer this finding already has, and would otherwise work it out
+                // again from whichever module the report was filed under.
+                case Citation.OutOfSight out ->
+                        souther.compiler.diag.Diagnostic.atCodeWrittenOutOfSight(out.provenance());
             };
         }
 

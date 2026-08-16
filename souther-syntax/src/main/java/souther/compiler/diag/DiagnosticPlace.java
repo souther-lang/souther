@@ -36,8 +36,8 @@ public sealed interface DiagnosticPlace {
      * A stretch of source a reader can be sent to.
      *
      * <p>Both a place a source of this compile was read for and a copy of code from out of sight
-     * that was given the caller's place to be read against. The two differ in what the coordinate
-     * says about itself ({@link WrittenAt}), and not in whether there is somewhere to send a reader.
+     * that was given the caller's place to be read against. The two differ in what the position says
+     * about itself ({@link Placement}), and not in whether there is somewhere to send a reader.
      *
      * <p>One component, and the source is read off it. A source held beside a region that carries
      * one is two values for one fact with nothing keeping them the same — which is the shape this
@@ -53,7 +53,7 @@ public sealed interface DiagnosticPlace {
 
         public InSource {
             heldToOnePlace(region);
-            if (region.start().sourceId() == null) {
+            if (!(region.start().quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds)) {
                 throw new NotAPlace("a place a reader is sent to names the source it is in: "
                         + region);
             }
@@ -61,7 +61,7 @@ public sealed interface DiagnosticPlace {
 
         /** The source this is in, which is the source the region was read from. */
         public SourceId source() {
-            return region.start().sourceId();
+            return ((QuotedFrom.ASourceThisCompileHolds) region.start().quotedFrom()).source();
         }
     }
 
@@ -79,29 +79,29 @@ public sealed interface DiagnosticPlace {
     /**
      * Where {@code region} is, classified once.
      *
-     * <p>Two questions, asked in this order and neither answered off the other. Whether there is a
-     * file to quote is whether the region names a source. What the numbers stand for is the
-     * coordinate's own provenance. A copy spliced into a caller answers yes to the first and stands
-     * in all the same, which is why the first cannot be read off the second.
+     * <p>Off the citation the region's start projects, which is where those two questions are
+     * already answered together. A copy spliced into a caller is somewhere a reader can be sent and
+     * stands in for code elsewhere at once, and that is one arm rather than a pair of answers this
+     * would have to combine.
      *
-     * @throws NotAPlace where there is no region, where it has no ends, or where it names no source
-     *         and its coordinate says the code is written at it. The last is a position somebody made
-     *         by hand and did not place, and it used to mean "read it in the diagnostic's file" — a
-     *         reading that made this defect possible and is gone
-     * @throws NotOnePlace where the ends were read from two sources
+     * @throws NotAPlace where there is no region, where it has no ends, or where the text it is in
+     *         is one this compilation cannot name while saying the code is written there. That is a
+     *         position somebody made by hand and did not place, and it used to mean "read it in the
+     *         diagnostic's file" — a reading that made this defect possible and is gone
+     * @throws NotOnePlace where the ends are in two places
      */
     static DiagnosticPlace of(Region region) {
         heldToOnePlace(region);
-        SourcePos start = region.start();
-        if (start.sourceId() != null) {
-            return new InSource(region);
-        }
-        if (Citation.of(start) instanceof Citation.OutOfSight out) {
-            return new Unavailable(out.provenance());
-        }
-        throw new NotAPlace(
-                "a region naming no source is a place nobody settled, and a report may not settle it"
-                        + " from where it happens to be shown: " + region);
+        return switch (Citation.of(region.start())) {
+            case Citation.Written _, Citation.Reached _ -> new InSource(region);
+            case Citation.OutOfSight out -> new Unavailable(out.provenance());
+            // A position in a text the caller handed over is not one this compilation can send a
+            // reader to, whether or not it has a declaration to name. What is said instead is the
+            // label's to decide, and it has the citation.
+            case Citation.Unplaced _, Citation.UnplacedElsewhere _ -> throw new NotAPlace(
+                    "a region naming no source is a place nobody settled, and a report may not"
+                            + " settle it from where it happens to be shown: " + region);
+        };
     }
 
     /**
@@ -126,12 +126,12 @@ public sealed interface DiagnosticPlace {
     /**
      * Refuses a region that is not one place before anything is asked of it.
      *
-     * <p>Both components of where a coordinate is, and not just the file. A place has one source
-     * and one provenance, and a region whose ends disagree about either is a place that is two
-     * places — {@link SourcePos} says as much of its own identity, two coordinates differing in
-     * provenance being read differently by every surface. Read off the start alone, the second end's
-     * answer would go unrecorded: a region running from a copy of {@code A} to a copy of {@code B}
-     * would come back as a report about {@code A}, and nothing anywhere would say otherwise.
+     * <p>The whole of where a position is, and not just the file. A region whose ends are in two
+     * places is a place that is two places, and a placement is what says which place one end is in —
+     * so this is one comparison rather than a file test and a provenance test that could be kept in
+     * step by hand. Read off the start alone, the second end's answer would go unrecorded: a region
+     * running from a copy of {@code A} to a copy of {@code B} would come back as a report about
+     * {@code A}, and nothing anywhere would say otherwise.
      *
      * <p>Held here rather than on {@link Region}, which is a pair of coordinates and is built by
      * every pass; this is where a pair is asked to be a place. Measured before it was written: no
@@ -146,13 +146,9 @@ public sealed interface DiagnosticPlace {
         if (start == null || end == null) {
             throw new NotAPlace("a region a label is about has two ends: " + region);
         }
-        if (!Objects.equals(start.sourceId(), end.sourceId())) {
-            throw new NotOnePlace("a region runs from " + start.sourceId() + " to "
-                    + end.sourceId() + ", which is not one place in one source");
-        }
-        if (!start.writtenAt().equals(end.writtenAt())) {
-            throw new NotOnePlace("a region runs from " + start.writtenAt() + " to "
-                    + end.writtenAt() + ", which is not one place written in one place");
+        if (!start.placement().equals(end.placement())) {
+            throw new NotOnePlace("a region runs from " + start.placement() + " to "
+                    + end.placement() + ", which is not one place");
         }
     }
 

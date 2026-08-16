@@ -28,7 +28,7 @@ public final class Diagnostic {
 
     private final Severity severity;
     private final DiagnosticCode code;
-    private final Region region;
+    private final Primary primary;
     private final List<LabeledRegion> secondary;
     private final String literalMessage;
     private final Message said;
@@ -36,12 +36,12 @@ public final class Diagnostic {
     private final List<Note> notes;
     private final String suggestion;
 
-    private Diagnostic(Severity severity, DiagnosticCode code, Region region,
+    private Diagnostic(Severity severity, DiagnosticCode code, Primary primary,
                        List<LabeledRegion> secondary, String literalMessage,
                        TypeComparison diff, List<Note> notes, String suggestion, Message said) {
         this.severity = severity;
         this.code = code;
-        this.region = region;
+        this.primary = primary;
         this.secondary = secondary;
         this.literalMessage = literalMessage;
         this.diff = diff;
@@ -84,8 +84,41 @@ public final class Diagnostic {
         return code == null ? null : code.titleKey();
     }
 
+    /** Where this points, or null where it points nowhere. A report that has something to say
+     *  instead says it through {@link #primary()}; every surface that only wanted a region reads
+     *  this and is told the same nothing it was told before. */
     public Region region() {
-        return region;
+        return Primary.regionOf(primary);
+    }
+
+    /** What this points at, which is a region or is nowhere and where the code is. */
+    public Primary primary() {
+        return primary;
+    }
+
+    /**
+     * What this report already says about where its code is written.
+     *
+     * <p>Two ways of knowing and one answer. A report with nowhere to point carries it outright; one
+     * pointing at a position carries it in what that position says, and a position in a module's
+     * published text or copied out of one says it as surely as the first does. Split, they became two
+     * questions with the same answer, and whoever was reading only the first had to work the second
+     * out again from whatever was to hand — which is the shape this whole change is about.
+     *
+     * <p>Three answers and not two. A report about code the reader is looking at has answered — it
+     * said "here" — and only one that points at nothing has not. Those came back as one absence
+     * once, and a caller moving a report could tell the first that its code was in a module.
+     */
+    public WhereCodeIsWritten whereItsCodeIsWritten() {
+        return switch (primary) {
+            case null -> WhereCodeIsWritten.Unstated.IT;
+            case Primary.Unavailable(SourceProvenance from) ->
+                    new WhereCodeIsWritten.Elsewhere(from);
+            case Primary.AtARegion(Region region) ->
+                    Citation.of(region.start()) instanceof Citation.Elsewhere elsewhere
+                            ? new WhereCodeIsWritten.Elsewhere(elsewhere.provenance())
+                            : WhereCodeIsWritten.Here.IT;
+        };
     }
 
     public List<LabeledRegion> secondary() {
@@ -110,6 +143,7 @@ public final class Diagnostic {
 
     /** The primary source position (the region's start). */
     public SourcePos pos() {
+        Region region = region();
         return region == null ? null : region.start();
     }
 
@@ -153,14 +187,53 @@ public final class Diagnostic {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
-        WrittenAt out = WrittenAt.outOfSight(provenance);
+        switch (whereItsCodeIsWritten()) {
+            // Nothing to contradict, so the caller answers. The only state where it may.
+            case WhereCodeIsWritten.Unstated _ -> { }
+            case WhereCodeIsWritten.Elsewhere(SourceProvenance known) -> {
+                if (!known.equals(provenance)) {
+                    throw new MovedSomewhereElsesCode(known, provenance);
+                }
+            }
+            // This report says its code is where it points, and moving a caret is not moving code.
+            case WhereCodeIsWritten.Here _ -> throw new MovedSomewhereElsesCode(provenance);
+        }
+        DeclaringCode declaring = new DeclaringCode(provenance);
         List<LabeledRegion> also = new ArrayList<>(secondary);
         for (SourcePos other : where.subList(1, where.size())) {
-            also.add(new LabeledRegion(Region.point(other.standingInFor(out)), alsoHere));
+            also.add(new LabeledRegion(Region.point(other.standingInFor(declaring)), alsoHere));
         }
         return new Diagnostic(severity, code,
-                Region.point(where.get(0).standingInFor(out)), List.copyOf(also),
+                new Primary.AtARegion(Region.point(where.get(0).standingInFor(declaring))),
+                List.copyOf(also),
                 literalMessage, diff, notes, suggestion, said);
+    }
+
+    /**
+     * A report told its code was written somewhere other than where it already says.
+     *
+     * <p>Moving a report is a change to where a reader is sent and is not a change to what the
+     * report is about. A caller supplies where the code is because a report with nothing pointed at
+     * has no answer of its own to read; one that has an answer is not asking, and being handed a
+     * different one means somebody worked it out again from what was to hand.
+     *
+     * <p>Marked, for the reason {@code DiagnosticPlace.NotAPlace} is: what raises this runs where an
+     * analysis may fall open, and an unmarked refusal would be swallowed there.
+     */
+    public static final class MovedSomewhereElsesCode extends IllegalArgumentException
+            implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        MovedSomewhereElsesCode(SourceProvenance known, SourceProvenance given) {
+            super("this report says its code is written in " + known + " and was moved as though it"
+                    + " were written in " + given);
+        }
+
+        MovedSomewhereElsesCode(SourceProvenance given) {
+            super("this report says its code is written where it points, and was moved as though it"
+                    + " were written in " + given);
+        }
     }
 
     /**
@@ -171,12 +244,12 @@ public final class Diagnostic {
      * store's own de-duplication, which keeps one report per identity — so leaving the values out
      * drops a real diagnostic rather than a repeat of one.
      */
-    public record Identity(Severity severity, String code, String titleKey, Region region,
+    public record Identity(Severity severity, String code, String titleKey, Primary primary,
                            List<LabeledRegion> secondary, String literalMessage,
                            TypeComparison diff, List<Note> notes, String suggestion, Message said) {}
 
     public Identity identity() {
-        return new Identity(severity, code(), titleKey(), region,
+        return new Identity(severity, code(), titleKey(), primary,
                 secondary == null ? List.of() : secondary, literalMessage, diff,
                 notes == null ? List.of() : notes, suggestion, said);
     }
@@ -185,7 +258,8 @@ public final class Diagnostic {
      * has not yet been moved onto a catalog key. It carries no code and no title: a site with
      * either of those has a catalog key by now. {@code pos} may be null for a position-less error. */
     public static Diagnostic literal(SourcePos pos, String message) {
-        return new Diagnostic(Severity.ERROR, null, pos == null ? null : Region.point(pos),
+        return new Diagnostic(Severity.ERROR, null,
+                pos == null ? null : new Primary.AtARegion(Region.point(pos)),
                 List.of(), message, null, List.of(), null, null);
     }
 
@@ -208,6 +282,12 @@ public final class Diagnostic {
         return new Builder().at(pos);
     }
 
+    /** A diagnostic with nowhere to point, about code written in {@code from} — which
+     *  {@link Builder#say} then gives what it says. */
+    public static Builder atCodeWrittenOutOfSight(SourceProvenance from) {
+        return new Builder().atCodeWrittenOutOfSight(from);
+    }
+
     /** The same, over the {@code width} UTF-16 code units from {@code pos} — the length of the text
      * it is about, which is what a {@link Region} is measured in. Not a width on a screen: how much
      * room that text takes is the renderer's to work out, from the line it is quoting. */
@@ -219,7 +299,7 @@ public final class Diagnostic {
     public static final class Builder {
         private DiagnosticCode code;
         private Message said;
-        private Region region;
+        private Primary primary;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private TypeComparison diff;
         private final List<Note> notes = new ArrayList<>();
@@ -245,7 +325,20 @@ public final class Diagnostic {
         }
 
         public Builder at(SourcePos pos) {
-            this.region = pos == null ? null : Region.point(pos);
+            this.primary = pos == null ? null : new Primary.AtARegion(Region.point(pos));
+            return this;
+        }
+
+        /**
+         * The report points nowhere, and the code it is about is written in {@code from}.
+         *
+         * <p>What a finding about code inside a module's published text says. The position it was
+         * found at is a line of a text no reader holds, so there is nothing to offer — and saying so
+         * with no region at all would drop the one thing that is known, which is which module wrote
+         * it. The same thing {@link #secondaryOutOfSight} says of a label.
+         */
+        public Builder atCodeWrittenOutOfSight(SourceProvenance from) {
+            this.primary = new Primary.Unavailable(from);
             return this;
         }
 
@@ -253,24 +346,27 @@ public final class Diagnostic {
          * The place, over the {@code width} units of text it is about — and over none of them where
          * the place only stands in for code written out of sight.
          *
-         * <p>The width is measured on the text the report is about, and where that text is out of
-         * sight the coordinate is somewhere else: a call in the caller's file, whose own text is
-         * whatever length it happens to be. Underlining a construction's width from there covers
+         * <p>The width is measured on the text the report is about, and where the code was copied
+         * here the position is somewhere else: a call in the caller's file, whose own text is
+         * whatever length it happens to be. A position in a published module's own text is not that
+         * — the numbers are that text's, and its width is the code's — so what this asks is whether
+         * the position was borrowed, not whether a reader can be sent to it. Underlining a construction's width from there covers
          * however many characters of the call the two numbers happen to agree on — three columns
          * sized for {@code Yen} landing on {@code atL}. A point claims what is true, which is that
          * this is where the code was reached from.
          */
         public Builder at(SourcePos pos, int width) {
             if (pos == null) {
-                this.region = null;
+                this.primary = null;
             } else {
-                this.region = pos.isOutOfSight() ? Region.point(pos) : Region.ofWidth(pos, width);
+                this.primary = new Primary.AtARegion(
+                        pos.wasCopiedHere() ? Region.point(pos) : Region.ofWidth(pos, width));
             }
             return this;
         }
 
         public Builder at(Region region) {
-            this.region = region;
+            this.primary = region == null ? null : new Primary.AtARegion(region);
             return this;
         }
 
@@ -317,7 +413,7 @@ public final class Diagnostic {
             if (code == null) {
                 throw new IllegalStateException("a diagnostic reports a rule; call `say`");
             }
-            return new Diagnostic(code.severity(), code, region, List.copyOf(secondary), null,
+            return new Diagnostic(code.severity(), code, primary, List.copyOf(secondary), null,
                     diff, List.copyOf(notes), suggestion, said);
         }
     }

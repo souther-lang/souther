@@ -12,6 +12,10 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.Region;
+import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.WhereCodeIsWritten;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -506,14 +510,13 @@ public final class Compilation {
     private record Repeat(String module, SourceId sourceId, Diagnostic.Identity problem) {}
 
     /**
-     * {@code found} where a reader can be sent to it — itself, for the reports whose coordinate was
-     * read from a source this compile holds.
+     * {@code found} where a reader can be sent to it — itself, for the reports already pointing at a
+     * source this compile holds.
      *
-     * <p>Two questions, asked separately. Whether a reader can be sent here is whether this compile
-     * holds a file to quote, which is what naming a source is. What the place stands in for is the
-     * coordinate's own ({@link souther.compiler.diag.WrittenAt}), read off it rather than rebuilt
-     * from the module this walk was about — the module is what a route to the code is looked up by,
-     * and provenance has one authority.
+     * <p>Which of them those are, and what to say about them, is one question rather than a source
+     * test here and a provenance lookup after it. What a report is moved with is what it already says
+     * about where its code is written; the module this walk was about answers only for a report that
+     * says nothing, which is the one case with nothing to prefer.
      *
      * <p>What a raised report carried as the text its pass threw it with is dropped with the move
      * ({@link Report#legacyMessage}). That text was rendered with the old coordinate written into
@@ -523,9 +526,8 @@ public final class Compilation {
      */
     private Db.Found citable(Db.Found found) {
         Diagnostic said = found.report().diagnostic();
-        SourcePos at = said.pos();
-        if (at == null || at.sourceId() != null || found.module() == null
-                || !(Citation.of(at) instanceof Citation.OutOfSight out)) {
+        SourceProvenance about = whatToMove(said, found.module());
+        if (about == null) {
             return found;
         }
         Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
@@ -533,9 +535,56 @@ public final class Compilation {
             return found;
         }
         return new Db.Found(found.module(), found.sourceId(), Report.of(
-                said.reachedFrom(onThePath.reachedFrom(), out.provenance(),
+                said.reachedFrom(onThePath.reachedFrom(), about,
                         new ModuleMessage.ItIsReachedFromHereToo())));
     }
+
+    /**
+     * Where the code a report is about is written, for a report this reading should move — and null
+     * for one it should leave alone.
+     *
+     * <p>Two questions, and they are not the same one. Whether this compilation can send a reader to
+     * where the report points is about the place; what the report says about where its code is
+     * written is about the code. A report pointing at a call in the reader's file says its code is
+     * elsewhere and needs no moving, so reading one off the other would move it.
+     *
+     * <p>Its own answer wherever it has one. A position carries which text it is in and whose code it
+     * holds separately, so a report from a body spliced into a module's published text says the
+     * body's module and not the text's — and reading the module this walk was about instead would put
+     * them back together, which is the inference this whole change removes.
+     *
+     * <p>The module only where nothing was pointed at at all. There is nothing to read an answer off,
+     * and the module the report was filed under is the whole of what is known about it.
+     *
+     * <p>A report in a text this compilation cannot name is left where it is. Its position is one
+     * whoever handed the text over can use and this is not being read by them — but nothing about it
+     * says where its code came from, and moving it would mean answering that from the module, which
+     * is the inference again. Whether such a position is a place at all is the open question about a
+     * primary region, and this does not decide it.
+     */
+    static SourceProvenance whatToMove(Diagnostic said, String module) {
+        if (module == null) {
+            return null;
+        }
+        boolean nowhereToSendAReader = switch (said.primary()) {
+            case null -> true;
+            case Primary.Unavailable _ -> true;
+            case Primary.AtARegion(Region region) ->
+                    Citation.of(region.start()) instanceof Citation.OutOfSight;
+        };
+        if (!nowhereToSendAReader) {
+            return null;
+        }
+        return switch (said.whereItsCodeIsWritten()) {
+            case WhereCodeIsWritten.Elsewhere(SourceProvenance from) -> from;
+            case WhereCodeIsWritten.Unstated _ ->
+                    souther.compiler.meta.ModuleReadback.provenanceOf(module);
+            // A report saying its code is where it points has somewhere to point, so it did not
+            // reach here.
+            case WhereCodeIsWritten.Here _ -> null;
+        };
+    }
+
 
     /** The one failure these sources have, or null when they have none. */
     public CompileException failure() {

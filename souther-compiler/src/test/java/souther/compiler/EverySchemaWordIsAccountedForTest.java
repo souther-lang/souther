@@ -8,7 +8,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
-import souther.compiler.diag.WrittenAt;
+import souther.compiler.diag.Placement;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.BoundaryObligation;
@@ -111,7 +111,8 @@ class EverySchemaWordIsAccountedForTest {
     private static Set<String> writtenAtWords() {
         SourcePos here = new SourcePos(1, 1, new SourceId("s"));
         return java.util.stream.Stream
-                .of(here, here.standingInFor(WrittenAt.outOfSight(new SourceProvenance.TheStandardLibrary("List.filter"))))
+                .of(here, here.standingInFor(new souther.compiler.diag.DeclaringCode(
+                        new SourceProvenance.TheStandardLibrary("List.filter"))))
                 .map(pos -> Citation.of(pos).writtenAtFields().get("kind"))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Diagnostic;
@@ -8,6 +9,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.Placement;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.query.Compilation;
@@ -102,12 +104,16 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """, held());
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
-        assertEquals(new SourceId("0"), said.sourceId(), "a reader can only be sent to a file this compile holds");
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("0")), said.quotedFrom(),
+                "a reader can only be sent to a file this compile holds");
         assertEquals(6, said.line(), "the import line naming the module, not a line of the module");
         assertEquals(1, said.column());
     }
 
-    /** The coordinate says the code is elsewhere, so no surface reads it as the place. */
+    /**
+     * The position says the code is elsewhere, so no surface reads it as the place — and it says
+     * this compile met it somewhere a reader holds, which is what the anchoring put there.
+     */
     @Test
     void theCoordinateStandsInForCodeWrittenInThatModule() {
         Compilation compilation = reading("""
@@ -119,8 +125,10 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
         Citation citation = Citation.of(whereTheReportAboutIsSaid(compilation, "lib.held"));
 
-        assertEquals("lib.held",
-                assertInstanceOf(Citation.OutOfSight.class, citation).provenance().reachedBy());
+        Citation.Reached reached = assertInstanceOf(Citation.Reached.class, citation);
+        assertEquals("lib.held", reached.provenance().reachedBy());
+        assertInstanceOf(QuotedFrom.ASourceThisCompileHolds.class, reached.at().quotedFrom(),
+                "a citation offering a place offers one in a file this compilation holds");
     }
 
     /**
@@ -148,7 +156,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """, and(held, front));
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
-        assertEquals(new SourceId("0"), said.sourceId());
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("0")), said.quotedFrom());
         assertEquals(4, said.line(), "the import of the dependency that led to it");
     }
 
@@ -340,10 +348,10 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         Set<String> saidAbout = new LinkedHashSet<>();
         for (Db.Found found : compilation.reports()) {
             SourcePos at = found.report().diagnostic().pos();
-            if (at == null || !at.isOutOfSight()) {
+            if (at == null || !(Citation.of(at) instanceof Citation.Elsewhere elsewhere)) {
                 continue;
             }
-            String stands = ((Citation.OutOfSight) Citation.of(at)).provenance().reachedBy();
+            String stands = elsewhere.provenance().reachedBy();
             saidAbout.add(stands);
             // Every file it is said in, and not only the one the caret is in: a second place is
             // said as a labelled region, and claiming a file that never reaches this module is
@@ -437,8 +445,12 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void movingTheCaretKeepsTheLabelsTheReportAlreadyHad() {
+        // Built the way a report about a module off the path is: pointing into that module's own
+        // text. One pointing into a file the reader holds says its code is there, and moving such a
+        // report is not something to ask for — a caret moving is not the code moving.
         Diagnostic said = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
-                .at(new SourcePos(1, 1, new SourceId("0")))
+                .at(Placement.whatAModulePublished(
+                        new SourceProvenance.APublishedModule("lib.held")).at(1, 1))
                 .secondary(Region.ofWidth(new SourcePos(3, 3, new SourceId("0")), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();

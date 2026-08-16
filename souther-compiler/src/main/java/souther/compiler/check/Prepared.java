@@ -222,7 +222,7 @@ public final class Prepared {
     public ExampleExecution forExamplesWrittenIn(SourceId sourceId) {
         List<Rows> mine = new ArrayList<>();
         for (Rows block : examples) {
-            if (sourceId.equals(block.read().pos().sourceId())) {
+            if (block.read().pos().isIn(sourceId)) {
                 mine.add(block);
             }
         }
