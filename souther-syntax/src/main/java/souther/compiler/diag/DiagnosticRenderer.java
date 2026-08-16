@@ -108,7 +108,10 @@ public interface DiagnosticRenderer {
      */
     static String qualified(String said, SourcePos at, Locale locale) {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
-        if (at == null || !(Citation.of(at) instanceof Citation.OutOfSight out)) {
+        // Both arms that say the code is elsewhere, because this sentence is about where the code is
+        // written and the two agree about that. What they differ about is whether there was anywhere
+        // to point, which is the caret's question and not this one.
+        if (at == null || !(Citation.of(at) instanceof Citation.Elsewhere out)) {
             return said;
         }
         String about = Messages.render(

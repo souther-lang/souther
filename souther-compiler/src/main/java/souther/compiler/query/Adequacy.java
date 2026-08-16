@@ -1743,13 +1743,23 @@ public final class Adequacy {
                     // the file the diagnostic is in; a label no longer takes its file from where it
                     // is shown, so what was left unsaid can be said.
                     rule(said).citation().ifPresent(cited -> {
-                        souther.compiler.diag.Region where = switch (cited) {
+                        switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
-                                    souther.compiler.diag.Region.point(w.at());
+                                    built.secondary(souther.compiler.diag.Region.point(w.at()),
+                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                            case souther.compiler.diag.Citation.Unplaced u ->
+                                    built.secondary(souther.compiler.diag.Region.point(u.at()),
+                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                            case souther.compiler.diag.Citation.Reached r ->
+                                    built.secondary(souther.compiler.diag.Region.point(r.at()),
+                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                            // The guard is inside the module's own text, which this compile has no
+                            // file for, so there is nothing to put a marker under and the label says
+                            // where the code came from instead.
                             case souther.compiler.diag.Citation.OutOfSight o ->
-                                    souther.compiler.diag.Region.point(o.reachedFrom());
-                        };
-                        built.secondary(where, new ExampleMessage.TheGuardThatDrawsTheLine());
+                                    built.secondaryOutOfSight(o.provenance(),
+                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                        }
                     });
                 }
                 case ARM_UNREACHED ->
@@ -1770,7 +1780,12 @@ public final class Adequacy {
         private static SourcePos sentTo(Citation cited) {
             return switch (cited) {
                 case Citation.Written written -> written.at();
-                case Citation.OutOfSight out -> out.reachedFrom();
+                case Citation.Unplaced unplaced -> unplaced.at();
+                case Citation.Reached reached -> reached.at();
+                // Nowhere. The finding is about code inside a module's own text, and a warning with
+                // no caret is what a report says when there is nothing to point at — the sentence
+                // still names the behavior and the rule, which is what it is about.
+                case Citation.OutOfSight _ -> null;
             };
         }
 

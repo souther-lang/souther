@@ -107,7 +107,10 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         assertEquals(1, said.column());
     }
 
-    /** The coordinate says the code is elsewhere, so no surface reads it as the place. */
+    /**
+     * The position says the code is elsewhere, so no surface reads it as the place — and it says
+     * this compile met it somewhere a reader holds, which is what the anchoring put there.
+     */
     @Test
     void theCoordinateStandsInForCodeWrittenInThatModule() {
         Compilation compilation = reading("""
@@ -119,8 +122,10 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
         Citation citation = Citation.of(whereTheReportAboutIsSaid(compilation, "lib.held"));
 
-        assertEquals("lib.held",
-                assertInstanceOf(Citation.OutOfSight.class, citation).provenance().reachedBy());
+        Citation.Reached reached = assertInstanceOf(Citation.Reached.class, citation);
+        assertEquals("lib.held", reached.provenance().reachedBy());
+        assertNotNull(reached.at().sourceId(),
+                "a citation offering a place offers one in a file this compilation holds");
     }
 
     /**
@@ -343,7 +348,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
             if (at == null || !at.isOutOfSight()) {
                 continue;
             }
-            String stands = ((Citation.OutOfSight) Citation.of(at)).provenance().reachedBy();
+            String stands = ((Citation.Elsewhere) Citation.of(at)).provenance().reachedBy();
             saidAbout.add(stands);
             // Every file it is said in, and not only the one the caret is in: a second place is
             // said as a labelled region, and claiming a file that never reaches this module is

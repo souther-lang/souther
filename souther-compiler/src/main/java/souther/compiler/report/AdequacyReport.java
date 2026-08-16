@@ -914,13 +914,39 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ObjectNode at = into.putObject("at");
         SourcePos pos = switch (where) {
             case Citation.Written written -> written.at();
-            case Citation.OutOfSight out -> out.reachedFrom();
+            case Citation.Reached reached -> reached.at();
+            case Citation.Unplaced _, Citation.OutOfSight _ -> throw new NoPlaceToWrite(where);
         };
         at.put("sourceId", sources.written(pos.sourceId()));
         at.put("line", pos.line());
         at.put("column", pos.column());
         ObjectNode writtenAt = at.putObject("writtenAt");
         where.writtenAtFields().forEach(writtenAt::put);
+    }
+
+    /**
+     * A place this document was asked to write that names no file.
+     *
+     * <p>Every place written here is a coverage site or a reason, and both are measured from a body
+     * this compile compiled out of a file it holds. A citation with no file is either a text nobody
+     * named — an editor's buffer, which nothing measures — or a position inside a module's own
+     * published text, which is not a body this compile has sites for. So the schema says a place has
+     * a source, a line and a column, and this is what happens when it would not.
+     *
+     * <p>A refusal rather than a document with the fields left out. That document would be one the
+     * shipped schema forbids, written silently, and read by a build that trusted the version number
+     * on it. Widening what a consumer must handle is a decision about the contract, and this is not
+     * the place it would be taken.
+     */
+    static final class NoPlaceToWrite extends IllegalArgumentException
+            implements souther.compiler.diag.TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        NoPlaceToWrite(Citation where) {
+            super("an adequacy document writes places in files this compile holds, and was given "
+                    + where);
+        }
     }
 
     private static void signature(ObjectNode behavior, Adequacy.SignatureEvidence signature) {

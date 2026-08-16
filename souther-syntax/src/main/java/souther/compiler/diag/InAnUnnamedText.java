@@ -48,7 +48,7 @@ final class InAnUnnamedText extends Placement {
 
     @Override
     Citation cite(SourcePos at) {
-        return new WrittenCitation(at);
+        return new UnplacedCitation(at);
     }
 
     @Override

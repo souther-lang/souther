@@ -162,8 +162,9 @@ public sealed interface OriginRef {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
             case GuardOrigin g -> switch (g.at()) {
-                case Citation.Written _ -> "guard@" + g.at().said(names, sectionSource);
-                case Citation.OutOfSight _ -> "guard in " + g.at().said(names, sectionSource);
+                case Citation.Written _, Citation.Unplaced _ ->
+                        "guard@" + g.at().said(names, sectionSource);
+                case Citation.Elsewhere _ -> "guard in " + g.at().said(names, sectionSource);
             };
             case NarrowedOrigin n -> n.bound().describe(names, sectionSource) + " within "
                     + n.within().stream().map(TypeSymbol::name)

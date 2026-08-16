@@ -56,7 +56,7 @@ final class StandingInFor extends Placement {
 
     @Override
     Citation cite(SourcePos at) {
-        return new OutOfSightCitation(provenance, at);
+        return new ReachedCitation(provenance, at);
     }
 
     @Override
