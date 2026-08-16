@@ -160,7 +160,13 @@ public final class Exposing {
                 ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
                 if (!Prelude.isLibraryFunction(operation.qualified())) {
                     refused.add(new Refusal.NoSuchLibraryFunction(imp, name));
-                    continue;   // it stands for nothing, and a use of it is told so once
+                    // Not brought in, so a use of it is a name resolution answers for itself and
+                    // reports where it is written. That is a second thing said about one mistaken
+                    // line, and it is what a refused import of a user module does too — `Scoping`
+                    // puts a refused name in the type namespace as standing for nothing and there
+                    // is no such treatment for the value namespace on either path. Measured on
+                    // both before leaving it alone; making the two agree is not this check's.
+                    continue;
                 }
                 if (declaredData.contains(name) || ownNames.contains(name)) {
                     refused.add(new Refusal.CollidesWithADeclaration(imp, name));
