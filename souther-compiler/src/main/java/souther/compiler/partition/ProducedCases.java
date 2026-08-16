@@ -41,7 +41,7 @@ public final class ProducedCases {
      * @param declared what the output type's cases are, which is what this answers where nothing is
      *                 taken away
      */
-    public static Set<TypeSymbol> of(Core body, CoverageSites.Plan plan, GuardReachability reachable,
+    public static Set<TypeSymbol> of(Core body, CoverageSites.Plan plan, ArmReachability reachable,
                                    Set<TypeSymbol> declared) {
         // Nothing proven is nothing to take away: what this returns is `declared` less the cases whose
         // every producer is behind a proven arm, and with no such arm there are none. Skipped rather
@@ -83,7 +83,7 @@ public final class ProducedCases {
      * case owed because the body happened to build one on its way past.
      */
     private static void walk(Core e, List<Integer> under, CoverageSites.Plan plan,
-                             GuardReachability reachable, Set<TypeSymbol> declared, Seen seen) {
+                             ArmReachability reachable, Set<TypeSymbol> declared, Seen seen) {
         if (seen.anythingUnreadable) {
             return;   // nothing further can be taken away
         }
@@ -119,7 +119,7 @@ public final class ProducedCases {
     }
 
     /** Where one producer puts the case it answers with. */
-    private static void produce(TypeSymbol built, List<Integer> under, GuardReachability reachable,
+    private static void produce(TypeSymbol built, List<Integer> under, ArmReachability reachable,
                                 Set<TypeSymbol> declared, Seen seen) {
         boolean proven = under.stream().anyMatch(reachable::provenUnreachable);
         if (built == null || !declared.contains(built)) {

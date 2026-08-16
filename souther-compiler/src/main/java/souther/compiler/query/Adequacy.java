@@ -112,7 +112,7 @@ public final class Adequacy {
 
     /** Nothing proven and nothing disproved, for a module whose reachability could not be asked. */
     static final Effective NOTHING_PROVEN =
-            new Effective(souther.compiler.partition.GuardReachability.NONE, Set.of());
+            new Effective(souther.compiler.partition.ArmReachability.NONE, Set.of());
 
     static Asked askedOf(Db db) {
         Asked asked = db.ask(new Requested()).value();
@@ -280,7 +280,7 @@ public final class Adequacy {
      * nothing bounds. Only a proof takes an arm away.
      */
     public record Reachable(String name)
-            implements Key<Map<String, souther.compiler.partition.GuardReachability>> {
+            implements Key<Map<String, souther.compiler.partition.ArmReachability>> {
 
         @Override
         public String module() {
@@ -288,7 +288,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Map<String, souther.compiler.partition.GuardReachability>> compute(Db db) {
+        public Answer<Map<String, souther.compiler.partition.ArmReachability>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -304,7 +304,7 @@ public final class Adequacy {
             Map<String, Claims> claimed = db.ask(new Claimed(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Symbols symbols = scope.value();
-            Map<String, souther.compiler.partition.GuardReachability> out = new LinkedHashMap<>();
+            Map<String, souther.compiler.partition.ArmReachability> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
                     continue;   // a composition has no body of its own, so no arms of its own
@@ -318,14 +318,12 @@ public final class Adequacy {
                 souther.compiler.partition.GuardThresholds.Guards guards =
                         souther.compiler.partition.GuardThresholds.of(
                                 spec.name(), body, plan, parameters, symbols);
-                // What the positions can hold, read before any threshold is applied: a guard's own line
-                // is not what says whether that line is reachable.
-                Map<souther.compiler.inputs.NumericTerm,
-                        souther.compiler.numeric.NumericDomain.Bounds> admissible =
-                        souther.compiler.partition.Partitions.of(spec.name(),
-                                domainOf(readInputs, spec), symbols).domains();
-                out.put(spec.name(), souther.compiler.partition.GuardReachability.of(
-                        guards.edges(), admissible));
+                // The reading of the input, and nothing a body drew: a guard's own line is not what
+                // says whether that line is reachable, and an arm's own case is not what says
+                // whether a value of it can arrive.
+                out.put(spec.name(), souther.compiler.partition.ArmReachability.of(
+                        guards.edges(), body, plan, parameters, domainOf(readInputs, spec),
+                        symbols));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -342,7 +340,7 @@ public final class Adequacy {
      * @param reachable  the arms still proven unreachable, which is what every measure excludes by
      * @param contradicted the ones a row reached anyway
      */
-    public record Effective(souther.compiler.partition.GuardReachability reachable, Set<Integer> contradicted) {
+    public record Effective(souther.compiler.partition.ArmReachability reachable, Set<Integer> contradicted) {
 
         public Effective {
             contradicted = Set.copyOf(contradicted);
@@ -366,7 +364,7 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, Effective>> compute(Db db) {
-            Answer<Map<String, souther.compiler.partition.GuardReachability>> proven = db.ask(new Reachable(name));
+            Answer<Map<String, souther.compiler.partition.ArmReachability>> proven = db.ask(new Reachable(name));
             if (!proven.present()) {
                 return Answer.absent();
             }
@@ -648,7 +646,7 @@ public final class Adequacy {
      * @param all     every arm the behavior is owed a row for. An arm the model's own rules prove
      *                nothing reaches is not one of them: it is instrumented, because a probe is what
      *                would show the proof wrong, and it is not owed, because no row can light it.
-     *                Which arms those are is {@link GuardReachability}'s answer, asked once for the
+     *                Which arms those are is {@link ArmReachability}'s answer, asked once for the
      *                module and read by every measure.
      * @param covered the ones a row went through
      * @param contradicted arms proven unreachable that a row went through anyway. Nothing in the model

@@ -10,10 +10,11 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.GuardEdge;
-import souther.compiler.partition.GuardReachability;
+import souther.compiler.partition.ArmReachability;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -259,15 +260,19 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 new CoverageSites.Obligation("classify", CoverageOrigin.written("t", index), 0));
     }
 
-    /** A reachability that proves arm 0 unreachable: nothing at or above 50 is a value of [0, 10]. */
-    private static GuardReachability proving() {
-        GuardEdge edge = GuardEdge.above(
-                new CoverageSites.GuardRef("classify", CoverageOrigin.written("t", 0), 0, 1, null),
-                0, new NumericTerm.ValueOf(TermPath.of("pair")), Count.of(50), true);
-        return GuardReachability.of(List.of(edge),
-                Map.of(new NumericTerm.ValueOf(TermPath.of("pair")),
-                        new NumericDomain.Bounds(Endpoint.inclusive(Count.of(BigDecimal.ZERO)),
-                                Endpoint.inclusive(Count.of(BigDecimal.TEN)))));
+    /**
+     * The model's own reachability, which proves arm 0 unreachable: nothing at or above 50 is a
+     * value any pair holds.
+     *
+     * <p>Read off the model rather than assembled here. A proof written by hand is one this test
+     * agrees with by construction, and what the rows below are about is what happens when the proof
+     * the compiler made turns out to be wrong.
+     */
+    private static ArmReachability proving() {
+        Compilation compilation = Compilation.ofSource(CAPPED, "Main");
+        compilation.answerEverything();
+        return compilation.db()
+                .ask(new Adequacy.Reachable(compilation.modules().get(0))).value().get("classify");
     }
 
     @Test
@@ -291,7 +296,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
      */
     @Test
     void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
-        GuardReachability proven = proving();
+        ArmReachability proven = proving();
         Adequacy.Effective effective = new Adequacy.Effective(
                 proven.without(Set.of(0)), Set.of(0));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
