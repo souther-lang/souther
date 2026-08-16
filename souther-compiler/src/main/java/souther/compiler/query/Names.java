@@ -452,7 +452,7 @@ public final class Names {
             try {
                 resolution = Resolve.resolving(available.value(),
                         scoped.value().writtenSymbols(writtenRegistry(db)),
-                        scoped.value().reachable());
+                        scoped.value().values());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

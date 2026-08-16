@@ -52,7 +52,8 @@ import java.util.Set;
 public final class Resolve {
 
     private final SyntaxSymbols symbols;
-    private final Values values;
+    private final Reachable reachable;
+    private final Elsewhere elsewhere;
     /** Every name this pass answered, in the order it met them. */
     private final List<TypeUse> denotations = new ArrayList<>();
     /** The same, for the names used as values. */
@@ -102,12 +103,13 @@ public final class Resolve {
 
     private Resolve(SyntaxSymbols symbols, Values values) {
         this.symbols = symbols;
-        this.values = values;
+        this.reachable = values.reachable();
+        this.elsewhere = values.elsewhere();
     }
 
     /** The value definition of this spelling in this module. */
     private BindingOwner ownerOfValue(String name) {
-        return new BindingOwner.OfValue(values.module(), name);
+        return new BindingOwner.OfValue(reachable.module(), name);
     }
 
     /** A binder answered, and the bindings that hold under it. */
@@ -154,18 +156,23 @@ public final class Resolve {
      *
      * <p>The behaviors come from outside — an import brings one in — so they are given rather than
      * read off the module. A module resolved on its own reaches only what it declares.
+     *
+     * <p>A table and nothing else. What is here was settled when the scope was assembled and will
+     * not be asked again, which is what lets a reader that only wants to know what is in scope —
+     * an editor offering completions — hold one: it is a value, it is equal to the next one that
+     * says the same thing, and holding it reaches nothing.
      */
-    public record Values(String module, Map<String, ValueName.Helper> helpers,
-                         Map<String, ValueName.Behavior> behaviors, boolean behaviorsWhole,
-                         Map<String, ValueName.Stdlib> exposed, Elsewhere elsewhere) {
+    public record Reachable(String module, Map<String, ValueName.Helper> helpers,
+                            Map<String, ValueName.Behavior> behaviors, boolean behaviorsWhole,
+                            Map<String, ValueName.Stdlib> exposed) {
 
         /**
          * What a module reaches when nothing else is in sight — the core modules, which the library
          * resolves as it loads. A core module imports nothing (it declares the library), so the
          * table of names an import would bring in is empty; a module that does import is resolved
-         * with what the query answered, which reads its imports from the source that wrote them.
+         * with what the scope it was assembled into answered.
          */
-        public static Values of(Ast.Module m) {
+        public static Reachable of(Ast.Module m) {
             Map<String, ValueName.Behavior> behaviors = new LinkedHashMap<>();
             for (Ast.BehaviorDef b : m.behaviors()) {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));
@@ -176,7 +183,27 @@ public final class Resolve {
                     helpers.put(fn.name(), new ValueName.Helper(m.name(), fn.name()));
                 }
             }
-            return new Values(m.name(), helpers, behaviors, true, Map.of(), Elsewhere.NONE);
+            return new Reachable(m.name(), helpers, behaviors, true, Map.of());
+        }
+    }
+
+    /**
+     * The table, and what can still be asked while a module is being resolved.
+     *
+     * <p>Two things and not six, because they are two kinds of thing. The table is settled; the
+     * other is a way of putting a question to whatever supplied the modules, and it is here because
+     * which module a qualified behavior reference names is decided while this pass runs — a
+     * qualifier is whatever the author wrote, so the set cannot be worked out in front of it.
+     *
+     * <p>Told apart so that a reader wanting the first is not handed the second. One of these ends
+     * up inside an answer a compilation remembers, and a reader holding the pair holds a way to
+     * reach the whole compilation; a reader holding the table holds a table.
+     */
+    public record Values(Reachable reachable, Elsewhere elsewhere) {
+
+        /** A module resolved on its own: what it declares, and nothing else in sight. */
+        public static Values of(Ast.Module m) {
+            return new Values(Reachable.of(m), Elsewhere.NONE);
         }
     }
 
@@ -534,15 +561,15 @@ public final class Resolve {
         if (target == null) {
             target = qualifier;
         }
-        if (target.equals(values.module())) {
+        if (target.equals(reachable.module())) {
             return bareBehavior(ref, bare, unknown);   // this module, named through itself
         }
-        if (!values.elsewhere().hasModule(target)) {
+        if (!elsewhere.hasModule(target)) {
             return noBehavior(ref, CompileException.of(Diagnostic
                     .say(new ModuleMessage.NoModuleOfThatName(qualifier, bare))
                     .at(ref.pos()).build()));
         }
-        Set<String> declared = values.elsewhere().behaviorsOf(target);
+        Set<String> declared = elsewhere.behaviorsOf(target);
         if (declared == null) {
             // The module is one this compilation has and could not read. What is wrong with it is
             // reported on its own source; saying anything here sends the author to a file that is
@@ -562,16 +589,16 @@ public final class Resolve {
 
     /** A bare name: this module's own behavior, or one an import brought in. */
     private Hir.Var bareBehavior(Ast.Var ref, String written, Unknown unknown) {
-        ValueName.Behavior named = values.behaviors().get(written);
+        ValueName.Behavior named = reachable.behaviors().get(written);
         if (named != null) {
             return behaviorReached(ref, named);
         }
-        if (!values.behaviorsWhole()) {
+        if (!reachable.behaviorsWhole()) {
             // An import that could not be followed may have been where this name came from.
             // Whatever is wrong with that module is reported there.
             return unanswered(ref);
         }
-        return noBehavior(ref, unknown.report(ref, values.behaviors().keySet()));
+        return noBehavior(ref, unknown.report(ref, reachable.behaviors().keySet()));
     }
 
     /**
@@ -583,7 +610,7 @@ public final class Resolve {
     private Hir.Var behaviorReached(Ast.Var ref, ValueName.Behavior name) {
         answered(ref.written(), name);
         return new Hir.Var.Denoting(ref.written(), name,
-                ReachName.of(name, ref.name(), values.module()), ref.region());
+                ReachName.of(name, ref.name(), reachable.module()), ref.region());
     }
 
     /** What to say about a name no behavior answers to, given the names that were reachable. */
@@ -1076,7 +1103,7 @@ public final class Resolve {
         } else {
             answered(call.name(), denotes);
             name = new Hir.Var.Denoting(written, denotes,
-                    ReachName.of(denotes, call.written(), values.module()), over);
+                    ReachName.of(denotes, call.written(), reachable.module()), over);
         }
         return new Hir.Apply(name, exprs(call.args(), bound), call.origin(), call.appliedAs(),
                 call.pos(), call.region());
@@ -1097,7 +1124,7 @@ public final class Resolve {
         }
         answered(v.written(), denotes);
         return new Hir.Var.Denoting(v.written(), denotes,
-                ReachName.of(denotes, v.name(), values.module()), v.region());
+                ReachName.of(denotes, v.name(), reachable.module()), v.region());
     }
 
     private List<Hir.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
@@ -1160,7 +1187,7 @@ public final class Resolve {
         // splits it again — from here it is carried as the pair.
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
-            if (Reserved.isNamespace(values.module()) || !Prelude.isPrivateMember(written)) {
+            if (Reserved.isNamespace(reachable.module()) || !Prelude.isPrivateMember(written)) {
                 return dot < 0 ? ValueName.Stdlib.namespace(written)
                         : new ValueName.Stdlib(written.substring(0, dot), written.substring(dot + 1));
             }
@@ -1172,18 +1199,18 @@ public final class Resolve {
         }
         // a helper or a behavior, applied or handed over by name — which the inliner expands into a
         // block that applies it
-        ValueName.Helper helper = values.helpers().get(written);
+        ValueName.Helper helper = reachable.helpers().get(written);
         if (helper != null) {
             return helper;
         }
-        ValueName.Behavior behavior = values.behaviors().get(written);
+        ValueName.Behavior behavior = reachable.behaviors().get(written);
         if (behavior != null) {
             return behavior;
         }
         // A name an import let this module write without its qualifier. Asked last: an import brings
         // a name in, and everything the module already has — a binding in force, its own
         // declarations — is what that name means here instead.
-        return values.exposed().get(written);
+        return reachable.exposed().get(written);
     }
 
     /**
@@ -1232,7 +1259,7 @@ public final class Resolve {
         if (denotes != null) {
             ValueName resolved = answered(written, denotes);
             return new Hir.Var.Denoting(written, resolved,
-                    ReachName.of(resolved, written.canonical(), values.module()),
+                    ReachName.of(resolved, written.canonical(), reachable.module()),
                     written.region());
         }
         return unknownMember(fa, written, applied, bound);
@@ -1345,8 +1372,8 @@ public final class Resolve {
     /** The names a body could have written where it wrote one nothing answers to. */
     private List<String> reachable(Bindings bound) {
         List<String> names = new ArrayList<>(bound.byName().keySet());
-        names.addAll(values.helpers().keySet());
-        names.addAll(values.behaviors().keySet());
+        names.addAll(reachable.helpers().keySet());
+        names.addAll(reachable.behaviors().keySet());
         return names;
     }
 

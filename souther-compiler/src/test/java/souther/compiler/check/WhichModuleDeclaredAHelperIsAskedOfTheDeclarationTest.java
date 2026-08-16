@@ -45,10 +45,11 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     private static Hir.Module resolved(String source, Map<String, String> imported) {
         Ast.Module parsed = CstFrontend.parse(source);
         Map<String, ValueName.Helper> helpers =
-                new LinkedHashMap<>(Resolve.Values.of(parsed).helpers());
+                new LinkedHashMap<>(Resolve.Reachable.of(parsed).helpers());
         imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
         Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
-                new Resolve.Values(parsed.name(), helpers, Map.of(), true, Map.of(),
+                new Resolve.Values(
+                        new Resolve.Reachable(parsed.name(), helpers, Map.of(), true, Map.of()),
                         Resolve.Elsewhere.NONE));
         if (!answered.unresolved().isEmpty()) {
             throw answered.unresolved().get(0);

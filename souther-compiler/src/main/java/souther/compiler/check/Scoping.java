@@ -131,9 +131,10 @@ public final class Scoping {
                 from.put(imported, imp);
             }
         }
-        Resolve.Values reachable = reachable(universe, read);
+        Resolve.Reachable reachable = reachable(universe, read);
         refused.addAll(oneSpellingTwice(universe, m));
-        return new Scoped(m.name(), denotations, aliases, reachable, refused);
+        return new Scoped(m.name(), denotations, aliases, reachable,
+                new Resolve.Values(reachable, new OfTheUniverse(universe)), refused);
     }
 
     /**
@@ -144,10 +145,16 @@ public final class Scoping {
      * question of what that is was being asked twice — once of the type namespace and once of the
      * value namespace — with the import lines walked once for each. A spelling that arrives in both
      * is a clash, and a walk that only ever saw one of them could not say so.
+     *
+     * <p>{@code reachable} and {@code values} are the same table, once on its own and once beside
+     * the way of asking the universe a further question. Both are here rather than one being made
+     * from the other by a caller: the universe is not a free axis — it is what this was assembled
+     * against — and a caller free to pair the table with a universe could pair it with a second
+     * one, leaving what an import brought in decided by one and what a qualifier names by another.
      */
     public record Scoped(String module, Map<String, Denotation> denotations,
-                         Map<String, String> aliases, Resolve.Values reachable,
-                         List<Refusal> refused) {
+                         Map<String, String> aliases, Resolve.Reachable reachable,
+                         Resolve.Values values, List<Refusal> refused) {
 
         /** Copied, for the reason {@link Exposing.Checked} is: this is an answer a compilation
          *  remembers, and an answer it remembers is a value. */
@@ -255,8 +262,8 @@ public final class Scoping {
      * name came from, and a reader that answered "all of them" for a universe it had not finished
      * reading would report the name as denoting nothing.
      */
-    private static Resolve.Values reachable(ModuleUniverse universe,
-                                            ModuleUniverse.InSight.Read read) {
+    private static Resolve.Reachable reachable(ModuleUniverse universe,
+                                               ModuleUniverse.InSight.Read read) {
         Ast.Module m = read.module();
         // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
         // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
@@ -297,8 +304,7 @@ public final class Scoping {
                 }
             }
         }
-        return new Resolve.Values(m.name(), helpers, behaviors, whole, read.libraryNames(),
-                new OfTheUniverse(universe));
+        return new Resolve.Reachable(m.name(), helpers, behaviors, whole, read.libraryNames());
     }
 
     /**
@@ -311,10 +317,11 @@ public final class Scoping {
      * there. Nothing derived is held: this is the universe, asked the questions it exists to
      * answer.
      *
-     * <p>A record, and not the closure it reads like, because what it is part of is remembered. An
-     * answer a compilation keeps is compared with the next one to decide whether the work that read
-     * it has to be done again, and a fresh object each time is an answer that never equals the last
-     * — which had every module that imports anything rebuilt whenever a body somewhere changed.
+     * <p>A record, and not the closure it reads like, because it is a value: two of these put the
+     * same question to the same universe and are the same thing. What it is part of is remembered,
+     * and an answer a compilation keeps is compared with the next one to decide whether the work
+     * that read it has to be done again — so an object that never equals the last one is an answer
+     * that is never kept.
      */
     record OfTheUniverse(ModuleUniverse universe) implements Resolve.Elsewhere {
 
