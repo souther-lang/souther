@@ -313,7 +313,12 @@ public final class Resolve {
             }
 
             @Override
-            public Set<String> behaviorsOf(String module) {
+            public Declares declaresBehavior(String module, String name) {
+                return Declares.NO;
+            }
+
+            @Override
+            public Set<String> behaviorNamesToSuggest(String module) {
                 return Set.of();
             }
         };
@@ -321,13 +326,40 @@ public final class Resolve {
         /** Whether this compilation has a module of that name. */
         boolean hasModule(String name);
 
+        /** Whether that module declares a behavior of that name. */
+        Declares declaresBehavior(String module, String name);
+
         /**
-         * The behaviors that module declares, or null where this compilation has it and cannot read
-         * it — which is not the same as its declaring none. Whatever is wrong with it is reported on
-         * its own source, so a name that may have come from there is left unanswered and said
-         * nothing about.
+         * The behavior names a report may offer where nothing answered to one.
+         *
+         * <p>Told apart from {@link #declaresBehavior} because the two are different capabilities,
+         * not because they read different things. That one settles what a name means; this one is
+         * what a "did you mean" may say, and what belongs in it is a question about reports. One
+         * method answering both is a set handed to a reader that only had a question, and a reader
+         * holding the set is a reader that can write a rule of its own about what the module has.
          */
-        Set<String> behaviorsOf(String module);
+        Set<String> behaviorNamesToSuggest(String module);
+    }
+
+    /**
+     * Whether a module declares something, where being unable to say is one of the answers.
+     *
+     * <p>Three and not two. A module this compilation has and cannot read declares nothing anybody
+     * here can name, and that is not the same as its declaring none: whatever is wrong with it is
+     * reported on its own source, so a name that may have come from there is left unanswered and
+     * said nothing about. Answered as a set that was null, the reader that forgot the null was
+     * told the module declares nothing.
+     */
+    public enum Declares {
+
+        /** It declares one. */
+        YES,
+
+        /** It does not. */
+        NO,
+
+        /** This compilation has the module and cannot read it, so nothing here can say. */
+        CANNOT_SAY
     }
 
     /**
@@ -657,15 +689,18 @@ public final class Resolve {
                     .say(new ModuleMessage.NoModuleOfThatName(qualifier, bare))
                     .at(ref.pos()).build()));
         }
-        Set<String> declared = elsewhere.behaviorsOf(target);
-        if (declared == null) {
-            // The module is one this compilation has and could not read. What is wrong with it is
-            // reported on its own source; saying anything here sends the author to a file that is
-            // fine.
-            return unanswered(ref);
-        }
-        if (!declared.contains(bare)) {
-            return noBehavior(ref, unknown.report(ref, declared));
+        switch (elsewhere.declaresBehavior(target, bare)) {
+            case CANNOT_SAY -> {
+                // The module is one this compilation has and could not read. What is wrong with it
+                // is reported on its own source; saying anything here sends the author to a file
+                // that is fine.
+                return unanswered(ref);
+            }
+            case NO -> {
+                return noBehavior(ref,
+                        unknown.report(ref, elsewhere.behaviorNamesToSuggest(target)));
+            }
+            case YES -> { }
         }
         ValueName.Behavior named = new ValueName.Behavior(target, bare);
         // A behavior named through its module is reached through an import, whether or not the

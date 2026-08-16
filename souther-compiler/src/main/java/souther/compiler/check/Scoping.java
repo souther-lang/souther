@@ -47,12 +47,11 @@ public final class Scoping {
      * module nothing can say anything about.
      */
     public static Scoped of(ModuleUniverse universe, Subject subject) {
-        ModuleUniverse.InSight.Read read = subject.read();
-        Ast.Module m = read.module();
+        Ast.Module m = subject.module();
         List<Refusal> refused = new ArrayList<>();
         Map<String, Denotation> denotations = new LinkedHashMap<>();
         Map<String, String> aliases = new LinkedHashMap<>();
-        for (Ast.Def own : read.declarations().values()) {
+        for (Ast.Def own : subject.declared().declarations().values()) {
             denotations.put(own.name(),
                     new Denotation.Denotes(TypeSymbols.declared(own.declaredKey())));
         }
@@ -81,7 +80,6 @@ public final class Scoping {
                 nameless(denotations, imp.names());
                 continue;
             }
-            Ast.Module src = there.module();
             if (imp.alias() != null) {
                 String taken = aliasTakenBy(universe, imp.alias(), aliases);
                 if (taken != null) {
@@ -91,19 +89,17 @@ public final class Scoping {
                 }
                 aliases.put(imp.alias(), imp.module());
             }
-            Set<String> exposed = Registry.baseNames(src.exposing());
-            Map<String, Ast.Def> declared = there.declarations();
             for (String imported : imp.names()) {
-                if (!exposed.contains(imported)) {
+                if (!there.exposes(imported)) {
                     refused.add(new Refusal.NotExposed(imp, imported));
                     nameless(denotations, List.of(imported));
                     continue;
                 }
-                Ast.Def brought = declared.get(imported);
+                Ast.Def brought = there.declaration(imported);
                 if (brought == null) {
                     // a behavior import is resolved separately, and so is a value or a helper: none
                     // of them is a data Def, so none goes into the type namespace
-                    if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
+                    if (there.declaresBehavior(imported) || there.declaresValue(imported)) {
                         continue;
                     }
                     refused.add(new Refusal.NoSuchName(imp, imported));
@@ -133,14 +129,22 @@ public final class Scoping {
         }
         Resolve.Values values =
                 new Resolve.Values(reachable(universe, subject), new OfTheUniverse(universe));
-        refused.addAll(oneSpellingTwice(universe, read));
+        refused.addAll(oneSpellingTwice(universe, subject));
         return new Scoped(m.name(), denotations, aliases, values, refused);
     }
 
     /**
      * The module a scope is being assembled for, and what only it needs.
      *
-     * <p>One value, because the two cannot be told apart afterwards. The
+     * <p>The module itself is here and not in the universe. A module being scoped is the one this
+     * reads the syntax of — its import lines, its bodies, the names its declarations write — and
+     * that is a capability nothing has over any other module: what a universe answers about a
+     * neighbour is what was settled about it ({@link ModuleUniverse.InSight.Read}), asked one name
+     * at a time, so no walk can work the same facts out a second way. Its own declaration index is
+     * here for the same reason and from the other side — reading every one of them is what a
+     * module may do to itself and to nothing else.
+     *
+     * <p>One value, because the parts cannot be told apart afterwards. The
      * {@code import List ( map )} lines are dropped once read ({@link Exposing}), so what they
      * brought in outlives them and travels with the module or is lost — read as a second answer it
      * was answered emptily for a module off the class path, and every bare name in a published
@@ -151,7 +155,7 @@ public final class Scoping {
      * write bare, and a universe that answered it anyway would put every importer's scope behind an
      * edit to a library import line in a module it imports from.
      */
-    public record Subject(ModuleUniverse.InSight.Read read,
+    public record Subject(Ast.Module module, Registry.Declared<Ast.Def> declared,
                           Map<String, ValueName.Stdlib> libraryNames) {
 
         public Subject {
@@ -298,7 +302,7 @@ public final class Scoping {
      * reading would report the name as denoting nothing.
      */
     private static Resolve.Reachable reachable(ModuleUniverse universe, Subject subject) {
-        Ast.Module m = subject.read().module();
+        Ast.Module m = subject.module();
         // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
         // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
         // two answers to one question is how a name came to denote a helper here and a behavior
@@ -325,13 +329,12 @@ public final class Scoping {
                 whole = false;
                 continue;
             }
-            Ast.Module from = there.module();
-            for (String published : HelperInliner.publishedNames(from, imp.names())) {
-                helpers.putIfAbsent(published, new ValueName.Helper(from.name(), published));
-            }
-            Set<String> declared = behaviorNames(from);
             for (String imported : imp.names()) {
-                if (declared.contains(imported)) {
+                if (there.publishesHelper(imported)) {
+                    helpers.putIfAbsent(imported,
+                            new ValueName.Helper(imp.module(), imported));
+                }
+                if (there.declaresBehavior(imported)) {
                     // a name this module declares itself is the one it means
                     behaviors.putIfAbsent(imported,
                             new ValueName.Behavior(imp.module(), imported));
@@ -365,9 +368,17 @@ public final class Scoping {
         }
 
         @Override
-        public Set<String> behaviorsOf(String module) {
+        public Resolve.Declares declaresBehavior(String module, String name) {
+            if (!(universe.module(module) instanceof ModuleUniverse.InSight.Read read)) {
+                return Resolve.Declares.CANNOT_SAY;
+            }
+            return read.declaresBehavior(name) ? Resolve.Declares.YES : Resolve.Declares.NO;
+        }
+
+        @Override
+        public Set<String> behaviorNamesToSuggest(String module) {
             return universe.module(module) instanceof ModuleUniverse.InSight.Read read
-                    ? behaviorNames(read.module()) : null;
+                    ? read.behaviorNamesToSuggest() : Set.of();
         }
     }
 
@@ -387,14 +398,13 @@ public final class Scoping {
      * <p>A behavior and a {@code let} of one name are not two: they are the declaration and the
      * implementation of one thing (ADR-0072).
      */
-    private static List<Refusal> oneSpellingTwice(ModuleUniverse universe,
-                                                  ModuleUniverse.InSight.Read read) {
-        Ast.Module m = read.module();
+    private static List<Refusal> oneSpellingTwice(ModuleUniverse universe, Subject subject) {
+        Ast.Module m = subject.module();
         List<Refusal> refused = new ArrayList<>();
-        // What the module has, as the universe answered it — not what its text writes. A
-        // declaration it does not have is refused where declarations are indexed, and a second
-        // reading of the text here would be a second answer to which of them it has.
-        Map<String, Ast.Def> declared = read.declarations();
+        // What the module has, as it was settled — not what its text writes. A declaration it does
+        // not have is refused where declarations are indexed, and a second reading of the text here
+        // would be a second answer to which of them it has.
+        Map<String, Ast.Def> declared = subject.declared().declarations();
         for (Ast.Def def : declared.values()) {
             // A standard-library qualifier is the only spelling that reaches the library, so a data
             // of that name hides it — from every module, since the qualifier is not this module's
@@ -447,16 +457,19 @@ public final class Scoping {
      * ({@link Exposing}) and are gone from the module by the time this is asked.
      */
     private static Set<String> intoTheValueNamespace(ModuleUniverse universe, Ast.Import imp) {
-        if (!(universe.module(imp.module()) instanceof ModuleUniverse.InSight.Read read)) {
+        if (!(universe.module(imp.module()) instanceof ModuleUniverse.InSight.Read there)) {
             return Set.of();
         }
-        Ast.Module from = read.module();
-        Set<String> names = new LinkedHashSet<>(HelperInliner.publishedNames(from, imp.names()));
-        Set<String> declared = new LinkedHashSet<>(behaviorNames(from));
-        declared.addAll(read.declarations().keySet());
-        Set<String> exposed = new LinkedHashSet<>(from.exposing());
+        Set<String> names = new LinkedHashSet<>();
         for (String name : imp.names()) {
-            if (declared.contains(name) && exposed.contains(name)) {
+            if (there.publishesHelper(name)) {
+                names.add(name);
+                continue;
+            }
+            if (!there.exposes(name)) {
+                continue;
+            }
+            if (there.declaresBehavior(name) || there.declaration(name) != null) {
                 names.add(name);
             }
         }
@@ -513,7 +526,7 @@ public final class Scoping {
                 continue;
             }
             String bare = written.substring(written.lastIndexOf('.') + 1);
-            if (behaviorNames(read.module()).contains(bare)) {
+            if (read.declaresBehavior(bare)) {
                 out.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
             }
         }
@@ -565,20 +578,6 @@ public final class Scoping {
         Set<String> names = new LinkedHashSet<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
             names.add(b.name());
-        }
-        return names;
-    }
-
-    /** The definitions a module declares in the value namespace — its values and its helpers. Like
-     * a behavior, one is a name in that namespace and not a data, so an import of it resolves
-     * elsewhere. */
-    public static Set<String> valueNames(Ast.Module m) {
-        Set<String> behaviors = behaviorNames(m);
-        Set<String> names = new LinkedHashSet<>();
-        for (Ast.FnDef fn : m.fns()) {
-            if (HelperInliner.isHelperName(behaviors, fn.name())) {
-                names.add(fn.name());
-            }
         }
         return names;
     }

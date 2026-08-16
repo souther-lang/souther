@@ -162,8 +162,8 @@ public final class PublishedUniverse {
     private ModuleUniverse universe() {
         Map<String, ModuleUniverse.InSight> modules = new LinkedHashMap<>(beyondReading);
         for (Map.Entry<String, ReadableModule> each : read.entrySet()) {
-            modules.put(each.getKey(), new ModuleUniverse.InSight.Read(
-                    each.getValue().module(), each.getValue().declarations()));
+            modules.put(each.getKey(), ModuleUniverse.InSight.Read.of(
+                    each.getValue().module(), declaredBy(each.getValue())));
         }
         return new ModuleUniverse.OfWhatIsRead(modules);
     }
@@ -178,10 +178,16 @@ public final class PublishedUniverse {
     private Registry<Ast.Def> declaredBy() {
         Map<String, Registry.Declared<Ast.Def>> declared = new LinkedHashMap<>();
         for (Map.Entry<String, ReadableModule> each : read.entrySet()) {
-            declared.put(each.getKey(), new Registry.Declared<>(each.getValue().declarations(),
-                    Registry.baseNames(each.getValue().module().exposing())));
+            declared.put(each.getKey(), declaredBy(each.getValue()));
         }
         return Registry.ofRead(declared);
+    }
+
+    /** What a registry has under one reading's name. The {@code exposing} list is read here, on
+     *  this side of the seam, and by nothing downstream of it. */
+    private static Registry.Declared<Ast.Def> declaredBy(ReadableModule readable) {
+        return new Registry.Declared<>(readable.declarations(),
+                Registry.baseNames(readable.module().exposing()));
     }
 
     /**
@@ -199,15 +205,19 @@ public final class PublishedUniverse {
      * and whoever asked is the one to decide what that means.
      */
     private Hir.Module resolve(ModuleUniverse universe, Registry<Ast.Def> registry, String module) {
-        if (!(universe.module(module) instanceof ModuleUniverse.InSight.Read read)) {
+        if (!(universe.module(module) instanceof ModuleUniverse.InSight.Read observed)) {
             return null;
         }
-        Scoping.Scoped scoped = Scoping.of(universe,
-                new Scoping.Subject(read, this.read.get(module).libraryNames()));
+        // The module itself comes from the reading this universe was built out of, and not from
+        // what the universe answers about it: a neighbour is settled facts, and only the module
+        // being scoped is read from.
+        ReadableModule readable = this.read.get(module);
+        Scoping.Scoped scoped = Scoping.of(universe, new Scoping.Subject(readable.module(),
+                declaredBy(readable), readable.libraryNames()));
         if (!scoped.refused().isEmpty()) {
             return null;
         }
-        Resolve.Resolution resolution = Resolve.resolving(read.module(),
+        Resolve.Resolution resolution = Resolve.resolving(readable.module(),
                 scoped.writtenSymbols(registry), scoped.values());
         return resolution.unresolved().isEmpty() ? resolution.module() : null;
     }

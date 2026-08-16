@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.ModuleUniverse;
+import souther.compiler.check.Registry;
 import souther.compiler.check.Scoping;
 import souther.compiler.types.ValueName;
 
@@ -45,33 +46,59 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
      * import line anywhere would be a reason to assemble every importing module's scope again.
      */
     public static Scoping.Subject subject(Db db, String name) {
-        if (!(over(db).module(name) instanceof InSight.Read read)) {
+        // The module itself, which only the module being scoped is read from. A neighbour is what
+        // was settled about it, asked one name at a time; a universe that handed its text over
+        // would let every walk work the same facts out again.
+        Ast.Module m = db.ask(new Front.Available(name)).value();
+        if (m == null) {
+            return null;
+        }
+        Registry.Declared<Ast.Def> declared = declaredBy(db, name);
+        if (declared == null) {
             return null;
         }
         Map<String, ValueName.Stdlib> library = db.ask(new Front.LibraryNames(name)).value();
-        // The two are one reading. A module whose table this compilation cannot answer is not one
+        // The three are one reading. A module whose table this compilation cannot answer is not one
         // a scope can be assembled for: answered emptily instead, every bare name its import lines
         // brought in would denote nothing.
-        return library == null ? null : new Scoping.Subject(read, library);
+        return library == null ? null : new Scoping.Subject(m, declared, library);
+    }
+
+    /**
+     * What a registry has under {@code name}, or null where this compilation will let nothing be
+     * built on it.
+     *
+     * <p>Both halves asked of the questions that already answer them — a name written twice is
+     * refused once, where declarations are indexed, and what a module exposes is read off its
+     * source in one place ({@link Front.Exposes}). Worked out here instead, the {@code exposing}
+     * list would have a second reader, which is what left one walk taking {@code Amount.decoder}
+     * for a name and another taking it for {@code Amount}.
+     */
+    private static Registry.Declared<Ast.Def> declaredBy(Db db, String name) {
+        // Asked only once the caller has a module to ask it of, which is why every caller reads
+        // Front.Available first. Whether a module is in a cycle is worked out over the whole
+        // workspace, and a name nothing here has is not a question about the shape of the
+        // workspace — an import of a misspelt module would otherwise put every module's imports on
+        // the far side of this one's answer.
+        Answer<Map<String, Ast.Def>> declarations = db.ask(new Names.Declarations(name));
+        if (!declarations.present()) {
+            return null;
+        }
+        Set<String> exposed = db.ask(new Front.Exposes(name)).value();
+        return exposed == null ? null : new Registry.Declared<>(declarations.value(), exposed);
     }
 
     @Override
     public InSight module(String name) {
         Ast.Module m = db.ask(new Front.Available(name)).value();
         if (m != null) {
-            // What this compilation declares there, asked of the one question that answers it — so
-            // that what a scope says a name denotes and what the declarations say is declared
-            // there cannot disagree, and so that a name written twice is refused once, where it is
-            // indexed. A module in an import cycle has nothing to give here: what it declares
-            // rests on the module that rests on it.
-            //
-            // Asked only once there is a module to ask it of. Whether a module is in a cycle is
-            // worked out over the whole workspace, and a name nothing here has is not a question
-            // about the shape of the workspace — an import of a misspelt module would otherwise
-            // put every module's imports on the far side of this one's answer.
-            Answer<Map<String, Ast.Def>> declarations = db.ask(new Names.Declarations(name));
-            if (declarations.present()) {
-                return new InSight.Read(m, declarations.value());
+            // What this compilation has under that name, asked of the questions that answer it —
+            // so that what a scope says a name denotes and what the declarations say is declared
+            // there cannot disagree. A module in an import cycle has nothing to give here: what it
+            // declares rests on the module that rests on it.
+            Registry.Declared<Ast.Def> declared = declaredBy(db, name);
+            if (declared != null) {
+                return InSight.Read.of(m, declared);
             }
         }
         // Nothing to give — and now why. A file the caller held back reports its own error, so an

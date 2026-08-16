@@ -4,7 +4,11 @@ import souther.compiler.ast.Ast;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Where the modules a module is resolved against come from.
@@ -52,13 +56,22 @@ public interface ModuleUniverse {
     sealed interface InSight {
 
         /**
-         * What a universe says a module is, to a module that names it: what it wrote, and what it
-         * declares.
+         * What a universe says a module is, to a module that names it: everything one module may
+         * observe of another, and nothing else.
          *
-         * <p>Both, because the second is a rule and not a reading: a name written twice keeps the
-         * first, a built-in case name is refused, and what is left is what the module declares. A
-         * reader that indexed the declarations itself would be a second place that rule is
-         * written, and the two would differ in what they do about the ones they refuse.
+         * <p>Settled here and not read off the module afterwards. What it declares is a rule and
+         * not a reading — a name written twice keeps the first, a built-in case name is refused —
+         * and a reader that indexed the declarations itself would be a second place that rule is
+         * written, the two differing in what they do about the ones they refuse. The same holds of
+         * every other fact one module needs of another: what it exposes, which behaviors it
+         * declares, which of its definitions it publishes. Each of those was worked out by whoever
+         * wanted it, off {@code exposing} and {@code behaviors} and {@code fns}, and the readers
+         * disagreed — a behavior arrived under an import line that was refused, because the walk
+         * that decided the value namespace never asked whether the module exposed it.
+         *
+         * <p>So this holds no module. A reader that could reach one could work the same facts out
+         * again, and "it does not today" is not a rule. What is here is what was settled, asked one
+         * name at a time: a question answered is a question a reader cannot answer differently.
          *
          * <p>What a module's own import lines let it write bare is not here. It is not something
          * one module needs of another — nothing a reader writes is answered by the library names
@@ -66,10 +79,121 @@ public interface ModuleUniverse {
          * importer's scope behind an edit to a line in a module it imports from. It belongs to the
          * module being scoped, and travels with it ({@link Scoping.Subject}).
          */
-        record Read(Ast.Module module, Map<String, Ast.Def> declarations) implements InSight {
+        final class Read implements InSight {
 
-            public Read {
-                declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
+            private final Registry.Declared<Ast.Def> declared;
+            private final Set<String> behaviors;
+            private final Set<String> values;
+            private final Set<String> publishedHelpers;
+
+            private Read(Registry.Declared<Ast.Def> declared, Set<String> behaviors,
+                         Set<String> values, Set<String> publishedHelpers) {
+                this.declared = declared;
+                this.behaviors = Collections.unmodifiableSet(new LinkedHashSet<>(behaviors));
+                this.values = Set.copyOf(values);
+                this.publishedHelpers = Set.copyOf(publishedHelpers);
+            }
+
+            /**
+             * The one place a module's observable semantics are worked out.
+             *
+             * <p>Handed the module and the declarations something already indexed, because those
+             * two are settled elsewhere and by different rules: what a module wrote is the parse,
+             * and which of its declarations it has is {@link DeclaredNames}' to say, at the
+             * boundary where there is still somebody to report a refusal to. Everything else one
+             * module may observe of another is derived here, once, and the module is not kept.
+             */
+            public static Read of(Ast.Module module, Registry.Declared<Ast.Def> declared) {
+                Set<String> behaviors = Scoping.behaviorNames(module);
+                Set<String> exposed = declared.exposed();
+                Set<String> values = new LinkedHashSet<>();
+                Set<String> published = new LinkedHashSet<>();
+                for (Ast.FnDef fn : module.fns()) {
+                    if (!HelperInliner.isHelperName(behaviors, fn.name())) {
+                        continue;   // a behavior's `let` is its implementation, not a name of its own
+                    }
+                    values.add(fn.name());
+                    if (HelperInliner.publishes(exposed, fn.name(),
+                            fn.body() instanceof Ast.FnBody.Written, List.of(fn.name()))) {
+                        published.add(fn.name());
+                    }
+                }
+                return new Read(declared, behaviors, values, published);
+            }
+
+            /**
+             * The declaration of that name, or null where it declares none.
+             *
+             * <p>Asked one name at a time, and there is no way to ask for them all. A reader that
+             * held the index could sort the declarations into behaviors and values and types for
+             * itself, which is the rule this exists to keep in one place — the same reason the
+             * names a report may offer are a capability of their own ({@link
+             * #behaviorNamesToSuggest}) rather than the set this is read from. The module being
+             * scoped reads its own index, from {@link Scoping.Subject}, because reading itself is
+             * what a subject is.
+             */
+            public Ast.Def declaration(String name) {
+                return declared.declarations().get(name);
+            }
+
+            /** Whether the module offers that name to a reader at all. */
+            public boolean exposes(String name) {
+                return declared.exposed().contains(name);
+            }
+
+            /** Whether it declares a behavior of that name. */
+            public boolean declaresBehavior(String name) {
+                return behaviors.contains(name);
+            }
+
+            /** Whether it declares a value of that name — a {@code let} that is not a behavior's
+             *  implementation. Neither this nor a behavior is a data, so an import of one reaches
+             *  the value namespace and nothing in the type namespace answers for it. */
+            public boolean declaresValue(String name) {
+                return values.contains(name);
+            }
+
+            /** Whether it hands a definition of that name to a reader that asks for it: exposed,
+             *  and with a body written here to hand over. */
+            public boolean publishesHelper(String name) {
+                return publishedHelpers.contains(name);
+            }
+
+            /**
+             * The behavior names a report may offer where nothing answered to one.
+             *
+             * <p>Apart from {@link #declaresBehavior}, though both read the same set, because they
+             * are different capabilities. That one settles what a name means; this one is what a
+             * "did you mean" may say, and what belongs in it is a question about reports — how near
+             * a spelling has to be, whether something a reader could not reach anyway is worth
+             * offering. Answered by one method, a change to either would be a change to both.
+             */
+            public Set<String> behaviorNamesToSuggest() {
+                return behaviors;
+            }
+
+            /** Two of these say the same thing when every fact they settled is the same. Written
+             *  out because this ends up inside an answer a compilation remembers, and an answer
+             *  that never equals the last one is one nothing that read it is kept past. */
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Read read
+                        && declared.equals(read.declared)
+                        && behaviors.equals(read.behaviors)
+                        && values.equals(read.values)
+                        && publishedHelpers.equals(read.publishedHelpers);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(declared, behaviors, values, publishedHelpers);
+            }
+
+            @Override
+            public String toString() {
+                return "Read[declares=" + declared.declarations().keySet()
+                        + ", exposes=" + declared.exposed() + ", behaviors=" + behaviors
+                        + ", values=" + values + ", publishes=" + publishedHelpers + "]";
             }
         }
 
