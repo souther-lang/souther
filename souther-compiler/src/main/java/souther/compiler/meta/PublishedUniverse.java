@@ -8,6 +8,7 @@ import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.ValueName;
 import souther.compiler.query.Front;
 
 import java.util.ArrayDeque;
@@ -25,7 +26,7 @@ import java.util.Set;
  * what a bare name an import brought in stands for. So a reader that has to compare two builds'
  * declarations reads both through this, and compares what comes back rather than what was written.
  *
- * <p>Everything here is the compiler's own: {@link PublishedModule} puts the declarations back
+ * <p>Everything here is the compiler's own: {@link ModuleReadback} puts the declarations back
  * together as source, {@link Exposing} reads what the import lines bring in, {@link Scoping} works
  * out what the names a module writes can mean, and {@link Resolve} answers them. What this adds is
  * only which modules to read — a module's declarations reach the modules they name, and those have
@@ -38,9 +39,9 @@ import java.util.Set;
  */
 public final class PublishedUniverse {
 
-    private final PublishedModule.Classes classes;
+    private final PublishedClasses classes;
     private final Map<String, Ast.Module> written = new LinkedHashMap<>();
-    private final Map<String, Exposing.Checked> checked = new LinkedHashMap<>();
+    private final Map<String, Map<String, ValueName.Stdlib>> libraryNames = new LinkedHashMap<>();
     private final Map<String, Set<String>> injected = new LinkedHashMap<>();
     private final Map<String, Read> resolved = new LinkedHashMap<>();
     private final Set<String> unreadable = new LinkedHashSet<>();
@@ -49,12 +50,12 @@ public final class PublishedUniverse {
     // and an import of the second is the importer's mistake while an import of the first is not.
     private final Map<String, ModuleUniverse.InSight> beyondReading = new LinkedHashMap<>();
 
-    private PublishedUniverse(PublishedModule.Classes classes) {
+    private PublishedUniverse(PublishedClasses classes) {
         this.classes = classes;
     }
 
     /** The universe those classes declare. Nothing is read until a module is asked for. */
-    public static PublishedUniverse of(PublishedModule.Classes classes) {
+    public static PublishedUniverse of(PublishedClasses classes) {
         return new PublishedUniverse(classes);
     }
 
@@ -102,13 +103,11 @@ public final class PublishedUniverse {
      * cannot be read here is another.
      */
     public boolean declares(String module) {
-        PublishedModule.Declarations found = classes.of(souther.compiler.jvm.SoutherJvmAbi.nameOf(
-                new souther.compiler.jvm.GeneratedClass.ModuleDeclarations(module)).binaryName());
-        // The same thing `PublishedModule.read` calls nothing published: a class of that name with
-        // no declarations on it is a class this compiler put nothing on, not something it failed to
-        // read. Asked the same way in both places, so a reader is not sent to look for a boundary
-        // revision that has nothing to do with it.
-        return found != null && found.module() != null;
+        // The same question the readback answers with `SaysNothing`, asked of the same function: a
+        // class of that name with no declarations on it is a class this compiler put nothing on, not
+        // something it failed to read. Two spellings of it would come apart, and a reader would be
+        // sent to look for a boundary revision that has nothing to do with it.
+        return ModuleReadback.carry(module, classes);
     }
 
     /** Reads {@code module} and everything its declarations name, as far as these classes go. */
@@ -120,24 +119,18 @@ public final class PublishedUniverse {
             if (written.containsKey(name) || unreadable.contains(name)) {
                 continue;
             }
-            PublishedModule published = published(name);
-            if (published == null) {
+            // Which of the two a name is comes off the reading itself. It used to be asked again of
+            // the classes afterwards, because a reading that failed answered null however it failed.
+            Readback readback = ModuleReadback.read(name, classes);
+            if (!(readback instanceof Readback.Ready(ReadableModule read))) {
                 unreadable.add(name);
-                beyondReading.put(name, declares(name)
+                beyondReading.put(name, readback instanceof Readback.Unreadable
                         ? ModuleUniverse.InSight.UNREADABLE : ModuleUniverse.InSight.UNKNOWN);
                 continue;
             }
-            Exposing.Checked read;
-            try {
-                read = Exposing.check(published.module());
-            } catch (CompileException | IllegalArgumentException _) {
-                unreadable.add(name);
-                beyondReading.put(name, ModuleUniverse.InSight.UNREADABLE);
-                continue;
-            }
             written.put(name, read.module());
-            checked.put(name, read);
-            injected.put(name, published.injectedBehaviors());
+            libraryNames.put(name, read.libraryNames());
+            injected.put(name, read.injectedBehaviors());
             // Which modules a module's declarations name, answered where the compiler answers it:
             // an import line names one, and so does a type or a behavior written with a qualifier,
             // which needs no import at all.
@@ -150,26 +143,10 @@ public final class PublishedUniverse {
     }
 
     /**
-     * What {@code module} published, with its import lines read.
-     *
-     * <p>Every way of failing is an absence rather than a raise. These classes came from wherever
-     * the answer was built: they may carry nothing, carry declarations at another boundary revision,
-     * or not be class files this JVM reads. What a reader of this does about any of them is the
-     * same, and it is the reader's to decide rather than this walk's to impose.
-     */
-    private PublishedModule published(String module) {
-        try {
-            return PublishedModule.read(module, classes);
-        } catch (CompileException | IllegalArgumentException _) {
-            return null;
-        }
-    }
-
-    /**
      * A module as the front end reads it, with what its declarations do not say.
      *
      * <p>Which behaviors are left to be injected is not written in a declaration and does not
-     * survive as source, so it travels beside the module ({@link PublishedModule}). It decides
+     * survive as source, so it travels beside the module ({@link ReadableModule}). It decides
      * whether an implementation may be supplied for a behavior at all, which is as much a fact about
      * a crossing as the behavior's signature is — so it travels this far too, rather than being
      * dropped where a reading turns into declarations.
@@ -239,7 +216,7 @@ public final class PublishedUniverse {
             return null;
         }
         Scoping.Scoped scoped =
-                Scoping.of(universe, new Scoping.Subject(read, checked.get(module).exposed()));
+                Scoping.of(universe, new Scoping.Subject(read, libraryNames.get(module)));
         if (!scoped.refused().isEmpty()) {
             return null;
         }

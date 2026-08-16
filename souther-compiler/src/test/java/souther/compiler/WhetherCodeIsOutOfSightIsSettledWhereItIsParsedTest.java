@@ -10,7 +10,9 @@ import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.frontend.CstFrontend;
-import souther.compiler.meta.PublishedModule;
+import souther.compiler.meta.ModuleReadback;
+import souther.compiler.meta.ReadableModule;
+import souther.compiler.meta.Readback;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +22,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,9 +74,10 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
                 data Code = Int
                     invariant atLeastOne = value >= 1
                 """));
-        PublishedModule read = PublishedModule.read("lib.rule",
-                ((souther.compiler.meta.ModulePath) classes::get).declarations());
-        assertNotNull(read, "the module was published and is on the path");
+        ReadableModule read = assertInstanceOf(Readback.Ready.class,
+                ModuleReadback.read("lib.rule",
+                        ((souther.compiler.meta.ModulePath) classes::get).declarations()),
+                "the module was published and is on the path").module();
 
         List<SourcePos> positions = new ArrayList<>();
         clausesOf(read.module(), positions);

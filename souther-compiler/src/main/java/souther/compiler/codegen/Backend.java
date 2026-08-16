@@ -1015,7 +1015,7 @@ public final class Backend {
      * module, so what the front end makes of them is a promise the jar carries too — a change to how
      * one of those bodies is read moves this number as surely as a change to a descriptor does, and
      * it is the front end's change rather than this package's. {@link
-     * souther.compiler.meta.PublishedModule} refuses a jar that disagrees, so the disagreement is
+     * souther.compiler.meta.ModuleReadback} refuses a jar that disagrees, so the disagreement is
      * reported as what it is instead of surfacing as an unresolved name inside a body nobody wrote.
      *
      * <p>A third thing arrived with version 6: what a published helper's declaration promises. A helper

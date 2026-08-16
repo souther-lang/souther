@@ -26,7 +26,7 @@ public interface ModulePath {
     byte[] bytes(String binaryName);
 
     /** The declarations published on these classes. */
-    default PublishedModule.Classes declarations() {
+    default PublishedClasses declarations() {
         return new ClassFileDeclarations(this::bytes);
     }
 

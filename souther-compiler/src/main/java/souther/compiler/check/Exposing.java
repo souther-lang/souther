@@ -1,9 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -44,21 +41,22 @@ public final class Exposing {
 
     /**
      * A module with its {@code import List ( ... )} lines dropped, what those lines brought in, and
-     * the ones that name something the module already declares.
+     * the lines that could not do their job.
      *
      * <p>One value, because the first two are one fact. The module no longer says what its bare
      * names mean and the table is the only thing that does, so a caller holding the module holds the
      * table with it — wherever that module travels, and whether it was read from a source or off the
      * class path.
      *
-     * <p>A collision is answered rather than thrown because it is one module's mistake and not a
-     * reason to stop reading. Thrown, it escaped the question that asked for this module and took
-     * every other file's diagnostics with it — an editor showed "the compiler could not finish
-     * reading this file" for the whole workspace while the author was part-way through writing a
-     * {@code let}.
+     * <p>Every way of failing is answered rather than thrown, because each of them is one module's
+     * mistake and not a reason to stop reading. Thrown, one escaped the question that asked for this
+     * module and took every other file's diagnostics with it — an editor showed "the compiler could
+     * not finish reading this file" for the whole workspace while the author was part-way through
+     * writing a {@code let}. That was said here about the collision alone while the other two still
+     * raised, and it was as true of them.
      */
     public record Checked(Ast.Module module, Map<String, ValueName.Stdlib> exposed,
-                          List<Diagnostic> conflicts) {
+                          List<Refusal> refused) {
 
         /**
          * Copied, because this is an answer a compilation remembers and an answer it remembers is a
@@ -68,8 +66,42 @@ public final class Exposing {
          */
         public Checked {
             exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
-            conflicts = List.copyOf(conflicts);
+            refused = List.copyOf(refused);
         }
+    }
+
+    /**
+     * What one {@code import List ( ... )} line could not do, as the check found it and before
+     * anybody has decided what to say about it.
+     *
+     * <p>The data and not a diagnostic. Who reads this decides where the report goes and whether
+     * there is one: a line in a source the author holds is said on that line, and the same failure
+     * in a module read off the class path is a fact about an artifact, said where that module was
+     * reached from. Built as a diagnostic here, the second reader would have to take one apart to
+     * make the other, and the position it carries would be a line of a text nobody holds.
+     *
+     * <p>The library counterpart of {@link Scoping.Refusal}, which says the same three things about
+     * an import of a module this compilation has. Same rules, different namespace: that one answers
+     * for {@code import app.pricing ( Quote )} and this one for {@code import List ( map )}.
+     */
+    public sealed interface Refusal {
+
+        /** The import line this was written on. */
+        Ast.Import imp();
+
+        /** The name it was to bring in. */
+        String name();
+
+        /** The standard library publishes no operation of that name in that module. */
+        record NoSuchLibraryFunction(Ast.Import imp, String name) implements Refusal {}
+
+        /** Two library modules publish the bare name, so importing both leaves it saying neither.
+         *  {@code earlier} is the one that has it, there being no reason for the second to win. */
+        record BroughtTwice(Ast.Import imp, String name, ValueName.Stdlib earlier,
+                            ValueName.Stdlib andThis) implements Refusal {}
+
+        /** The name is also declared here, so it would stand for two things. */
+        record CollidesWithADeclaration(Ast.Import imp, String name) implements Refusal {}
     }
 
     /**
@@ -81,12 +113,12 @@ public final class Exposing {
     public static Checked check(Ast.Module module) {
         Validated validated = validate(module);
         return new Checked(withoutLibraryImports(module, validated.kept()), validated.exposed(),
-                validated.conflicts());
+                validated.refused());
     }
 
     /** What {@link #validate} answers, before the module is rebuilt around it. */
     private record Validated(Map<String, ValueName.Stdlib> exposed, List<Ast.Import> kept,
-                             List<Diagnostic> conflicts) {}
+                             List<Refusal> refused) {}
 
     /**
      * The library names an import brings in, with the three things an import can get wrong reported:
@@ -115,7 +147,7 @@ public final class Exposing {
 
         Map<String, ValueName.Stdlib> exposed = new HashMap<>();
         List<Ast.Import> kept = new ArrayList<>();
-        List<Diagnostic> conflicts = new ArrayList<>();
+        List<Refusal> refused = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
             if (!Prelude.isQualifier(imp.module())) {
                 kept.add(imp);   // an ordinary user-module import — resolved elsewhere
@@ -126,30 +158,27 @@ public final class Exposing {
                 // alias, and each name in its list is the operation. What is brought in is that pair,
                 // so nothing downstream has to take a spelling apart to get at either.
                 ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
-                String qualified = operation.qualified();
-                if (!Prelude.isLibraryFunction(qualified)) {
-                    throw CompileException.of(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.NameIsNotAStandardLibraryFunction(
-                                    name, imp.module()))
-                            .build());
+                if (!Prelude.isLibraryFunction(operation.qualified())) {
+                    refused.add(new Refusal.NoSuchLibraryFunction(imp, name));
+                    // Not brought in, so a use of it is a name resolution answers for itself and
+                    // reports where it is written. That is a second thing said about one mistaken
+                    // line, and it is what a refused import of a user module does too — `Scoping`
+                    // puts a refused name in the type namespace as standing for nothing and there
+                    // is no such treatment for the value namespace on either path. Measured on
+                    // both before leaving it alone; making the two agree is not this check's.
+                    continue;
                 }
                 if (declaredData.contains(name) || ownNames.contains(name)) {
-                    conflicts.add(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(name))
-                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
-                            .build());
+                    refused.add(new Refusal.CollidesWithADeclaration(imp, name));
                     continue;   // the name is refused; what it means until then is the declaration
                 }
                 ValueName.Stdlib prior = exposed.putIfAbsent(name, operation);
                 if (prior != null && !prior.equals(operation)) {
-                    throw CompileException.of(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.NameIsPublishedByTwoModules(
-                                    name, prior.qualified(), qualified))
-                            .build());
+                    refused.add(new Refusal.BroughtTwice(imp, name, prior, operation));
                 }
             }
         }
-        return new Validated(exposed, kept, conflicts);
+        return new Validated(exposed, kept, refused);
     }
 
     private static Ast.Module withoutLibraryImports(Ast.Module module, List<Ast.Import> kept) {

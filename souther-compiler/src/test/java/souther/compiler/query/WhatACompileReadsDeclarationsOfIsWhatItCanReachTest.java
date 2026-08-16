@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.meta.Agreement;
 import souther.compiler.meta.DeclarationAgreement;
-import souther.compiler.meta.PublishedModule;
+import souther.compiler.meta.PublishedClasses;
+import souther.compiler.meta.ModuleReadback;
+import souther.compiler.meta.Readback;
 
 import java.util.List;
 import java.util.Map;
@@ -47,11 +49,11 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
     /** A module this compilation built, and one it read off the path, are both among them. */
     @Test
     void aModuleOnThePathIsAmongWhatThisCompileReadsDeclarationsOf() {
-        PublishedModule.Classes reads = declarationsOf(ROOT, Compiler.compile(SHARED));
+        PublishedClasses reads = declarationsOf(ROOT, Compiler.compile(SHARED));
 
-        assertNotNull(PublishedModule.read("example.root", reads),
+        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.root", reads),
                 "the module being compiled here");
-        assertNotNull(PublishedModule.read("example.shared", reads),
+        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.shared", reads),
                 "and the one it imports, which arrived compiled");
     }
 
@@ -73,7 +75,7 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
     }
 
     /** What a compile of {@code source} against {@code path} can read declarations of. */
-    private static PublishedModule.Classes declarationsOf(String source, Map<String, byte[]> path) {
+    private static PublishedClasses declarationsOf(String source, Map<String, byte[]> path) {
         Compilation compiled = Compilation.ofSources(List.of(source), path::get);
         compiled.db().ask(new Output.All());
         org.junit.jupiter.api.Assertions.assertEquals(List.of(),

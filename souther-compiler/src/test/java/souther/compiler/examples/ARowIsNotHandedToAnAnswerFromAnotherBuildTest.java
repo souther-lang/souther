@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ClassFileDeclarations;
-import souther.compiler.meta.PublishedModule;
+import souther.compiler.meta.PublishedClasses;
 import souther.compiler.observe.Applied;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -235,7 +235,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
      */
     @Test
     void aRunOfTheCompilesOwnAnswersNeverReadsAnyDeclarations() {
-        Supplier<PublishedModule.Classes> refuses = () -> {
+        Supplier<PublishedClasses> refuses = () -> {
             throw new AssertionError("a run of this compile's own answers read declarations");
         };
 
@@ -251,10 +251,10 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     /** An answerer that says its answers read values by {@code theirs}, and is never handed one. */
     private static final class Refusing implements Answerer {
 
-        private final PublishedModule.Classes theirs;
+        private final PublishedClasses theirs;
         private boolean handed;
 
-        private Refusing(PublishedModule.Classes theirs) {
+        private Refusing(PublishedClasses theirs) {
             this.theirs = theirs;
         }
 
@@ -292,7 +292,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     }
 
     private static ExampleVerifier.Observations evaluated(String source, Answering answering,
-                                                          Supplier<PublishedModule.Classes> declared) {
+                                                          Supplier<PublishedClasses> declared) {
         Compilation c = Compilation.ofSource(source, "Main");
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
@@ -318,7 +318,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     }
 
     /** The classes one build of {@code source} emits, read for what they were stamped with. */
-    private static PublishedModule.Classes declarationsOf(String source) {
+    private static PublishedClasses declarationsOf(String source) {
         Compilation compiled = Compilation.ofSource(source, "Main");
         Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
         return new ClassFileDeclarations(classes::get);

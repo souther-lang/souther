@@ -170,13 +170,13 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
      */
     @Test
     void aModuleWhoseDeclarationsCannotBeIndexedIsAnAbsenceWhereverItIsReachedFrom() {
-        Map<String, PublishedModule.Declarations> published = Map.of(
+        Map<String, PublishedClasses.Declarations> published = Map.of(
                 "pub.twice.$Module", moduleClass("pub.twice", List.of(), List.of("A", "B")),
                 "pub.twice.A", dataClass("data Same = String"),
                 "pub.twice.B", dataClass("data Same = Int"),
                 "pub.naming.$Module", moduleClass("pub.naming", List.of(), List.of("Note")),
                 "pub.naming.Note", dataClass("data Note = { s: pub.twice.Same }"));
-        PublishedUniverse universe = PublishedUniverse.of(published::get);
+        PublishedUniverse universe = PublishedUniverse.of(n -> PublishedClasses.carrying(published.get(n)));
 
         assertNull(universe.resolved("pub.twice"), "`Same` is declared twice, so it is not indexed");
 
@@ -187,17 +187,17 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     }
 
     /** A `$Module` class carrying {@code types}, as another build would have stamped it. */
-    private static PublishedModule.Declarations moduleClass(String module, List<String> imports,
+    private static PublishedClasses.Declarations moduleClass(String module, List<String> imports,
                                                             List<String> types) {
-        return new PublishedModule.Declarations(new PublishedModule.SoutherModuleView(
-                souther.compiler.codegen.Backend.BOUNDARY_VERSION, "another build", module,
+        return new PublishedClasses.Declarations(new PublishedClasses.SoutherModuleView(
+                souther.compiler.codegen.Backend.BOUNDARY_VERSION, "another build",
                 "module " + module + " exposing ( Same, Note )", imports, types,
                 List.of(), List.of()), null, null, null);
     }
 
     /** The class one declaration was stamped on. */
-    private static PublishedModule.Declarations dataClass(String declaration) {
-        return new PublishedModule.Declarations(null, declaration, null, null);
+    private static PublishedClasses.Declarations dataClass(String declaration) {
+        return new PublishedClasses.Declarations(null, declaration, null, null);
     }
 
     /** What the invariant of {@code type} calls, as the front end answered it. */
