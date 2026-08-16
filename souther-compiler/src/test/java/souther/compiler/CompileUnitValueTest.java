@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.SourceContext;
@@ -131,7 +133,7 @@ class CompileUnitValueTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(e.getMessage().contains("empty body"), e.getMessage());
         assertEquals(2, e.pos().line(), "must point at the opening brace");
-        assertEquals(1, e.diagnostic().region().sourceSpan(), "a multi-line region draws one caret");
+        assertEquals(1, ((Primary.InSource) e.diagnostic().primary()).place().region().sourceSpan(), "a multi-line region draws one caret");
     }
 
     /** A spread body is a body: what it includes decides the fields, and an empty one cannot be

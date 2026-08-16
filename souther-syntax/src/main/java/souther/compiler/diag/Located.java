@@ -5,26 +5,32 @@ import souther.compiler.source.SourceId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
- * A diagnostic and which of the sources a compile was handed its primary region is in. A
- * {@link Diagnostic} says where in a file it is; which file that is belongs to the compile, not to
- * the diagnostic, so it is carried alongside.
+ * A diagnostic and what the caller holding the files answers for it.
  *
- * <p>Only the primary region. A secondary says which source it is in itself
+ * <p>{@link ReportContext} is that answer, and it is two questions rather than one. This used to
+ * carry a single source called "the source the primary region is in", which the region already said
+ * wherever it said anything — and which was the only answer there was for a report that pointed at
+ * nothing. Both readings lived in one field, so the field was empty for half the reports that had a
+ * file and set for every report that had none.
+ *
+ * <p>Not "the file this diagnostic is in". A label says which source it is in itself
  * ({@link DiagnosticPlace}), and a diagnostic said at more than one source is read from each of them
- * in turn ({@link DiagnosticView}) — so this is not "the file this diagnostic is in", and a caller
- * holding one for a file other than this is not holding a mistake.
+ * in turn ({@link DiagnosticView}) — so a caller holding one of these for a file other than the one
+ * the report points at is not holding a mistake.
  *
  * @param diagnostic what was found
- * @param primarySourceId the source the primary region is in, or null when nothing says: a
- *        position the compiler synthesized, and a report a compile could pin on no source of its
- *        own. A compile of one source is not one of those — it names that source like any other
+ * @param context what the caller says: which file it is listing this under, and which text it is
+ *        reading
  */
-public record Located(Diagnostic diagnostic, SourceId primarySourceId) {
+public record Located(Diagnostic diagnostic, ReportContext context) {
 
-    /** The id a diagnostic that names no source carries. */
-    public static final SourceId NO_SOURCE = null;
+    public Located {
+        Objects.requireNonNull(diagnostic, "something was found");
+        Objects.requireNonNull(context, "a caller showing a report answers for it");
+    }
 
     /** What was found, without where — for a caller reading what a compile says rather than
      * deciding which file to put a marker in. */

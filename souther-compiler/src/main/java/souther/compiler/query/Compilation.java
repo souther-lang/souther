@@ -13,6 +13,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Primary;
+import souther.compiler.diag.ReportContext;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.diag.WhereCodeIsWritten;
@@ -460,11 +461,15 @@ public final class Compilation {
             byId.put(id, new ArrayList<>());
         }
         for (Db.Found found : reports()) {
-            SourceId primary = locatedSourceIdOf(found);
+            SourceId primary = filedUnderOf(found);
             for (SourceId id : publishSourceIdsOf(found)) {
                 List<Located> on = byId.get(id);
                 if (on != null) {
-                    on.add(new Located(found.report().diagnostic(), primary));
+                    // Listed under the file the report claims, and read from the file this entry
+                    // is for. A problem written in two files is one report said in both, and on
+                    // the second of them the text being read is that second file.
+                    on.add(new Located(found.report().diagnostic(),
+                            ReportContext.of(primary, id)));
                 }
             }
         }
@@ -499,7 +504,7 @@ public final class Compilation {
         Map<Repeat, Db.Found> reports = new LinkedHashMap<>();
         for (Db.Found found : db.allReports()) {
             Db.Found said = citable(found);
-            reports.putIfAbsent(new Repeat(said.module(), locatedSourceIdOf(said),
+            reports.putIfAbsent(new Repeat(said.module(), filedUnderOf(said),
                     said.report().problem()), said);
         }
         return new ArrayList<>(reports.values());
@@ -559,18 +564,15 @@ public final class Compilation {
      * <p>A report in a text this compilation cannot name is left where it is. Its position is one
      * whoever handed the text over can use and this is not being read by them — but nothing about it
      * says where its code came from, and moving it would mean answering that from the module, which
-     * is the inference again. Whether such a position is a place at all is the open question about a
-     * primary region, and this does not decide it.
+     * is the inference again.
      */
     static SourceProvenance whatToMove(Diagnostic said, String module) {
         if (module == null) {
             return null;
         }
         boolean nowhereToSendAReader = switch (said.primary()) {
-            case null -> true;
-            case Primary.Unavailable _ -> true;
-            case Primary.AtARegion(Region region) ->
-                    Citation.of(region.start()) instanceof Citation.OutOfSight;
+            case Primary.Unavailable _, Primary.Nowhere _ -> true;
+            case Primary.InSource _, Primary.InAnUnnamedText _ -> false;
         };
         if (!nowhereToSendAReader) {
             return null;
@@ -657,15 +659,14 @@ public final class Compilation {
                 .thenComparingInt(f -> lineOf(f.report().diagnostic()))
                 .thenComparingInt(f -> columnOf(f.report().diagnostic())));
         Db.Found first = errors.get(0);
-        List<Diagnostic> rest = new ArrayList<>();
-        List<SourceId> restSources = new ArrayList<>();
+        List<Located> rest = new ArrayList<>();
         for (Db.Found f : errors.subList(1, errors.size())) {
-            rest.add(f.report().diagnostic());
-            restSources.add(sourceIdOf(f));
+            rest.add(new Located(f.report().diagnostic(),
+                    ReportContext.inFile(filedUnderOf(f))));
         }
         return first.report().asException()
-                .alsoReporting(rest, restSources)
-                .inSource(sourceIdOf(first));
+                .alsoReporting(rest)
+                .inSource(filedUnderOf(first));
     }
 
     /** Where a report sits among the sources for ordering, with the one naming none before them all. */
@@ -674,32 +675,56 @@ public final class Compilation {
         return index < 0 ? -1 : index;
     }
 
-    /** A report with no position comes before the ones in its source that have one: it is about the
-     *  source rather than about a line of it. */
+    /**
+     * Where in its file a report sits, for ordering — and before every line of it where it points at
+     * no part of the file.
+     *
+     * <p>A report about the file rather than about a line of it comes first, and so does one whose
+     * numbers are of a text this compile could not name: those numbers are not of the file it is
+     * listed under, so ordering by them would interleave it with the lines of a file it says nothing
+     * about.
+     */
+    private static SourcePos orderingPositionOf(Diagnostic diagnostic) {
+        return diagnostic == null ? null : switch (diagnostic.primary()) {
+            case Primary.InSource(souther.compiler.diag.DiagnosticPlace.InSource place) ->
+                    place.region().start();
+            case Primary.InAnUnnamedText _, Primary.Unavailable _, Primary.Nowhere _ -> null;
+        };
+    }
+
     private static int lineOf(Diagnostic diagnostic) {
-        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        SourcePos pos = orderingPositionOf(diagnostic);
         return pos == null ? -1 : pos.line();
     }
 
     private static int columnOf(Diagnostic diagnostic) {
-        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        SourcePos pos = orderingPositionOf(diagnostic);
         return pos == null ? -1 : pos.column();
     }
 
     /**
-     * Which of the sources this compilation holds a report's primary region is in: the one the report
-     * claims ({@link Db.Found#claimedSourceId()}), or — where it claims none, or claims one this
-     * compile was not handed — the one that declares the module it was about.
+     * Which of this compilation's sources a report is listed under: the one it claims
+     * ({@link Db.Found#claimedSourceId()}), or — where it claims none, or claims one this compile
+     * was not handed — the one that declares the module it was about.
      *
-     * <p>The second half of that is a guard, and it guards availability as much as attribution. A
-     * position may have been read from a source this compile does not have: the prelude, or a module
-     * read back off the module path. Filing a report under a name {@link #diagnostics()} has no entry
-     * for would drop it silently, and a report the author never sees is worse than one on the wrong
-     * file.
+     * <p>Listed under, and not "the source its primary region is in". Those were one method and one
+     * word for two questions, and the second of them has no answer here any more: a report that
+     * points into a source says which one, on the place itself
+     * ({@link souther.compiler.diag.Primary.InSource}), and nothing needs to be told. What is left
+     * is this one, which the report cannot answer — a report about a module, one whose code is out
+     * of sight, one in a text this compile could not name, all have to be listed somewhere for an
+     * author to be shown them, and only a caller holding the files can say where.
      *
-     * <p>Always answered, whatever the compile tells a caller about its sources. What a source is
-     * called here is how a report is filed and how its regions are quoted; what a caller is told is
-     * {@link #sourceIdOf(Db.Found)}, and the two are not the same question.
+     * <p>So the fallback below is not a place. It is where the report is listed, and nothing reads
+     * it as a caret: a renderer quotes from the place the report points at and names the file it is
+     * listed under, which for a report pointing nowhere is the whole of what it says. Read as a
+     * place — which it was, while one field answered both — it put a line and a column from one
+     * source against the text of another.
+     *
+     * <p>The fallback guards availability as much as attribution. A position may have been read
+     * from a source this compile does not have: the prelude, or a module read back off the module
+     * path. Filing a report under a name {@link #diagnostics()} has no entry for would drop it
+     * silently, and a report the author never sees is worse than one listed on the wrong file.
      *
      * <p>Which module the report is a failure of is a third question and not this one. A report
      * points into another module wherever the code it is about was written there — an invariant of
@@ -707,28 +732,12 @@ public final class Compilation {
      * on that code, because that is what the report is about. Where it is said is
      * {@link #publishSourceIdsOf(Db.Found)}.
      */
-    private SourceId locatedSourceIdOf(Db.Found found) {
+    public SourceId filedUnderOf(Db.Found found) {
         SourceId claimed = found.claimedSourceId();
         if (claimed != null && sourceIds().contains(claimed)) {
             return claimed;
         }
         return found.module() == null ? null : sourceIdOf(found.module());
-    }
-
-    /**
-     * Which source a report's primary region is in, as a caller holding its own list of files is
-     * told — none where nothing says.
-     *
-     * <p>The same answer whatever the caller handed over. A compile of one source used to answer
-     * none here, on the grounds that the caller knows the file it gave: what that did was leave the
-     * primary naming nothing while every secondary named the one source there was, so a renderer
-     * comparing the two read them as two files and printed a file name over a note in the file it
-     * was already quoting. Whether to print a name is the renderer's question, and it already
-     * answers it by comparing the anchor with the place; whether a caller wants to see ids at all is
-     * answered by the names it gives them.
-     */
-    public SourceId sourceIdOf(Db.Found found) {
-        return locatedSourceIdOf(found);
     }
 
     /**
@@ -753,7 +762,7 @@ public final class Compilation {
      * not the other for a difference neither of them wrote.
      */
     public List<SourceId> publishSourceIdsOf(Db.Found found) {
-        SourceId primary = locatedSourceIdOf(found);
+        SourceId primary = filedUnderOf(found);
         List<SourceId> saidAt = new ArrayList<>();
         if (primary != null) {
             saidAt.add(primary);
@@ -779,9 +788,9 @@ public final class Compilation {
     }
 
     /** Where a report sits in the order the sources were given, or -1 when it names none. Only for
-     * ordering: which file a reader is sent to is {@link #sourceIdOf(Db.Found)}. */
+     * ordering: which file a report is listed under is {@link #filedUnderOf(Db.Found)}. */
     private int indexOf(Db.Found found) {
-        SourceId id = locatedSourceIdOf(found);
+        SourceId id = filedUnderOf(found);
         if (id == null) {
             return -1;
         }
@@ -802,7 +811,7 @@ public final class Compilation {
         List<Db.Found> found = reports();
         for (Db.Found f : found) {
             if (!f.report().isError()) {
-                warnings.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
+                warnings.add(new Located(f.report().diagnostic(), ReportContext.inFile(filedUnderOf(f))));
             }
         }
         return warnings;
@@ -821,7 +830,7 @@ public final class Compilation {
         List<Db.Found> found = reports();
         for (Db.Found f : found) {
             if (f.report().isError()) {
-                errors.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
+                errors.add(new Located(f.report().diagnostic(), ReportContext.inFile(filedUnderOf(f))));
             }
         }
         return errors;

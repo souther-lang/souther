@@ -203,12 +203,12 @@ class AJoinFailureNamesTheOperandItRefusedTest {
 
     /** The characters of {@code source} a report's primary region covers. */
     private static String underlined(String source, Diagnostic report) {
-        return at(source, report.region());
+        return at(source, ((Primary.InSource) report.primary()).place().region());
     }
 
     /** The whole source line a report's primary region begins on. */
     private static String line(String source, Diagnostic report) {
-        return source.lines().toList().get(report.region().start().line() - 1);
+        return source.lines().toList().get(((Primary.InSource) report.primary()).place().region().start().line() - 1);
     }
 
     /** The characters of {@code source} {@code region} covers. */

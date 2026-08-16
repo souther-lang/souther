@@ -75,27 +75,26 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
      * being written, one level down from the one it replaced.
      */
     private static final Set<Class<?>> ANSWERS_FOR_A_SOURCE = Set.of(
-            Region.class, SourcePos.class, DiagnosticPlace.InSource.class, Citation.class);
+            Region.class, SourcePos.class, DiagnosticPlace.InSource.class, Citation.class,
+            Diagnostic.class);
 
     /**
-     * The one value that holds both, and it is an open question rather than a shape this rule does
-     * not cover.
+     * Nothing. The one value that used to hold both was {@link Spot}, which paired a told source
+     * with a region because a primary region was not held to naming one — and what the told source
+     * meant depended on which of them it was beside: the source the region was in, or the file the
+     * report was being read from.
      *
-     * <p>{@link Spot} pairs a told source with a region, and the reason is not that a primary is a
-     * different kind of place. A secondary is built through {@link DiagnosticPlace}, so it names a
-     * source by construction; a primary is not held to that, and over one compile of this suite 53
-     * of 3545 diagnostics carried a primary region that names no source while saying the code is
-     * written at it, with another 22 carrying no region at all. Where the region does not answer,
-     * the told source is the only answer there is.
+     * <p>Both are values now and neither is told. A place a reader is sent to carries its source
+     * ({@link Spot.InSource}); a place in a text this compilation cannot name carries the text the
+     * surface says it is reading, which is not a second answer to a question its region answers,
+     * because that region answers nothing ({@link UnnamedRegion}). Which file a report is listed
+     * under is the third thing and is not a place at all — it is what a caller holding the files
+     * answers, and it is on the context rather than beside the report.
      *
-     * <p>So what is unsettled is not whether the pair may exist but what the second half means: the
-     * source the region is in, or the file this report is being read from. Deciding that means
-     * reading what those 53 diagnostics are about, across the fourteen codes they came from, and
-     * that is a question about the diagnostic model rather than about source identity. Named here so
-     * that it goes when that question is answered, rather than outliving it as a rule nobody
-     * remembers writing.
+     * <p>Kept as an empty set rather than deleted. An exception admitted here is a rule this test
+     * stops making, and one added later should look like what it is.
      */
-    private static final Set<Class<?>> OPEN = Set.of(Spot.class);
+    private static final Set<Class<?>> OPEN = Set.of();
 
     private static final List<Class<?>> COMPILED = compiled();
 
@@ -155,7 +154,9 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
     @Test
     void theScanReachesTheValuesThisRuleIsAbout() {
         assertTrue(COMPILED.size() > 500, "the compiler and its syntax, not a handful: " + COMPILED.size());
-        for (Class<?> named : List.of(SourcePos.class, Region.class, Citation.class, Spot.class,
+        for (Class<?> named : List.of(SourcePos.class, Region.class, Citation.class,
+                Spot.InSource.class, Spot.InTextBeingRead.class, Diagnostic.class, Located.class,
+                souther.compiler.query.Db.Found.class,
                 DiagnosticPlace.InSource.class, souther.compiler.observe.RowOutcome.class,
                 souther.compiler.observe.Incompleteness.class,
                 souther.compiler.query.Output.Examples.class)) {

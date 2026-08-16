@@ -1,5 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.ReportContext;
+
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
@@ -62,7 +66,7 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
 
     /** Where the compile says the problem is, as `sourceId line:column`. */
     private static String saidAt(CompileException e) {
-        return e.sourceId() + " " + e.diagnostic().pos();
+        return e.sourceId() + " " + ((Primary.InSource) e.diagnostic().primary()).place().region().start();
     }
 
     // --- one method per way of getting it wrong -------------------------------------------------
@@ -111,7 +115,7 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
                 """);
 
         assertEquals(new SourceId("1"), e.sourceId(), "the field is given its value in the attached file");
-        assertEquals(3, e.diagnostic().pos().line());
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
     }
 
     /**
@@ -129,7 +133,7 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
 
         assertEquals(new SourceId("1"), e.sourceId());
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("1")),
-                e.diagnostic().pos().quotedFrom(),
+                ((Primary.InSource) e.diagnostic().primary()).place().region().start().quotedFrom(),
                 "the position itself says which file, which is what the id is read off");
     }
 
@@ -153,7 +157,7 @@ class AMistakeInAnAttachedFileIsSaidOnThatFileTest {
         };
 
         String out = new HumanRenderer(false).render(
-                new Located(e.diagnostic(), e.sourceId()), sources, Locale.ENGLISH);
+                new Located(e.diagnostic(), ReportContext.inFile(e.sourceId())), sources, Locale.ENGLISH);
 
         assertTrue(out.contains("shippingfee.examples.sou:4:"), out);
         assertTrue(out.contains("北海道沖縄"), "the line quoted is the row that names it: " + out);

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
@@ -95,7 +97,7 @@ class ARowAndItsStandInAreUnderlinedOverWhatTheyStateTest {
 
     /** The primary region of the one disagreement {@code source} is warned about. */
     private static Region primary(String source) {
-        return disagreement(source).region();
+        return ((Primary.InSource) disagreement(source).primary()).place().region();
     }
 
     /** The region said beside it — where the stand-in is written. */

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.examples.EvaluationPolicy;
@@ -81,7 +83,7 @@ class CompileFakeTableWhereWrittenTest {
                 """);
 
         assertEquals("E1317", one.code());
-        assertEquals(16, one.pos().line(), "at the row that states no value");
+        assertEquals(16, ((Primary.InSource) one.primary()).place().region().start().line(), "at the row that states no value");
     }
 
     @Test
@@ -116,7 +118,7 @@ class CompileFakeTableWhereWrittenTest {
 
         assertEquals("E1908", one.code());
         assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, one.said());
-        assertEquals(16, one.pos().line(), "at the row whose input count is wrong");
+        assertEquals(16, ((Primary.InSource) one.primary()).place().region().start().line(), "at the row whose input count is wrong");
     }
 
     /**
@@ -259,8 +261,8 @@ class CompileFakeTableWhereWrittenTest {
         assertEquals(List.of(), only("E1920", warnings),
                 "nothing records what `find` owes, so no comparison was missed");
         Diagnostic one = said.get(0).diagnostic();
-        assertEquals(14, one.pos().line(), "at the fake");
-        assertEquals(6, one.pos().column(), "on the behavior it names");
+        assertEquals(14, ((Primary.InSource) one.primary()).place().region().start().line(), "at the fake");
+        assertEquals(6, ((Primary.InSource) one.primary()).place().region().start().column(), "on the behavior it names");
         // The number is read off the wait this compile was given rather than written in, so the
         // line still holds if that wait changes. Ungrouped, which is how it is set.
         assertTrue(rendered(one).contains("Building the `fake find` table did not answer within "

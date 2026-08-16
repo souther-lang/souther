@@ -8,8 +8,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An error that takes on the other errors a compilation found still says what it was raised with.
@@ -30,8 +28,8 @@ class AnErrorKeepsTheMessageItWasRaisedWithTest {
                 "2 example rows did not hold");
         String said = raised.getMessage();
 
-        CompileException joined = raised.alsoReporting(List.of(at(9, "elsewhere")),
-                java.util.Arrays.asList(Located.NO_SOURCE));
+        CompileException joined = raised.alsoReporting(
+                List.of(new Located(at(9, "elsewhere"), ReportContext.NONE)));
 
         assertEquals(said, joined.getMessage());
         assertEquals(3, joined.diagnostics().size());
@@ -43,19 +41,20 @@ class AnErrorKeepsTheMessageItWasRaisedWithTest {
     void whatItTakesOnComesAfterWhatItHad() {
         CompileException raised = CompileException.of(at(3, "first"));
 
-        CompileException joined = raised.alsoReporting(List.of(at(5, "second"), at(7, "third")),
-                java.util.Arrays.asList(new SourceId("b.sou"), Located.NO_SOURCE));
+        CompileException joined = raised.alsoReporting(List.of(
+                new Located(at(5, "second"), ReportContext.inFile(new SourceId("b.sou"))),
+                new Located(at(7, "third"), ReportContext.NONE)));
 
         assertEquals(List.of("first", "second", "third"),
                 joined.diagnostics().stream().map(DiagnosticRenderer::legacyBody).toList());
         assertEquals(new SourceId("b.sou"), joined.sourceIdOf(1));
-        assertEquals(Located.NO_SOURCE, joined.sourceIdOf(2));
+        assertEquals(null, joined.sourceIdOf(2), "the third named none");
     }
 
     @Test
     void anUnnamedSourceIsStillTaggedAfterwards() {
         CompileException joined = CompileException.of(at(3, "first"))
-                .alsoReporting(List.of(at(5, "second")), java.util.Arrays.asList(Located.NO_SOURCE))
+                .alsoReporting(List.of(new Located(at(5, "second"), ReportContext.NONE)))
                 .inSource(new SourceId("a.sou"));
 
         assertEquals(new SourceId("a.sou"), joined.sourceIdOf(0));
@@ -66,16 +65,7 @@ class AnErrorKeepsTheMessageItWasRaisedWithTest {
     void takingOnNothingIsTheSameError() {
         CompileException raised = CompileException.of(at(3, "first"));
 
-        assertSame(raised, raised.alsoReporting(List.of(), List.of()));
+        assertSame(raised, raised.alsoReporting(List.of()));
     }
 
-    @Test
-    void everyDiagnosticTakenOnNamesASource() {
-        CompileException raised = CompileException.of(at(3, "first"));
-
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> raised.alsoReporting(List.of(at(5, "second"), at(7, "third")),
-                        List.of(new SourceId("b.sou"))));
-        assertTrue(e.getMessage().contains("one source per diagnostic"), e.getMessage());
-    }
 }

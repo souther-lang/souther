@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.msg.InvariantMessage;
@@ -49,7 +51,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> Yen(0).value <= x, value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(4, e.diagnostic().region().start().line());
+        assertEquals(4, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
     }
 
     @Test
@@ -61,7 +63,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> Yen { value = 0 }.value <= x, value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(4, e.diagnostic().region().start().line());
+        assertEquals(4, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
     }
 
     @Test
@@ -74,7 +76,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = atLeastZero(value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line(),
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
                 "the error is at the construction, which is in the helper");
     }
 
@@ -88,7 +90,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = atLeastZero(value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line());
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
     }
 
     /** However many helpers away: the clause arrives at the check with all of them expanded into it,
@@ -104,7 +106,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = outer(value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line(),
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
                 "`inner` holds the construction; `outer` only passes through");
     }
 
@@ -201,8 +203,8 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> atLeastZero(x), value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(3, e.diagnostic().region().start().line());
-        assertEquals(34, e.diagnostic().region().start().column(),
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
+        assertEquals(34, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column(),
                 "the construction in the helper, not the combinator the clause calls");
     }
 
@@ -220,8 +222,8 @@ class CompileConstructionInInvariantTest {
                         value)
                 """);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, e.diagnostic().said());
-        assertEquals(5, e.diagnostic().region().start().line());
-        assertEquals(14, e.diagnostic().region().start().column());
+        assertEquals(5, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line());
+        assertEquals(14, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column());
     }
 
     /** Written in the clause itself there is one place, and labelling it twice says nothing. */

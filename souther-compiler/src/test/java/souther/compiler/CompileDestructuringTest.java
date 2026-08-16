@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.CompileException;
@@ -416,8 +418,8 @@ class CompileDestructuringTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
 
         String line = src.lines().toList().get(4);
-        assertEquals(5, e.diagnostic().pos().line(), e.getMessage());
-        assertEquals(line.indexOf("Line(") + 1, e.diagnostic().pos().column(),
+        assertEquals(5, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(), e.getMessage());
+        assertEquals(line.indexOf("Line(") + 1, ((Primary.InSource) e.diagnostic().primary()).place().region().start().column(),
                 "the caret is on the pattern: " + line);
     }
 

@@ -163,7 +163,7 @@ class DbTest {
 
     @Test
     void raisesTheMessageAPassRaisedItWith() {
-        Diagnostic d = Diagnostic.say(new ModuleMessage.DuplicateModule("demo")).build();
+        Diagnostic d = Diagnostic.say(new ModuleMessage.DuplicateModule("demo")).nowhere().build();
         CompileException raised = CompileException.of(d);
         List<Report> reports = Report.of(raised);
         assertEquals(raised.getMessage(), reports.get(0).asException().getMessage());

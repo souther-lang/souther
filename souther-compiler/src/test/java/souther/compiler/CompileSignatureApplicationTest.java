@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
@@ -70,6 +72,6 @@ class CompileSignatureApplicationTest {
                 }
                 """);
         assertEquals("check.fold.seed.title", d.titleKey());
-        assertEquals(5, d.pos().line());
+        assertEquals(5, ((Primary.InSource) d.primary()).place().region().start().line());
     }
 }

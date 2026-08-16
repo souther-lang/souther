@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.params.ParameterizedTest;
@@ -169,7 +171,7 @@ class CompilePathAgreementTest {
         CompileException linked = compileError(() -> Compiler.compileModules(List.of(source)));
         assertEquals(alone.diagnostic().said(), linked.diagnostic().said(),
                 "the two paths disagree on what is wrong with " + name);
-        assertEquals(alone.diagnostic().pos(), linked.diagnostic().pos(),
+        assertEquals(((Primary.InSource) alone.diagnostic().primary()).place().region().start(), ((Primary.InSource) linked.diagnostic().primary()).place().region().start(),
                 "the two paths disagree on where " + name + " is wrong");
     }
 

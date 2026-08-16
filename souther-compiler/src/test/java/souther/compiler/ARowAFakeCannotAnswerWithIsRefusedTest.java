@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -135,7 +137,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         List<Diagnostic> said = unanswerable(source);
 
         assertEquals(1, said.size(), "one row of the two answers nothing");
-        assertEquals(lineOf(source, "\"second\""), said.get(0).pos().line(),
+        assertEquals(lineOf(source, "\"second\""), ((Primary.InSource) said.get(0).primary()).place().region().start().line(),
                 "and it is the later one, since the first match is what answers");
         assertEquals(lineOf(source, "Found { id = MemberId(\"m-1\") }"),
                 ((souther.compiler.diag.DiagnosticPlace.InSource) said.get(0).secondary().get(0).place()).region().start().line(),
@@ -153,7 +155,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         List<Diagnostic> said = unanswerable(source);
 
         assertEquals(1, said.size(), "one of the two `_` rows answers nothing");
-        assertEquals(lineOf(source, "\"first\""), said.get(0).pos().line(),
+        assertEquals(lineOf(source, "\"first\""), ((Primary.InSource) said.get(0).primary()).place().region().start().line(),
                 "and it is the earlier one, since a table falls through to the last `_`");
         assertEquals(lineOf(source, "\"second\""),
                 ((souther.compiler.diag.DiagnosticPlace.InSource) said.get(0).secondary().get(0).place()).region().start().line(),
@@ -172,7 +174,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         List<Diagnostic> said = unanswerable(source);
 
         assertEquals(List.of(lineOf(source, "\"first\""), lineOf(source, "\"second\"")),
-                said.stream().map(d -> d.pos().line()).sorted().toList(),
+                said.stream().map(d -> ((Primary.InSource) d.primary()).place().region().start().line()).sorted().toList(),
                 "two rows answer nothing, and each is said at itself");
         assertTrue(said.stream().allMatch(d -> ((souther.compiler.diag.DiagnosticPlace.InSource) d.secondary().get(0).place()).region().start().line()
                         == lineOf(source, "\"third\"")),
