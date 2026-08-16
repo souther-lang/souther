@@ -77,6 +77,22 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1013)
     record ItsRulesCannotAllHold(String data) implements DataMessage, Reported {}
 
+    /**
+     * The rules leave one position no value its order holds.
+     *
+     * <p>{@link ItsRulesCannotAllHold} with the place filled in. The general sentence is true of
+     * this and says only that something contradicts, which leaves an author reading every clause to
+     * find out which position is the one — and the reading knows.
+     *
+     * <p>What was shown and not one of the ways of showing it. Three shapes come to this: two ends
+     * that cross, one end the order does not reach, and two equalities naming different values. A
+     * sentence about a pair of bounds is true of the first and sends the author of the other two
+     * looking for a rule the model does not contain.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NothingIsLeftForThatPositionToHold(String data, String at)
+            implements DataMessage, Reported {}
+
     /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
     record ASetCannotBeFilledFromItsElement(String data, String at, long available)

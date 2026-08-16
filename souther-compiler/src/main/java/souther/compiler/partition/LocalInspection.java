@@ -395,15 +395,40 @@ public final class LocalInspection {
                 // what carries it. The carrier, asked of the carrier, as a guard's is.
                 return new BlockReason.UnreadComparisonDomain();
             }
-            return InvariantBound.of(clause, carried).isPresent()
-                    ? null : new BlockReason.UnreadComparisonForm();
+            return unreadFormOf(InvariantBound.of(clause, carried), true);
         }
         if (measure != null && InvariantBound.statesAnEnd(clause, measure)) {
             // A size is a whole number whatever it is a size of, so nothing here is about a carrier.
-            return InvariantBound.ofSize(clause, measure).isPresent() ? null
-                    : new BlockReason.UnreadComparisonForm();
+            // And nothing takes a size's ends into the reading that refuses a declaration for
+            // holding no value: that reading is over the positions a value has, and a size is a
+            // number taken of one. So a size bound past the end of the whole numbers is a rule this
+            // report is the only reader of, and going quiet about it would leave it unsaid
+            // everywhere.
+            return unreadFormOf(InvariantBound.ofSize(clause, measure), false);
         }
         return null;
+    }
+
+    /**
+     * What a reading of an ordered rule leaves for the report to say about it.
+     *
+     * <p>Nothing where an end was read. A rule stating an end past the last value of the order is
+     * the case the two callers differ on, and what settles it is whether anything else says
+     * something about such a rule: where the declaration is refused for holding no value, this
+     * report is never produced and naming the rule as one nothing could read would send an author
+     * after a bound the compiler understood perfectly; where nothing refuses it, this is its only
+     * reader and silence is the rule going unsaid.
+     *
+     * @param refusedElsewhere whether a rule stating an end past the end of the order is taken into
+     *                         the reading that refuses a declaration for holding no value
+     */
+    private static BlockReason unreadFormOf(InvariantBound.Read read, boolean refusedElsewhere) {
+        return switch (read) {
+            case InvariantBound.Read.AnEnd _ -> null;
+            case InvariantBound.Read.PastWhereTheOrderStops _ ->
+                    refusedElsewhere ? null : new BlockReason.UnreadComparisonForm();
+            case InvariantBound.Read.NoEnd _ -> new BlockReason.UnreadComparisonForm();
+        };
     }
 
     /**

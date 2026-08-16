@@ -581,10 +581,14 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
      *
      * <p>There is no field here to make optional. The sentence about self-reference was the only one
      * written, so every way of coming to no value was told the way one of them came to it.
+     *
+     * <p>The sentence names the position, because the reading that showed it can.
+     * {@link souther.compiler.diag.msg.DataMessage.ItsRulesCannotAllHold} is what a domain that
+     * could show only that the rules contradict leaves.
      */
     @Test
     void aDeclarationWhoseRulesCannotAllHoldIsNotToldItRefersToItself() {
-        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
                 module demo
 
                 data Bad = Int
@@ -595,13 +599,16 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
     /**
      * A declaration whose equalities admit no value is told the same thing, and told it once.
      *
-     * <p>The sentence is about the rules and not about the carrier, since neither is the count.
-     * What holds the record beside it out of the report is that granting the name a value leaves
+     * <p>The sentence is about the rules and not about the carrier, since neither is the count. Two
+     * equalities name one position twice, which is a range with one value in it read twice — so this
+     * is the same shape as a pair of ends that cross and is told the same sentence.
+     *
+     * <p>What holds the record beside it out of the report is that granting the name a value leaves
      * the record with one: the record is not what the author has to change.
      */
     @Test
     void aDeclarationWhoseEqualitiesAdmitNoValueIsToldItsRulesCannotAllHold() {
-        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
                 module demo
 
                 data Gender = String

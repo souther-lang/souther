@@ -107,11 +107,16 @@ public final class DeclaredBounds {
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
-                    InvariantBound read = (measure == null ? InvariantBound.of(each, carrier)
-                            : InvariantBound.ofSize(each, measure)).orElse(null);
-                    if (read == null) {
+                    // An end and nothing else. A rule this reads no end from narrows nothing here,
+                    // and a rule stepping past the last value of the order states an end no value is
+                    // at — which is a declaration with no value, answered where counts are and not
+                    // by a bound written at a place nothing can be.
+                    if (!((measure == null ? InvariantBound.of(each, carrier)
+                            : InvariantBound.ofSize(each, measure))
+                            instanceof InvariantBound.Read.AnEnd placed)) {
                         continue;
                     }
+                    InvariantBound read = placed.bound();
                     End end = new End(read.end(), List.of(layer.named()));
                     if (read.lower()) {
                         min = End.tighter(min, end, false);
