@@ -121,6 +121,24 @@ public sealed interface InvariantMessage extends Message {
     @Code(DiagnosticCode.E1102)
     record AUnitDataHasNothingToObserve(String data) implements InvariantMessage, Reported {}
 
+    /**
+     * A clause declared on a sum, which nothing constructs.
+     *
+     * <p>Said where the clause still exists. A sum is lowered into a declaration with no slot for
+     * one, so carrying on from here drops the clause and everything written inside it — a call to a
+     * function that does not exist compiles clean. What it costs is not one silent clause: a reading
+     * that asks which rules are written about a position answers from the declaration, so a rule
+     * that never arrived reads as a rule nobody wrote, and a report goes on to say the model draws
+     * no distinction there.
+     */
+    @Code(DiagnosticCode.E1107)
+    record ASumIsNeverConstructed(String data) implements InvariantMessage, Reported {}
+
+    /** Where the same rule is written instead: on the case that is built, or on a newtype over the
+     *  sum, which is built and carries its own check. */
+    record WriteItOnACaseOrOnANewtypeOverTheSum(String data)
+            implements InvariantMessage, Supporting {}
+
     @Code(DiagnosticCode.E1104)
     record UnderscoreCannotNameAClause(String data) implements InvariantMessage, Reported {}
 

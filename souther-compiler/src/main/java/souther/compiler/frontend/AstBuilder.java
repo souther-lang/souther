@@ -327,6 +327,17 @@ public final class AstBuilder {
         }
         Optional<SyntaxNode> sum = n.child(SyntaxKind.SUM_BODY);
         if (sum.isPresent()) {
+            // Nothing constructs a sum — a value of one is written as one of its cases — so a clause
+            // here would be owed by no construction
+            // (spec §an-invariant-is-declared-where-a-construction-owes-it). Refused where the
+            // clause is still in hand: `Ast.SumData` has no slot for one, and past this point what
+            // was written and what was dropped read alike.
+            for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
+                throw CompileException.of(Diagnostic
+                        .at(pos(clause))
+                        .hint(new InvariantMessage.WriteItOnACaseOrOnANewtypeOverTheSum(name))
+                        .say(new InvariantMessage.ASumIsNeverConstructed(name)).build());
+            }
             List<Ast.Name> cases = new ArrayList<>();
             for (SyntaxToken t : identTokens(sum.get())) {
                 cases.add(Ast.Name.written(nameOf(t)));
