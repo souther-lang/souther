@@ -42,17 +42,12 @@ public final class Scoping {
     /**
      * What a module is resolved against, in {@code universe}.
      *
-     * <p>The module arrives as the universe answered it, rather than as a module and a table beside
-     * it. A module and the library names its import lines let it write bare are one reading, and a
-     * caller free to pair them itself is a caller that can pair a module with another module's
-     * table — which, answered emptily, left every bare name in a published invariant denoting
-     * nothing.
-     *
-     * <p>So only a module the universe can read has a scope. One it has and cannot read has no
+     * <p>Only a module the universe can read has a scope. One it has and cannot read has no
      * declarations to give, and a scope assembled around the hole would say what a name means in a
      * module nothing can say anything about.
      */
-    public static Scoped of(ModuleUniverse universe, ModuleUniverse.InSight.Read read) {
+    public static Scoped of(ModuleUniverse universe, Subject subject) {
+        ModuleUniverse.InSight.Read read = subject.read();
         Ast.Module m = read.module();
         List<Refusal> refused = new ArrayList<>();
         Map<String, Denotation> denotations = new LinkedHashMap<>();
@@ -137,9 +132,31 @@ public final class Scoping {
             }
         }
         Resolve.Values values =
-                new Resolve.Values(reachable(universe, read), new OfTheUniverse(universe));
+                new Resolve.Values(reachable(universe, subject), new OfTheUniverse(universe));
         refused.addAll(oneSpellingTwice(universe, read));
         return new Scoped(m.name(), denotations, aliases, values, refused);
+    }
+
+    /**
+     * The module a scope is being assembled for, and what only it needs.
+     *
+     * <p>One value, because the two cannot be told apart afterwards. The
+     * {@code import List ( map )} lines are dropped once read ({@link Exposing}), so what they
+     * brought in outlives them and travels with the module or is lost — read as a second answer it
+     * was answered emptily for a module off the class path, and every bare name in a published
+     * invariant then denoted nothing.
+     *
+     * <p>Told apart from what the universe says about the modules around it, because it is a fact
+     * about here and not about them. A reader of another module never asks what that module may
+     * write bare, and a universe that answered it anyway would put every importer's scope behind an
+     * edit to a library import line in a module it imports from.
+     */
+    public record Subject(ModuleUniverse.InSight.Read read,
+                          Map<String, ValueName.Stdlib> libraryNames) {
+
+        public Subject {
+            libraryNames = Collections.unmodifiableMap(new LinkedHashMap<>(libraryNames));
+        }
     }
 
     /**
@@ -280,9 +297,8 @@ public final class Scoping {
      * name came from, and a reader that answered "all of them" for a universe it had not finished
      * reading would report the name as denoting nothing.
      */
-    private static Resolve.Reachable reachable(ModuleUniverse universe,
-                                               ModuleUniverse.InSight.Read read) {
-        Ast.Module m = read.module();
+    private static Resolve.Reachable reachable(ModuleUniverse universe, Subject subject) {
+        Ast.Module m = subject.read().module();
         // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
         // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
         // two answers to one question is how a name came to denote a helper here and a behavior
@@ -322,7 +338,7 @@ public final class Scoping {
                 }
             }
         }
-        return new Resolve.Reachable(m.name(), helpers, behaviors, whole, read.libraryNames());
+        return new Resolve.Reachable(m.name(), helpers, behaviors, whole, subject.libraryNames());
     }
 
     /**

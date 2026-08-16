@@ -19,6 +19,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -92,9 +93,15 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         return assertInstanceOf(ModuleUniverse.InSight.Read.class, readings.get(module));
     }
 
+    /** The module a scope is assembled for, as this compilation puts it together. */
+    private static Scoping.Subject subject(Db db, String module) {
+        Scoping.Subject subject = CompilationUniverse.subject(db, module);
+        assertNotNull(subject, module);
+        return subject;
+    }
+
     /** {@code module} resolved against {@code universe}, by the one assembly there is. */
-    private static Hir.Module resolvedAgainst(ModuleUniverse universe,
-                                              ModuleUniverse.InSight.Read module,
+    private static Hir.Module resolvedAgainst(ModuleUniverse universe, Scoping.Subject subject,
                                               Map<String, ModuleUniverse.InSight> readings) {
         Map<String, Ast.Module> written = new LinkedHashMap<>();
         readings.forEach((name, sighted) -> {
@@ -102,10 +109,10 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
                 written.put(name, there.module());
             }
         });
-        Scoping.Scoped scoped = Scoping.of(universe, module);
+        Scoping.Scoped scoped = Scoping.of(universe, subject);
         assertEquals(java.util.List.of(), scoped.refused(),
                 "nothing about this model is refused");
-        Resolve.Resolution answered = Resolve.resolving(module.module(),
+        Resolve.Resolution answered = Resolve.resolving(subject.read().module(),
                 scoped.writtenSymbols(Registry.ofWritten(written)), scoped.values());
         assertEquals(java.util.List.of(), answered.unresolved(),
                 () -> "every name was answered: " + answered.unresolved());
@@ -120,7 +127,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
 
         Map<String, ModuleUniverse.InSight> readings = readings(db);
         Hir.Module byWhatWasRead = resolvedAgainst(new ModuleUniverse.OfWhatIsRead(readings),
-                read(readings, "scope.down"), readings);
+                subject(db, "scope.down"), readings);
 
         assertEquals(byTheCompilation, byWhatWasRead,
                 "which universe answered is not something a resolved module can differ by");
@@ -137,8 +144,9 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
      */
     @Test
     void aModuleTheUniverseCannotReadIsNotReportedAsMissing() {
-        Map<String, ModuleUniverse.InSight> readings = readings(compiled().db());
-        ModuleUniverse.InSight.Read down = read(readings, "scope.down");
+        Db db = compiled().db();
+        Map<String, ModuleUniverse.InSight> readings = readings(db);
+        Scoping.Subject down = subject(db, "scope.down");
         readings.put("scope.up", ModuleUniverse.InSight.UNREADABLE);
 
         Scoping.Scoped scoped =
@@ -167,11 +175,10 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
      */
     @Test
     void aReadingWithoutItsLibraryNamesCannotAnswerWhatItsImportsBroughtIn() {
-        Map<String, ModuleUniverse.InSight> readings = readings(compiled().db());
-        ModuleUniverse.InSight.Read down = read(readings, "scope.down");
-        ModuleUniverse.InSight.Read withoutTheTable =
-                new ModuleUniverse.InSight.Read(down.module(), down.declarations(), Map.of());
-        readings.put("scope.down", withoutTheTable);
+        Db db = compiled().db();
+        Map<String, ModuleUniverse.InSight> readings = readings(db);
+        Scoping.Subject withoutTheTable =
+                new Scoping.Subject(read(readings, "scope.down"), Map.of());
 
         Map<String, Ast.Module> written = new LinkedHashMap<>();
         readings.forEach((name, sighted) -> {
@@ -181,7 +188,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         });
         Scoping.Scoped scoped =
                 Scoping.of(new ModuleUniverse.OfWhatIsRead(readings), withoutTheTable);
-        Resolve.Resolution answered = Resolve.resolving(withoutTheTable.module(),
+        Resolve.Resolution answered = Resolve.resolving(withoutTheTable.read().module(),
                 scoped.writtenSymbols(Registry.ofWritten(written)), scoped.values());
 
         assertTrue(answered.unresolved().stream()
@@ -194,8 +201,9 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
      *  it. */
     @Test
     void aModuleNoUniverseHasIsRefusedOnTheImportLine() {
-        Map<String, ModuleUniverse.InSight> readings = readings(compiled().db());
-        ModuleUniverse.InSight.Read down = read(readings, "scope.down");
+        Db db = compiled().db();
+        Map<String, ModuleUniverse.InSight> readings = readings(db);
+        Scoping.Subject down = subject(db, "scope.down");
         readings.remove("scope.up");
 
         Scoping.Scoped scoped =

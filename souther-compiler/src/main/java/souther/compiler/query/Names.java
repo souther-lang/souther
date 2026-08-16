@@ -327,11 +327,11 @@ public final class Names {
 
         @Override
         public Answer<Scoping.Scoped> compute(Db db) {
-            ModuleUniverse universe = CompilationUniverse.over(db);
-            if (!(universe.module(name) instanceof ModuleUniverse.InSight.Read read)) {
+            Scoping.Subject subject = CompilationUniverse.subject(db, name);
+            if (subject == null) {
                 return Answer.absent();
             }
-            Scoping.Scoped scoped = Scoping.of(universe, read);
+            Scoping.Scoped scoped = Scoping.of(CompilationUniverse.over(db), subject);
             List<Report> reports = new ArrayList<>();
             for (Scoping.Refusal refusal : scoped.refused()) {
                 reports.add(said(refusal));

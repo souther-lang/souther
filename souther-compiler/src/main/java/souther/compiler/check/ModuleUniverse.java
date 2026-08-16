@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.types.ValueName;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -53,25 +52,24 @@ public interface ModuleUniverse {
     sealed interface InSight {
 
         /**
-         * What a universe says a module is: what it wrote, what it declares, and the library names
-         * its import lines let it write bare.
+         * What a universe says a module is, to a module that names it: what it wrote, and what it
+         * declares.
          *
-         * <p>One value, because none of the three can be worked out from another without deciding
-         * something. The {@code import List ( map )} lines are dropped once read ({@link Exposing}),
-         * so what they brought in outlives them and travels with the module or is lost — answered
-         * separately it was answered emptily for a module read off the class path, and every bare
-         * name in a published invariant then denoted nothing. And which declarations a module has
-         * is a rule, not a reading: a name written twice keeps the first, a built-in case name is
-         * refused, and what is left is what the module declares. A reader that indexed the
-         * declarations itself would be a second place that rule is written, and the two would
-         * differ in what they do about the ones they refuse.
+         * <p>Both, because the second is a rule and not a reading: a name written twice keeps the
+         * first, a built-in case name is refused, and what is left is what the module declares. A
+         * reader that indexed the declarations itself would be a second place that rule is
+         * written, and the two would differ in what they do about the ones they refuse.
+         *
+         * <p>What a module's own import lines let it write bare is not here. It is not something
+         * one module needs of another — nothing a reader writes is answered by the library names
+         * another module may write bare — and reading it of every module named would put every
+         * importer's scope behind an edit to a line in a module it imports from. It belongs to the
+         * module being scoped, and travels with it ({@link Scoping.Subject}).
          */
-        record Read(Ast.Module module, Map<String, Ast.Def> declarations,
-                    Map<String, ValueName.Stdlib> libraryNames) implements InSight {
+        record Read(Ast.Module module, Map<String, Ast.Def> declarations) implements InSight {
 
             public Read {
                 declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
-                libraryNames = Collections.unmodifiableMap(new LinkedHashMap<>(libraryNames));
             }
         }
 

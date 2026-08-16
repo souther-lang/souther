@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.ModuleUniverse;
+import souther.compiler.check.Scoping;
 import souther.compiler.types.ValueName;
 
 import java.util.Map;
@@ -34,6 +35,26 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
         return new CompilationUniverse(db);
     }
 
+    /**
+     * The module a scope is being assembled for, as this compilation reads it — or null where there
+     * is no scope to assemble.
+     *
+     * <p>The one place the module and the library names its own import lines let it write bare are
+     * put together on this side. Read here and not in {@link #module}, because it is a fact about
+     * the module being scoped and about no other: read of every module named, an edit to a library
+     * import line anywhere would be a reason to assemble every importing module's scope again.
+     */
+    public static Scoping.Subject subject(Db db, String name) {
+        if (!(over(db).module(name) instanceof InSight.Read read)) {
+            return null;
+        }
+        Map<String, ValueName.Stdlib> library = db.ask(new Front.LibraryNames(name)).value();
+        // The two are one reading. A module whose table this compilation cannot answer is not one
+        // a scope can be assembled for: answered emptily instead, every bare name its import lines
+        // brought in would denote nothing.
+        return library == null ? null : new Scoping.Subject(read, library);
+    }
+
     @Override
     public InSight module(String name) {
         Ast.Module m = db.ask(new Front.Available(name)).value();
@@ -49,9 +70,8 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
             // about the shape of the workspace — an import of a misspelt module would otherwise
             // put every module's imports on the far side of this one's answer.
             Answer<Map<String, Ast.Def>> declarations = db.ask(new Names.Declarations(name));
-            Map<String, ValueName.Stdlib> library = db.ask(new Front.LibraryNames(name)).value();
-            if (declarations.present() && library != null) {
-                return new InSight.Read(m, declarations.value(), library);
+            if (declarations.present()) {
+                return new InSight.Read(m, declarations.value());
             }
         }
         // Nothing to give — and now why. A file the caller held back reports its own error, so an
