@@ -74,6 +74,21 @@ public sealed interface Agreement {
          * this compiler cannot read are not a stale build of the same model, they are a build it
          * cannot say anything about.
          */
-        NOT_READABLE_HERE
+        NOT_READABLE_HERE,
+
+        /**
+         * The answer did not say which declarations it reads a row's values by.
+         *
+         * <p>Saying it is the whole of what an answer of another build is asked, and the accessor is
+         * abstract so that an implementation which does not say it is refused where it is written.
+         * What is left is one that answers with nothing, which no reading turns into a second set of
+         * declarations.
+         *
+         * <p>Here rather than raised, and not read as the compile's own. An answerer is written
+         * outside this package, so its answering with nothing is a thing to be refused rather than a
+         * state of this compiler — raised, it would stop a compile over one implementation; taken
+         * for the compile's own, an implementation would be out of the question by returning null.
+         */
+        NO_ORIGIN_STATED
     }
 }

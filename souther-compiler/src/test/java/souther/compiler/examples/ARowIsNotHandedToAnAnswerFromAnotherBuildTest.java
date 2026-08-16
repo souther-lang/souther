@@ -97,6 +97,61 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
     }
 
     /**
+     * An answer that says nothing about which build it reads by is refused, not read as this one.
+     *
+     * <p>What states it is an abstract accessor, so an implementation that does not state it is
+     * refused where it is written. That leaves the one Java does not refuse: an implementation that
+     * answers with nothing. Both ways of taking it are worse than refusing it — raised, one
+     * implementation stops the whole compile; read as this compile's own, an implementation is out
+     * of the question by returning null and its rows are run against declarations nobody held it to.
+     */
+    @Test
+    void anAnswerThatSaysNothingAboutItsBuildIsRefusedRatherThanTakenForThisOne() {
+        Silent silent = new Silent();
+
+        ExampleVerifier.Observations observed = evaluated(MODEL, silent.asAnswering());
+
+        assertFalse(silent.handed, "no row reached it");
+        assertEquals(2, observed.rows().size());
+        for (RowOutcome row : observed.rows()) {
+            assertEquals(Disposition.INCOMPLETE, row.disposition(),
+                    "nothing was decided about the model");
+            assertEquals(FailurePhase.ANSWERER_ESTABLISHMENT, row.failurePhase(),
+                    "what stopped it is the answer and not the row");
+        }
+        assertEquals(1, observed.failures().size(),
+                "one answer could not be established, whatever the rows were");
+    }
+
+    /** An answerer that answers with nothing when asked which build its answers read values by. */
+    private static final class Silent implements Answerer {
+
+        private boolean handed;
+
+        private Answering asAnswering() {
+            return (generated, compiled) -> this;
+        }
+
+        @Override
+        public Answer of(String behavior) {
+            return new Answer.Something() {
+
+                @Override
+                public Origin origin() {
+                    return null;
+                }
+
+                @Override
+                public Applying applying(List<DependencyStandin> standins) {
+                    handed = true;
+                    throw new ImplementationNotReached("a row reached it (said by the test)",
+                            new ClassNotFoundException(behavior));
+                }
+            };
+        }
+    }
+
+    /**
      * One diagnostic for the behavior, and not one per row.
      *
      * <p>Two rows did not stop for two reasons. One answer and one module disagree, and that is the

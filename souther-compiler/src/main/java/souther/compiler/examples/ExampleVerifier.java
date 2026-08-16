@@ -413,6 +413,12 @@ public final class ExampleVerifier {
         return switch (answer) {
             case Answerer.Answer.Nothing _ -> null;
             case Answerer.Answer.Something something -> switch (something.origin()) {
+                // An answerer is written outside this package, so what it hands back is a thing to
+                // be refused rather than a state of this compiler. Saying nothing is not saying
+                // "this compile's own": read that way, an implementation would be out of the
+                // question by returning null, which is what the abstract accessor was for.
+                case null -> new Agreement.Unreadable(module.name(),
+                        Agreement.Reason.NO_ORIGIN_STATED, Agreement.Side.THE_ANSWER);
                 case TheCompilesOwn _ -> null;
                 case Origin.Published published -> agreements.computeIfAbsent(published.classes(),
                         theirs -> DeclarationAgreement.of(module.name(), declared.get(), theirs));
@@ -450,6 +456,8 @@ public final class ExampleVerifier {
                                     new ExampleMessage.ItsClassesCarryNoDeclarations(unreadable.module());
                             case NOT_READABLE_HERE ->
                                     new ExampleMessage.WhatItPublishedCannotBeReadHere(unreadable.module());
+                            case NO_ORIGIN_STATED ->
+                                    new ExampleMessage.ItDidNotSayWhichBuildItReadsBy(unreadable.module());
                         };
                         case THE_MODULE_BEING_EVALUATED ->
                                 new ExampleMessage.ThisCompileCannotReadItsOwnDeclarationsOf(
