@@ -5,7 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.inputs.InputPath;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
@@ -68,11 +68,9 @@ public final class ArmReachability {
      * @param read       what can arrive at each position of the input, which is where both rules get
      *                   their answer — the numbers a comparison is held against and the cases a
      *                   {@code match} arm is written for
-     * @param parameters the behavior's parameter names, which is what tells a {@code match} on an
-     *                   input from a {@code match} on anything else
      */
     public static ArmReachability of(List<GuardEdge> edges, Core body, CoverageSites.Plan plan,
-                                     List<String> parameters, InputDomain read, Symbols symbols) {
+                                     InputDomain read, Symbols symbols) {
         Set<Integer> out = new LinkedHashSet<>();
         Map<NumericTerm, NumericDomain.Bounds> admissible = numbers(read);
         for (GuardEdge edge : edges) {
@@ -80,7 +78,7 @@ public final class ArmReachability {
                 out.add(edge.site());
             }
         }
-        armsAt(body, plan, parameters, read, symbols, out);
+        armsAt(body, plan, InputReads.of(read), symbols, out);
         return out.isEmpty() ? NONE : new ArmReachability(Set.copyOf(out));
     }
 
@@ -105,15 +103,18 @@ public final class ArmReachability {
      *
      * <p>Cases written together on one arm are one arm, so an arm goes only where every case it
      * names is refused: an arm a row can still take is an arm the rows are owed.
+     *
+     * <p>Which reads are the input's is asked of their bindings, so a lambda binding a name a
+     * parameter already binds is matched on for what it is rather than for what it is spelled.
      */
-    private static void armsAt(Core body, CoverageSites.Plan plan, List<String> parameters,
-                               InputDomain read, Symbols symbols, Set<Integer> out) {
+    private static void armsAt(Core body, CoverageSites.Plan plan, InputReads reads,
+                               Symbols symbols, Set<Integer> out) {
         if (body == null) {
             return;
         }
         if (body instanceof Core.Match match) {
-            TermPath path = InputPath.of(match.scrutinee(), parameters, symbols);
-            Position at = path == null ? null : read.at(path);
+            TermPath path = reads.pathOf(match.scrutinee(), symbols);
+            Position at = path == null ? null : reads.read().at(path);
             int[] arms = at == null ? null : plan.probesOf(match);
             for (int i = 0; arms != null && i < match.cases().size() && i < arms.length; i++) {
                 if (arms[i] != CoverageSites.NO_SITE && refusesEvery(at, match.cases().get(i))) {
@@ -121,7 +122,11 @@ public final class ArmReachability {
                 }
             }
         }
-        Core.forEachChild(body, child -> armsAt(child, plan, parameters, read, symbols, out));
+        // Inside what a `let` binds, so that an arm of an expanded helper is read against the
+        // position the call handed it.
+        InputReads inside = body instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
+                : reads;
+        Core.forEachChild(body, child -> armsAt(child, plan, inside, symbols, out));
     }
 
     /** Whether the rules refuse every case this arm is written for. An arm naming none of them —

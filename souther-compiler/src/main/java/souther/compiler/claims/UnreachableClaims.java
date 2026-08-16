@@ -3,7 +3,8 @@ package souther.compiler.claims;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
-import souther.compiler.inputs.InputPath;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeSymbol;
 
@@ -18,7 +19,8 @@ import java.util.List;
  * that is the model's own rules, not the sentence saying so. Read here, judged in {@link Claims}.
  *
  * <p><b>Only what can be read off the body without deciding anything.</b> The body is followed down
- * its spine — what a {@code let} binds — to the first fork. Where that fork is a {@code match} on an
+ * its spine — what a {@code let} binds — to the first fork, and what the spine bound on the way is
+ * carried, so that a name standing for an argument is read as the argument. Where that fork is a {@code match} on an
  * input position, the cases whose arms answer nothing are the ones claimed. A function written where
  * a call takes one is not entered: evaluating that position makes the function, and what it matches
  * on when the call applies it is about its own parameters. Nothing below a fork is read: an arm of
@@ -46,14 +48,15 @@ public final class UnreachableClaims {
     /**
      * What {@code body} declares cannot arrive.
      *
-     * @param parameters the behavior's parameter names, which is what tells a {@code match} on an
-     *                   input from a {@code match} on anything else
+     * @param read the reading of the behavior's input, which is what tells a {@code match} on one
+     *             of its positions from a {@code match} on anything else
      */
-    public static UnreachableClaims of(Core body, List<String> parameters, Symbols symbols) {
-        if (body == null || !(spine(body) instanceof Core.Match match)) {
+    public static UnreachableClaims of(Core body, InputDomain read, Symbols symbols) {
+        Spine spine = spine(body, InputReads.of(read));
+        if (!(spine.at() instanceof Core.Match match)) {
             return NONE;
         }
-        TermPath path = InputPath.of(match.scrutinee(), parameters, symbols);
+        TermPath path = spine.reads().pathOf(match.scrutinee(), symbols);
         if (path == null) {
             return NONE;
         }
@@ -89,11 +92,16 @@ public final class UnreachableClaims {
      * matches on when something calls it is about its own parameters rather than about this
      * behavior's inputs.
      */
-    private static Core spine(Core body) {
+    private static Spine spine(Core body, InputReads reads) {
         Core at = body;
+        InputReads inside = reads;
         while (at instanceof Core.LetIn let) {
+            inside = inside.and(let.binder(), let.value());
             at = let.body();
         }
-        return at;
+        return new Spine(at, inside);
     }
+
+    /** Where the spine ended, and what it bound on the way. */
+    private record Spine(Core at, InputReads reads) {}
 }

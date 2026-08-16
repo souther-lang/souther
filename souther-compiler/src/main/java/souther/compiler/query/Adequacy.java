@@ -211,7 +211,13 @@ public final class Adequacy {
                 }
                 Sig sig = sigs.value().get(spec.name());
                 if (sig != null) {
-                    out.put(spec.name(), InputDomain.of(spec, sig, scope.value()));
+                    // The implementation the body was checked against, which is where a read of a
+                    // parameter gets the binding it carries: the check binds `fn`'s own binders and
+                    // the lowering leaves them alone. A behavior nothing implements has positions
+                    // all the same.
+                    Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(name, spec.name()));
+                    out.put(spec.name(), InputDomain.of(spec, fn.present() ? fn.value() : null, sig,
+                            scope.value()));
                 }
             }
             return Answer.of(Ordered.map(out));
@@ -268,10 +274,9 @@ public final class Adequacy {
                     continue;   // a composition has no body of its own to read this off
                 }
                 out.put(spec.name(), Claims.of(
-                        UnreachableClaims.of(bodies.get(spec.name()),
-                                spec.params().stream().map(Hir.Param::name).toList(), scope.value()),
-                        readInputs == null ? InputDomain.NONE
-                                : readInputs.getOrDefault(spec.name(), InputDomain.NONE)));
+                        UnreachableClaims.of(bodies.get(spec.name()), domainOf(readInputs, spec),
+                                scope.value()),
+                        domainOf(readInputs, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -310,7 +315,6 @@ public final class Adequacy {
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(bodies);
-            Map<String, Claims> claimed = db.ask(new Claimed(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Symbols symbols = scope.value();
             Map<String, souther.compiler.partition.ArmReachability> out = new LinkedHashMap<>();
@@ -323,16 +327,14 @@ public final class Adequacy {
                 if (body == null || sig == null) {
                     continue;
                 }
-                List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
                 souther.compiler.partition.GuardThresholds.Guards guards =
                         souther.compiler.partition.GuardThresholds.of(
-                                spec.name(), body, plan, parameters, symbols);
+                                spec.name(), body, plan, domainOf(readInputs, spec), symbols);
                 // The reading of the input, and nothing a body drew: a guard's own line is not what
                 // says whether that line is reachable, and an arm's own case is not what says
                 // whether a value of it can arrive.
                 out.put(spec.name(), souther.compiler.partition.ArmReachability.of(
-                        guards.edges(), body, plan, parameters, domainOf(readInputs, spec),
-                        symbols));
+                        guards.edges(), body, plan, domainOf(readInputs, spec), symbols));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -417,7 +419,6 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Map<String, Observed> byTarget = rowsOf(db, name);
-            Map<String, Claims> claimed = db.ask(new Claimed(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What each body can answer with, so that a case only an unreachable arm produces is not
             // counted. Read from the same reachability the arms are counted by.
@@ -541,7 +542,6 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
-            Map<String, Claims> claimed = db.ask(new Claimed(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Symbols symbols = scope.value();
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
@@ -561,7 +561,7 @@ public final class Adequacy {
                 }
                 out.put(spec.name(), assess(spec, sig, symbols, bodies.get(spec.name()), plan,
                         byTarget.getOrDefault(spec.name(), Observed.NONE), armsAsked, building,
-                        claimsOf(claimed, spec), domainOf(readInputs, spec)));
+                        domainOf(readInputs, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -570,8 +570,7 @@ public final class Adequacy {
         private static List<BoundaryAssessment> assess(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                boolean armsAsked, FixtureReader.Construction building, Claims claims,
-                InputDomain domain) {
+                boolean armsAsked, FixtureReader.Construction building, InputDomain domain) {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
@@ -1127,7 +1126,6 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
-            Map<String, Claims> claimed = db.ask(new Claimed(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Symbols symbols = scope.value();
 
@@ -1154,7 +1152,7 @@ public final class Adequacy {
                 try {
                     pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
-                            claimsOf(claimed, spec), domainOf(readInputs, spec));
+                            domainOf(readInputs, spec));
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -1383,7 +1381,7 @@ public final class Adequacy {
         private static Generator.GenerationResult pairsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                FixtureReader.Construction building, Claims claims, InputDomain domain) {
+                FixtureReader.Construction building, InputDomain domain) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,

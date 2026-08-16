@@ -79,7 +79,8 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
      *  about it. */
     private Position read(String type) {
         return InputDomain.of(
-                        List.of(new InputDomain.Parameter("x", Type.ref(named(type)))), symbols)
+                        List.of(new InputDomain.Parameter("x", null, Type.ref(named(type)))),
+                        symbols)
                 .at(TermPath.of("x"));
     }
 

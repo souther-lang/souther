@@ -32,8 +32,8 @@ import java.util.Set;
  * something true about their model.
  *
  * <p>Only guards take an arm away, because only a guard's arm has a reachability proof behind it. A
- * {@code match} arm is left alone: which cases of a sum can arrive is a different question and
- * {@link Exclusions} is where it is asked.
+ * {@code match} arm is left alone here: which cases of a sum can arrive is a different question, and
+ * it is asked of the reading of the input ({@link ArmReachability}).
  */
 public final class ProducedCases {
 

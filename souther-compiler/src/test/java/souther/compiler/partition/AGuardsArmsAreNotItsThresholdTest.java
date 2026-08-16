@@ -70,7 +70,7 @@ class AGuardsArmsAreNotItsThresholdTest {
         assertNotNull(body);
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         return GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Hir.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
     }
 
     /** The arm taken when the condition holds, which the plan numbers first. */
@@ -249,8 +249,7 @@ class AGuardsArmsAreNotItsThresholdTest {
 
     /** Held against a reading of nothing, which is what the two arms are proven with. */
     private static ArmReachability reaching(List<GuardEdge> edges, InputDomain read) {
-        return ArmReachability.of(edges, null, CoverageSites.of(Map.of()), List.of("n"), read,
-                null);
+        return ArmReachability.of(edges, null, CoverageSites.of(Map.of()), read, null);
     }
 
     @Test

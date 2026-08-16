@@ -3,7 +3,6 @@ package souther.compiler.claims;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.Unsettlement;
 
 import java.util.ArrayList;
@@ -77,18 +76,5 @@ public final class Claims {
      *  for the ones it prints. */
     public List<Judged> thatAre(Class<? extends ClaimVerdict> verdict) {
         return judged.stream().filter(each -> verdict.isInstance(each.verdict())).toList();
-    }
-
-    /** What the model's own words are for a case at a position, where a claim named one and the
-     *  rules agreed with it. Empty where no confirmed claim names the case. */
-    public List<String> confirmedReasonsFor(TermPath at, String caseName) {
-        for (Judged each : judged) {
-            if (each.verdict() instanceof ClaimVerdict.Confirmed
-                    && each.claim().at().equals(at)
-                    && each.claim().named().name().equals(caseName)) {
-                return each.claim().reasons();
-            }
-        }
-        return List.of();
     }
 }

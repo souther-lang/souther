@@ -61,7 +61,7 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
         Core body = checked.behaviorBodies().get("pick");
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Hir.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
         Map<String, OriginRef.GuardOrigin.Witness> out = new LinkedHashMap<>();
         for (Threshold each : guards.thresholds()) {
             out.put(each.path().toString(), each.origin().witness());

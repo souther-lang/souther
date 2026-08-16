@@ -31,19 +31,14 @@ public final class UnreachableReasons {
     /** One {@code unreachable} an expression reaches: what it says, and where it says it. */
     public record Said(String reason, souther.compiler.diag.SourcePos at) {}
 
-    /** Every reason reached along the paths that answer nothing, in the order they are evaluated and
-     * without repeats. Empty where the expression answers a value. */
-    public static List<String> of(Core e) {
-        return said(e).stream().map(Said::reason).distinct().toList();
-    }
-
     /**
-     * The same, each with where it is written.
+     * Every {@code unreachable} reached along the paths that answer nothing, in the order they are
+     * evaluated. Empty where the expression answers a value.
      *
-     * <p>Both come off one walk, since they are one reading: a reader wanting the words and a reader
-     * wanting the place would otherwise walk the arm twice and could come to disagree about which
-     * paths answer nothing. Repeats are kept here and dropped by {@link #of}, so that two arms
-     * aborting with the same words still have two places between them.
+     * <p>The words and the places come off one walk, since they are one reading: a reader wanting
+     * the words and a reader wanting the place would otherwise walk the arm twice and could come to
+     * disagree about which paths answer nothing. Repeats are kept, so that two arms aborting with
+     * the same words still have two places between them; a caller wanting the reasons drops them.
      */
     public static List<Said> said(Core e) {
         List<Said> found = new java.util.ArrayList<>();

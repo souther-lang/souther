@@ -1143,9 +1143,7 @@ public final class Bodies {
             }
             for (Diagnostic refused : souther.compiler.claims.ClaimDiagnostics.refusals(
                     souther.compiler.claims.Claims.of(
-                            souther.compiler.claims.UnreachableClaims.of(body,
-                                    spec.params().stream().map(Hir.Param::name).toList(),
-                                    scope.value()),
+                            souther.compiler.claims.UnreachableClaims.of(body, read, scope.value()),
                             read),
                     read)) {
                 out.add(Report.of(refused));

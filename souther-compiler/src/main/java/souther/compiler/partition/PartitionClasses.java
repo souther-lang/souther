@@ -140,8 +140,15 @@ final class PartitionClasses {
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.none())));
         }
-        Type element = view.shape() instanceof souther.compiler.check.Shape.Optional optional
-                ? optional.element() : null;
+        if (!(view.shape() instanceof souther.compiler.check.Shape.Optional optional)) {
+            // The reading states whether an optional holds anything only of an optional. A class
+            // for one anywhere else is the two readings of a position disagreeing about its shape.
+            throw new IllegalStateException(
+                    "`" + Type.show(view.declared()) + "` is asked whether it holds a value, and it"
+                            + " is not an optional; the reading of a position and the classes built"
+                            + " from it disagree about its shape");
+        }
+        Type element = optional.element();
         List<FixtureTemplate> some = Partitions.representativesOf(element, symbols);
         Classifier is = Classifier.under(worn,
                 Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)));

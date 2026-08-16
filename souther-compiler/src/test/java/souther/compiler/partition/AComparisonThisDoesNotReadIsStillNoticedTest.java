@@ -73,7 +73,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertNotNull(body);
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         return GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Hir.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
     }
 
     /** A comparison this reads is not also reported as one it did not. */

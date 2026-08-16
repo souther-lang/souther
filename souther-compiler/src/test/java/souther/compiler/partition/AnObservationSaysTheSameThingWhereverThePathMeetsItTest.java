@@ -88,7 +88,8 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
                 Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("book"), symbols), symbols),
-                GuardThresholds.of("book", body, plan, parameters, symbols).thresholds(), symbols);
+                GuardThresholds.of("book", body, plan,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), symbols).thresholds(), symbols);
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();

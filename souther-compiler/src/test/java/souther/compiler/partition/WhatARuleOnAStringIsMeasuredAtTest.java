@@ -164,7 +164,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         Core body = checked.behaviorBodies().get("f");
         GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
-                spec.params().stream().map(Hir.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
                 Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("f"), symbols), symbols),
                 guards.thresholds(), symbols, List.of(), guards.singled());

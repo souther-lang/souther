@@ -195,6 +195,84 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         assertEquals(List.of("B"), input.unspecified().stream().map(each -> each.name()).toList());
     }
 
+    /**
+     * A name is a position because of the binding it is, and not because of how it is spelled.
+     *
+     * <p>The local shadows the parameter and holds whatever the call answers with, so nothing here
+     * says an {@code Off} arrives at it. Read by spelling, the arm is judged against the
+     * parameter's rules — which admit one — and a model that says nothing wrong is refused.
+     */
+    @Test
+    void aLocalThatShadowsAParameterIsNotTheParameter() {
+        String shadowed = """
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Active = Flag invariant value /= Off
+                data Answer = Int
+
+                let defaulted (f: Flag): Active =
+                    match f with
+                        | On  -> Active(On)
+                        | Off -> Active(On)
+
+                behavior pick : (f: Flag) -> Answer
+                    constructs Answer, Active, On
+
+                let pick (f) = {
+                    let f = defaulted(f)
+                    match f.value with
+                        | On  -> Answer(1)
+                        | Off -> unreachable "a defaulted flag is never Off"
+                }
+                """;
+
+        assertEquals(List.of(), errorsIn(shadowed), "nothing here is wrong");
+    }
+
+    /**
+     * And a name bound to a position is that position, whatever it is called.
+     *
+     * <p>A helper expanded into a body binds the call's argument to its own parameter and matches
+     * that. Read by spelling, this is caught only where the two happen to share a name — so the
+     * helper's is deliberately not the behavior's here.
+     */
+    @Test
+    void aClaimInsideAnExpandedHelperIsJudgedAgainstWhatTheCallGaveIt() {
+        String throughHelper = """
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Answer = Int
+
+                let decide (g: Flag): Answer =
+                    match g with
+                        | On  -> Answer(1)
+                        | Off -> unreachable "the caller never passes Off"
+
+                behavior pick : (f: Flag) -> Answer
+                    constructs Answer
+
+                let pick (f) = decide(f)
+                """;
+
+        assertEquals(List.of("E1326"), errorsIn(throughHelper));
+    }
+
+    /** The codes of whatever this model is refused for, in the order they are reported. */
+    private static List<String> errorsIn(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return compilation.db().allReports().stream()
+                .filter(found -> found.report().isError())
+                .map(found -> found.report().diagnostic().code())
+                .toList();
+    }
+
     /** The gap that is real is still reported; the one no row can fill is not. */
     @Test
     void theCaseWithAnAnswerIsStillOwedARow() {

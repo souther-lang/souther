@@ -12,6 +12,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
@@ -48,13 +49,15 @@ public final class InputDomain {
     public static final int MAX_DEPTH = 2;
 
     /** Nothing to read: a behavior whose signature is not in hand. */
-    public static final InputDomain NONE = new InputDomain(List.of());
+    public static final InputDomain NONE = new InputDomain(List.of(), Map.of());
 
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
+    private final Map<BindingId, String> read;
 
-    private InputDomain(List<Position> positions) {
+    private InputDomain(List<Position> positions, Map<BindingId, String> read) {
         this.positions = List.copyOf(positions);
+        this.read = Map.copyOf(read);
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
         // readings under one path would be the position answering differently depending on which
@@ -63,33 +66,68 @@ public final class InputDomain {
         this.byPath = Map.copyOf(at);
     }
 
-    /** One thing a behavior is applied to: what it is called, and what it holds. Taken together
-     *  because they are one fact — a name beside a type is a pair a caller can get out of step. */
-    public record Parameter(String name, Type type) {}
+    /**
+     * One thing a behavior is applied to: what it is called, what it holds, and which binding a body
+     * reads it as.
+     *
+     * <p>Taken together because they are one fact — three lists a caller can get out of step is how
+     * a position comes to be named after one parameter and read off another.
+     *
+     * @param name    what a report calls the position, which is the name the <em>declaration</em>
+     *                wrote: a behavior states what it takes, and an implementation may bind the same
+     *                thing under another spelling
+     * @param binding what a body's reads of it carry, or null where no implementation binds it. What
+     *                a binding is cannot be worked out from how it was spelled ({@link BindingId}),
+     *                which is why the two are both here and neither stands in for the other
+     */
+    public record Parameter(String name, BindingId binding, Type type) {}
 
     /** Every position of an input, in the order the parameters are declared and descended into. */
     public static InputDomain of(List<Parameter> parameters, Symbols symbols) {
         List<Position> found = new ArrayList<>();
+        Map<BindingId, String> read = new LinkedHashMap<>();
         for (Parameter parameter : parameters) {
+            if (parameter.binding() != null) {
+                read.putIfAbsent(parameter.binding(), parameter.name());
+            }
             walk(TermPath.of(parameter.name()), parameter.type(), 0, symbols,
                     PlacedRules.of(parameter.type(), symbols), found);
         }
-        return found.isEmpty() ? NONE : new InputDomain(found);
+        return found.isEmpty() ? NONE : new InputDomain(found, read);
     }
 
     /**
-     * The same, of a behavior.
+     * The same, of a behavior and the implementation that binds its parameters.
      *
-     * <p>The one place a name and a type are put side by side: the declaration says what the
-     * parameters are called and the signature says what they hold, and the pairing is done here
-     * rather than by every caller that has both.
+     * <p>The one place the three are put side by side: the declaration says what the parameters are
+     * called, the signature says what they hold, and the implementation says which binding a body's
+     * reads of one carry. Paired here rather than by every caller that has some of them.
+     *
+     * @param fn the implementation, or null where nothing implements this behavior — an injected
+     *           behavior has positions and no body to read them in
      */
-    public static InputDomain of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols) {
+    public static InputDomain of(Hir.SpecBehavior behavior, Hir.FnDef fn, Sig sig,
+                                 Symbols symbols) {
         List<Parameter> parameters = new ArrayList<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
-            parameters.add(new Parameter(behavior.params().get(i).name(), sig.inputTypes().get(i)));
+            BindingId binding = fn != null && i < fn.params().size()
+                    ? fn.params().get(i).binder().binding() : null;
+            parameters.add(new Parameter(behavior.params().get(i).name(), binding,
+                    sig.inputTypes().get(i)));
         }
         return of(parameters, symbols);
+    }
+
+    /**
+     * The same, of an input nothing reads a body against.
+     *
+     * <p>The positions are the same either way — what a behavior takes is what it declares — and
+     * what is absent is the means to tell one of its parameters from a name a body binds under the
+     * same spelling. So this is the reading for a caller with no body in hand, and a caller with one
+     * that used it would find every claim and every comparison naming nothing.
+     */
+    public static InputDomain of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols) {
+        return of(behavior, null, sig, symbols);
     }
 
     /** The positions, in the order they were read. */
@@ -101,6 +139,17 @@ public final class InputDomain {
      *  the walk stops, or one that is not a position of this behavior at all. */
     public Position at(TermPath path) {
         return byPath.get(path);
+    }
+
+    /**
+     * What a body's read of {@code binding} names, or null where it is not one of these parameters.
+     *
+     * <p>Asked of the binding and never of the spelling. A body may bind a name its own behavior
+     * already binds — {@code let f = defaulted(f)} — and the two are different values under one
+     * word, so a reader matching the word reads the inner one as the outer.
+     */
+    public String parameterRead(BindingId binding) {
+        return binding == null ? null : read.get(binding);
     }
 
     /**
