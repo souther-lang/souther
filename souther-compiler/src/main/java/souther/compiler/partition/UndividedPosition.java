@@ -23,8 +23,8 @@ public record UndividedPosition(TermPath at, Why why) {
     public sealed interface Why {
 
         /**
-         * Every producer was asked, none of them stopped, and none of them divided the position:
-         * the model divides it no way at all.
+         * Every reading ran to the end, none of them stopped, and none of them divided the
+         * position: the model divides it no way at all.
          *
          * <p>A class with no way to make one rather than a record, because what it says is a
          * conclusion about a model and the only thing entitled to draw it is the completion of a
@@ -73,7 +73,16 @@ public record UndividedPosition(TermPath at, Why why) {
      * capability was missing.
      */
     public enum Reason {
-        /** A comparison this position is named by sits inside a condition this does not read. */
+        /**
+         * A rule about this position is one this compiler did not read.
+         *
+         * <p>Said of the rule and not of one way of failing to read it. A comparison inside a
+         * condition this does not take apart is one; a rule naming which values may stand here,
+         * written as something other than a value written out, is another; a rule this never
+         * reached at all is a third. The word is the whole of what a reader is promised — that the
+         * model states something here and this compiler did not read it — and which reader of the
+         * clause gave up is not part of the promise.
+         */
         UNSUPPORTED_SYNTAX,
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,

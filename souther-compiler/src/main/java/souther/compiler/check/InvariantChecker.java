@@ -271,23 +271,39 @@ public final class InvariantChecker {
      *                        where one could not be typed or held nothing this reads — the bounds are
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
-     * @param everyClauseGathered whether every clause of the value reached the readings at all.
-     *                 False where the walk fell over, and false where a clause could not be typed —
-     *                 in both, a rule of the declaration is one no reading here ever saw, so no
-     *                 reading can say it took the declaration in. A different question from
-     *                 {@code everyClauseRead}, which is one reading's account of the clauses it was
-     *                 handed: a clause that reading could not turn into an obligation is one
-     *                 another reading may have taken in whole, and borrowing that answer would
-     *                 settle each reading's completeness by a fragment that is not its own
+     * @param notGathered where a clause of the value did not reach the readings at all, as the
+     *                 paths the stops happened at. A clause that could not be typed, and a walk
+     *                 that declined to go further: in both, a rule of the declaration is one no
+     *                 reading here ever saw, so no reading can say it took that part of the
+     *                 declaration in.
+     *
+     *                 <p>Where and not whether, because a rule that narrows a position names it,
+     *                 and a clause written under one field can name no position outside that field.
+     *                 Recorded as one flag for the value, a stop under a regex-bounded code spoiled
+     *                 the plain {@code Int} beside it, and a report said a rule about that
+     *                 {@code Int} may have gone unread when nothing was written about it at all.
+     *                 A stop at {@link FieldDomains#THE_VALUE} is the declaration's own clause and
+     *                 does reach every position of it.
+     *
+     *                 <p>A different question from {@code everyClauseRead}, which is one reading's
+     *                 account of the clauses it was handed: a clause that reading could not turn
+     *                 into an obligation is one another reading may have taken in whole, and
+     *                 borrowing that answer would settle each reading's completeness by a fragment
+     *                 that is not its own
      */
     record Seeded(ConstraintState constraints, Map<String, Term> atoms, Map<String, Term> keys,
                   Map<String, Term> held, Reading reading, boolean everyClauseRead,
-                  boolean everyClauseGathered) {
+                  Set<String> notGathered) {
 
-        /** What a walk that fell over comes to: no position named, no rule read, and saying so. */
+        public Seeded {
+            notGathered = Set.copyOf(notGathered);
+        }
+
+        /** What a walk that fell over comes to: no position named, no rule read, and saying so of
+         *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), Map.of()), false, false);
+                    new Reading(List.of(), Map.of()), false, Set.of(FieldDomains.THE_VALUE));
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -373,7 +389,7 @@ public final class InvariantChecker {
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
         // of them can spoil a position for it. That is a fact about what was handed over rather
         // than about any one reading, and it is recorded here where the handing over happens.
-        boolean[] gathered = {true};
+        Set<String> notGathered = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
         Gathering gathering = new Gathering() {
 
@@ -383,23 +399,24 @@ public final class InvariantChecker {
             }
 
             @Override
-            public void missed() {
-                gathered[0] = false;
+            public void missed(String path) {
+                notGathered.add(path);
             }
         };
         try {
             boolean own = !reach.withoutClauses().test(named) && !reach.stopAt().test(named);
             if (!own && !c.clauses.of(named, data).isEmpty()) {
                 // Left out because this reading was asked to leave them out, which is still a rule
-                // of the value that no reading here took in.
-                gathering.missed();
+                // of the value that no reading here took in. At the value itself, since a clause of
+                // this declaration can name any position of it.
+                gathering.missed(FieldDomains.THE_VALUE);
             }
             for (Hir.InvariantClause clause :
                     own ? c.clauses.of(named, data) : List.<Hir.InvariantClause>of()) {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
                 if (stated == null) {
                     read = false;
-                    gathered[0] = false;
+                    notGathered.add(FieldDomains.THE_VALUE);
                     continue;
                 }
                 written.add(new Written(named, stated));
@@ -416,6 +433,7 @@ public final class InvariantChecker {
                     // No depth limit here: this is the reading a boundary is derived from, and a
                     // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                            data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
                             k, at, 1, Integer.MAX_VALUE, new HashSet<>(), gathering, reach);
                 }
             }
@@ -459,7 +477,8 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(constraints, atoms, keys, held, reading, read, gathered[0]);
+        return new Seeded(constraints, atoms, keys, held, reading, read,
+                Set.copyOf(notGathered));
     }
 
     /**
@@ -598,7 +617,7 @@ public final class InvariantChecker {
          * entered holds rules nobody here has read. What a collector does with it is the same
          * either way.
          */
-        void missed();
+        void missed(String path);
     }
 
     /** A coordinate a clause reaching this value could be about. */
@@ -2044,8 +2063,8 @@ public final class InvariantChecker {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>(), null,
-                Reach.EVERYTHING);
+        return seedAt(root, FieldDomains.THE_VALUE, k, at, depth, FIELDS_SEEDED, new HashSet<>(),
+                null, Reach.EVERYTHING);
     }
 
     /**
@@ -2078,9 +2097,9 @@ public final class InvariantChecker {
      * and only then is anything said. A walk that reported every stop would have a record with one
      * plain string field speaking for none of its positions.
      */
-    private Known declining(Type type, Gathering gathering, Known k) {
+    private Known declining(Type type, String path, Gathering gathering, Known k) {
         if (gathering != null && type != null && anyRuleUnder(type, new HashSet<>())) {
-            gathering.missed();
+            gathering.missed(path);
         }
         return k;
     }
@@ -2118,7 +2137,7 @@ public final class InvariantChecker {
         return found[0];
     }
 
-    private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
+    private Known seedAt(Core root, String path, Known k, Denotations at, int depth, int limit,
                          Set<TypeSymbol> onPath, Gathering gathering, Reach reach) {
         // Read before the path is entered, so that the one name and the other stay paired: a stop
         // taken after entering would leave the name on the path with nothing to take it off, and the
@@ -2127,10 +2146,10 @@ public final class InvariantChecker {
         // none, and reading it here is the supposing undone one step in.
         if (depth > limit || !(root.type() instanceof Type.Ref ref)
                 || reach.stopAt().test(ref.name())) {
-            return declining(root.type(), gathering, k);
+            return declining(root.type(), path, gathering, k);
         }
         if (!(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || !onPath.add(ref.name())) {
-            return declining(root.type(), gathering, k);
+            return declining(root.type(), path, gathering, k);
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
         Map<String, BindingId> bindings = clauses.bindingsOf(ref.name(), data);
@@ -2150,7 +2169,7 @@ public final class InvariantChecker {
         // reader collecting the clauses would otherwise take the ones it was handed for every
         // clause there is, and answer for a rule it never saw.
         if (gathering != null && !stated.everyClauseStated()) {
-            gathering.missed();
+            gathering.missed(path);
         }
         for (Clauses.Stated one : stated.clauses()) {
             if (gathering != null) {
@@ -2164,12 +2183,18 @@ public final class InvariantChecker {
         if (data.newtype()) {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
+            // A newtype's `.value` is at no path of its own, which is the rule `name` walks by:
+            // wearing a name is not being somewhere else.
             Core value = given.get(bindings.get("value"));
-            out = value == null ? declining(fields.get("value"), gathering, out)
-                    : seedAt(value, out, at, depth + 1, limit, onPath, gathering, reach);
+            out = value == null ? declining(fields.get("value"), path, gathering, out)
+                    : seedAt(value, path, out, at, depth + 1, limit, onPath, gathering, reach);
         } else {
-            for (Core value : given.values()) {
-                out = seedAt(value, out, at, depth + 1, limit, onPath, gathering, reach);
+            for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
+                Core value = given.get(field.getValue());
+                if (value != null) {
+                    out = seedAt(value, under(path, field.getKey()), out, at, depth + 1, limit,
+                            onPath, gathering, reach);
+                }
             }
         }
         onPath.remove(ref.name());

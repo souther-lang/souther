@@ -31,9 +31,15 @@ import java.util.Set;
  *                 path is how a reason came to be recovered by string match. A reason travels with
  *                 the position or it is a reason about whatever the strings happened to pair it
  *                 with.
+ * @param unread   a rule about this position's own values that the local reading did not take in,
+ *                 or null where it read them all. Carried for the same reason {@link #pending} is,
+ *                 and kept apart from it because the two are lifted by different work and one
+ *                 outranks the other: where the walk could not reach into what the position holds,
+ *                 a rule about what is inside describes that same stop from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, Set<String> excluded, StructuralInspection.Pending pending) {
+                   List<Cut> cuts, Set<String> excluded, StructuralInspection.Pending pending,
+                   BlockReason unread) {
 
     public Axis {
         classes = List.copyOf(classes);
@@ -43,24 +49,24 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts, Set<String> excluded) {
-        this(id, term, type, classes, cuts, excluded, null);
+        this(id, term, type, classes, cuts, excluded, null, null);
     }
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, Set.of(), null);
+        this(id, term, type, classes, cuts, Set.of(), null, null);
     }
 
     /**
-     * A position nothing has answered for yet, and what the structural reading found.
+     * A position nothing has answered for yet, and what the readings of it found.
      *
      * <p>Not a position the model does not divide. A rule a body writes may still draw a line on it,
-     * and only where none does is {@code found} what a report says — an absence where the structure
-     * ran out, and what stopped the reading where it did not.
+     * and only where none does is what was found here what a report says — an absence where every
+     * reading ran to the end and found nothing, and what stopped one where it did not.
      */
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
-                                 StructuralInspection.Pending found) {
-        return new Axis(id, term, type, List.of(), List.of(), Set.of(), found);
+                                 StructuralInspection.Pending found, BlockReason unread) {
+        return new Axis(id, term, type, List.of(), List.of(), Set.of(), found, unread);
     }
 
     /**
@@ -74,12 +80,12 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * as one the model divides no way.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, excluded, pending);
+        return new Axis(id, term, type, classes, cuts, excluded, pending, unread);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts) {
-        return new Axis(id, term, type, classes, cuts, excluded, pending);
+        return new Axis(id, term, type, classes, cuts, excluded, pending, unread);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
@@ -97,7 +103,8 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     public Axis excluding(Collection<String> ids) {
         Set<String> here = ids.stream().filter(id -> classOf(id) != null)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        return here.isEmpty() ? this : new Axis(id, term, type, classes, cuts, here, pending);
+        return here.isEmpty() ? this
+                : new Axis(id, term, type, classes, cuts, here, pending, unread);
     }
 
     /**

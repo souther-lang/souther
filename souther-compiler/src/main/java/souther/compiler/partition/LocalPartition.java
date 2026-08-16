@@ -15,6 +15,9 @@ import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.AdmissibleSet;
+import souther.compiler.values.UnreadReason;
+import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,50 +27,64 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What a position's own type and rules say about it, asked once and answered whole.
+ * What one reading of a position's own type and rules came to.
  *
- * <p>Two producers answer here — the classes the type states, and the lines its rules draw — and
- * what a caller gets is both or neither. That is the point of the type: {@link Exhausted} is not
- * "there were no classes", it is <b>both were asked and neither had anything</b>, and only that
- * licenses going on to ask what is under the position. Asked separately, the walk decided when
- * local evidence had run out by looking at two empty lists, and any reader that forgot one of them
- * would have concluded it from half the evidence.
+ * <p>Three answers about the model and not about how many readers were asked. {@link Open} is not
+ * "the lists came back empty" — it is <b>the position's local rules were read to the end and the
+ * model states no division here</b>, which is a sentence about the model and the only one an
+ * absence may be built on. Written as a count of empty producers, the sentence was one line of a
+ * caller away from every position that happened to have nothing beside it, and a third producer
+ * with the answer stayed outside what "everything was asked" meant (issue #772).
+ *
+ * <p>{@link Open} carries no account of the reading, and that is the whole of how the sentence is
+ * held: a reading short of the rules cannot be written as one. What it comes out as instead is
+ * {@link Blocked}, which says a rule about the position was written and this did not read it.
  *
  * <p>The reading and the answer are apart. {@link LocalReading} is what the position was seen to
- * be — its term, what its rules leave it, what could not be read — and is the same value in either
- * case, because one reading produced both.
+ * be — its term, what its rules leave its numbers and its values, what could not be read — and is
+ * the same value whichever answer follows, because one reading produced all three. Whether the set
+ * a {@link Divided} position's classes came from was the whole of its rules is read there.
  */
-public sealed interface LocalInspection {
+public sealed interface LocalPartition {
 
-    /** What the position was read as, which is the same whether anything came of it. */
+    /** What the position was read as, which is the same whichever answer this is. */
     LocalReading reading();
 
     /**
-     * Something the position's own type or rules said: classes, lines, or both.
+     * The model divides the position: into classes, by lines, or both.
      *
-     * <p>Never neither. A value of this carrying no classes and no cuts would be an exhaustion
-     * dressed as evidence, and the phase after this one would never be reached for it.
+     * <p>Never neither. A value of this carrying no classes and no cuts would be an open position
+     * dressed as a divided one, and the phase after this one would never be reached for it.
      */
-    record Evidence(LocalReading reading, List<PartitionClass> classes, CutEvidence cuts)
-            implements LocalInspection {
+    record Divided(LocalReading reading, List<PartitionClass> classes, CutEvidence cuts)
+            implements LocalPartition {
 
-        public Evidence {
+        public Divided {
             classes = List.copyOf(classes);
             if (classes.isEmpty() && cuts instanceof CutEvidence.None) {
                 throw new IllegalArgumentException(
-                        "neither classes nor cuts is `Exhausted`, which is a different answer");
+                        "nothing divides this position, which is a different answer");
             }
         }
     }
 
     /**
-     * Both producers were asked and neither answered.
+     * The position's local rules were read to the end, and the model divides it no way.
      *
-     * <p>A proof rather than a report: what makes it constructible is having asked, and what it
-     * licenses is the structural question after it. It says nothing about whether the position
-     * divides — the rules a body writes have not been read yet.
+     * <p>A conclusion rather than a tally. It says nothing about the rules a behavior's body
+     * writes — those have not been read — so it is what licenses the questions after it rather than
+     * a verdict of its own.
      */
-    record Exhausted(LocalReading reading) implements LocalInspection {}
+    record Open(LocalReading reading) implements LocalPartition {}
+
+    /**
+     * A rule about this position was written and this reading did not take it in.
+     *
+     * <p>Not a division and not the absence of one. Nothing follows about what the model does here,
+     * which is the point: the values are as wide as the rules could be read as, and a rule this
+     * could not read can divide the position as easily as the ones it could.
+     */
+    record Blocked(LocalReading reading, BlockReason why) implements LocalPartition {}
 
     /**
      * The one reading.
@@ -82,8 +99,8 @@ public sealed interface LocalInspection {
      * @param path   where the position sits, which a term is named by
      * @param placed the value the position is inside, or null where it is a parameter itself
      */
-    static LocalInspection inspect(PartitionInput input, TermPath path, Symbols symbols,
-                                   Partitions.Placed placed) {
+    static LocalPartition of(PartitionInput input, TermPath path, Symbols symbols,
+                             Partitions.Placed placed) {
         TypeView view = input.view();
         Type type = view.declared();
         // Which number this position is measured at, and what its rules leave that number. Asked
@@ -117,7 +134,13 @@ public sealed interface LocalInspection {
                 : DeclaredBounds.and(valueOfType, DeclaredBounds.placed(stated, false, carried));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
-        boolean nothingExists = placed != null && placed.domains().infeasible();
+        boolean nothingExists = placed != null && placed.bounds().infeasible();
+        // Which values the position may hold, and how much of what its rules say was read. The same
+        // reading the numbers come from and a separate question of it: a rule can name the values a
+        // position holds without stating where they stop, and one that states where they stop
+        // without naming any of them.
+        AdmissibleSet admitted = placed == null
+                ? AdmissibleSet.complete(ValueSet.ANY) : placed.admits(path);
         // A record's rule relates the numbers its fields hold, so it reaches the term that is one of
         // them and no other: a cap on a field says nothing about how long the string beside it is.
         NumericDomain.Bounds projected = placed == null || !(term instanceof NumericTerm.ValueOf)
@@ -127,29 +150,57 @@ public sealed interface LocalInspection {
         // type draws a line, because a clause relating two fields is not a partition of one of them.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected, term);
-        LocalReading reading = new LocalReading(term, admissible,
+        LocalReading reading = new LocalReading(term, admissible, admitted,
                 unreadBoundsAt(path, type, symbols, carried, taken));
 
         // What the type declares, crossed with what the position can hold. Neither reading is the
         // other's input: a case the rules refuse is still a case of the type, and it is here that
         // it stops being a class of this position.
-        List<PartitionClass> classes =
+        List<PartitionClass> declared =
                 constructibleAt(PartitionClasses.of(view, symbols), view, admissible, symbols);
+        // And where the type states none, the values its rules name. Asked in this order rather
+        // than merged: what a type declares is what the position's values are, and a rule naming
+        // some of them divides what is left rather than replacing it — which is a narrowing, and is
+        // where the declared classes are narrowed rather than a second set of classes.
+        List<PartitionClass> classes = nothingExists || !declared.isEmpty() ? declared
+                : ValueClasses.of(admitted.approximation(), view, symbols);
         DeclaredBounds.Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
                 : cutsOf(type, axis, own,
                         placed == null ? List.of() : placed.narrowedBy(path, true),
                         placed == null ? List.of() : placed.narrowedBy(path, false));
         if (classes.isEmpty() && cuts.isEmpty()) {
-            return new Exhausted(reading);
+            // Nothing divides the position, and what may be concluded from that is what the reading
+            // knows about itself. A set of values arrived at from part of the rules names no
+            // division; a rule that went unread can divide the position as easily as one that was
+            // read, so an absence does not follow from this reading having found none.
+            return admitted.whyPartial() == null ? new Open(reading)
+                    : new Blocked(reading, stopped(admitted.whyPartial()));
         }
         // Whether a row can be written at an edge is a question about the whole value the position
         // sits in, so it is answered once for the parameter. A rule this could not read is a way that
         // value can be refused, wherever in it the rule is written.
         CutEvidence drawn = cuts.isEmpty() ? new CutEvidence.None()
                 : new CutEvidence.Present(cuts,
-                        placed != null && !placed.domains().allRulesRead());
-        return new Evidence(reading, classes, drawn);
+                        placed != null && !placed.bounds().allRulesRead());
+        return new Divided(reading, classes, drawn);
+    }
+
+    /**
+     * What stopped the values reading, in the vocabulary a report is projected from.
+     *
+     * <p>A relation between two positions is what {@link BlockReason.ComparisonBetweenPositions}
+     * already says, whichever rule wrote it: a {@code guard} comparing two inputs and an
+     * {@code invariant} relating two fields leave a reader the same thing to know. The other two
+     * are their own, because what would lift each is different work — one wants a reader for a form,
+     * and one wants the gathering to reach further.
+     */
+    private static BlockReason stopped(UnreadReason why) {
+        return switch (why) {
+            case RELATES_TWO_POSITIONS -> new BlockReason.ComparisonBetweenPositions();
+            case FORM_NOT_READ -> new BlockReason.UnreadValueRule();
+            case NOT_REACHED -> new BlockReason.ValueRulesNotReached();
+        };
     }
 
     /**

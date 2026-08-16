@@ -365,6 +365,48 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     /**
+     * A stop under one field says nothing about the field beside it.
+     *
+     * <p>Where the walk stopped and not that it stopped. A rule that narrows a position names it,
+     * and a clause written inside one field can name no position outside that field — so a walk
+     * that declined to go into a list of constrained values has said nothing about the plain
+     * {@code Int} next to it, and the {@code Int} is a position nothing was written about.
+     *
+     * <p>Recorded as one answer for the whole value, this was the common shape in the corpus: a
+     * record with one field the walk stops at leaves every other field of it reported as one whose
+     * rules may have gone unread, when nothing was written about them at all.
+     */
+    @Test
+    void aStopUnderOneFieldDoesNotSpoilTheFieldBesideIt() {
+        FieldDomains read = of("""
+                module demo
+
+                data Inner = String
+                    invariant only = value == "A"
+
+                data Forecast = { inners: List<Inner>, dealCount: Int }
+                """, "Forecast");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "inners");
+        wholly(ValueSet.ANY, read, "dealCount");
+    }
+
+    /** And a clause of the value's own declaration reaches every position of it, so a stop there
+     *  leaves all of them short of their rules. */
+    @Test
+    void aStopAtTheValueItselfLeavesEveryPositionOfItShort() {
+        FieldDomains read = ofRefused("""
+                module demo
+
+                data Pair = { left: String, right: Int }
+                    invariant no = left == "A" && right == "B"
+                """, "Pair");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.NOT_REACHED, read, "right");
+    }
+
+    /**
      * And a type it does not enter that no rule is written under costs nothing.
      *
      * <p>Which is what keeps the answer worth having. A record with a plain field, or with a field

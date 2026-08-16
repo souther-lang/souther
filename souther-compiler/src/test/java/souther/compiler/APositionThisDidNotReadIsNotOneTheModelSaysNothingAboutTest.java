@@ -212,7 +212,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
         assertFalse(block.contains("not derivable: m"), block);
         assertTrue(block.contains("not read: m"), block);
-        assertTrue(block.contains("does not read"), block);
+        assertTrue(block.contains("did not read"), block);
     }
 
     /**

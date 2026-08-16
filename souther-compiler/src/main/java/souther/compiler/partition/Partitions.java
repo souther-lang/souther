@@ -10,6 +10,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.Rules;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.numeric.Count;
@@ -18,6 +19,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.values.AdmissibleSet;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
@@ -129,7 +131,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found,
-                    new Placed(readAs(type, symbols), fieldDomainsOf(type, symbols)),
+                    new Placed(readAs(type, symbols), rulesOf(type, symbols)),
                     domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
@@ -610,7 +612,7 @@ public final class Partitions {
         // classes was never checked at all, and the one case the type exists to make loud was the
         // one that stayed quiet.
         PartitionInput input = PartitionInput.of(TypeView.of(type, symbols));
-        LocalInspection local = LocalInspection.inspect(input, path, symbols, placed);
+        LocalPartition local = LocalPartition.of(input, path, symbols, placed);
         LocalReading reading = local.reading();
         for (UnreadRule each : reading.unread()) {
             if (unread.stream().noneMatch(had -> had.equals(each))) {
@@ -623,17 +625,18 @@ public final class Partitions {
             domains.put(term, reading.admissible());
         }
         switch (local) {
-            case LocalInspection.Evidence evidence -> {
-                if (evidence.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
+            case LocalPartition.Divided divided -> {
+                if (divided.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
                     uncertain.add(term);
                 }
-                out.add(new Axis(id, term, type, evidence.classes(), evidence.cuts().cuts()));
+                out.add(new Axis(id, term, type, divided.classes(), divided.cuts().cuts()));
             }
-            // Both local producers were asked and neither answered, which is what licenses asking
-            // what is under the position. The answer is not a verdict: a leaf and a block are both
-            // positions still to be answered for, and each carries what it is left with if nothing
-            // answers.
-            case LocalInspection.Exhausted _ -> {
+            // Nothing local divides the position, which is what licenses asking what is under it.
+            // Whether the reading got to the end of the rules is carried rather than acted on here:
+            // a position made of positions is given up in favour of what is under it either way,
+            // and a rule about the whole value that this could not read says nothing about which of
+            // its fields it would have divided.
+            case LocalPartition.Open _, LocalPartition.Blocked _ -> {
                 switch (StructuralInspection.of(input.shape(), depth < MAX_DEPTH)) {
                     // The one answer that takes the position away: what is under it is what the
                     // classes belong to, and this position is not carried further.
@@ -644,9 +647,13 @@ public final class Partitions {
                         }
                     }
                     // A leaf and a block are both positions still to be answered for, and each
-                    // carries what it is left with if nothing answers.
+                    // carries what it is left with if nothing answers — including a rule about this
+                    // position that the local reading could not take in, which is what keeps the
+                    // position from completing as one the model divides no way.
                     case StructuralInspection.Pending pending ->
-                            out.add(Axis.pendingAt(id, term, type, pending));
+                            out.add(Axis.pendingAt(id, term, type, pending,
+                                    local instanceof LocalPartition.Blocked blocked
+                                            ? blocked.why() : null));
                 }
             }
         }
@@ -655,25 +662,41 @@ public final class Partitions {
 
     /** The value a position is inside: what it is called, and what its rules leave each position of
      * it able to hold. */
-    record Placed(TypeSymbol value, FieldDomains domains) {
+    record Placed(TypeSymbol value, Rules rules) {
+
+        /** What the rules leave the numbers, ends and narrowings of this value. */
+        FieldDomains bounds() {
+            return rules.bounds();
+        }
 
         /** What is left for the position at {@code path}, which is read from the value this is of. */
         NumericDomain.Bounds at(TermPath path) {
             return path.fields().isEmpty() ? null
-                    : domains.at(String.join(".", path.fields()));
+                    : bounds().at(String.join(".", path.fields()));
+        }
+
+        /**
+         * Which values the position at {@code path} may hold, and how much of its rules was read.
+         *
+         * <p>Asked at every path, the value's own included: what a name wraps is at no path of its
+         * own and is the position a reader of a newtype asks about, which is why this is not the
+         * empty answer where {@link #at} is.
+         */
+        AdmissibleSet admits(TermPath path) {
+            return rules.admits(String.join(".", path.fields()));
         }
 
         /** The ends the clauses reaching this value place on the coordinates at {@code path}, which
          * is a different question from what {@link #at} leaves them. */
         List<FieldDomains.Placed> placedAt(TermPath path) {
             return path.fields().isEmpty() ? List.of()
-                    : domains.placedAt(String.join(".", path.fields()));
+                    : bounds().placedAt(String.join(".", path.fields()));
         }
 
         /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
         List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
             return path.fields().isEmpty() ? List.of()
-                    : domains.narrowedBy(String.join(".", path.fields()), lower);
+                    : bounds().narrowedBy(String.join(".", path.fields()), lower);
         }
     }
 
@@ -707,11 +730,14 @@ public final class Partitions {
      * fields, and can be ones this could not read, and all three are answers about the same value:
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
+     *
+     * <p>Whether there was a declaration to read at all is {@link Rules}' answer and not a default
+     * this fills in. A position with no declaration on it has no rule written about it, and a
+     * reading that said instead "a rule about this may have gone unread" would say it of every
+     * plain {@code String} in every model.
      */
-    private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
-        TypeSymbol read = readAs(type, symbols);
-        return read != null && symbols.declarations().declaration(read.key()) instanceof Hir.Data data
-                ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
+    private static Rules rulesOf(Type type, Symbols symbols) {
+        return Rules.of(readAs(type, symbols), symbols);
     }
 
     /**

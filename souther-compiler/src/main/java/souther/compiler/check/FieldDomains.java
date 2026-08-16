@@ -54,7 +54,8 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), true,
-                    false, ConstraintState.top(), null, null, null, Map.of(), () -> true);
+                    Set.of(THE_VALUE), ConstraintState.top(), null, null, null, Map.of(),
+                    () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -76,8 +77,9 @@ public final class FieldDomains {
      * reading knows about itself: a walk that fell over produces the same empty domain as a value
      * with no rules, and a second reading asked afterwards does not take the same path. */
     private final boolean seeded;
-    /** Whether every clause of this value reached the readings at all — see {@link #admits}. */
-    private final boolean everyClauseGathered;
+    /** Where a clause of this value did not reach the readings at all, as the paths the stops
+     * happened at — see {@link #admits}. */
+    private final Set<String> notGathered;
     /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
@@ -96,7 +98,7 @@ public final class FieldDomains {
                          Map<String, UnreadReason> unreadByField,
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeSymbol>> narrowers,
-                         boolean seeded, boolean everyClauseGathered,
+                         boolean seeded, Set<String> notGathered,
                          ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
@@ -107,7 +109,7 @@ public final class FieldDomains {
         this.directs = directs;
         this.narrowers = narrowers;
         this.seeded = seeded;
-        this.everyClauseGathered = everyClauseGathered;
+        this.notGathered = notGathered;
         this.constraints = constraints;
         this.named = named;
         this.data = data;
@@ -240,7 +242,7 @@ public final class FieldDomains {
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), seeded.reading().directs(),
                 seeded.reading().narrowers(),
-                seeded.everyClauseRead(), seeded.everyClauseGathered(),
+                seeded.everyClauseRead(), seeded.notGathered(),
                 seeded.constraints(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
@@ -443,8 +445,30 @@ public final class FieldDomains {
         // clauses it was handed, and a clause it could not turn into an obligation is one this
         // reading may have taken in whole; borrowing it would settle this reading's completeness by
         // a fragment that is not this reading's.
-        return everyClauseGathered ? AdmissibleSet.complete(values)
+        return reachedTheRulesAt(path) ? AdmissibleSet.complete(values)
                 : AdmissibleSet.partial(values, UnreadReason.NOT_REACHED);
+    }
+
+    /**
+     * Whether the gathering reached whatever rules are written about the position at {@code path}.
+     *
+     * <p>A stop reaches the position it happened at and everything under it, and no further. A rule
+     * that narrows a position names it, and a clause written inside one field names no position
+     * outside that field — so a walk that declined to enter a regex-bounded code has said nothing
+     * about the plain {@code Int} beside it.
+     *
+     * <p>A stop at {@link #THE_VALUE} is different in kind and is why the paths are compared rather
+     * than counted: the declaration's own clause can name any position of it, so a clause of it
+     * that never arrived leaves every position short of its rules.
+     */
+    private boolean reachedTheRulesAt(String path) {
+        for (String stopped : notGathered) {
+            if (stopped.equals(THE_VALUE) || path.equals(stopped)
+                    || path.startsWith(stopped + ".")) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Both names the position at {@code path} answers to. A number has one of each and everything

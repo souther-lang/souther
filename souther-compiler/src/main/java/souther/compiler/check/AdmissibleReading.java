@@ -98,7 +98,7 @@ final class AdmissibleReading {
                 return comparison(b, (b.op() == Hir.BinOp.EQ) == positive);
             }
         }
-        return AdmissibleValues.unreadable(names(e), UnreadReason.FORM_NOT_READ);
+        return unreadable(e);
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */
@@ -108,21 +108,27 @@ final class AdmissibleReading {
             // `"A" == value` says what `value == "A"` says.
             read = sided(b.right(), b.left(), states);
         }
-        return read != null ? read : AdmissibleValues.unreadable(names(b), whyNot(b));
+        return read != null ? read : unreadable(b);
     }
 
     /**
-     * Why a comparison this reading recognised said nothing about the positions it names.
+     * A rule this reading could not turn into a set of values, and why.
      *
-     * <p>Told apart at the point of failure, where both sides are still in hand. A comparison of two
-     * positions is a rule about a pair, and nothing about it was beyond this reading — a set of one
-     * position's values is simply not what it says. A comparison against anything else is a form
-     * this reading does not take apart, which is a fact about the reading. Recovered afterwards from
-     * the positions alone, the two would be one answer.
+     * <p>The positions it names decide it, in one place, because the positions are what the two
+     * answers are about. A rule naming two of them says where one stands against the other —
+     * {@code startsAt < endsAt}, {@code a /= b}, a call over both — and a set of one position's
+     * values is not what a rule like that says, whatever shape it is written in. A rule naming one
+     * says something about that one, and this did not read the shape it says it in.
+     *
+     * <p>Which is why the two are settled together rather than at each shape that gives up. Written
+     * per shape, the ordering comparisons fell through one path and the equalities another, and a
+     * relation between two positions was reported as a form nobody could read when it was written
+     * with a {@code <}.
      */
-    private UnreadReason whyNot(Core.Binary b) {
-        return positionIn(b.left()) != null && positionIn(b.right()) != null
-                ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ;
+    private AdmissibleValues<Term> unreadable(Core e) {
+        Set<Term> named = names(e);
+        return AdmissibleValues.unreadable(named, named.size() >= 2
+                ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
     }
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null

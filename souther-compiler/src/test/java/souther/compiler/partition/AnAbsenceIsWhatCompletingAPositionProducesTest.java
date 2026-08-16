@@ -51,7 +51,13 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     }
 
     private static Axis pending(StructuralInspection.Pending found) {
-        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, found);
+        return pending(found, null);
+    }
+
+    /** The same, with a rule about the position's own values that the local reading could not take
+     *  in — which is a second way a position can be left unable to reach an absence. */
+    private static Axis pending(StructuralInspection.Pending found, BlockReason unread) {
+        return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, found, unread);
     }
 
     // --- what can be pending at all -------------------------------------------------------------

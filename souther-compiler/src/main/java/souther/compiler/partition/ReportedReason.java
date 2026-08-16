@@ -32,6 +32,11 @@ public final class ReportedReason {
                     UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
             case BlockReason.UnreadComparisonForm _ ->
                     UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            // Both of these are a rule this could not read, which is the one thing a reader of a
+            // document is being told. Which reader of the clause gave up, and whether it gave up on
+            // the form or never arrived at the clause, are this compiler's own business.
+            case BlockReason.UnreadValueRule _, BlockReason.ValueRulesNotReached _ ->
+                    UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             case BlockReason.ComparisonBetweenPositions _ ->
