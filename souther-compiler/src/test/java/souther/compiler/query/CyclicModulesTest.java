@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -114,6 +115,28 @@ class CyclicModulesTest {
                 "it answered without being asked through itself, so the answer is kept — a walk"
                         + " that asked about each module it reached would be one of these two"
                         + " modules asking what it reaches through the other");
+    }
+
+    /**
+     * A module in a cycle is one nothing may be built on, and that is one answer rather than two.
+     *
+     * <p>What it declares rests on the module that rests on it, so the declarations are not
+     * answered — and a scope assembled around them would say a name denotes a declaration the
+     * declaration world says is not there. Two answers to one question, which is the thing the
+     * scope was made one place to stop. So there is no scope for it either, and an import of it
+     * leaves the names it was to bring in denoting nothing.
+     */
+    @Test
+    void nothingIsScopedOutOfACycle() {
+        Compilation compilation = Compilation.ofDocuments(documents(A, B), Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+        compilation.diagnostics();
+
+        assertEquals(souther.compiler.check.ModuleUniverse.InSight.UNREADABLE,
+                CompilationUniverse.over(compilation.db()).module("m.a"),
+                "the module is here, and what it declares cannot be worked out");
+        assertFalse(compilation.db().ask(new Names.ModuleScope("m.a")).present(),
+                "a module nothing can be built on has no scope to be built against");
     }
 
     @Test

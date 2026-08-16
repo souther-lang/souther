@@ -1304,11 +1304,15 @@ public final class Names {
      * <p>Answered by {@link Scoping}, which is where the scope those imports fill is assembled. A
      * reader here and the scope disagreeing about which imports a module has is a reader holding a
      * signature the scope never brought a name in for.
+     *
+     * <p>Asked of what the module wrote, not of what this compilation will let anything be built
+     * on. Which modules one names is how the import graph is walked and how a cycle is found, so an
+     * answer that stopped at a module in a cycle could not find the half of the cycle that closes
+     * it.
      */
     public static List<Ast.Import> importsOf(Db db, String name) {
-        ModuleUniverse universe = CompilationUniverse.over(db);
-        return universe.module(name) instanceof ModuleUniverse.InSight.Read read
-                ? Scoping.importsOf(universe, read.module()) : List.of();
+        Ast.Module m = db.ask(new Front.Available(name)).value();
+        return m == null ? List.of() : Scoping.importsOf(CompilationUniverse.over(db), m);
     }
 
     static Set<String> behaviorNames(Ast.Module m) {

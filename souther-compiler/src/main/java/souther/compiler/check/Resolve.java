@@ -23,6 +23,7 @@ import souther.compiler.Reserved;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -165,6 +166,17 @@ public final class Resolve {
     public record Reachable(String module, Map<String, ValueName.Helper> helpers,
                             Map<String, ValueName.Behavior> behaviors, boolean behaviorsWhole,
                             Map<String, ValueName.Stdlib> exposed) {
+
+        /** Copied, because a reader holds this. A table something else can still write to is not a
+         *  value, and the reader that held one would find what it read had changed under it — the
+         *  scope a compilation remembers and the scope resolution ran against being the same
+         *  object. Copied in order: what a name is offered against is answered from these, and a
+         *  suggestion that came out in a different order each time would be a different answer. */
+        public Reachable {
+            helpers = Collections.unmodifiableMap(new LinkedHashMap<>(helpers));
+            behaviors = Collections.unmodifiableMap(new LinkedHashMap<>(behaviors));
+            exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
+        }
 
         /**
          * What a module reaches when nothing else is in sight — the core modules, which the library

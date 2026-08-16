@@ -27,6 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Held against the source rather than against behaviour, because what is being kept out is a
  * dependency. Nothing goes wrong the day someone reaches for {@code Diagnostic} here; what goes
  * wrong is later, when the second reader cannot use the rule that came with it.
+ *
+ * <p>What it reads is the assembly's own two sources, and not what they call. A rule the assembly
+ * asks of somewhere else is that place's, held by whatever holds that place: the assembly reads
+ * what a module publishes and what a name is a qualifier of, and neither of those answers by
+ * saying something. What this refuses is the assembly deciding to say something itself.
  */
 class AScopeIsAssembledWithoutSayingAnythingToAnyoneTest {
 

@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -19,9 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Handed the pair, such a reader holds a way to reach the whole compilation, and what it kept is an
  * answer that is never equal to the next one, so nothing that read it is ever kept either.
  *
- * <p>Written as a property of the components rather than as a list of them, because a list is a
- * copy of what the record already says and goes out of date by agreeing with itself. What is being
- * refused is a component that can answer a question, whatever it is called.
+ * <p>Written as a property of the parts rather than as a list of them, because a list is a copy of
+ * what the record already says and goes out of date by agreeing with itself. What is refused is a
+ * part that can answer a question, whatever it is called — and inside a collection as well as
+ * beside one, since a map of ways of asking is a way of asking.
+ *
+ * <p>It does not look inside another record. Both of the two that matter here are checked by name,
+ * and a walk that followed every record would have to answer what to do about one that holds
+ * itself.
  */
 class TheTableAReaderHoldsReachesNothingTest {
 
@@ -49,15 +56,53 @@ class TheTableAReaderHoldsReachesNothingTest {
         assertEquals(List.of("elsewhere: Elsewhere"), asking(Resolve.Values.class));
     }
 
+    /**
+     * And one held inside a collection is found.
+     *
+     * <p>The other half of knowing the check can see. A way of asking put beside the table is
+     * refused by the arm above; one put in a map of them is what a table of names looks like from
+     * the outside, and is what would go unseen by a check that read only the part's own type. There
+     * is nothing in the compiler shaped like this, which is why it is written here.
+     */
+    @Test
+    void oneHeldInsideACollectionIsFoundToo() {
+        assertEquals(List.of("byName: Elsewhere"), asking(AsIfATableOfThem.class));
+    }
+
+    /** A table whose entries can each answer a question. */
+    private record AsIfATableOfThem(Map<String, Resolve.Elsewhere> byName) {}
+
     /** The parts of {@code held} that can answer a question. */
     private static List<String> asking(Class<?> held) {
         List<String> asking = new ArrayList<>();
         for (RecordComponent part : held.getRecordComponents()) {
-            Class<?> type = part.getType();
-            if (!HELD.contains(type) && !type.isRecord() && !type.isEnum()) {
-                asking.add(part.getName() + ": " + type.getSimpleName());
+            String reaching = reaching(part.getGenericType());
+            if (reaching != null) {
+                asking.add(part.getName() + ": " + reaching);
             }
         }
         return asking;
+    }
+
+    /** What in {@code type} can answer a question, or null where none of it can. */
+    private static String reaching(Type type) {
+        if (type instanceof ParameterizedType parameterized) {
+            String outer = reaching(parameterized.getRawType());
+            if (outer != null) {
+                return outer;
+            }
+            for (Type held : parameterized.getActualTypeArguments()) {
+                String inner = reaching(held);
+                if (inner != null) {
+                    return inner;
+                }
+            }
+            return null;
+        }
+        if (type instanceof Class<?> named) {
+            return HELD.contains(named) || named.isRecord() || named.isEnum()
+                    ? null : named.getSimpleName();
+        }
+        return type.getTypeName();   // a wildcard or a variable says nothing about what it stands for
     }
 }

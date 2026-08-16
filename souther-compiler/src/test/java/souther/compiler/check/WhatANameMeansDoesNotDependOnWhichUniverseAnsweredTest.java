@@ -165,7 +165,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         Map<String, ModuleUniverse.InSight> readings = readings(compiled().db());
         ModuleUniverse.InSight.Read down = read(readings, "scope.down");
         ModuleUniverse.InSight.Read withoutTheTable =
-                new ModuleUniverse.InSight.Read(down.module(), Map.of());
+                new ModuleUniverse.InSight.Read(down.module(), down.declarations(), Map.of());
         readings.put("scope.down", withoutTheTable);
 
         Map<String, Ast.Module> written = new LinkedHashMap<>();

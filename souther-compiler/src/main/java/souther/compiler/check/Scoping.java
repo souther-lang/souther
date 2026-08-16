@@ -57,11 +57,10 @@ public final class Scoping {
         List<Refusal> refused = new ArrayList<>();
         Map<String, Denotation> denotations = new LinkedHashMap<>();
         Map<String, String> aliases = new LinkedHashMap<>();
-        for (Ast.Def own : declaredIn(m).values()) {
+        for (Ast.Def own : read.declarations().values()) {
             denotations.put(own.name(),
                     new Denotation.Denotes(TypeSymbols.declared(own.declaredKey())));
         }
-        Set<String> ownNames = Set.copyOf(denotations.keySet());
         // Which import brought each name in, so a second one naming it is reported against that
         // import rather than against a local definition the module may not have.
         Map<String, Ast.Import> from = new HashMap<>();
@@ -70,23 +69,24 @@ public final class Scoping {
         // taking the whole scope away would leave every name in the file meaning nothing — which is
         // when an author most wants to be told what one means.
         for (Ast.Import imp : importsOf(universe, m)) {
-            Ast.Module src;
+            ModuleUniverse.InSight.Read there;
             switch (universe.module(imp.module())) {
-                case ModuleUniverse.InSight.Read there -> src = there.module();
+                case ModuleUniverse.InSight.Read read0 -> there = read0;
                 // Being part of this universe and being part of it while saying nothing usable are
                 // different things, and only the second is the importer's business. Whatever is
                 // wrong with a module that is here is answered where it is; saying it again here
                 // sends the author to a file that is fine.
-                case ModuleUniverse.InSight.Unreadable _ -> src = null;
+                case ModuleUniverse.InSight.Unreadable _ -> there = null;
                 case ModuleUniverse.InSight.Unknown _ -> {
                     refused.add(new Refusal.NoSuchModule(imp));
-                    src = null;
+                    there = null;
                 }
             }
-            if (src == null) {
+            if (there == null) {
                 nameless(denotations, imp.names());
                 continue;
             }
+            Ast.Module src = there.module();
             if (imp.alias() != null) {
                 String taken = aliasTakenBy(universe, imp.alias(), aliases);
                 if (taken != null) {
@@ -97,7 +97,7 @@ public final class Scoping {
                 aliases.put(imp.alias(), imp.module());
             }
             Set<String> exposed = Registry.baseNames(src.exposing());
-            Map<String, Ast.Def> declared = declaredIn(src);
+            Map<String, Ast.Def> declared = there.declarations();
             for (String imported : imp.names()) {
                 if (!exposed.contains(imported)) {
                     refused.add(new Refusal.NotExposed(imp, imported));
@@ -116,9 +116,14 @@ public final class Scoping {
                     continue;
                 }
                 if (denotations.get(imported) instanceof Denotation.Denotes) {
-                    refused.add(ownNames.contains(imported)
+                    // Which of the two is asked of what has the name, not of what this module
+                    // declares: an import that brought it in is in `from`, and one that did not is
+                    // an import against a declaration. Read the other way round, the second could
+                    // be told to name an import that is not there.
+                    Ast.Import earlier = from.get(imported);
+                    refused.add(earlier == null
                             ? new Refusal.CollidesWithADeclaration(imp, imported)
-                            : new Refusal.BroughtTwice(imp, imported, from.get(imported)));
+                            : new Refusal.BroughtTwice(imp, imported, earlier));
                     continue;   // the first claim on the name keeps it
                 }
                 // A name a failed import line only stood in for is not a claim on it: an import
@@ -131,10 +136,10 @@ public final class Scoping {
                 from.put(imported, imp);
             }
         }
-        Resolve.Reachable reachable = reachable(universe, read);
+        Resolve.Values values =
+                new Resolve.Values(reachable(universe, read), new OfTheUniverse(universe));
         refused.addAll(oneSpellingTwice(universe, m));
-        return new Scoped(m.name(), denotations, aliases, reachable,
-                new Resolve.Values(reachable, new OfTheUniverse(universe)), refused);
+        return new Scoped(m.name(), denotations, aliases, values, refused);
     }
 
     /**
@@ -146,15 +151,16 @@ public final class Scoping {
      * value namespace — with the import lines walked once for each. A spelling that arrives in both
      * is a clash, and a walk that only ever saw one of them could not say so.
      *
-     * <p>{@code reachable} and {@code values} are the same table, once on its own and once beside
-     * the way of asking the universe a further question. Both are here rather than one being made
-     * from the other by a caller: the universe is not a free axis — it is what this was assembled
-     * against — and a caller free to pair the table with a universe could pair it with a second
-     * one, leaving what an import brought in decided by one and what a qualifier names by another.
+     * <p>The table and the way of asking the universe a further question are here as one pair
+     * rather than the table alone. The universe is not a free axis — it is what this was assembled
+     * against — so a caller that had to put the two together could put a table with a second
+     * universe, leaving what an import brought in decided by one and what a qualifier names by the
+     * other. The declaration registry is handed over at the point of use for the opposite reason:
+     * one compilation genuinely reads one scope against three stages of its declarations.
      */
     public record Scoped(String module, Map<String, Denotation> denotations,
-                         Map<String, String> aliases, Resolve.Reachable reachable,
-                         Resolve.Values values, List<Refusal> refused) {
+                         Map<String, String> aliases, Resolve.Values values,
+                         List<Refusal> refused) {
 
         /** Copied, for the reason {@link Exposing.Checked} is: this is an answer a compilation
          *  remembers, and an answer it remembers is a value. */
@@ -177,6 +183,12 @@ public final class Scoping {
          */
         public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry) {
             return SyntaxSymbols.of(module, registry, denotations, aliases);
+        }
+
+        /** What this module can name in the value namespace, on its own. What a reader wanting to
+         *  know what may be written here asks for; the pair is what the resolve pass is given. */
+        public Resolve.Reachable reachable() {
+            return values.reachable();
         }
 
         /** The same over a stage of the declarations something has resolved. */
@@ -208,8 +220,14 @@ public final class Scoping {
          *  universe, or the standard library. */
         record AliasTaken(Ast.Import imp, String takenBy) implements Refusal {}
 
-        /** Two imports bring the same bare name in. */
-        record BroughtTwice(Ast.Import imp, String name, Ast.Import earlier) implements Refusal {}
+        /** Two imports bring the same bare name in. {@code earlier} is the one that has it, and
+         *  there is always one: an import against a declaration is the arm below. */
+        record BroughtTwice(Ast.Import imp, String name, Ast.Import earlier) implements Refusal {
+
+            public BroughtTwice {
+                java.util.Objects.requireNonNull(earlier, "the import that already brought it in");
+            }
+        }
 
         /** An import brings in a name this module declares itself. */
         record CollidesWithADeclaration(Ast.Import imp, String name) implements Refusal {}
@@ -545,17 +563,5 @@ public final class Scoping {
             }
         }
         return names;
-    }
-
-    /**
-     * A module's own declarations, by the name written there.
-     *
-     * <p>A declaration the module may not have is left out; the ones it may have are what it
-     * declares. So a name written twice does not take every other name in the file with it. That a
-     * name was written twice is answered where the declarations are indexed, not here — a scope
-     * says what the names that are there mean.
-     */
-    private static Map<String, Ast.Def> declaredIn(Ast.Module m) {
-        return DeclaredNames.of(m.defs(), Ast.Def::name, Ast.Def::written, Ast.Def::pos).defs();
     }
 }
