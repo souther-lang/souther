@@ -406,7 +406,7 @@ public final class ExampleStatements {
     /** One recorded row, read as far as it can be without running it. What it says is left as written
      * — rendering it builds the fixture a second time, and only a row that turns out to disagree is
      * ever shown. */
-    private record RecordedRow(SourcePos at, Hir.Expr expected, Object[] arguments, Answered answer) {}
+    private record RecordedRow(Hir.Expr expected, Object[] arguments, Answered answer) {}
 
     private Readings collectDisagreements(Set<String> contested) {
         Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
@@ -464,7 +464,7 @@ public final class ExampleStatements {
                 }
                 Answered answer = readExpected(reader, row.expected(), sig.out(), cases);
                 return answer instanceof Answered.Unreadable ? null
-                        : new RecordedRow(row.expected().pos(), row.expected(), arguments, answer);
+                        : new RecordedRow(row.expected(), arguments, answer);
             }, new Deadline.Work.Fixtures(ex.target(), row.pos(), row.identity()));
             // A reading that did not finish is not said here, whichever reason ended it. The same row
             // is evaluated where the example is checked, which builds these fixtures and then runs the

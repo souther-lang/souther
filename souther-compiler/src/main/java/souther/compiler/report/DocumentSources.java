@@ -43,8 +43,13 @@ public final class DocumentSources {
         this.names = names;
     }
 
-    /** The identity to write, recorded as one this document has to explain. */
+    /** The identity to write, recorded as one this document has to explain — or nothing, for a
+     *  place that names no source, which is a document saying it does not know rather than one
+     *  naming a file it has no id for. */
     public String written(SourceId sourceId) {
+        if (sourceId == null) {
+            return null;
+        }
         referenced.add(sourceId);
         return sourceId.value();
     }

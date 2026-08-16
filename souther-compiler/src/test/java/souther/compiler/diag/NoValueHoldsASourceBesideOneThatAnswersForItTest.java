@@ -12,7 +12,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -48,6 +51,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>{@link SourceId} is what made the question askable. Now every class the compiler and its
  * syntax produce is read, with nothing named on either side: what a source identity is, is a type,
  * and so is what answers for one.
+ *
+ * <p>Through the wrapping, and not only at the top. The field this change removed was
+ * {@code Optional<SourceRef>}, so a check that compared erased types would have watched that shape
+ * go and said nothing when it came back — green for the very value it was written about.
  *
  * <h2>What it does not reach</h2>
  *
@@ -159,31 +166,66 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
         }
         if (type.isRecord()) {
             for (RecordComponent c : componentsOf(type)) {
-                if (c.getType() == SourceId.class) {
+                if (mentions(c.getGenericType(), SourceId.class)) {
                     held.add(type.getName() + "." + c.getName());
                 }
             }
             return held;
         }
         for (Field f : type.getDeclaredFields()) {
-            if (!Modifier.isStatic(f.getModifiers()) && f.getType() == SourceId.class) {
+            if (!Modifier.isStatic(f.getModifiers()) && mentions(f.getGenericType(), SourceId.class)) {
                 held.add(type.getName() + "." + f.getName());
             }
         }
         return held;
     }
 
+    /**
+     * Whether {@code held} is {@code wanted}, or a container of it.
+     *
+     * <p>Read through the wrapping, because the shape this rule is about wore some. The field this
+     * change removed was {@code Optional<SourceRef>}, and a check that compared the erased type
+     * would have watched it go and said nothing when it came back as {@code Optional<SourceId>} — a
+     * guard that is green for the very value it was written about.
+     */
+    private static boolean mentions(Type held, Class<?> wanted) {
+        if (held == wanted) {
+            return true;
+        }
+        if (held instanceof Class<?> c) {
+            return c.isArray() && mentions(c.getComponentType(), wanted);
+        }
+        if (held instanceof GenericArrayType array) {
+            return mentions(array.getGenericComponentType(), wanted);
+        }
+        if (held instanceof ParameterizedType parameterized) {
+            if (mentions(parameterized.getRawType(), wanted)) {
+                return true;
+            }
+            for (Type argument : parameterized.getActualTypeArguments()) {
+                if (mentions(argument, wanted)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean mentionsAPlace(Type held) {
+        return ANSWERS_FOR_A_SOURCE.stream().anyMatch(place -> mentions(held, place));
+    }
+
     private static boolean holdsAPlace(Class<?> type) {
         if (type.isRecord()) {
             for (RecordComponent c : componentsOf(type)) {
-                if (ANSWERS_FOR_A_SOURCE.contains(c.getType())) {
+                if (mentionsAPlace(c.getGenericType())) {
                     return true;
                 }
             }
             return false;
         }
         for (Field f : type.getDeclaredFields()) {
-            if (!Modifier.isStatic(f.getModifiers()) && ANSWERS_FOR_A_SOURCE.contains(f.getType())) {
+            if (!Modifier.isStatic(f.getModifiers()) && mentionsAPlace(f.getGenericType())) {
                 return true;
             }
         }
@@ -199,8 +241,8 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
         boolean names = false;
         boolean carries = false;
         for (Parameter p : made.getParameters()) {
-            names |= p.getType() == SourceId.class;
-            carries |= ANSWERS_FOR_A_SOURCE.contains(p.getType());
+            names |= mentions(p.getParameterizedType(), SourceId.class);
+            carries |= mentionsAPlace(p.getParameterizedType());
         }
         return names && carries;
     }

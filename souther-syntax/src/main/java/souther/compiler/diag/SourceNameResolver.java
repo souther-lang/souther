@@ -35,6 +35,6 @@ public interface SourceNameResolver {
      * rendering a report over sources it did not read off a disk.
      */
     static SourceNameResolver identity() {
-        return SourceId::value;
+        return id -> id == null ? null : id.value();
     }
 }

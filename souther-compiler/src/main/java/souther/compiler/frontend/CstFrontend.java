@@ -36,7 +36,7 @@ public final class CstFrontend {
      * <p>The positions it makes name no source and say the code is written at them, which is what a
      * text somebody wrote and nobody filed is. A caller that has a name for the text — a compile
      * reading one of its own sources — parses through
-     * {@link #parseWithSlices(String, String, String)}; a caller reading a text put back together
+     * {@link #parseWithSlices(String, String, SourceId)}; a caller reading a text put back together
      * out of what a module published parses through {@link #parseWhatAModulePublished}, because
      * those positions are in no file and are not where the code is.
      */

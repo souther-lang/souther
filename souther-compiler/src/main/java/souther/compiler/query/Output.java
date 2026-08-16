@@ -994,7 +994,7 @@ public final class Output {
          */
         private static List<Report> alreadyDeclared(Db db, String name, SourceId sourceId) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            if (layout == null || sourceId == null || sourceId.equals(layout.idOfModule().get(name))) {
+            if (layout == null || sourceId.equals(layout.idOfModule().get(name))) {
                 return List.of();   // the module's own source declares what it declares
             }
             Set<String> taken = new LinkedHashSet<>(declaredIn(db, layout.idOfModule().get(name)));
