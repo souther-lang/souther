@@ -932,16 +932,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /**
      * A place this document was asked to write that names no file.
      *
-     * <p>Every place written here is a coverage site or a reason, and both are measured from a body
-     * this compile compiled out of a file it holds. A citation with no file is either a text nobody
-     * named — an editor's buffer, which nothing measures — or a position inside a module's own
-     * published text, which is not a body this compile has sites for. So the schema says a place has
-     * a source, a line and a column, and this is what happens when it would not.
+     * <p>The shipped schema says a place has a source, a line and a column, and there are two ways
+     * to arrive here without one. A position in a text this compilation cannot name, in a document
+     * about a compile whose every source is named, is a position a pass minted rather than read — the
+     * open question about whether such a position is a place at all. And a position inside a module's
+     * own published text is a real place in a text no reader holds, which the contract has no shape
+     * for: not a source, a line and a column, and not nothing either, since what a reader is owed
+     * there is which module the code is in.
      *
-     * <p>A refusal rather than a document with the fields left out. That document would be one the
-     * shipped schema forbids, written silently, and read by a build that trusted the version number
-     * on it. Widening what a consumer must handle is a decision about the contract, and this is not
-     * the place it would be taken.
+     * <p>A refusal rather than a document with the fields left out or filled in from whatever file
+     * was to hand. Both of those are documents the shipped schema forbids, written silently and read
+     * by a build that trusted the version on them. Widening what a consumer must handle is a
+     * decision about the contract, and it is not one to take by writing a field.
+     *
+     * <p>So what this says is that the decision has not been taken. It is loud on purpose: over this
+     * compiler's own suite the places written here are eight, all of them in files it holds, which
+     * is far too few to read as "this cannot happen".
      */
     static final class NoPlaceToWrite extends IllegalArgumentException
             implements souther.compiler.diag.TheCompilerDisagreesWithItself {
