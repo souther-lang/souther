@@ -92,8 +92,8 @@ public sealed interface ModuleMessage extends Message {
     /** Why: it names a declaration whose class the path does not carry. */
     record AClassItSaysItDeclaresIsNotOnThePath(String declaration) implements ModuleMessage, Supporting {}
 
-    /** Why: this JVM does not read class files of the kind the path carries for it. */
-    record ItsClassesAreNotOnesThisJvmReads() implements ModuleMessage, Supporting {}
+    /** Why: one of its classes carries metadata this compiler cannot read. */
+    record ItsMetadataCannotBeReadHere() implements ModuleMessage, Supporting {}
 
     /** Why: what it carries declares a different module from the one it was filed under. */
     record ItDeclaresAnotherModule(String named) implements ModuleMessage, Supporting {}

@@ -78,15 +78,14 @@ public sealed interface Readback {
         record AnotherModule(String named) implements Failure {}
 
         /**
-         * There is a class of that name and this JVM does not read class files of its kind: a
-         * malformed one, or one at a major version it does not know.
+         * One of its classes carries metadata this compiler cannot read.
          *
          * <p>The one failure found before anything about Souther has been read. It is still a fact
          * about the artifact and not about the author's dependency list, which is why it is here and
          * not an absence — read as one, the author is told there is no such module while their build
          * file says otherwise.
          */
-        record NotClassFilesThisJvmReads() implements Failure {}
+        record UnreadableMetadata() implements Failure {}
 
         /** What was published is not source this compiler parses.
          *

@@ -11,6 +11,10 @@ import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.classfile.Annotation;
+import java.lang.classfile.Attributes;
+import java.lang.classfile.ClassFile;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -60,9 +64,45 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 imports, types, List.of(), helpers), null, null, null);
     }
 
-    /** Bytes that begin like a class file and end before one does. */
+    /** Bytes that begin like a class file and end before one does: the parse itself refuses them. */
     private static final byte[] NOT_A_CLASS_FILE =
             {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE, 0, 0};
+
+    /**
+     * {@code original} with one byte changed so that the class-file reader accepts the bytes and
+     * then refuses one of the values read off them.
+     *
+     * <p>Parsing a class file does not read it. The model is lazy, so a constant an annotation names
+     * is checked when the annotation is asked for its class or its members, and a reader that caught
+     * only around the parse answers the first kind of malformed file and lets the second escape.
+     *
+     * <p>Searched for rather than written down, because which byte does it is a fact about the
+     * bytes this compiler emits today. Failing to find one is this test having nothing to say, and
+     * it says so.
+     */
+    private static byte[] readableUntilAsked(byte[] original) {
+        for (int i = 8; i < original.length; i++) {
+            byte[] bytes = original.clone();
+            bytes[i] = (byte) (bytes[i] ^ 0xFF);
+            boolean parsed = false;
+            try {
+                List<Annotation> read = ClassFile.of().parse(bytes)
+                        .findAttribute(Attributes.runtimeInvisibleAnnotations())
+                        .map(a -> List.copyOf(a.annotations())).orElse(List.of());
+                parsed = true;
+                for (Annotation a : read) {
+                    a.className().stringValue();
+                    a.elements().forEach(e -> e.name().stringValue());
+                }
+            } catch (IllegalArgumentException _) {
+                if (parsed) {
+                    return bytes;
+                }
+            }
+        }
+        throw new IllegalStateException(
+                "no corruption of these bytes parses and then refuses an accessor");
+    }
 
     private static PublishedClasses.Declarations dataClass(String declaration) {
         return new PublishedClasses.Declarations(null, declaration, null, null);
@@ -188,6 +228,51 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
 
         bothAreSaidOnTheSource(binaryName -> binaryName.equals("lib.pub.Held")
                 ? NOT_A_CLASS_FILE : built.get(binaryName));
+    }
+
+    /**
+     * The class file parses, and reading a value off it does not.
+     *
+     * <p>The lazy half of the class-file model, and the half a catch around the parse alone lets
+     * through. Of 470 single-byte corruptions of a real module's declarations class, 202 refuse the
+     * parse and 97 more parse and then refuse an accessor — so answering only the first kind leaves
+     * a third of the malformed artifacts ending the compilation.
+     */
+    @Test
+    void oneWhoseMetadataIsRefusedAfterItsClassFileParses() {
+        Map<String, byte[]> built = Compiler.compile("""
+                module lib.pub exposing ( Held )
+                data Held = String
+                """);
+        byte[] lazily = readableUntilAsked(built.get("lib.pub.$Module"));
+
+        bothAreSaidOnTheSource(binaryName -> binaryName.equals("lib.pub.$Module")
+                ? lazily : built.get(binaryName));
+    }
+
+    /**
+     * A module compiled here is shadowed by one on the path this compiler cannot read.
+     *
+     * <p>Whether the path has the name does not depend on whether what it has can be read — two
+     * modules under one name are two answers to what that name means however either was built. The
+     * presence query folded "cannot read it" into "there is none", which is the collapse this whole
+     * reading is written to keep apart, at the one question that was meant not to depend on the
+     * reading at all.
+     */
+    @Test
+    void aModuleCompiledHereIsShadowedByOneThisCompilerCannotRead() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.uses
+
+                data Page = { n: Int }
+                """), binaryName -> binaryName.equals("app.uses.$Module") ? NOT_A_CLASS_FILE : null);
+        Set<String> codes = new LinkedHashSet<>();
+        for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
+            codes.add(said.diagnostic().code());
+        }
+
+        assertTrue(codes.contains("E1503"),
+                "the path has the name, whether or not what it has can be read: " + codes);
     }
 
     /**

@@ -686,8 +686,8 @@ public final class Front {
                     said.hint(new ModuleMessage.ItWasBuiltBy(by));
             case Readback.Failure.DeclarationMissing(String declaration) ->
                     said.hint(new ModuleMessage.AClassItSaysItDeclaresIsNotOnThePath(declaration));
-            case Readback.Failure.NotClassFilesThisJvmReads _ ->
-                    said.hint(new ModuleMessage.ItsClassesAreNotOnesThisJvmReads());
+            case Readback.Failure.UnreadableMetadata _ ->
+                    said.hint(new ModuleMessage.ItsMetadataCannotBeReadHere());
             case Readback.Failure.AnotherModule(String named) ->
                     said.hint(new ModuleMessage.ItDeclaresAnotherModule(named));
             case Readback.Failure.InvalidPublishedSyntax _ ->

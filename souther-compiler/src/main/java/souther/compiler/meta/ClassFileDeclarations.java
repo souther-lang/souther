@@ -27,25 +27,33 @@ public final class ClassFileDeclarations implements PublishedClasses {
 
     @Override
     public PublishedClasses.Carried of(String binaryName) {
+        // Outside the reading. Whatever hands the bytes over is a caller's, and a fault in it is a
+        // fault: only what this class does with bytes it was given is an answer about an artifact.
         byte[] bytes = bytesOf.apply(binaryName);
         if (bytes == null) {
             return new PublishedClasses.Carried.NoSuchClass();
         }
-        List<Annotation> annotations;
         try {
-            annotations = annotations(bytes);
+            return new PublishedClasses.Carried.Declared(declarationsIn(bytes));
         } catch (IllegalArgumentException _) {
-            // The one thing that can go wrong here, and the only place that knows it did: the
-            // class-file reader refuses a malformed file and one at a major version it does not
-            // know. Said as what it is, so that nothing further out has to read an exception type
-            // as a statement about somebody's artifact.
-            return new PublishedClasses.Carried.NotAClassFileThisJvmReads();
+            // Every reading of the class file is inside this, and it has to be. Parsing one does
+            // not read it: the class-file model is lazy, and a constant pool entry an annotation
+            // names is checked when the annotation is asked for its class or its members. Measured
+            // on a real module's bytes — of 470 single-byte corruptions, 202 refused the parse and
+            // 97 more parsed and then refused an accessor. A catch around the parse alone answers
+            // the first 202 and lets the other 97 end the compilation.
+            return new PublishedClasses.Carried.UnreadableMetadata();
         }
+    }
+
+    /** What one class was annotated with, read off its bytes. Raises where they are not something
+     *  this compiler can read the metadata off. */
+    private static PublishedClasses.Declarations declarationsIn(byte[] bytes) {
         PublishedClasses.SoutherModuleView module = null;
         String data = null;
         String signature = null;
         Boolean injected = null;
-        for (Annotation a : annotations) {
+        for (Annotation a : annotations(bytes)) {
             String type = a.className().stringValue();
             if (type.endsWith("/SoutherModule;")) {
                 module = moduleView(a);
@@ -56,8 +64,7 @@ public final class ClassFileDeclarations implements PublishedClasses {
                 injected = bool(a, "injected");
             }
         }
-        return new PublishedClasses.Carried.Declared(
-                new PublishedClasses.Declarations(module, data, signature, injected));
+        return new PublishedClasses.Declarations(module, data, signature, injected);
     }
 
     private static List<Annotation> annotations(byte[] bytes) {

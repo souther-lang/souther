@@ -11,11 +11,16 @@ import java.util.List;
  * named apart from the module a readback answers with, which exists only where the reading
  * succeeded.
  *
- * <p>Asking answers, and does not raise. Turning bytes into declarations is where a class file that
- * this runtime does not read is found out, and the reader that has the bytes is the only thing that
- * knows what went wrong with them: a caller that had to catch would be reading an exception type as
- * a statement about somebody's artifact, which is what an artifact's failures travelling as raises
- * cost in the first place.
+ * <p>A known condition of the class being read is an answer and not a raise: there is no such class,
+ * or there is one and the metadata this compiler needs cannot be read off it. Reading the bytes is
+ * where the second is found out, and whatever reads them is the only thing that knows it — a caller
+ * that had to catch would be reading an exception type as a statement about somebody's artifact,
+ * which is what an artifact's failures travelling as raises cost in the first place.
+ *
+ * <p>A fault in an implementation of this remains a fault. What is answered is what is known about
+ * the class, not everything that can go wrong on the way to it; an implementation that caught
+ * whatever reached it would report a defect in this compiler as a defect in somebody's dependency,
+ * which is the distinction the readback above rests on.
  */
 public interface PublishedClasses {
 
@@ -25,9 +30,10 @@ public interface PublishedClasses {
     /**
      * What looking for one class found.
      *
-     * <p>Three outcomes, because a class this runtime will not read is not a class that is not
-     * there. The classes on a path came from wherever the build that made them came from, and one of
-     * them may be malformed or at a major version this runtime does not know. Read as an absence, an
+     * <p>Three outcomes, because a class this compiler cannot read the metadata off is not a class
+     * that is not there. The classes on a path came from wherever the build that made them came
+     * from, and one of them may be malformed, at a major version this runtime does not know, or
+     * carrying annotations that name constants nothing can make sense of. Read as an absence, an
      * author is told there is no such module while their dependency list says otherwise.
      */
     sealed interface Carried {
@@ -39,8 +45,15 @@ public interface PublishedClasses {
          *  every member absent. */
         record Declared(Declarations declarations) implements Carried {}
 
-        /** There is a class of that name and this runtime does not read class files of its kind. */
-        record NotAClassFileThisJvmReads() implements Carried {}
+        /**
+         * There is a class of that name and the metadata this compiler needs cannot be read off it.
+         *
+         * <p>Said of the metadata rather than of the class file, because that is what was asked for
+         * and all that was looked at. A class file can be one the runtime reads perfectly well and
+         * still carry an annotation naming a constant this compiler cannot make sense of, and a
+         * reading here has no business saying anything about whether the class would load.
+         */
+        record UnreadableMetadata() implements Carried {}
     }
 
     /** {@code declarations}, or {@link Carried.NoSuchClass} where they are null — for a source of

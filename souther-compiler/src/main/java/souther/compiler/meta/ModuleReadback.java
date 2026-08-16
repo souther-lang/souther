@@ -80,9 +80,16 @@ public final class ModuleReadback {
      * ended the compilation from a question whose whole answer is yes or no.
      */
     public static boolean carry(String module, PublishedClasses classes) {
-        return classes.of(declarationsClassOf(module))
-                instanceof PublishedClasses.Carried.Declared(PublishedClasses.Declarations d)
-                && d.module() != null;
+        return switch (classes.of(declarationsClassOf(module))) {
+            case PublishedClasses.Carried.NoSuchClass _ -> false;
+            // Carried, and not readable. Those are the two questions this whole reading is written
+            // to keep apart, and folding the second into "no such name" here would have answered
+            // one of them with the other — the same collapse, at the one query that was meant not
+            // to depend on the reading at all.
+            case PublishedClasses.Carried.UnreadableMetadata _ -> true;
+            case PublishedClasses.Carried.Declared(PublishedClasses.Declarations d) ->
+                    d.module() != null;
+        };
     }
 
     /** What {@code classes} carry for {@code moduleName}. */
@@ -92,8 +99,8 @@ public final class ModuleReadback {
             case PublishedClasses.Carried.NoSuchClass _ -> {
                 return new Readback.SaysNothing();
             }
-            case PublishedClasses.Carried.NotAClassFileThisJvmReads _ -> {
-                return unreadable(moduleName, new Readback.Failure.NotClassFilesThisJvmReads());
+            case PublishedClasses.Carried.UnreadableMetadata _ -> {
+                return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
             }
             case PublishedClasses.Carried.Declared(PublishedClasses.Declarations declared) ->
                     found = declared;
@@ -114,9 +121,9 @@ public final class ModuleReadback {
         for (String type : m.types()) {
             PublishedClasses.Declarations carried;
             switch (classes.of(moduleName + "." + type)) {
-                case PublishedClasses.Carried.NotAClassFileThisJvmReads _ -> {
+                case PublishedClasses.Carried.UnreadableMetadata _ -> {
                     return unreadable(moduleName,
-                            new Readback.Failure.NotClassFilesThisJvmReads());
+                            new Readback.Failure.UnreadableMetadata());
                 }
                 case PublishedClasses.Carried.NoSuchClass _ -> {
                     return unreadable(moduleName,
@@ -134,9 +141,9 @@ public final class ModuleReadback {
             PublishedClasses.Declarations carried;
             switch (classes.of(SoutherJvmAbi.nameOf(
                     new GeneratedClass.BehaviorInterface(moduleName, behavior)).binaryName())) {
-                case PublishedClasses.Carried.NotAClassFileThisJvmReads _ -> {
+                case PublishedClasses.Carried.UnreadableMetadata _ -> {
                     return unreadable(moduleName,
-                            new Readback.Failure.NotClassFilesThisJvmReads());
+                            new Readback.Failure.UnreadableMetadata());
                 }
                 case PublishedClasses.Carried.NoSuchClass _ -> {
                     return unreadable(moduleName,
