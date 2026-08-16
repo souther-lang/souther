@@ -58,7 +58,7 @@ public final class ClassFileDeclarations implements PublishedClasses {
 
     private static PublishedClasses.SoutherModuleView moduleView(Annotation a) {
         return new PublishedClasses.SoutherModuleView(
-                integer(a, "compat"), string(a, "compiler"), string(a, "name"), string(a, "header"),
+                integer(a, "compat"), string(a, "compiler"), string(a, "header"),
                 strings(a, "imports"), strings(a, "types"), strings(a, "behaviors"),
                 strings(a, "invariantHelpers"));
     }

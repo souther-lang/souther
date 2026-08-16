@@ -1,6 +1,5 @@
 package souther.compiler.meta;
 
-import souther.compiler.check.Exposing;
 
 import java.util.List;
 
@@ -65,6 +64,30 @@ public sealed interface Readback {
          * @param declaration the type or behavior that was named */
         record DeclarationMissing(String declaration) implements Failure {}
 
+        /**
+         * What the class carries declares a different module.
+         *
+         * <p>Which module a reading is about is the name it was asked for; which module the
+         * declarations are of is what their header says. The class is found by the first and the
+         * module is named by the second, and nothing held the two together — so an artifact whose
+         * header names something else came back as a module filed under a name that is not its own,
+         * with every question about it answered from the wrong declarations.
+         *
+         * @param named the name the artifact gave itself
+         */
+        record AnotherModule(String named) implements Failure {}
+
+        /**
+         * There is a class of that name and this JVM does not read class files of its kind: a
+         * malformed one, or one at a major version it does not know.
+         *
+         * <p>The one failure found before anything about Souther has been read. It is still a fact
+         * about the artifact and not about the author's dependency list, which is why it is here and
+         * not an absence — read as one, the author is told there is no such module while their build
+         * file says otherwise.
+         */
+        record NotClassFilesThisJvmReads() implements Failure {}
+
         /** What was published is not source this compiler parses.
          *
          * <p>Nothing about where. The text was put back together here out of what the module
@@ -73,17 +96,59 @@ public sealed interface Readback {
          * artifact, which the module's name is enough to say. */
         record InvalidPublishedSyntax() implements Failure {}
 
-        /** Its import lines could not do their job, as the check that reads them found them.
+        /**
+         * Its import lines could not do their job.
          *
-         * <p>The refusals travel as they were found rather than as sentences about them. The same
-         * failures on a line of a source this compilation holds are said on that line; here there is
-         * no line to say them on, and turning them into diagnostics in order to carry them would put
-         * a place on them that has to be taken off again. */
-        record InvalidExposure(List<Exposing.Refusal> refusals) implements Failure {
+         * <p>At least one, and the type says so: {@code first} is the one a reader with room for a
+         * single sentence says, and there is no way to build this with nothing in it. A caller
+         * reading the head of a list it was told is non-empty by a comment is a caller the next
+         * producer can break.
+         */
+        record InvalidExposure(Exposure first, List<Exposure> rest) implements Failure {
 
             public InvalidExposure {
-                refusals = List.copyOf(refusals);
+                java.util.Objects.requireNonNull(first, "an exposure failure is at least one line");
+                rest = List.copyOf(rest);
+            }
+
+            /** All of them, the first included, in the order the lines are written. */
+            public List<Exposure> all() {
+                List<Exposure> every = new java.util.ArrayList<>();
+                every.add(first);
+                every.addAll(rest);
+                return List.copyOf(every);
             }
         }
+    }
+
+    /**
+     * One import line of an artifact that could not do its job, as a fact about the artifact.
+     *
+     * <p>{@link Exposing.Refusal} is the same failure as the check that reads a source finds it, and
+     * carries the {@code import} line it was written on so that a reader with that source can quote
+     * it. Carried across this boundary it would bring a position in a text nobody holds — which is
+     * the defect this whole type exists to close, arriving as an AST node instead of as a
+     * diagnostic. So the refusal is projected here, and what crosses is what happened and not where.
+     *
+     * <p>Kept apart from the reasons a readback fails, because the two are read at different
+     * granularities: an artifact is unreadable or it is not, and its import lines are however many
+     * they are.
+     */
+    public sealed interface Exposure {
+
+        /** The library module the line names. */
+        String from();
+
+        /** The name it was to bring in. */
+        String name();
+
+        /** The standard library publishes no operation of that name in that module. */
+        record NoSuchLibraryFunction(String from, String name) implements Exposure {}
+
+        /** Two library modules publish the bare name, so importing both leaves it saying neither. */
+        record BroughtTwice(String from, String name, String earlier) implements Exposure {}
+
+        /** The name is also declared by the module the line is written in. */
+        record CollidesWithADeclaration(String from, String name) implements Exposure {}
     }
 }

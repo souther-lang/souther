@@ -20,8 +20,17 @@ public interface PublishedClasses {
     record Declarations(SoutherModuleView module, String data, String behaviorSignature,
                         Boolean behaviorInjected) {}
 
-    /** The {@code $Module} annotation's members. */
-    record SoutherModuleView(int compat, String compiler, String name, String header,
+    /**
+     * The {@code $Module} annotation's members, as a reader here uses them.
+     *
+     * <p>Which module this is, is the header's to say, and it is not surfaced twice. The annotation
+     * carries a {@code name} member as well — {@link ModuleMetadata} writes it, and a tool reading
+     * the class file may want it — and a reading that took it as well would have three names for one
+     * module: the one it was asked about, the one this member spells, and the one the header
+     * declares. Two of them can disagree with the third and nothing decides which wins, so only the
+     * header is read and the reading holds it against the name it was asked for.
+     */
+    record SoutherModuleView(int compat, String compiler, String header,
                              List<String> imports, List<String> types,
                              List<String> behaviors, List<String> invariantHelpers) {}
 }

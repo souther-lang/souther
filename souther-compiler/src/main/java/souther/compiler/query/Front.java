@@ -686,12 +686,16 @@ public final class Front {
                     said.hint(new ModuleMessage.ItWasBuiltBy(by));
             case Readback.Failure.DeclarationMissing(String declaration) ->
                     said.hint(new ModuleMessage.AClassItSaysItDeclaresIsNotOnThePath(declaration));
+            case Readback.Failure.NotClassFilesThisJvmReads _ ->
+                    said.hint(new ModuleMessage.ItsClassesAreNotOnesThisJvmReads());
+            case Readback.Failure.AnotherModule(String named) ->
+                    said.hint(new ModuleMessage.ItDeclaresAnotherModule(named));
             case Readback.Failure.InvalidPublishedSyntax _ ->
                     said.hint(new ModuleMessage
                             .WhatItPublishedIsNotSourceThisCompilerParses());
-            case Readback.Failure.InvalidExposure(List<Exposing.Refusal> refusals) ->
+            case Readback.Failure.InvalidExposure(Readback.Exposure line, List<Readback.Exposure> _) ->
                     said.hint(new ModuleMessage.AnImportLineOfItsCannotBeReadHere(
-                            refusals.get(0).name(), refusals.get(0).imp().module()));
+                            line.name(), line.from()));
         };
         return because.hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(module)).build();
     }

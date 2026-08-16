@@ -55,7 +55,7 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                                                              List<String> types,
                                                              List<String> helpers) {
         return new PublishedClasses.Declarations(new PublishedClasses.SoutherModuleView(
-                compat, "0.0.1-other", module,
+                compat, "0.0.1-other",
                 "module " + module + " exposing ( " + String.join(", ", types) + " )",
                 imports, types, List.of(), helpers), null, null, null);
     }
@@ -125,6 +125,69 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 "lib.pub.$Module", moduleClass(Backend.BOUNDARY_VERSION, "lib.pub",
                         List.of("import List ( noSuchOperation )"), List.of("Held"),
                         List.of("let helper (xs) = noSuchOperation(xs)")),
+                "lib.pub.Held", dataClass("data Held = String"))));
+    }
+
+    /**
+     * An import line the published surface does not need is not one this compiler reads, so it is
+     * never one it cannot read.
+     *
+     * <p>A module's bodies do not cross, and neither do the imports only they used — otherwise every
+     * importing project would have to put a module on its path to read declarations that never
+     * mention it. So the lines are dropped before the check reads them, and an artifact carrying a
+     * mistaken one that nothing published refers to is read like any other.
+     *
+     * <p>Written down because the rule is easy to lose. Reading the import lines before dropping the
+     * unneeded ones would refuse this artifact, and would be the same change that puts the dropped
+     * import back on every importer's path.
+     */
+    @Test
+    void oneWhoseUnreadableImportNoDeclarationNeedsIsReadLikeAnyOther() {
+        Set<String> codes = saidAboutTheSource(new Fabricated(Map.of(
+                "lib.pub.$Module", moduleClass(Backend.BOUNDARY_VERSION, "lib.pub",
+                        List.of("import List ( noSuchOperation )"), List.of("Held"), List.of()),
+                "lib.pub.Held", dataClass("data Held = String"))));
+
+        assertEquals(Set.of("E1023"), codes,
+                "the author's own mistake, and nothing about a line nothing published names");
+    }
+
+    /**
+     * Its classes are not class files this Java runtime reads.
+     *
+     * <p>The one failure found before anything about Souther has been read, and the one that used to
+     * escape from further out than any of the others: the class-file reader raises, and reading a
+     * module begins by asking it for the declarations class. Told as an absence instead, the author
+     * would be shown "no such module" for a dependency their build file does name.
+     */
+    @Test
+    void oneWhoseClassesThisJvmDoesNotRead() {
+        bothAreSaidOnTheSource(new ModulePath() {
+            @Override
+            public byte[] bytes(String binaryName) {
+                return binaryName.equals("lib.pub.$Module")
+                        ? new byte[] {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE, 0, 0}
+                        : null;
+            }
+        });
+    }
+
+    /**
+     * A reading answers about the module it was asked for.
+     *
+     * <p>The class is found by the name the caller asked about and the module is named by the header
+     * that class carries. Nothing held the two together, so an artifact whose header names something
+     * else was filed under a name that is not its own, with every question about it answered from
+     * the wrong declarations and no report anywhere saying so.
+     */
+    @Test
+    void oneWhoseHeaderNamesAnotherModule() {
+        bothAreSaidOnTheSource(new Fabricated(Map.of(
+                "lib.pub.$Module", new PublishedClasses.Declarations(
+                        new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
+                                "0.0.1-other", "module lib.other exposing ( Held )",
+                                List.of(), List.of("Held"), List.of(), List.of()),
+                        null, null, null),
                 "lib.pub.Held", dataClass("data Held = String"))));
     }
 

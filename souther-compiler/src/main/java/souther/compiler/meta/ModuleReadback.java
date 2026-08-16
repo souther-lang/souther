@@ -8,8 +8,11 @@ import souther.compiler.diag.SourceProvenance;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -39,8 +42,12 @@ import java.util.function.Function;
  *
  * <p>Nothing here raises for an artifact this compiler will not read. Every such failure is a
  * {@link Readback.Failure}, named where it is found by the code that knows its shape, so what
- * converts is stated rather than decided by how wide a caller's catch happened to be. The one catch
- * left is around the parse, and it is around the parse alone.
+ * converts is stated rather than decided by how wide a caller's catch happened to be.
+ *
+ * <p>Two raises are turned into failures, and each catch is around the one call that makes it: the
+ * class-file reader, which refuses bytes it does not know, and the parser. Both are passes and both
+ * raise, so this is where a raise becomes a value; wrapping any more than the call would let
+ * something else's raise arrive as a statement about this artifact.
  */
 public final class ModuleReadback {
 
@@ -73,15 +80,20 @@ public final class ModuleReadback {
      * ended the compilation from a question whose whole answer is yes or no.
      */
     public static boolean carry(String module, PublishedClasses classes) {
-        PublishedClasses.Declarations found = declarationsOf(module, classes);
-        return found != null && found.module() != null;
+        return declarationsOf(module, classes) instanceof Found.Declared;
     }
 
     /** What {@code classes} carry for {@code moduleName}. */
     public static Readback read(String moduleName, PublishedClasses classes) {
-        PublishedClasses.Declarations found = declarationsOf(moduleName, classes);
-        if (found == null || found.module() == null) {
-            return new Readback.SaysNothing();
+        PublishedClasses.Declarations found;
+        switch (declarationsOf(moduleName, classes)) {
+            case Found.Nothing _ -> {
+                return new Readback.SaysNothing();
+            }
+            case Found.NotClassFiles _ -> {
+                return unreadable(moduleName, new Readback.Failure.NotClassFilesThisJvmReads());
+            }
+            case Found.Declared(PublishedClasses.Declarations declared) -> found = declared;
         }
         PublishedClasses.SoutherModuleView m = found.module();
         // A member this compiler asks for and the writer did not write reads as its default. The
@@ -135,28 +147,115 @@ public final class ModuleReadback {
             // else's raise arrive as a statement about this artifact.
             return unreadable(moduleName, new Readback.Failure.InvalidPublishedSyntax());
         }
+        if (!parsed.name().equals(moduleName)) {
+            // A reading answers about the module it was asked for. The class was found by that name
+            // and the module is named by the header on it; where the two differ there is no reading
+            // of this module here, whatever the class carries.
+            return unreadable(moduleName, new Readback.Failure.AnotherModule(parsed.name()));
+        }
         // Which imports are needed is asked of the header and the declarations — everything that was
         // published except the import lines themselves.
         Exposing.Checked checked =
                 Exposing.check(withNeededImports(parsed, m.header() + "\n" + declarations));
         if (!checked.refused().isEmpty()) {
-            return unreadable(moduleName, new Readback.Failure.InvalidExposure(checked.refused()));
+            List<Readback.Exposure> crossed = checked.refused().stream()
+                    .map(ModuleReadback::asAnArtifactsFailure).toList();
+            return unreadable(moduleName, new Readback.Failure.InvalidExposure(
+                    crossed.get(0), crossed.subList(1, crossed.size())));
         }
         return new Readback.Ready(
-                new ReadableModule(checked.module(), injected, checked.exposed()));
+                new AsRead(checked.module(), injected, checked.exposed()));
+    }
+
+    /**
+     * The only {@link ReadableModule} there is.
+     *
+     * <p>Package-private, and built at one statement of {@link #read}. Nothing outside this package
+     * can make one, and nothing inside it does — so a value of this type is a reading that got to
+     * the end, rather than a value somebody assembled that looks like one.
+     */
+    record AsRead(Ast.Module module, Set<String> injectedBehaviors,
+                  Map<String, ValueName.Stdlib> libraryNames) implements ReadableModule {
+
+        /** Copied, because this is an answer a compilation remembers and an answer it remembers is
+         *  a value. */
+        AsRead {
+            injectedBehaviors = Collections.unmodifiableSet(new LinkedHashSet<>(injectedBehaviors));
+            libraryNames = Collections.unmodifiableMap(new LinkedHashMap<>(libraryNames));
+        }
     }
 
     private static Readback unreadable(String module, Readback.Failure why) {
         return new Readback.Unreadable(module, why);
     }
 
-    /** What {@code classes} carry on {@code module}'s declarations class, or null where there is no
-     *  such class. Asked one way, so that {@link #carry} and {@link #read} cannot come to differ
-     *  about whether the path has a name. */
-    private static PublishedClasses.Declarations declarationsOf(String module,
-                                                                PublishedClasses classes) {
-        return classes.of(
-                SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(module)).binaryName());
+    /**
+     * A refusal the check found, as a fact about the artifact it was found in.
+     *
+     * <p>The place goes here and nowhere else. A refusal carries the {@code import} line it was
+     * written on, which is what lets a reader holding that source quote it; this side has no source
+     * to quote and the line is in a text nobody holds, so what crosses is what happened. Left on,
+     * the position this whole type exists to keep out would have arrived as an AST node instead of
+     * as a diagnostic.
+     *
+     * <p>A switch over every refusal there is, with nothing to fall through to: a rule added to the
+     * check is one this boundary has to say something about, and one that reached here with nothing
+     * to say would be an artifact refused for a reason nobody can name.
+     */
+    private static Readback.Exposure asAnArtifactsFailure(Exposing.Refusal refusal) {
+        return switch (refusal) {
+            case Exposing.Refusal.NoSuchLibraryFunction r ->
+                    new Readback.Exposure.NoSuchLibraryFunction(r.imp().module(), r.name());
+            case Exposing.Refusal.BroughtTwice r ->
+                    new Readback.Exposure.BroughtTwice(r.imp().module(), r.name(),
+                            r.earlier().qualified());
+            case Exposing.Refusal.CollidesWithADeclaration r ->
+                    new Readback.Exposure.CollidesWithADeclaration(r.imp().module(), r.name());
+        };
+    }
+
+    /**
+     * What looking for a module's declarations class found.
+     *
+     * <p>Three outcomes here as well, and for the reason the reading has three: a class this JVM
+     * will not read is not a class that is not there. The classes on a path came from wherever the
+     * build that made them came from, and one of them may be a class file at a major version this
+     * JVM does not know — read as an absence, an author is told there is no such module while their
+     * dependency list says otherwise.
+     */
+    private sealed interface Found {
+
+        /** No class of that name, or one this compiler put no declarations on. */
+        record Nothing() implements Found {}
+
+        /** The declarations that class carries. */
+        record Declared(PublishedClasses.Declarations declarations) implements Found {}
+
+        /** There is a class and this JVM does not read class files of its kind. */
+        record NotClassFiles() implements Found {}
+    }
+
+    /**
+     * What {@code classes} carry on {@code module}'s declarations class.
+     *
+     * <p>Asked one way, so that {@link #carry} and {@link #read} cannot come to differ about whether
+     * the path has a name.
+     *
+     * <p>The catch is around the one call that turns bytes into declarations, and around that call
+     * alone: {@link ClassFileDeclarations} hands the bytes to the class-file reader, which refuses a
+     * malformed file and one at a version it does not know by raising. That is the only raise this
+     * step has, and it is the reading's to answer rather than the compilation's to end.
+     */
+    private static Found declarationsOf(String module, PublishedClasses classes) {
+        PublishedClasses.Declarations found;
+        try {
+            found = classes.of(SoutherJvmAbi.nameOf(
+                    new GeneratedClass.ModuleDeclarations(module)).binaryName());
+        } catch (IllegalArgumentException _) {
+            return new Found.NotClassFiles();
+        }
+        return found == null || found.module() == null
+                ? new Found.Nothing() : new Found.Declared(found);
     }
 
     /**

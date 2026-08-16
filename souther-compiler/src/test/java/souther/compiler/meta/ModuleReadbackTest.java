@@ -238,7 +238,7 @@ class ModuleReadbackTest {
             }
             PublishedClasses.SoutherModuleView m = d.module();
             return new PublishedClasses.Declarations(
-                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old", m.name(),
+                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old",
                             m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
@@ -270,7 +270,7 @@ class ModuleReadbackTest {
             }
             PublishedClasses.SoutherModuleView m = d.module();
             return new PublishedClasses.Declarations(
-                    new PublishedClasses.SoutherModuleView(m.compat() - 1, "0.0.1-older", m.name(),
+                    new PublishedClasses.SoutherModuleView(m.compat() - 1, "0.0.1-older",
                             m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
@@ -303,7 +303,7 @@ class ModuleReadbackTest {
             }
             PublishedClasses.SoutherModuleView m = d.module();
             return new PublishedClasses.Declarations(
-                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old", m.name(),
+                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old",
                             m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
@@ -312,6 +312,46 @@ class ModuleReadbackTest {
                 Readback.Failure.Incompatible.class, refusalOf("shared.money", stale));
 
         assertEquals("0.0.1-old", why.compiler());
+    }
+
+    /**
+     * A reading answers about the module it was asked for, or it does not answer.
+     *
+     * <p>What is asked for and what comes back are two names, and nothing held them together: the
+     * class is found by the name the caller asked about, and the module is named by the header that
+     * class carries. An artifact whose header names something else came back {@code Ready}, and what
+     * the walk over the path then held was a module filed under a name that is not its own — every
+     * question about it answered from the wrong module, and no report anywhere saying so.
+     *
+     * <p>Not reachable through a jar this compiler agrees with: the declaring project's own build
+     * names the class after the module. It is reachable through one it does not agree with, which is
+     * the case this reading exists to be clear about.
+     */
+    @Test
+    void oneWhoseHeaderNamesAnotherModuleIsNotTheModuleThatWasAskedFor() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                """);
+        PublishedClasses renamed = binaryName -> {
+            PublishedClasses.Declarations d =
+                    new ClassFileDeclarations(classes::get).of(binaryName);
+            if (d == null || d.module() == null) {
+                return d;
+            }
+            PublishedClasses.SoutherModuleView m = d.module();
+            return new PublishedClasses.Declarations(
+                    new PublishedClasses.SoutherModuleView(m.compat(), m.compiler(),
+                            "module shared.other exposing ( Amount )", m.imports(), m.types(),
+                            m.behaviors(), m.invariantHelpers()),
+                    d.data(), d.behaviorSignature(), d.behaviorInjected());
+        };
+
+        Readback.Failure.AnotherModule why = assertInstanceOf(
+                Readback.Failure.AnotherModule.class, refusalOf("shared.money", renamed));
+
+        assertEquals("shared.other", why.named(),
+                "the name the artifact gave itself, which is not the one it was filed under");
     }
 
     private static List<String> names(List<Ast.Def> defs) {

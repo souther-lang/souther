@@ -190,7 +190,7 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
     private static PublishedClasses.Declarations moduleClass(String module, List<String> imports,
                                                             List<String> types) {
         return new PublishedClasses.Declarations(new PublishedClasses.SoutherModuleView(
-                souther.compiler.codegen.Backend.BOUNDARY_VERSION, "another build", module,
+                souther.compiler.codegen.Backend.BOUNDARY_VERSION, "another build",
                 "module " + module + " exposing ( Same, Note )", imports, types,
                 List.of(), List.of()), null, null, null);
     }
