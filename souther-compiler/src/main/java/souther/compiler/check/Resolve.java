@@ -168,7 +168,8 @@ public final class Resolve {
      * says the same thing, and holding it reaches nothing.
      */
     public record Reachable(String module, Map<String, ValueName.Helper> helpers,
-                            Map<String, ValueName.Behavior> behaviors, boolean behaviorsWhole,
+                            Map<String, ValueName.Behavior> behaviors,
+                            Set<String> standingForNothing, boolean behaviorsWhole,
                             Map<String, ValueName.Stdlib> exposed) {
 
         /** Copied, because a reader holds this. A table something else can still write to is not a
@@ -179,6 +180,8 @@ public final class Resolve {
         public Reachable {
             helpers = Collections.unmodifiableMap(new LinkedHashMap<>(helpers));
             behaviors = Collections.unmodifiableMap(new LinkedHashMap<>(behaviors));
+            standingForNothing =
+                    Collections.unmodifiableSet(new LinkedHashSet<>(standingForNothing));
             exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
         }
 
@@ -204,6 +207,34 @@ public final class Resolve {
         }
 
         /**
+         * What writing {@code name} here would mean.
+         *
+         * <p>Three answers, and the third is why this is asked rather than looked up. A name an
+         * import line was to bring in and could not is in scope denoting nothing: what is wrong was
+         * said on that line, so a use of it says nothing more. Absent from the table instead, every
+         * use is reported as a name nothing declares, and the author is sent to a body where
+         * nothing is wrong — which is the same reasoning the type namespace was written to
+         * ({@link Denotation}), and the same three answers.
+         */
+        public Reach reach(String name) {
+            return reachIn(byName(), name);
+        }
+
+        /** The same, over a table {@link #byName} already answered. Package-private, so the only
+         *  readers are the ones that got the table from here: the rule about what a spelling means
+         *  is this one, and a caller that assembled a table of its own would be asking it of
+         *  something else. {@code Resolve} reads every name a module writes, and rebuilding the
+         *  table for each of them is what this saves. */
+        Reach reachIn(Map<String, ValueName> reached, String name) {
+            ValueName named = reached.get(name);
+            if (named != null) {
+                return new Reach.Reaches(named);
+            }
+            return standingForNothing.contains(name) ? Reach.STANDS_FOR_NOTHING
+                    : Reach.NOT_IN_SCOPE;
+        }
+
+        /**
          * What a module reaches when nothing else is in sight — the core modules, which the library
          * resolves as it loads. A core module imports nothing (it declares the library), so the
          * table of names an import would bring in is empty; a module that does import is resolved
@@ -220,7 +251,7 @@ public final class Resolve {
                     helpers.put(fn.name(), new ValueName.Helper(m.name(), fn.name()));
                 }
             }
-            return new Reachable(m.name(), helpers, behaviors, true, Map.of());
+            return new Reachable(m.name(), helpers, behaviors, Set.of(), true, Map.of());
         }
     }
 
@@ -1285,17 +1316,17 @@ public final class Resolve {
      * construction of a unit data and records where it came from; applied, it is a newtype taking
      * what it wraps, and the application is what says that.
      */
-    private ValueName lookup(WrittenName name, boolean applied, Bindings bound) {
+    private Reach lookup(WrittenName name, boolean applied, Bindings bound) {
         String written = name.canonical();
         // a binding in force wins over everything else: a body may bind a name a module declares,
         // and the binding is what the name means there
         ValueName.Local binding = bound.binderOf(written);
         if (binding != null) {
-            return binding;
+            return new Reach.Reaches(binding);
         }
         // names the language itself gives: Option's two cases
         if (written.equals("None") || written.equals("Some")) {
-            return new ValueName.Builtin(written);
+            return new Reach.Reaches(new ValueName.Builtin(written));
         }
         // A library qualifier makes this a library reference — `Date(...)`, whose namespace is the
         // whole name, included. Whether the library has a member of that name is the check's to say:
@@ -1311,19 +1342,20 @@ public final class Resolve {
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             if (Reserved.isNamespace(reachable.module()) || !Prelude.isPrivateMember(written)) {
-                return dot < 0 ? ValueName.Stdlib.namespace(written)
-                        : new ValueName.Stdlib(written.substring(0, dot), written.substring(dot + 1));
+                return new Reach.Reaches(dot < 0 ? ValueName.Stdlib.namespace(written)
+                        : new ValueName.Stdlib(written.substring(0, dot),
+                                written.substring(dot + 1)));
             }
-            return null;
+            return Reach.NOT_IN_SCOPE;
         }
         if (symbols.scope().resolve(name) instanceof Denotation.Denotes d) {
-            return new ValueName.OfType(written, d.type(),
-                    applied ? null : ConstructionOrigin.own());
+            return new Reach.Reaches(new ValueName.OfType(written, d.type(),
+                    applied ? null : ConstructionOrigin.own()));
         }
         // A helper or a value of this module, a behavior it reaches, or a name an import let it
         // write without a qualifier — asked of the one table that says which, so that a reader
         // listing what may be written here reads the same answer this does.
-        return reaches.get(written);
+        return reachable.reachIn(reaches, written);
     }
 
     /**
@@ -1368,14 +1400,23 @@ public final class Resolve {
             return null;
         }
         WrittenName written = dottedName(fa);
-        ValueName denotes = lookup(written, applied, bound);
-        if (denotes != null) {
-            ValueName resolved = answered(written, denotes);
-            return new Hir.Var.Denoting(written, resolved,
-                    ReachName.of(resolved, written.canonical(), reachable.module()),
-                    written.region());
+        switch (lookup(written, applied, bound)) {
+            case Reach.Reaches(ValueName denotes) -> {
+                ValueName resolved = answered(written, denotes);
+                return new Hir.Var.Denoting(written, resolved,
+                        ReachName.of(resolved, written.canonical(), reachable.module()),
+                        written.region());
+            }
+            // A qualified spelling an import line was to bring in and could not. Said on that line
+            // already, so the chain is answered here rather than taken apart and reported again.
+            case Reach.StandsForNothing _ -> {
+                unanswered();
+                return new Hir.Var.Unanswered(written, written.region());
+            }
+            case Reach.NotInScope _ -> {
+                return unknownMember(fa, written, applied, bound);
+            }
         }
-        return unknownMember(fa, written, applied, bound);
     }
 
     /**
@@ -1429,8 +1470,14 @@ public final class Resolve {
 
     /** What a name used as a value denotes, or null where nothing does — reported here. */
     private ValueName valueName(WrittenName written, Bindings bound) {
-        ValueName denotes = lookup(written, false, bound);
-        return denotes != null ? denotes : nothing(unknownIdentifier(written, bound));
+        return switch (lookup(written, false, bound)) {
+            case Reach.Reaches(ValueName named) -> named;
+            // Already accounted for on the import line that could not bring it in. Counted, so the
+            // module is not emitted, and said nothing about, so the author is not sent to a body
+            // where nothing is wrong.
+            case Reach.StandsForNothing _ -> unanswered();
+            case Reach.NotInScope _ -> nothing(unknownIdentifier(written, bound));
+        };
     }
 
     /**
@@ -1441,8 +1488,11 @@ public final class Resolve {
      * position it was written in is a fact about the source rather than about the name.
      */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
-        ValueName denotes = lookup(call.name(), true, bound);
-        return denotes != null ? denotes : nothing(unknownIdentifier(call.name(), bound));
+        return switch (lookup(call.name(), true, bound)) {
+            case Reach.Reaches(ValueName named) -> named;
+            case Reach.StandsForNothing _ -> unanswered();
+            case Reach.NotInScope _ -> nothing(unknownIdentifier(call.name(), bound));
+        };
     }
 
     /**
@@ -1478,6 +1528,19 @@ public final class Resolve {
      */
     private ValueName nothing(CompileException why) {
         unresolved.add(why);
+        failed++;
+        return null;
+    }
+
+    /**
+     * Records that a name in a body reached nothing, where what is wrong has already been said.
+     *
+     * <p>Counted and not reported. A name an import line was to bring in is in scope reaching
+     * nothing, and the line it came from is where the author was told — so the module is one whose
+     * names did not all come out, which is what {@code failed} is, and nothing further is said
+     * about a body that is not what is wrong.
+     */
+    private ValueName unanswered() {
         failed++;
         return null;
     }
