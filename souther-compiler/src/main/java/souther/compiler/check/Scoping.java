@@ -637,8 +637,8 @@ public final class Scoping {
     }
 
     /** The behaviors this module names through another module's name, by that module. */
-    public static Map<String, Set<String>> borrowed(ModuleUniverse universe, Ast.Module m) {
-        Map<String, String> qualifiers = aliases(m);
+    private static Map<String, Set<String>> borrowed(ModuleUniverse universe, Ast.Module m) {
+        Map<String, String> qualifiers = qualifiersWritten(m);
         Map<String, Set<String>> out = new LinkedHashMap<>();
         for (Ast.Var ref : qualifiedBehaviorRefs(m)) {
             String written = ref.name();
@@ -655,8 +655,20 @@ public final class Scoping {
         return out;
     }
 
-    /** Each {@code import ... as} alias, against the module it stands for. */
-    public static Map<String, String> aliases(Ast.Module m) {
+    /**
+     * Each {@code import ... as} alias against the module its line names, as the source writes
+     * them.
+     *
+     * <p>Not what a qualifier means here. An alias two lines both take is refused and the first
+     * keeps it; this reads every line and the last one wins, so the two answer differently for
+     * exactly the module an author was told about. What a qualifier names is
+     * {@link Scoped#aliases()}, which is what the refusal was applied to.
+     *
+     * <p>Here for finding which modules a module reaches, which is a different question and wants
+     * the wider answer: a line that was refused still names a module this one depends on, and a
+     * cycle running through it is a cycle whether or not the alias stood.
+     */
+    public static Map<String, String> qualifiersWritten(Ast.Module m) {
         Map<String, String> qualifiers = new HashMap<>();
         for (Ast.Import imp : m.imports()) {
             if (imp.alias() != null) {

@@ -17,7 +17,7 @@ package souther.compiler.check;
  * with that type is not a second thing said about the line already refused. One answer for both
  * namespaces cannot say that.
  */
-public sealed interface ResolvedImport {
+sealed interface ResolvedImport {
 
     /** What the subject's own declarations already hold under this spelling. */
     Held held();

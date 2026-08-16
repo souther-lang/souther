@@ -1302,7 +1302,7 @@ public final class Names {
 
     private static List<Dependency> dependencies(Ast.Module m, Set<String> modules) {
         List<Dependency> deps = new ArrayList<>();
-        Map<String, String> qualifiers = Scoping.aliases(m);
+        Map<String, String> qualifiers = Scoping.qualifiersWritten(m);
         for (Ast.Import imp : m.imports()) {
             deps.add(new Dependency(imp.module(), imp.pos()));
         }

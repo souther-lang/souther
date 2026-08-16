@@ -205,10 +205,41 @@ public final class Bodies {
         // And the ones a qualified reference reaches, which claim no bare spelling and so were
         // settled by no contest. They are borrowed all the same: naming a behavior through its
         // module reaches it, and the signature and the injected field come with it.
-        Ast.Module m = db.ask(new Front.Available(module)).value();
-        if (m != null) {
-            Scoping.borrowed(CompilationUniverse.over(db), m)
-                    .forEach((from, names) -> names.forEach(bare -> out.putIfAbsent(bare, from)));
+        for (Reached each : reachedByAQualifier(db, module)) {
+            out.putIfAbsent(each.name(), each.module());
+        }
+        return out;
+    }
+
+    /** One behavior a qualified reference reached, as resolution answered it. */
+    private record Reached(String module, String name, SourcePos at) {}
+
+    /**
+     * The behaviors a qualified reference reaches, as resolution answered them.
+     *
+     * <p>Read off what resolution settled and not off the import lines. Which module a qualifier
+     * names is decided against the aliases a scope was assembled with, where an alias already
+     * answered to is refused and the first line keeps it; walked again over the raw lines, the last
+     * one wins instead — so {@code import app.a as X} followed by a refused {@code import app.b as
+     * X} left {@code X.f} meaning {@code app.a.f} to everything that reads a name and
+     * {@code app.b.f} to everything that collects a signature.
+     *
+     * <p>Kept as the pairs and not folded by the bare name, because two of them under one spelling
+     * is what the rule below is about. Resolution stands each synthesized import where the
+     * reference that asked for it is written, so the place comes with it.
+     */
+    private static List<Reached> reachedByAQualifier(Db db, String module) {
+        List<Reached> out = new ArrayList<>();
+        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(module));
+        if (!resolved.present()) {
+            return out;
+        }
+        for (Hir.Import imp : resolved.value().imports()) {
+            for (Hir.ImportedName each : imp.importedNames()) {
+                if (each.pos() == null) {
+                    out.add(new Reached(imp.module(), each.text(), imp.pos()));
+                }
+            }
         }
         return out;
     }
@@ -291,7 +322,6 @@ public final class Bodies {
             if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.absent();
             }
-            Ast.Module m = db.ask(new Front.Available(name)).value();
             // A behavior's name is a member of the generated class, so two of them cannot share
             // one. Two written lines claiming a spelling are a contest and are settled where
             // claims are; what is left here is a name reached through a qualified reference — it
@@ -302,14 +332,11 @@ public final class Bodies {
                 scoped.value().imports().behaviors()
                         .forEach((each, named) -> from.put(each, named.module()));
             }
-            for (Map.Entry<String, Set<String>> reached
-                    : Scoping.borrowed(CompilationUniverse.over(db), m).entrySet()) {
-                for (String each : reached.getValue()) {
-                    String earlier = from.put(each, reached.getKey());
-                    if (earlier != null && !earlier.equals(reached.getKey())) {
-                        return Answer.absent(collision(each, earlier, reached.getKey(),
-                                namedAt(m, each)));
-                    }
+            for (Reached each : reachedByAQualifier(db, name)) {
+                String earlier = from.put(each.name(), each.module());
+                if (earlier != null && !earlier.equals(each.module())) {
+                    return Answer.absent(
+                            collision(each.name(), earlier, each.module(), each.at()));
                 }
             }
             Map<String, Sig> result = new LinkedHashMap<>();
@@ -335,23 +362,6 @@ public final class Bodies {
                     .hint(new ModuleMessage.ABehaviorsNameIsAlsoItsInjectedField(bare)).build());
         }
 
-        /**
-         * Where the qualified reference that reaches {@code bare} is written.
-         *
-         * <p>The reference and not the import line. There is no line: this is a name reached
-         * through its module, and the import that records the dependency was synthesized at the
-         * module header — which is where this was reported, so an author was sent to the top of
-         * the file and told to take an import off a list that does not have one.
-         */
-        private static SourcePos namedAt(Ast.Module m, String bare) {
-            for (Ast.Var ref : Scoping.qualifiedBehaviorRefs(m)) {
-                String written = ref.name();
-                if (written.substring(written.lastIndexOf('.') + 1).equals(bare)) {
-                    return ref.pos();
-                }
-            }
-            return m.pos();
-        }
     }
 
     /** The behaviors a module borrows that are injection targets where they are declared, so a

@@ -195,9 +195,12 @@ public final class Resolve {
          * three tables: two of those would agree until one of them moved, and nothing would say
          * which had.
          *
-         * <p>A binding in force and a type written as a value are not here. Both are answered before
-         * this table is consulted — the first from the bindings that hold at the position, the
-         * second from the type scope — so neither is a fact about the module.
+         * <p>A binding in force is not here: it is answered from the bindings that hold at the
+         * position, before this is read, and is no fact about the module. Nor is a type written as
+         * a value — but that one is read <em>after</em> this rather than before it. What a spelling
+         * reaches here is settled, and a type of that name is what to do when nothing here answers,
+         * so a data an import brought in no longer takes a spelling this module writes a
+         * {@code let} for.
          */
         public Map<String, ValueName> byName() {
             Map<String, ValueName> reached = new LinkedHashMap<>(helpers);

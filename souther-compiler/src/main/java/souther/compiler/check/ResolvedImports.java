@@ -23,17 +23,24 @@ import java.util.Map;
  * one that says what may be read from the module that has it, and nothing would say which was
  * right. What a spelling means and what may be done about it are one fact.
  *
+ * <p>The result itself does not leave. What is offered is the four answers, each already held
+ * against the subject's declarations — a reader handed the results themselves could take the leave
+ * out of a claim that lost its spelling to a {@code let} written here, which is the capability the
+ * projection exists to withhold. A projection nobody is obliged to use is a rule kept by whoever
+ * remembers it.
+ *
  * <p>What is here is what the lines settled, and not what the module means as a whole: the
  * subject's own declarations are not in it. They are what the projections are held against — a
  * declaration written here takes the spelling in the namespace it is in, and the import keeps the
  * other one, which is what lets a `let` and a data of one name each answer where they belong after
  * the collision has been reported.
  */
-public record ResolvedImports(Map<String, ResolvedImport> byName) {
+public final class ResolvedImports {
 
-    /** Copied, because this ends up inside an answer a compilation remembers. */
-    public ResolvedImports {
-        byName = Collections.unmodifiableMap(new LinkedHashMap<>(byName));
+    private final Map<String, ResolvedImport> byName;
+
+    ResolvedImports(Map<String, ResolvedImport> byName) {
+        this.byName = Collections.unmodifiableMap(new LinkedHashMap<>(byName));
     }
 
     /** Nothing was imported — a module resolved on its own. */
@@ -131,5 +138,23 @@ public record ResolvedImports(Map<String, ResolvedImport> byName) {
             }
         });
         return Collections.unmodifiableMap(out);
+    }
+
+    /** Two of these say the same thing when every spelling settled the same way. Written out
+     *  because this ends up inside an answer a compilation remembers, and an answer that never
+     *  equals the last one is one nothing that read it is kept past. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof ResolvedImports resolved && byName.equals(resolved.byName);
+    }
+
+    @Override
+    public int hashCode() {
+        return byName.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "ResolvedImports" + byName;
     }
 }

@@ -129,16 +129,16 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
      * definition nothing agreed to hand over — which is how the publication rule came to be written
      * twice, once over each representation.
      *
-     * <p>What is asked is where a leave can be made, and not where one can be seen. A leave travels
-     * — the claim that survived the contest carries it, which is what lets the reader redeem
-     * exactly what it was granted — so counting the places that hand one back would count carriers,
-     * and a carrier grants nothing. Making one is what the language can close: the constructor is
-     * private, and it is declared inside the reading, so the code that can write a leave is the
-     * code that settles what a module publishes. Package-private would have left every class beside
-     * that one able to write its own, which is a rule kept by nobody looking.
+     * <p>What is asked is where a leave is made, and not where one can be seen. A leave travels —
+     * the claim that survived the contest carries it, which is what lets the reader redeem exactly
+     * what it was granted — so counting the places that hand one back would count carriers, and a
+     * carrier grants nothing. The constructor is private and declared inside the reading, which
+     * closes it to one file; asked of the source, the places that call it number one. Package
+     * boundaries would have left every class beside the reading able to write its own, and a check
+     * on the shape of the API would miss a second one written next to the first.
      */
     @Test
-    void onlyAReadingSaysADefinitionIsPublished() {
+    void onlyAReadingSaysADefinitionIsPublished() throws IOException {
         Class<?> leave = ModuleUniverse.InSight.Read.PublishedHelper.class;
         for (Constructor<?> each : leave.getDeclaredConstructors()) {
             assertTrue(Modifier.isPrivate(each.getModifiers()),
@@ -148,18 +148,16 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
         assertEquals(ModuleUniverse.InSight.Read.class, leave.getEnclosingClass(),
                 "a leave is written by what grants it");
         List<String> minting = new ArrayList<>();
-        for (Class<?> each : compiled()) {
-            for (Executable member : members(each)) {
-                if (member instanceof Method method && Modifier.isStatic(method.getModifiers())
-                        && !Modifier.isPrivate(method.getModifiers())
-                        && mentioned(method.getGenericReturnType()).contains(leave)) {
-                    minting.add(each.getName() + "#" + member.getName());
-                }
+        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            String text = read(source);
+            int at = text.indexOf("new PublishedHelper(");
+            while (at >= 0) {
+                minting.add(source.getFileName().toString());
+                at = text.indexOf("new PublishedHelper(", at + 1);
             }
         }
-        assertEquals(List.of(), minting,
-                "nothing hands a leave out to whoever asks: a static one is a door anybody may"
-                        + " walk through, and a private one is a reader of what was granted");
+        assertEquals(List.of("ModuleUniverse.java"), minting,
+                "a leave is written where publication is settled, and nowhere else");
     }
 
     /**
