@@ -3,8 +3,15 @@ package souther.lsp.analysis;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.Compiler;
+import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Requirements;
+import souther.compiler.check.Sig;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SpecImplementation;
+import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
@@ -36,7 +43,9 @@ import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
+import souther.compiler.cst.TopLevelForm;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.fmt.Skeleton;
 import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
@@ -53,6 +62,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -95,6 +105,9 @@ public final class Analyzer {
      * said. Held across edits so completion has something to offer while the document being typed in
      * is held out of the compile for its syntax errors. */
     private final NamesFromElsewhere elsewhere = new NamesFromElsewhere();
+
+    /** What the last compile that could answer said each document owes a declaration for. */
+    private final LastAnswered<List<CompletionItem>> behaviorsOwed = new LastAnswered<>();
 
     /**
      * How much of what the rows cover this editor was told to measure. Off by default.
@@ -284,6 +297,7 @@ public final class Analyzer {
     private Compilation compileOf(ModuleGraph graph, souther.compiler.meta.ModulePath path,
                                   Map<String, String> sources, Set<String> broken) {
         elsewhere.forgetAllBut(graph.uris());
+        behaviorsOwed.forgetAllBut(graph.uris());
         readings.keySet().retainAll(Set.copyOf(graph.uris()));
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
             workspaceCompile = Compilation.ofDocuments(sources, broken, path);
@@ -1228,10 +1242,244 @@ public final class Analyzer {
         for (CompletionItem item : fromElsewhere) {
             byLabel.putIfAbsent(item.label(), item);
         }
+        // Ahead of the keywords, so where a declaration may be written the offer is the declaration
+        // rather than the word it starts with. Inside a definition none of these are offered and the
+        // word stands, which is what a `let` binding in a block is written with.
+        for (CompletionItem item : declarationsToWrite(uri, root, cursor, compilation, module)) {
+            byLabel.putIfAbsent(item.label(), item);
+        }
         for (String keyword : CstLexer.keywords()) {
             byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD, null));
         }
         return new ArrayList<>(byLabel.values());
+    }
+
+    /**
+     * The declarations that may be written at the cursor.
+     *
+     * <p>Nothing where the cursor is inside a definition: what may be written there is an
+     * expression, and a declaration offered inside one is an offer to write a syntax error. At the
+     * file level, the forms whose place in a file the cursor is still in — a header opens a file, an
+     * import follows it, and a body item may be written wherever one may.
+     *
+     * <p>Where the compile can say what this module declares, a behavior with no implementation is
+     * offered the {@code let} its signature describes, and every behavior is offered a row. Where it
+     * cannot — which is every keystroke that leaves the document unparseable — the forms are still
+     * offered, stating what they are and nothing that was not read.
+     */
+    private List<CompletionItem> declarationsToWrite(String uri, SyntaxNode root, int cursor,
+                                                     Compilation compilation, String module) {
+        if (enclosingDef(root, cursor) != null) {
+            return List.of();
+        }
+        List<CompletionItem> out = new ArrayList<>();
+        Set<TopLevelForm.Region> here = regionsAt(root, cursor);
+        for (TopLevelForm form : TopLevelForm.values()) {
+            if (here.contains(form.region())) {
+                built(form.starter(), CompletionItem.SNIPPET, null,
+                        DeclarationSkeletons.fixed(form)).ifPresent(out::add);
+            }
+        }
+        // Through the same gate. A declaration written from a signature stands where a declaration
+        // stands, and knowing which one it is does not make it writable anywhere else.
+        if (here.contains(TopLevelForm.Region.BODY)) {
+            out.addAll(behaviorsToWrite(uri, compilation, module));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * What the behaviors of {@code module} are still owed, as declarations to write.
+     *
+     * <p>Two sets, not one. An implementation is owed by a behavior written as a signature with
+     * nothing implementing it, which is {@link Requirements#injected} — the same question the
+     * emitter asks about what it has to be given. A row may be written for any behavior at all: a
+     * composition has no implementation to offer, since it is its own, and has rows like anything
+     * else.
+     */
+    private List<CompletionItem> behaviorsToWrite(String uri, Compilation compilation,
+                                                  String module) {
+        List<CompletionItem> answered =
+                behaviorsOwed.of(uri, module, () -> askBehaviorsToWrite(compilation, module));
+        return answered == null ? List.of() : answered;
+    }
+
+    /**
+     * The same, asked of the compile — null where it cannot say what this module declares.
+     *
+     * <p>Null for each of the three questions going unanswered, and not only for the first. A
+     * module's requirements not being answered is not that module requiring nothing: a row written
+     * from that would leave out the stand-in its target needs, which is E1908 the moment it is
+     * completed. Answering nothing is what lets the last answer that was given stand.
+     */
+    private List<CompletionItem> askBehaviorsToWrite(Compilation compilation, String module) {
+        if (module == null) {
+            return null;
+        }
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Map<String, List<BehaviorRequirement>> requirements =
+                compilation.db().ask(new Bodies.Requirements(module)).value();
+        Map<String, Sig> signatures = compilation.db().ask(new Bodies.Signatures(module)).value();
+        if (prepared == null || requirements == null || signatures == null) {
+            return null;
+        }
+        List<CompletionItem> out = new ArrayList<>();
+        for (Hir.BehaviorDef declared : prepared.behaviors()) {
+            implementationToWrite(prepared, declared, module).ifPresent(out::add);
+            rowToWrite(prepared, declared, signatures, requirements, module).ifPresent(out::add);
+        }
+        return out;
+    }
+
+    /** The {@code let} a behavior is owed, where it is owed one. */
+    private static Optional<CompletionItem> implementationToWrite(
+            Prepared prepared, Hir.BehaviorDef declared, String module) {
+        if (!(declared instanceof Hir.SpecBehavior behavior) || !prepared.injected(behavior)) {
+            return Optional.empty();
+        }
+        List<SpecImplementation.Parameter> parameters = SpecImplementation.parameters(behavior);
+        if (parameters.contains(new SpecImplementation.Parameter.Unanswered())) {
+            // A dependency naming nothing settles no parameter, and a skeleton stating one it did
+            // not read would be this server inventing it.
+            return Optional.empty();
+        }
+        return built(TopLevelForm.FN.starter() + " " + behavior.name(), CompletionItem.SNIPPET,
+                module, DeclarationSkeletons.implementing(behavior.name(), parameters));
+    }
+
+    /**
+     * A row for a behavior: as many arguments as it takes, and what nothing stands in for.
+     *
+     * <p>How many it takes is the signature's, which is what a row is held to whether the behavior
+     * is written as one or composed out of others — a composition takes what its first stage takes,
+     * and nothing here works that out a second time. What it depends on is the same:
+     * {@link Bodies.Requirements} carries a composition's stages' requirements as its own, so a row
+     * for one supplies what the stages want.
+     *
+     * <p>A behavior that is itself injected requires nothing and is not a key there — the one place
+     * a name being missing says something rather than being something missing. Which of the two it
+     * is, is asked of the behavior rather than read off the absence: a name that is not there for
+     * any other reason is an answer that does not hold together, and a row written as though it
+     * required nothing would state no stand-in for what it depends on.
+     */
+    private static Optional<CompletionItem> rowToWrite(
+            Prepared prepared, Hir.BehaviorDef declared, Map<String, Sig> signatures,
+            Map<String, List<BehaviorRequirement>> requirements, String module) {
+        Sig sig = signatures.get(declared.name());
+        if (sig == null) {
+            return Optional.empty();
+        }
+        List<BehaviorRequirement> required = List.of();
+        if (!prepared.injected(declared)) {
+            required = requirements.get(declared.name());
+            if (required == null) {
+                return Optional.empty();
+            }
+        }
+        List<String> unsupplied = ExampleProvisioning.unsupplied(List.of(),
+                Requirements.names(required), prepared.forExamples());
+        return built(TopLevelForm.EXAMPLE.starter() + " " + declared.name(),
+                CompletionItem.SNIPPET, module,
+                DeclarationSkeletons.exampleFor(declared.name(), argumentsOf(declared, sig),
+                        unsupplied));
+    }
+
+    /**
+     * What to write in each of a row's argument places.
+     *
+     * <p>How many there are is the signature's. What each is called is a label and nothing more —
+     * what stands there is a value, not the parameter — so it is taken from the declaration where
+     * there is one to take it from, and held to the count rather than deciding it. A composition
+     * names no parameters of its own, and a row for one says what it takes without saying what its
+     * first stage happened to call them.
+     */
+    private static List<String> argumentsOf(Hir.BehaviorDef declared, Sig sig) {
+        List<String> labels = new ArrayList<>();
+        if (declared instanceof Hir.SpecBehavior behavior
+                && behavior.params().size() == sig.ins().size()) {
+            for (Hir.Param param : behavior.params()) {
+                labels.add(param.name());
+            }
+            return labels;
+        }
+        for (int i = 0; i < sig.ins().size(); i++) {
+            labels.add("arg");
+        }
+        return labels;
+    }
+
+    /**
+     * An item writing {@code parts}, or nothing where they do not make a declaration.
+     *
+     * <p>Fail-open, deliberately. A skeleton is refused where the tokens do not parse or where the
+     * formatter did not write back what it was given, and neither is about what an author typed:
+     * every name in one comes from a declaration the compiler read, so both mean a defect in the
+     * formatter or the grammar. What that costs here is one candidate fewer, which nothing says out
+     * loud — this server has no channel to say it on, since its output is the protocol.
+     *
+     * <p>Taken over the alternative, which is to let it out and lose the whole list: an editor would
+     * be left with no completion at all, for every request against that document, over a candidate
+     * that was never the one being asked for. What guards against it going unnoticed is that every
+     * form is built in a test, and a behavior's is built over each model those tests are written
+     * against.
+     */
+    private static Optional<CompletionItem> built(String label, int kind, String detail,
+                                                  List<Skeleton.Part> parts) {
+        try {
+            return Optional.of(new CompletionItem(label, kind, detail, Skeleton.of(parts)));
+        } catch (Skeleton.Mismatch _) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * The places in a file the cursor is in.
+     *
+     * <p>A file is read as a header, then its imports, then its body, and a form may be written at
+     * the cursor when writing it there leaves the file still in that order. So both sides of the
+     * cursor are read: what stands before it says what it is past, and what stands after it says
+     * what it may not be written in front of. An import offered above one already written is an
+     * offer to write a file whose imports are not together, and a definition offered above one is an
+     * offer to write a definition the imports come after.
+     *
+     * <p>A header is offered only to a file with none. There is one, it opens the file, and a second
+     * is not something to write.
+     */
+    private static Set<TopLevelForm.Region> regionsAt(SyntaxNode root, int cursor) {
+        int headerEnds = -1;
+        boolean hasHeader = false;
+        int lastImportEnds = -1;
+        int firstDefinition = Integer.MAX_VALUE;
+        boolean anythingBefore = false;
+        for (SyntaxNode item : root.childNodes()) {
+            // Where the item is written, not where its node begins: a node reaches back over the
+            // blank line in front of it, and a cursor on that line is in front of the item.
+            int written = writtenFrom(item);
+            if (written < 0) {
+                continue;
+            }
+            anythingBefore |= written < cursor;
+            switch (item.kind()) {
+                case MODULE_HEADER, EXAMPLES_FILE_HEADER -> {
+                    hasHeader = true;
+                    headerEnds = Math.max(headerEnds, item.end());
+                }
+                case IMPORT_DECL -> lastImportEnds = Math.max(lastImportEnds, item.end());
+                default -> firstDefinition = Math.min(firstDefinition, written);
+            }
+        }
+        Set<TopLevelForm.Region> here = new LinkedHashSet<>();
+        if (!hasHeader && !anythingBefore) {
+            here.add(TopLevelForm.Region.FILE_HEADER);
+        }
+        boolean pastTheHeader = cursor >= headerEnds;
+        if (pastTheHeader && cursor <= firstDefinition) {
+            here.add(TopLevelForm.Region.PRELUDE);
+        }
+        if (pastTheHeader && cursor >= lastImportEnds) {
+            here.add(TopLevelForm.Region.BODY);
+        }
+        return here;
     }
 
     /**
@@ -1271,16 +1519,54 @@ public final class Analyzer {
         return labels;
     }
 
-    /** The top-level definition whose span contains {@code offset}, or {@code null} at the file level. */
+    /** The top-level definitions, each of which is written as one thing and holds what it binds. */
+    private static final Set<SyntaxKind> DEFINITIONS = Set.of(
+            SyntaxKind.DATA_DEF, SyntaxKind.BEHAVIOR_DEF, SyntaxKind.FN_DEF,
+            SyntaxKind.EXAMPLE_DEF, SyntaxKind.FAKE_DEF);
+
+    /**
+     * The top-level definition whose text contains {@code offset}, or {@code null} at the file level.
+     *
+     * <p>Its text, and not its span. A node reaches back over the blank lines and comments in front
+     * of it — the tree covers every character, and they belong to something — so a cursor on the
+     * empty line above a definition is inside its span while being nowhere near it. That line is
+     * where the next declaration is written, and what is bound inside the definition below is bound
+     * nowhere there.
+     *
+     * <p>The rows of an {@code example} and of a {@code fake} are definitions here as much as a
+     * {@code let} is. What is written in one is an expression — a row's inputs, what it expects, what
+     * a table answers with — so a declaration offered inside one would be offered inside an
+     * expression, and a binding written in a row's block holds there and is in force at a cursor in
+     * it.
+     */
     private SyntaxNode enclosingDef(SyntaxNode root, int offset) {
         for (SyntaxNode def : root.childNodes()) {
-            if ((def.kind() == SyntaxKind.DATA_DEF || def.kind() == SyntaxKind.BEHAVIOR_DEF
-                    || def.kind() == SyntaxKind.FN_DEF)
-                    && offset >= def.start() && offset <= def.end()) {
+            if (!DEFINITIONS.contains(def.kind())) {
+                continue;
+            }
+            int written = writtenFrom(def);
+            if (written >= 0 && offset >= written && offset <= def.end()) {
                 return def;
             }
         }
         return null;
+    }
+
+    /** Where {@code node}'s own text begins: its first code token, past the trivia in front of it. */
+    private static int writtenFrom(SyntaxNode node) {
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxToken token) {
+                if (!token.kind().isTrivia()) {
+                    return token.start();
+                }
+            } else if (e instanceof SyntaxNode child) {
+                int written = writtenFrom(child);
+                if (written >= 0) {
+                    return written;
+                }
+            }
+        }
+        return -1;
     }
 
     /**

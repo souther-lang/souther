@@ -257,12 +257,13 @@ public final class SpecChecker {
                 throw new Unanswerable(required.pos());
             }
         }
+        // What this fn has to take, asked of the behavior rather than added up here (§fn-declaration).
+        List<SpecImplementation.Parameter> shape = SpecImplementation.parameters(spec);
         int nBusiness = spec.params().size();
-        int nReq = spec.dependsOn().size();
-        if (fn.params().size() != nBusiness + nReq) {
+        if (fn.params().size() != shape.size()) {
             throw CompileException.of(Diagnostic
                             .at(fn.pos())
-                            .say(new BehaviorMessage.TheImplementationTakesAnotherNumberOfParameters(fn.name(), String.valueOf(fn.params().size()), spec.name(), String.valueOf(nBusiness), String.valueOf(nReq))).build());
+                            .say(new BehaviorMessage.TheImplementationTakesAnotherNumberOfParameters(fn.name(), String.valueOf(fn.params().size()), spec.name(), String.valueOf(nBusiness), String.valueOf(shape.size() - nBusiness))).build());
         }
         for (Hir.FnParam p : fn.params()) {
             // a pattern in parameter position names a type, but it is not an annotation: it opens
@@ -272,18 +273,20 @@ public final class SpecChecker {
                                 .at(p.pos()).say(new BehaviorMessage.AnImplementationsParametersTakeTheirTypesFromIt(fn.name(), spec.name(), p.name())).build());
             }
         }
-        for (int i = 0; i < nReq; i++) {
-            // A clause naming nothing names no parameter for this one to be out of order against;
-            // it is reported where it is written, and the parameters beside it are still held to
-            // the ones that do.
-            if (!(spec.dependsOn().get(i).answered() instanceof Hir.Var.Denoting named)) {
-                continue;
-            }
-            String got = fn.params().get(nBusiness + i).name();
-            String want = named.bare();
-            if (!got.equals(want)) {
-                throw CompileException.of(Diagnostic
-                                .at(fn.pos()).say(new BehaviorMessage.AnInjectedParameterIsOutOfOrder(fn.name(), got, want)).build());
+        for (int i = 0; i < shape.size(); i++) {
+            switch (shape.get(i)) {
+                // An input's name is the implementation's to choose.
+                case SpecImplementation.Parameter.Input _ -> { }
+                // A clause naming nothing names no parameter for this one to be out of order
+                // against, and it was refused above, at the clause rather than at this list.
+                case SpecImplementation.Parameter.Unanswered _ -> { }
+                case SpecImplementation.Parameter.Injected injected -> {
+                    String got = fn.params().get(i).name();
+                    if (!got.equals(injected.name())) {
+                        throw CompileException.of(Diagnostic
+                                        .at(fn.pos()).say(new BehaviorMessage.AnInjectedParameterIsOutOfOrder(fn.name(), got, injected.name())).build());
+                    }
+                }
             }
         }
 

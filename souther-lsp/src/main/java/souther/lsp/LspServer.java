@@ -11,6 +11,7 @@ import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
+import souther.lsp.protocol.Insertion;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
 import souther.lsp.protocol.Position;
@@ -39,6 +40,9 @@ public final class LspServer {
     private final MessageConnection conn;
     private final DocumentStore documents = new DocumentStore();
     private final Analyzer analyzer = new Analyzer();
+
+    /** Whether this client said it reads completion placeholders. False until it says so. */
+    private boolean readsSnippets;
     private final Workspace workspace = new Workspace();
     private int nextRequestId = 1;
 
@@ -180,6 +184,28 @@ public final class LspServer {
         }
         workspace.setRoots(roots);
         analyzer.measure(adequacyAsked(params));
+        readsSnippets = snippetSupportAsked(params);
+    }
+
+    /**
+     * Whether the client said it reads completion placeholders, from
+     * {@code capabilities.textDocument.completion.completionItem.snippetSupport}.
+     *
+     * <p>False unless it said so, which is the protocol's default and not a guess: a client sent a
+     * snippet it did not ask for gets the placeholders in its buffer as characters. Nothing else the
+     * client declares is read — what this server answers does not depend on it — so this is the one
+     * thing asked of the handshake beyond where the workspace is.
+     */
+    private static boolean snippetSupportAsked(JsonNode params) {
+        JsonNode at = params == null ? null : params.get("capabilities");
+        for (String field : List.of("textDocument", "completion", "completionItem",
+                "snippetSupport")) {
+            if (at == null || at.isNull()) {
+                return false;
+            }
+            at = at.get(field);
+        }
+        return at != null && at.isBoolean() && at.asBoolean();
     }
 
     /**
@@ -330,6 +356,14 @@ public final class LspServer {
             // detail as an empty line beside the label.
             if (item.detail() != null) {
                 sent.put("detail", item.detail());
+            }
+            if (item.writes() != null) {
+                sent.put("insertText", readsSnippets
+                        ? Insertion.snippet(item.writes())
+                        : Insertion.plain(item.writes()));
+                if (readsSnippets) {
+                    sent.put("insertTextFormat", Insertion.SNIPPET_FORMAT);
+                }
             }
             items.add(sent);
         }

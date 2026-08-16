@@ -11,9 +11,7 @@ import souther.lsp.protocol.CompletionItem;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -44,8 +42,8 @@ import java.util.Set;
  */
 final class NamesFromElsewhere {
 
-    /** Document URI → what the last compile that could answer said reaches it from elsewhere. */
-    private final Map<String, List<CompletionItem>> byDocument = new LinkedHashMap<>();
+    /** What the last compile that could answer said reaches each document from elsewhere. */
+    private final LastAnswered<List<CompletionItem>> byDocument = new LastAnswered<>();
 
     /**
      * The candidates {@code uri} reaches from outside itself.
@@ -57,12 +55,9 @@ final class NamesFromElsewhere {
      */
     List<CompletionItem> of(Compilation compilation, String uri, String module,
                             Set<String> declaredHere) {
-        List<CompletionItem> answered = ask(compilation, module, declaredHere);
-        if (answered == null) {
-            return byDocument.getOrDefault(uri, List.of());
-        }
-        byDocument.put(uri, answered);
-        return answered;
+        List<CompletionItem> answered =
+                byDocument.of(uri, module, () -> ask(compilation, module, declaredHere));
+        return answered == null ? List.of() : answered;
     }
 
     /**
@@ -104,7 +99,7 @@ final class NamesFromElsewhere {
     /** Forgets every document the workspace no longer holds, so a file that was deleted or renamed
      * leaves no names behind. */
     void forgetAllBut(Collection<String> uris) {
-        byDocument.keySet().retainAll(Set.copyOf(uris));
+        byDocument.forgetAllBut(uris);
     }
 
     /** What kind of declaration an editor is being offered. Read off the declaration, so a sum is
