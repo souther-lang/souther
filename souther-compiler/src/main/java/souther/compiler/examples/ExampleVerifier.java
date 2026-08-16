@@ -1087,13 +1087,15 @@ public final class ExampleVerifier {
             return null;
         }
         BoundaryOutput outType = depSig.out();
-        // a value fake given inline on the row: `with dep = value`
-        for (Hir.With w : row.withs()) {
-            if (w.dep().equals(depName)) {
+        // What stands in, and where it was written, is ExampleProvisioning's; building the value it
+        // answers with is this reader's.
+        return switch (ExampleProvisioning.standingIn(row.withs(), depName, module)) {
+            case ExampleProvisioning.Standin.OnTheRow onTheRow -> {
+                Hir.With w = onTheRow.written();
                 try {
                     Object value = fixtures.buildFixture(w.value(), outType).value();
                     // a constant: it ignores its inputs
-                    return new DependencyStandin(depName, dep.params().size(), _ -> value);
+                    yield new DependencyStandin(depName, dep.params().size(), _ -> value);
                 } catch (FixtureException fe) {
                     // The row does supply a fake. What failed is building its value, which is a
                     // different problem from a dependency nothing stands in for.
@@ -1101,20 +1103,17 @@ public final class ExampleVerifier {
                             .say(new ExampleMessage.TheFakeValueCouldNotBeBuilt(depName,
                                     fe.getMessage()))
                             .build());
-                    return null;
+                    yield null;
                 }
             }
-        }
-        // a function fake given as a `fake dep | table` declaration
-        for (souther.compiler.check.Prepared.FakeTable table : module.fakes()) {
-            Hir.Fake fk = table.read();
-            if (fk.target().equals(depName)) {
-                return tableStandin(fixtures, fk, dep, depSig);
+            case ExampleProvisioning.Standin.InTheModule inTheModule ->
+                    tableStandin(fixtures, inTheModule.table().read(), dep, depSig);
+            case ExampleProvisioning.Standin.Nothing _ -> {
+                out.add(fakeMissingDiag(target, req, row, "add `with " + depName
+                        + " = ...` on the row, or a `fake " + depName + "` table"));
+                yield null;
             }
-        }
-        out.add(fakeMissingDiag(target, req, row, "add `with " + depName
-                + " = ...` on the row, or a `fake " + depName + "` table"));
-        return null;
+        };
     }
 
     /**
