@@ -363,7 +363,16 @@ public final class Prelude {
      * A case of a registered sum is registered with it.
      */
     private static SyntaxSymbols symbolsOf(Ast.Module m, String resource) {
-        Map<String, Ast.Def> declared = Registry.ownDefs(m);
+        DeclaredNames.Index<Ast.Def> indexed = Registry.indexed(m);
+        if (!indexed.refusals().isEmpty()) {
+            // The standard library is this compiler's own source. A declaration it may not have is
+            // nobody's mistake to be told about: it is a resource shipped in the jar being wrong,
+            // which is refused where it is loaded like the rest of what is checked here.
+            throw new IllegalStateException("prelude resource " + resource + " carries a"
+                    + " declaration the indexing refused: `"
+                    + indexed.refusals().get(0).refused().name() + "`");
+        }
+        Map<String, Ast.Def> declared = indexed.declarations();
         if (declared.isEmpty()) {
             return SyntaxSymbols.none();   // signatures over primitives and type variables only
         }
@@ -385,7 +394,9 @@ public final class Prelude {
             scope.put(name, new Denotation.Denotes(TypeSymbol.runtime(name)));
         }
         return SyntaxSymbols.of(TypeSymbol.RUNTIME,
-                Registry.ofWritten(Map.of(TypeSymbol.RUNTIME, m)), scope, Map.of());
+                Registry.ofRead(Map.of(TypeSymbol.RUNTIME, new Registry.Declared<>(
+                        declared, Registry.baseNames(m.exposing())))),
+                scope, Map.of());
     }
 
     /** The runtime-backed declaration {@code name} denotes, or null when there is none. */

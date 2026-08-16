@@ -106,6 +106,10 @@ public sealed interface ModuleMessage extends Message {
      *  fail is the publishing project's to see in its own build; here they come to the same thing. */
     record AnImportLineOfItsCannotBeReadHere(String name, String from) implements ModuleMessage, Supporting {}
 
+    /** Why: what it declares is not a set of declarations one module may have. Which rule it breaks
+     *  is the publishing project's to see in its own build; here they come to the same thing. */
+    record ADeclarationOfItsCannotBeReadHere(String declaration) implements ModuleMessage, Supporting {}
+
     record RebuildItOrCompileAgainstWhatBuiltIt(String module) implements ModuleMessage, Supporting {}
 
     @Code(DiagnosticCode.E1504)

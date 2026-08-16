@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.CompileException;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 
@@ -33,23 +34,33 @@ public final class Symbols implements NameSense {
         return new Symbols("", Registry.empty(), Map.of(), Map.of());
     }
 
-    /** A lone module, compiled with nothing else in sight: bare names are its own definitions. */
+    /**
+     * A lone module, compiled with nothing else in sight: bare names are its own definitions.
+     *
+     * <p>Indexed here, so that what comes back is a symbol table over declarations this module has,
+     * and refused here where it may not have one. Refused as the report and not as a fault: a module
+     * of this compilation reaches this stage carrying a declaration it may not have, because
+     * {@code Names} reports that one and goes on with the rest, and resolution resolves the module
+     * as it was written. So the author holds the file, and what to do about it is the same thing
+     * {@link SyntaxSymbols#of(souther.compiler.ast.Ast.Module)} says one representation earlier.
+     */
     public static Symbols of(Hir.Module m) {
+        DeclaredNames.Index<Hir.Def> declared = Registry.indexed(m);
+        if (!declared.refusals().isEmpty()) {
+            throw CompileException.of(
+                    DeclarationRefusals.reportedAsResolved(declared.refusals().get(0)));
+        }
         Map<String, Denotation> names = new HashMap<>();
-        for (Hir.Def def : TypeChecker.ownDefs(m).values()) {
+        for (Hir.Def def : declared.declarations().values()) {
             names.put(def.name(), new Denotation.Denotes(def.declares()));
         }
-        return new Symbols(m.name(), Registry.of(Map.of(m.name(), m)), names, Map.of());
+        return new Symbols(m.name(),
+                Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
+                        declared.declarations(), Registry.baseNames(m.exposing())))),
+                names, Map.of());
     }
 
-    /** A module compiled against a registry: {@code names} is what its bare names mean (own plus
-     * imported) and {@code aliases} maps each {@code import ... as} alias to its module. */
-    public static Symbols of(Hir.Module m, Map<String, Hir.Module> registry,
-                             Map<String, Denotation> names, Map<String, String> aliases) {
-        return of(m.name(), Registry.of(registry), names, aliases);
-    }
-
-    /** As {@link #of(Hir.Module, Map, Map, Map)}, over a registry that reads its declarations
+    /** A module compiled over a registry that reads its declarations
      * however it likes — the form a query-backed compilation uses, where a module's definitions are
      * asked for one at a time rather than held in a map.
      *

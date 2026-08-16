@@ -163,10 +163,13 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
      * <p>Indexing refuses a name written twice, and a module read back from another build can carry
      * one: it was published under the rules of the compiler that built it. There is nobody to tell —
      * the source is not this compile's — so it is a module this reader cannot read, and a reader of
-     * <em>that</em> is what this holds. The second ask is the one that matters. A registry that works
-     * a module's declarations out when it is first asked raises again for the next asker, and the
-     * next asker is a module naming it with a qualifier while it is being resolved, which is past
-     * everything that answers absences.
+     * <em>that</em> is what this holds.
+     *
+     * <p>The second ask is the one that matters. This was settled at the moment a universe was
+     * assembled, by catching what the indexing raised; a module named with a qualifier is asked for
+     * again while some other module is being resolved, and the raise came back from a lookup, past
+     * everything that answers absences. It is settled where the module is read now, and what a
+     * lookup answers is what that reading left.
      */
     @Test
     void aModuleWhoseDeclarationsCannotBeIndexedIsAnAbsenceWhereverItIsReachedFrom() {

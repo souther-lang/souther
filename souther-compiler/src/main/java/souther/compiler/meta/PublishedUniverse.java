@@ -7,8 +7,6 @@ import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
-import souther.compiler.diag.CompileException;
-import souther.compiler.types.ValueName;
 import souther.compiler.query.Front;
 
 import java.util.ArrayDeque;
@@ -40,9 +38,10 @@ import java.util.Set;
 public final class PublishedUniverse {
 
     private final PublishedClasses classes;
-    private final Map<String, Ast.Module> written = new LinkedHashMap<>();
-    private final Map<String, Map<String, ValueName.Stdlib>> libraryNames = new LinkedHashMap<>();
-    private final Map<String, Set<String>> injected = new LinkedHashMap<>();
+    // What each module gave, as the one value a reading answers with. Three maps filled at one
+    // statement apiece is three places to remember, and the fact they hold is one fact: this is
+    // what reading that module came back with.
+    private final Map<String, ReadableModule> read = new LinkedHashMap<>();
     private final Map<String, Read> resolved = new LinkedHashMap<>();
     private final Set<String> unreadable = new LinkedHashSet<>();
     // What was reached and gave no reading, told apart the way a universe tells them apart: a name
@@ -73,13 +72,13 @@ public final class PublishedUniverse {
             return already;
         }
         readReaching(module);
-        if (!written.containsKey(module)) {
+        if (!read.containsKey(module)) {
             unreadable.add(module);
             return null;
         }
         ModuleUniverse universe = universe();
-        Registry<Ast.Def> registry = declaredBy(universe);
-        for (String name : Set.copyOf(written.keySet())) {
+        Registry<Ast.Def> registry = declaredBy();
+        for (String name : Set.copyOf(read.keySet())) {
             if (resolved.containsKey(name)) {
                 continue;
             }
@@ -87,7 +86,7 @@ public final class PublishedUniverse {
             if (hir == null) {
                 unreadable.add(name);
             } else {
-                resolved.put(name, new Read(hir, injected.getOrDefault(name, Set.of())));
+                resolved.put(name, new Read(hir, read.get(name).injectedBehaviors()));
             }
         }
         return resolved.get(module);
@@ -116,25 +115,23 @@ public final class PublishedUniverse {
         Set<String> tried = new LinkedHashSet<>(Set.of(module));
         while (!toRead.isEmpty()) {
             String name = toRead.removeFirst();
-            if (written.containsKey(name) || unreadable.contains(name)) {
+            if (read.containsKey(name) || unreadable.contains(name)) {
                 continue;
             }
             // Which of the two a name is comes off the reading itself. It used to be asked again of
             // the classes afterwards, because a reading that failed answered null however it failed.
             Readback readback = ModuleReadback.read(name, classes);
-            if (!(readback instanceof Readback.Ready(ReadableModule read))) {
+            if (!(readback instanceof Readback.Ready(ReadableModule readable))) {
                 unreadable.add(name);
                 beyondReading.put(name, readback instanceof Readback.Unreadable
                         ? ModuleUniverse.InSight.UNREADABLE : ModuleUniverse.InSight.UNKNOWN);
                 continue;
             }
-            written.put(name, read.module());
-            libraryNames.put(name, read.libraryNames());
-            injected.put(name, read.injectedBehaviors());
+            read.put(name, readable);
             // Which modules a module's declarations name, answered where the compiler answers it:
             // an import line names one, and so does a type or a behavior written with a qualifier,
             // which needs no import at all.
-            for (String reaches : Front.reaches(read.module()).keySet()) {
+            for (String reaches : Front.reaches(readable.module()).keySet()) {
                 if (tried.add(reaches)) {
                     toRead.addLast(reaches);
                 }
@@ -156,45 +153,35 @@ public final class PublishedUniverse {
     /**
      * What was read, as the universe a module is resolved against.
      *
-     * <p>Every module is indexed here, once, and this is the only place indexing one can fail. A
-     * registry that works a module's declarations out when it is first asked raises wherever it is
-     * asked from, and a reader that caught the first ask was caught by the second: a module named
-     * with a qualifier is asked for again while some other module is being resolved, and the raise
-     * came back out of a reading that answers absences.
+     * <p>Nothing is worked out here. A module that came back readable came back indexed — which
+     * declarations it has is settled while it is read, and a set of declarations one module may not
+     * have is an artifact this compiler will not read, said as that. So a module is in sight with
+     * what it declares, or it is one of the two kinds of absence, and there is no third thing that
+     * can go wrong at the moment a universe is assembled.
      */
     private ModuleUniverse universe() {
         Map<String, ModuleUniverse.InSight> modules = new LinkedHashMap<>(beyondReading);
-        for (Map.Entry<String, Ast.Module> each : written.entrySet()) {
-            modules.put(each.getKey(), sighted(each.getValue()));
+        for (Map.Entry<String, ReadableModule> each : read.entrySet()) {
+            modules.put(each.getKey(), new ModuleUniverse.InSight.Read(
+                    each.getValue().module(), each.getValue().declarations()));
         }
         return new ModuleUniverse.OfWhatIsRead(modules);
     }
 
-    /** One module of that universe: what it wrote and what it declares, or nothing to be built on. */
-    private static ModuleUniverse.InSight sighted(Ast.Module module) {
-        try {
-            return new ModuleUniverse.InSight.Read(module, Registry.ownDefs(module));
-        } catch (CompileException | IllegalArgumentException _) {
-            return ModuleUniverse.InSight.UNREADABLE;
-        }
-    }
-
     /**
-     * What resolution reads other modules by: the declarations this universe settled, and nothing
+     * What resolution reads other modules by: the declarations each reading settled, and nothing
      * worked out again.
      *
-     * <p>Built from the universe rather than beside it, so what a scope says a module declares and
-     * what resolution finds there are one answer. A module the universe has nothing to give for is
-     * not among them, and is read the way a module nobody has is read.
+     * <p>Built from the same readings the universe is built from, so what a scope says a module
+     * declares and what resolution finds there are one answer rather than two that happen to agree.
      */
-    private Registry<Ast.Def> declaredBy(ModuleUniverse universe) {
-        Map<String, Map<String, Ast.Def>> declared = new LinkedHashMap<>();
-        for (String name : written.keySet()) {
-            if (universe.module(name) instanceof ModuleUniverse.InSight.Read read) {
-                declared.put(name, read.declarations());
-            }
+    private Registry<Ast.Def> declaredBy() {
+        Map<String, Registry.Declared<Ast.Def>> declared = new LinkedHashMap<>();
+        for (Map.Entry<String, ReadableModule> each : read.entrySet()) {
+            declared.put(each.getKey(), new Registry.Declared<>(each.getValue().declarations(),
+                    Registry.baseNames(each.getValue().module().exposing())));
         }
-        return Registry.ofRead(Map.copyOf(written), declared);
+        return Registry.ofRead(declared);
     }
 
     /**
@@ -215,8 +202,8 @@ public final class PublishedUniverse {
         if (!(universe.module(module) instanceof ModuleUniverse.InSight.Read read)) {
             return null;
         }
-        Scoping.Scoped scoped =
-                Scoping.of(universe, new Scoping.Subject(read, libraryNames.get(module)));
+        Scoping.Scoped scoped = Scoping.of(universe,
+                new Scoping.Subject(read, this.read.get(module).libraryNames()));
         if (!scoped.refused().isEmpty()) {
             return null;
         }

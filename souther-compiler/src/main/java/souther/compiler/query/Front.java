@@ -376,6 +376,11 @@ public final class Front {
                 return read.module();
             }
 
+            /** What it declares, indexed where it was read back. */
+            public Map<String, Ast.Def> declarations() {
+                return read.declarations();
+            }
+
             public Set<String> injectedBehaviors() {
                 return read.injectedBehaviors();
             }
@@ -696,6 +701,10 @@ public final class Front {
             case Readback.Failure.InvalidExposure(Readback.Exposure line, List<Readback.Exposure> _) ->
                     said.hint(new ModuleMessage.AnImportLineOfItsCannotBeReadHere(
                             line.name(), line.from()));
+            case Readback.Failure.InvalidDeclarations(
+                    Readback.DeclarationRejection first, List<Readback.DeclarationRejection> _) ->
+                    said.hint(new ModuleMessage.ADeclarationOfItsCannotBeReadHere(
+                            first.declaration()));
         };
         return because.hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(module)).build();
     }

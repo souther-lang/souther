@@ -452,30 +452,4 @@ public final class TypeChecker {
         return Symbols.of(module);
     }
 
-    /** A module's own definitions, keyed by the name written there. */
-    public static Map<String, Hir.Def> ownDefs(Hir.Module module) {
-        Declared declared = declared(module);
-        if (!declared.rejected().isEmpty()) {
-            throw declared.rejected().get(0);
-        }
-        return declared.defs();
-    }
-
-    /** What a module declares, and the declarations it cannot have. */
-    public record Declared(Map<String, Hir.Def> defs, List<CompileException> rejected) {}
-
-    /**
-     * Every declaration a module may have, by name, and one error per declaration it may not.
-     *
-     * <p>A name declared twice keeps the first: the second is reported and left out, so the rest of
-     * the module still means what it means. Writing a declaration twice is what copying one looks
-     * like halfway through, and taking every name in the file away until it is finished is the
-     * opposite of useful.
-     */
-    public static Declared declared(Hir.Module module) {
-        DeclaredNames.Of<Hir.Def> declared = DeclaredNames.of(module.defs(), Hir.Def::name,
-                Hir.Def::written, Hir.Def::pos);
-        return new Declared(declared.defs(), declared.rejected());
-    }
-
 }

@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
+import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
 
 import org.junit.jupiter.api.Test;
@@ -315,6 +316,41 @@ class ModuleReadbackTest {
 
         assertEquals("shared.other", why.named(),
                 "the name the artifact gave itself, which is not the one it was filed under");
+    }
+
+    /**
+     * Every declaration the indexing refused crosses, and not only the first.
+     *
+     * <p>The indexing reads the whole module and answers with every refusal it saw, so keeping one
+     * would be this boundary deciding to lose the others — a rule about what an artifact is, made
+     * where an artifact is being described. What is shown to an author is one sentence, and that is
+     * a question about a report rather than about the facts a report is written from.
+     */
+    @Test
+    void everyDeclarationItRefusesCrosses() {
+        Map<String, PublishedClasses.Declarations> published = Map.of(
+                "lib.two.$Module", new PublishedClasses.Declarations(
+                        new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
+                                "another build", "module lib.two exposing ( Held )", List.of(),
+                                List.of("Held", "Twice", "Some"), List.of(), List.of()),
+                        null, null, null),
+                "lib.two.Held", declaring("data Held = String"),
+                "lib.two.Twice", declaring("data Held = Int"),
+                "lib.two.Some", declaring("data Some = String"));
+
+        Readback.Failure why =
+                refusalOf("lib.two", name -> PublishedClasses.carrying(published.get(name)));
+
+        Readback.Failure.InvalidDeclarations refused =
+                assertInstanceOf(Readback.Failure.InvalidDeclarations.class, why);
+        assertEquals(new Readback.DeclarationRejection.DeclaredTwice("Held"), refused.first());
+        assertEquals(List.of(new Readback.DeclarationRejection.BuiltInOptionCaseDeclared("Some")),
+                refused.rest(), "the rest of what the indexing saw, in the order it saw them");
+    }
+
+    /** The class one declaration was stamped on. */
+    private static PublishedClasses.Declarations declaring(String declaration) {
+        return new PublishedClasses.Declarations(null, declaration, null, null);
     }
 
     /** {@code classes}, with whatever their `$Module` annotation says rewritten by {@code as}. */
