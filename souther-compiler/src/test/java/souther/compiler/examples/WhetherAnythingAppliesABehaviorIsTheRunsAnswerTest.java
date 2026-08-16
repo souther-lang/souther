@@ -215,6 +215,9 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         mine.db().ask(new Shapes.Scope(name)).value(),
                         mine.db().ask(new Bodies.Signatures(name)).value(),
                         artifactOf(other, "example.elsewhere"),
+                        () -> {
+                            throw new AssertionError("the run was made before it was refused");
+                        },
                         mine.db().ask(new Bodies.Requirements(name)).value(),
                         ExampleVerifier.class.getClassLoader(),
                         mine.db().ask(new Bodies.ModuleDefinitions(name)).value(),
@@ -245,30 +248,47 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 if (!behavior.equals("doubleFromOutside")) {
                     return new Answerer.Answer.Nothing();
                 }
-                Answerer.Answer.Something something = standins ->
-                        ((Answerer.Answer.Something) own.of("double")).applying(standins);
-                return something;
+                return new Answerer.Answer.Something() {
+
+                    @Override
+                    public Origin origin() {
+                        return new TheCompilesOwn();
+                    }
+
+                    @Override
+                    public Answerer.Applying applying(List<DependencyStandin> standins) {
+                        return ((Answerer.Answer.Something) own.of("double")).applying(standins);
+                    }
+                };
             };
         };
     }
 
     /** An answerer claiming an implementation for every behavior and reaching none of them. */
     private static Answering claimingEverythingAndReachingNothing() {
-        return (generated, compiled) -> behavior -> {
-            Answerer.Answer.Something something = _ -> new Answerer.Applying() {
+        return (generated, compiled) -> behavior -> new Answerer.Answer.Something() {
 
-                @Override
-                public Applied applied() {
-                    return new Applied.GeneratedHere();
-                }
+            @Override
+            public Origin origin() {
+                return new TheCompilesOwn();
+            }
 
-                @Override
-                public Object to(List<Handed> arguments) {
-                    throw new ImplementationNotReached("no class of that name (said by the test)",
-                            new ClassNotFoundException(behavior));
-                }
-            };
-            return something;
+            @Override
+            public Answerer.Applying applying(List<DependencyStandin> standins) {
+                return new Answerer.Applying() {
+
+                    @Override
+                    public Applied applied() {
+                        return new Applied.GeneratedHere();
+                    }
+
+                    @Override
+                    public Object to(List<Handed> arguments) {
+                        throw new ImplementationNotReached("no class of that name (said by the test)",
+                                new ClassNotFoundException(behavior));
+                    }
+                };
+            }
         };
     }
 
@@ -287,6 +307,11 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 c.db().ask(new Shapes.Scope(name)).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifactOf(c, name),
+                // Every answer here applies this compile's own classes, so nothing is held against
+                // this module's declarations and they are never read.
+                () -> {
+                    throw new AssertionError("an answer of this compile's own read declarations");
+                },
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 ExampleVerifier.class.getClassLoader(),
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),

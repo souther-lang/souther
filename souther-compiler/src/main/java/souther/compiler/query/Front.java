@@ -1006,8 +1006,13 @@ public final class Front {
      * with one, and the qualifier of every behavior it names that way. Neither kind of qualified
      * reference needs an import line, so reading only the import lines would leave a module it
      * reaches unread.
+     *
+     * <p>Public because a second set of published classes is read the same way
+     * ({@link souther.compiler.meta.PublishedUniverse}): which modules a module's declarations name
+     * is one question, and a reader that answered it a second time would answer it differently the
+     * day a new way of naming one arrives.
      */
-    static Map<String, SourcePos> reaches(Ast.Module m) {
+    public static Map<String, SourcePos> reaches(Ast.Module m) {
         Map<String, SourcePos> names = new LinkedHashMap<>();
         Map<String, String> aliases = new HashMap<>();
         for (Ast.Import imp : m.imports()) {

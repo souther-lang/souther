@@ -139,6 +139,48 @@ public interface Registry<D> {
         };
     }
 
+    /**
+     * The declarations of a set of modules already indexed, for a reader that settled which of them
+     * could be indexed at all.
+     *
+     * <p>{@link #ofWritten} works a module's definitions out on first use and raises where they
+     * cannot be indexed, which is what a compilation wants: the raise is the report, said against
+     * the source that carries the second declaration. A reader of what another build published has
+     * nobody to say it to — the source is not this compile's, and a module it cannot index is one
+     * it cannot read rather than one anybody here got wrong. So it indexes each module once, keeps
+     * what that settled, and reads by this.
+     *
+     * <p>A module that had nothing to give is not among {@code declarations}, and is answered the
+     * way a module nobody has is answered. Which of the two it was is not this registry's to say:
+     * that is what the reader settled, and it says it where it says what it has.
+     */
+    static Registry<Ast.Def> ofRead(Map<String, Ast.Module> modules,
+                                    Map<String, Map<String, Ast.Def>> declarations) {
+        return new Registry<Ast.Def>() {
+
+            @Override
+            public Ast.Def declaration(TypeKey address) {
+                return declaredIn(address.module()).get(address.name());
+            }
+
+            @Override
+            public Map<String, Ast.Def> declaredIn(String moduleName) {
+                return declarations.getOrDefault(moduleName, Map.of());
+            }
+
+            @Override
+            public Set<String> exposedBy(String moduleName) {
+                Ast.Module m = modules.get(moduleName);
+                return m == null ? Set.of() : baseNames(m.exposing());
+            }
+
+            @Override
+            public Set<String> moduleNames() {
+                return modules.keySet();
+            }
+        };
+    }
+
     /** An {@code exposing} list as the type names it names: {@code Amount.decoder} exposes
      * {@code Amount}. */
     static Set<String> baseNames(Iterable<String> exposing) {

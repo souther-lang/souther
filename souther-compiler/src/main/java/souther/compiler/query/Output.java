@@ -24,6 +24,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 
@@ -435,6 +436,30 @@ public final class Output {
         ClassLoader parent = path == null ? Output.class.getClassLoader()
                 : path.loader(Output.class.getClassLoader());
         return new MemoryClassLoader(classes, parent);
+    }
+
+    /**
+     * Where this compilation reads declarations of a module from — its own generated classes first,
+     * then the path.
+     *
+     * <p>The same two places the evaluation loader draws classes from, and in the same order, because
+     * they are answers to one question: which module a name means here. A reader with only what this
+     * compilation generated would find nothing for a module that arrived compiled, which is the
+     * ordinary shape of a project rather than an edge of one.
+     *
+     * <p>Its own first, for the reason the loader has: a module being compiled here wins over one of
+     * the same name on the path.
+     */
+    static ClassFileDeclarations declarationsRead(Db db) {
+        Map<String, byte[]> generated = db.ask(new All()).value();
+        ModulePath path = db.ask(new Front.Path()).value();
+        return new ClassFileDeclarations(binaryName -> {
+            byte[] here = generated == null ? null : generated.get(binaryName);
+            if (here != null || path == null) {
+                return here;
+            }
+            return path.bytes(binaryName);
+        });
     }
 
     /**
@@ -944,6 +969,11 @@ public final class Output {
             souther.compiler.examples.ExampleVerifier.Observations observed =
                     souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
                             artifact,
+                            // What this compile can read declarations of, for holding an answer's own
+                            // against. Asked for only if something has to be held: a compile's own
+                            // answers are of the module being evaluated by being of this compile of
+                            // it, and every answer this run has is one of those today.
+                            () -> declarationsRead(db),
                             requirements, evaluationLoader(db),
                             values == null ? Map.of() : values, sourceId, deadlineOf(db),
                             policyOf(db),

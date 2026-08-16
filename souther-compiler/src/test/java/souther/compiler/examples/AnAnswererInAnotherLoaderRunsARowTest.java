@@ -139,8 +139,18 @@ class AnAnswererInAnotherLoaderRunsARowTest {
 
         @Override
         public Answer of(String behavior) {
-            Answer.Something something = standins -> applying(behavior, standins);
-            return something;
+            return new Answer.Something() {
+
+                @Override
+                public Origin origin() {
+                    return new TheCompilesOwn();
+                }
+
+                @Override
+                public Applying applying(List<DependencyStandin> standins) {
+                    return Crossed.this.applying(behavior, standins);
+                }
+            };
         }
 
         private Applying applying(String behavior, List<DependencyStandin> standins) {
@@ -216,6 +226,11 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 c.db().ask(new Shapes.Scope(name)).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifact,
+                // The crossing here is between two loaders of one build, so what the answerer reads
+                // values by is this compile's declarations and nothing is held against them.
+                () -> {
+                    throw new AssertionError("an answer of this compile's own read declarations");
+                },
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),

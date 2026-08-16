@@ -22,6 +22,23 @@ public enum FailurePhase {
     /** A dependency had no fake, or a fake had no answer for the input it was given. */
     FAKE_RESOLUTION,
 
+    /**
+     * What was to apply the behavior could not be established as being of the module the row is
+     * written for.
+     *
+     * <p>An implementation supplied from outside a compile reads a row's values by the declarations
+     * it was built against, and those are of whatever build that was. Where they say something else
+     * about what a value is — an invariant narrowed, a case added, a field renamed — a row handed over
+     * is decided by the two builds disagreeing rather than by the model.
+     *
+     * <p>So the row is not handed over, and this is where it stopped. Not {@link #NONE}: the row was
+     * to be run and something stopped it, and a row that said nothing went wrong while ending
+     * undecided would be a state nothing produced. Not the model's failure either — {@link
+     * Disposition#INCOMPLETE} is what it ends as, because what the row would have decided is exactly
+     * what was not found out.
+     */
+    ANSWERER_ESTABLISHMENT,
+
     /** Applying the behavior did not produce an answer. */
     INVOCATION,
 

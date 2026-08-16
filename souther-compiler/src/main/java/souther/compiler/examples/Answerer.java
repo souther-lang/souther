@@ -68,10 +68,23 @@ public interface Answerer {
          *
          * <p>What it is is not said. Which of several things applied a row is recorded from the
          * application itself ({@link Applying#applied}), so a reader of this needs nothing from it
-         * but that it can be applied.
+         * but that it can be applied and which declarations it reads a row's values by.
          */
-        @FunctionalInterface
         non-sealed interface Something extends Answer {
+
+            /**
+             * Which declarations the values this is applied to are read by.
+             *
+             * <p>Abstract, with nothing standing in for an answer that is not written. A default
+             * would be a default about the one thing here a run cannot check for itself, so the day
+             * something is supplied from outside a compile and does not say, it would be taken for
+             * the compile's own and its rows held to declarations nobody compared.
+             *
+             * <p>Asked before the row is handed over, which is before the stand-ins are gathered:
+             * whether a run may hand this a row does not depend on either, and a row it may not be
+             * handed has to stop having been held to everything it can be held to without being run.
+             */
+            Origin origin();
 
             /**
              * It, with {@code standins} answering for what the behavior depends on.

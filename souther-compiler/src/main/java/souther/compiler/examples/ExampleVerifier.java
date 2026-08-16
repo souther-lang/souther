@@ -34,10 +34,18 @@ import souther.compiler.observe.Run;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 
+import souther.compiler.meta.Agreement;
+import souther.compiler.meta.DeclarationAgreement;
+import souther.compiler.meta.PublishedModule;
+
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Evaluates a module's {@code example}s at compile time and reports any mismatch as a compile error.
@@ -106,6 +114,12 @@ public final class ExampleVerifier {
      * of one compile and a run has no use for a pairing of two, so the loader is built from one half
      * of it and the other half goes to {@code answering} from the same value.
      *
+     * <p>{@code declared} is where the declarations of the module the rows are written for are read
+     * from, for holding an answer's own against. Given as something to ask rather than as the
+     * declarations, because a run whose answers are all this compile's own has nothing to hold and
+     * never asks: there are no two builds there, and reading a module's declarations to compare them
+     * with themselves is work for an answer nobody could have brought.
+     *
      * <p>And it has to be of the module whose rows these are, which is checked here because here is
      * where both are in hand. Past this point the module the rows belong to is gone: an answerer is
      * given a manifest and a loader, and the manifest is what says which module's implementations it
@@ -118,6 +132,7 @@ public final class ExampleVerifier {
     public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
                                      Symbols symbols, Map<String, Sig> sigs,
                                      EvaluationArtifact artifact,
+                                     Supplier<PublishedModule.Classes> declared,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      String sourceId, Deadline deadline, EvaluationPolicy policy,
@@ -132,7 +147,7 @@ public final class ExampleVerifier {
         }
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
-                deadline, policy, answering.over(artifact.implementations(), loader));
+                deadline, policy, answering.over(artifact.implementations(), loader), declared);
         v.sourceId = sourceId;
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
@@ -157,13 +172,34 @@ public final class ExampleVerifier {
         // so what a measure sees and what stopped it can never disagree.
         for (RowOutcome outcome : rows) {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
-                incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_UNDECIDED,
+                incompleteness.add(new Incompleteness(leftUndecidedBy(outcome.failurePhase()),
                         new souther.compiler.observe.Target.OfBehavior(outcome.target()),
                         java.util.Optional.of(
                                 souther.compiler.diag.Citation.of(outcome.at().pos()))));
             }
         }
         return new Observations(failures, rows, incompleteness);
+    }
+
+    /**
+     * What a measure loses when a row ends undecided, read off what stopped the row.
+     *
+     * <p>The two vocabularies are kept apart here and joined nowhere else. What stopped a row is a
+     * fact about the row and is written where the row stopped; what a measure can no longer answer is
+     * a fact about the measure, and this is the one place the first is read for the second. A row
+     * carrying the measure's word would be the row answering a question that is not about it.
+     *
+     * <p>A switch with no default, so a phase added later is a compile error here. What it asks for
+     * is what a reader of a measure is to be told when a row stops that way, which is not something
+     * to be defaulted into whatever the nearest existing answer happens to be.
+     */
+    private static Incompleteness.Code leftUndecidedBy(FailurePhase phase) {
+        return switch (phase) {
+            case ANSWERER_ESTABLISHMENT -> Incompleteness.Code.ANSWERER_NOT_ESTABLISHED;
+            case NONE, INPUT_FIXTURE, EXPECTED_FIXTURE, FAKE_RESOLUTION, INVOCATION, COMPARISON,
+                 STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, INFRASTRUCTURE ->
+                    Incompleteness.Code.ROW_UNDECIDED;
+        };
     }
 
     /**
@@ -234,12 +270,37 @@ public final class ExampleVerifier {
     /** What applies a behavior for a row. One for the run, so no row's meaning depends on which
      * answerer it had. */
     private final Answerer answerer;
+    /** Where the declarations the rows are written for are read from, asked for only if something
+     * has to be held against them. A run of this compile's own answers never calls it. */
+    private final Supplier<PublishedModule.Classes> declared;
+    /**
+     * What each set of declarations was held to say for each behavior, so one answer is not read
+     * twice.
+     *
+     * <p>By identity of what carries them, because that is what a run has of an answer's
+     * declarations — and only ever as a memo. Nothing here decides that two answers are of one build
+     * because they arrived as one object: emptying this changes what is paid and not what is
+     * answered.
+     *
+     * <p>By behavior as well as by classes, because that is what was asked. One jar answers several
+     * behaviors, and what each of them reaches is its own — so a memo kept by the classes alone
+     * would answer for the second behavior with what was worked out about the first.
+     */
+    private final Map<PublishedModule.Classes, Map<String, Agreement>> agreements =
+            new IdentityHashMap<>();
+    /** The behaviors an answer could not be established for have already been reported about. A
+     * behavior's rows may be written in more than one block, and what is reported is about neither
+     * the block nor the row. It is per source, which is what a verifier is: a diagnostic is said
+     * where it can be quoted, and a reader of the other source would otherwise be shown rows that
+     * stopped with nothing saying why. */
+    private final Set<String> said = new LinkedHashSet<>();
 
     private ExampleVerifier(souther.compiler.check.Prepared.ExampleExecution module,
                             Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
-                            Deadline deadline, EvaluationPolicy policy, Answerer answerer) {
+                            Deadline deadline, EvaluationPolicy policy, Answerer answerer,
+                            Supplier<PublishedModule.Classes> declared) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -249,6 +310,7 @@ public final class ExampleVerifier {
         this.deadline = deadline;
         this.policy = policy;
         this.answerer = answerer;
+        this.declared = declared;
     }
 
     /**
@@ -272,6 +334,13 @@ public final class ExampleVerifier {
             out.add(notRunnable(ex));
             return;
         }
+        // Said once for the behavior in this source: not once for each of its rows, and not once for
+        // each block they are written in. One answer and one module disagreeing is one fact, and a
+        // behavior's rows may be written in as many blocks as they belong in.
+        if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)
+                && said.add(target.name())) {
+            out.add(cannotBeHeldTo(ex, target.name(), target.agreement()));
+        }
         Sig sig = sigs.get(target.name());
         if (sig == null) {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
@@ -289,9 +358,13 @@ public final class ExampleVerifier {
      * <p>Which kind of behavior it is does not survive to here. A row applies the class the module
      * emitted, and that class is reached the same way whichever way the behavior was written — the
      * name says which, and the requirements say what to hand it.
+     *
+     * @param agreement what holding the answer's declarations against this module's said, or null
+     *                  where there was nothing to hold — the answer is this compile's own, or
+     *                  nothing answers the behavior at all
      */
     private record ExampleTarget(String name, List<BehaviorRequirement> requirements,
-                                 Answerer.Answer answer) {}
+                                 Answerer.Answer answer, Agreement agreement) {}
 
     /**
      * The behavior a row is about, and what this run has to apply it with.
@@ -321,10 +394,86 @@ public final class ExampleVerifier {
             if (!b.name().equals(name)) {
                 continue;
             }
-            return new ExampleTarget(name, requirements.getOrDefault(name, List.of()),
-                    answerer.of(name));
+            Answerer.Answer answer = answerer.of(name);
+            return new ExampleTarget(name, requirements.getOrDefault(name, List.of()), answer,
+                    heldTo(name, answer));
         }
         return null;
+    }
+
+    /**
+     * What holding the answer's declarations against this module's says, or null where there is
+     * nothing to hold.
+     *
+     * <p>Asked here, which is before a row states anything: whether a run may hand this answer a row
+     * does not depend on the row, and a row that may not be handed over has to be able to stop having
+     * been held to everything a row can be held to without being run.
+     *
+     * <p>The two ways there is nothing to hold are not the same and are both null. An answer of this
+     * compile's own is of the module being evaluated because it is of this compile of it — one build,
+     * so there is no second set of declarations. A behavior nothing applies has no declarations to
+     * bring at all, and its rows are recorded rather than run whatever any build says.
+     */
+    private Agreement heldTo(String behavior, Answerer.Answer answer) {
+        // A switch, so an answer this was never shown is a compile error here rather than one of the
+        // two ways silently taken for it.
+        return switch (answer) {
+            case Answerer.Answer.Nothing _ -> null;
+            case Answerer.Answer.Something something -> switch (something.origin()) {
+                // An answerer is written outside this package, so what it hands back is a thing to
+                // be refused rather than a state of this compiler. Saying nothing is not saying
+                // "this compile's own": read that way, an implementation would be out of the
+                // question by returning null, which is what the abstract accessor was for.
+                case null -> new Agreement.Unreadable(module.name(),
+                        Agreement.Reason.NO_ORIGIN_STATED, Agreement.Side.THE_ANSWER);
+                case TheCompilesOwn _ -> null;
+                case Origin.Published published -> agreements
+                        .computeIfAbsent(published.classes(), _ -> new LinkedHashMap<>())
+                        .computeIfAbsent(behavior, named -> DeclarationAgreement.of(module.name(),
+                                named, declared.get(), published.classes()));
+            };
+        };
+    }
+
+    /**
+     * What a behavior whose answer could not be established as this module's reports.
+     *
+     * <p>Two things to say and not one. Declarations that differ are established: both were read and
+     * one of them says something else, and what to do about it is to build again. Declarations that
+     * could not be read establish nothing about either — the answer may well be of exactly this
+     * module — and reporting that as a stale build would be reporting a difference on evidence
+     * nobody has.
+     */
+    private Diagnostic cannotBeHeldTo(Hir.Example ex, String target, Agreement said) {
+        return switch (said) {
+            case Agreement.Agree _ ->
+                    throw new IllegalStateException("an agreement that holds reports nothing");
+            case Agreement.Disagree differs -> Diagnostic.at(ex.pos())
+                    .say(new ExampleMessage.TheAnswerIsOfAnotherBuild(target, differs.module(),
+                            differs.declaration()))
+                    .hint(new ExampleMessage.BuildWhatAnswersItAgainstThisRevision(differs.module()))
+                    .build();
+            case Agreement.Unreadable unreadable -> Diagnostic.at(ex.pos())
+                    .say(new ExampleMessage.WhetherTheAnswerIsOfThisModuleCannotBeTold(target,
+                            unreadable.module()))
+                    // Which side could not be read decides what the reader is to do about it, so the
+                    // hint says whose declarations they are. Naming the answer's build for what this
+                    // compile could not read would send someone to rebuild what is not in question.
+                    .hint(switch (unreadable.side()) {
+                        case THE_ANSWER -> switch (unreadable.reason()) {
+                            case NOTHING_PUBLISHED ->
+                                    new ExampleMessage.ItsClassesCarryNoDeclarations(unreadable.module());
+                            case NOT_READABLE_HERE ->
+                                    new ExampleMessage.WhatItPublishedCannotBeReadHere(unreadable.module());
+                            case NO_ORIGIN_STATED ->
+                                    new ExampleMessage.ItDidNotSayWhichBuildItReadsBy(unreadable.module());
+                        };
+                        case THE_MODULE_BEING_EVALUATED ->
+                                new ExampleMessage.ThisCompileCannotReadItsOwnDeclarationsOf(
+                                        unreadable.module());
+                    })
+                    .build();
+        };
     }
 
     /** The injected behavior named {@code name} in this module — a valid target for a fake; null if
@@ -768,6 +917,15 @@ public final class ExampleVerifier {
                 return;
             }
             case Answerer.Answer.Something something -> applies = something;
+        }
+        if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)) {
+            // Everything this row can be held to without being run has been, and it is not handed
+            // over: what would read its values could not be established as reading them by the
+            // declarations they were built from. Nothing was decided about the model, and what
+            // stopped it was the answer — which is what the row says of itself, rather than being
+            // worked out again by whoever reads it. The behavior's own diagnostic says why.
+            state.incomplete(FailurePhase.ANSWERER_ESTABLISHMENT);
+            return;
         }
         List<DependencyStandin> standins = resolveFakes(fixtures, target, row, out);
         if (standins == null) {
