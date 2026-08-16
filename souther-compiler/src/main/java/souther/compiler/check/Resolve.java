@@ -1315,8 +1315,13 @@ public final class Resolve {
      * <p>One ladder, in one order, so a name means the same thing under an application as beside one.
      * It was two — a bare name tried the declared types before this module's helpers, an applied one
      * tried the library first and the types last — and which rung answered therefore depended on
-     * whether a `(` followed. The rungs a spelling could reach twice are refused where the value
-     * namespace is assembled, so the order between them decides nothing.
+     * whether a `(` followed.
+     *
+     * <p>The value namespace is read before a type is read as one. A spelling reaching two of these
+     * is refused where the namespace is assembled, so in a module that compiles the order decides
+     * nothing — but a refusal is reported and recovered from, and what each name means afterwards
+     * should not follow from which rung happened to be tried first. So a type read as a value is
+     * what to do when the value namespace has no answer, and not a rung above it.
      *
      * <p>{@code applied} is the one thing the position still says. A type written as a value is the
      * construction of a unit data and records where it came from; applied, it is a newtype taking
@@ -1354,14 +1359,28 @@ public final class Resolve {
             }
             return Reach.NOT_IN_SCOPE;
         }
+
+        // A helper or a value of this module, a behavior it reaches, or a name an import let it
+        // write without a qualifier — asked of the one table that says which, so that a reader
+        // listing what may be written here reads the same answer this does.
+        // What this module can name in the value namespace, which is the settled answer: its own
+        // definitions and what the import lines were left with.
+        Reach reached = reachable.reachIn(reaches, written);
+        if (!(reached instanceof Reach.NotInScope)) {
+            return reached;
+        }
+        // A type written as a value, which is the construction of what it denotes. Read after the
+        // value namespace and not before it, because it is what to do when nothing there answers
+        // rather than a rung of its own: a spelling the value namespace settled is settled, and a
+        // type of that name is a second answer to a question already answered. Before this, a data
+        // an import brought in beat a `let` written here under the same name — the collision
+        // between them is reported, and what each means afterwards was decided by the order these
+        // were consulted rather than by anything either says.
         if (symbols.scope().resolve(name) instanceof Denotation.Denotes d) {
             return new Reach.Reaches(new ValueName.OfType(written, d.type(),
                     applied ? null : ConstructionOrigin.own()));
         }
-        // A helper or a value of this module, a behavior it reaches, or a name an import let it
-        // write without a qualifier — asked of the one table that says which, so that a reader
-        // listing what may be written here reads the same answer this does.
-        return reachable.reachIn(reaches, written);
+        return reached;
     }
 
     /**

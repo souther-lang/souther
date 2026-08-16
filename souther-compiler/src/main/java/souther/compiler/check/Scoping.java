@@ -10,6 +10,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -53,13 +54,16 @@ public final class Scoping {
         List<Refusal> refused = new ArrayList<>();
         Map<String, String> aliases = new LinkedHashMap<>();
         Map<String, Ast.Def> ownData = subject.declared().declarations();
-        // Every spelling this module writes for itself, whichever kind of declaration it is. What
-        // an import would bring in loses to any of them, so they are asked as one set.
-        Set<String> ownNames = new LinkedHashSet<>(ownData.keySet());
-        ownNames.addAll(behaviorNames(m));
+        // What this module writes for itself, by the namespace each spelling reaches. A data is in
+        // both — it is a type and the construction of one — and a `let` or a behavior is a value
+        // and nothing in the type namespace, which is what lets one of each under a spelling come
+        // apart after the collision between them has been said.
+        Set<String> ownValues = new LinkedHashSet<>(ownData.keySet());
+        ownValues.addAll(behaviorNames(m));
         for (Ast.FnDef fn : m.fns()) {
-            ownNames.add(fn.name());
+            ownValues.add(fn.name());
         }
+
         // Every claim on a spelling, whichever kind of line made it. Which provider a claim came
         // from is what makes it, and settles nothing after that: two lines asking for one spelling
         // are one contest, and reading the library ones apart from the rest is how `map` could
@@ -68,49 +72,42 @@ public final class Scoping {
         // In the order the lines are written, and not in the order the two sets of claims were
         // gathered. Which line a contest is reported at, and which is shown as the one that has
         // the name already, is read off this — so gathered order would put the library line first
-        // whatever the author wrote, and an author who wrote the user-module line first would be
-        // shown their first line as the mistake and their second as what it collided with.
+        // whatever the author wrote.
         List<Claim> claims = new ArrayList<>(subject.libraryClaims());
         claims.addAll(claimsOf(universe, m, aliases, refused));
-        claims.sort(java.util.Comparator.comparingInt(each -> written(each.imp())));
-        Map<String, Settled> settled = adjudicate(claims, ownNames, refused);
+        claims.sort(Comparator.<Claim>comparingInt(each -> line(each.imp()))
+                .thenComparingInt(each -> column(each.imp())));
+        ResolvedImports imports =
+                adjudicate(claims, ownData.keySet(), ownValues, refused);
 
         Map<String, Denotation> denotations = new LinkedHashMap<>();
         for (Ast.Def own : ownData.values()) {
             denotations.put(own.name(),
                     new Denotation.Denotes(TypeSymbols.declared(own.declaredKey())));
         }
-        settled.forEach((spelling, what) -> {
-            if (denotations.containsKey(spelling)) {
-                return;   // this module's own declaration is what the spelling means
-            }
-            switch (what) {
-                case Settled.Brings(Brought.ADeclaration(TypeSymbol type)) ->
-                        denotations.put(spelling, new Denotation.Denotes(type));
-                // A name brought in as a value is not a type, and is no answer in this namespace.
-                case Settled.Brings _ -> { }
-                case Settled.StandsForNothing _ ->
-                        denotations.put(spelling, Denotation.STANDS_FOR_NOTHING);
-            }
-        });
+        denotations.putAll(imports.types());
 
         Resolve.Values values = new Resolve.Values(
-                reachable(universe, subject, settled), new OfTheUniverse(universe));
+                reachable(universe, subject, imports), new OfTheUniverse(universe));
         refused.addAll(oneSpellingTwice(subject, ownData));
-        return new Scoped(m.name(), denotations, aliases, values, refused);
+        return new Scoped(m.name(), denotations, aliases, values, imports, refused);
     }
 
     /**
-     * Where a line is written, as one number, so claims can be put in the order an author reads
-     * them.
+     * Where a line is written, so claims can be put in the order an author reads them.
      *
      * <p>A line the author did not write is last. An import synthesized from a qualified reference
      * stands at the module header, which is before every line that was written, and showing it as
      * the one that has a name already would name a line nobody can go and look at.
      */
-    private static int written(Ast.Import imp) {
+    private static int line(Ast.Import imp) {
         SourcePos at = imp.pos();
-        return at == null ? Integer.MAX_VALUE : at.line() * 1000 + at.column();
+        return at == null ? Integer.MAX_VALUE : at.line();
+    }
+
+    private static int column(Ast.Import imp) {
+        SourcePos at = imp.pos();
+        return at == null ? Integer.MAX_VALUE : at.column();
     }
 
     /**
@@ -177,18 +174,6 @@ public final class Scoping {
         record ALibraryOperation(ValueName.Stdlib name) implements Brought {}
     }
 
-    /** What a spelling means here once every claim on it has been read. */
-    private sealed interface Settled {
-
-        /** One claim stood, or several stood and brought the same thing. */
-        record Brings(Brought what) implements Settled {}
-
-        /** Claims were made and none is adopted. The spelling is in scope denoting nothing, so a
-         *  use of it says nothing more — what is wrong was said on the import line. */
-        record StandsForNothing() implements Settled {}
-
-        Settled NOTHING = new StandsForNothing();
-    }
 
     /**
      * Every claim this module's import lines make, and the refusals that are about the lines
@@ -298,25 +283,25 @@ public final class Scoping {
      * with it — a second thing said about the one line already refused. Which namespace a
      * declaration holds is what the projections read, and each keeps its own.
      */
-    private static Map<String, Settled> adjudicate(List<Claim> claims, Set<String> ownNames,
-                                                   List<Refusal> refused) {
+    private static ResolvedImports adjudicate(List<Claim> claims, Set<String> ownTypes,
+                                              Set<String> ownValues, List<Refusal> refused) {
         Map<String, List<Claim>> byName = new LinkedHashMap<>();
         for (Claim each : claims) {
             if (each.written()) {
                 byName.computeIfAbsent(each.name(), k -> new ArrayList<>()).add(each);
             }
         }
-        Map<String, Settled> settled = new LinkedHashMap<>();
+        Map<String, ResolvedImport> settled = new LinkedHashMap<>();
         byName.forEach((spelling, made) -> {
-            for (Claim each : made) {
-                if (ownNames.contains(spelling) && each instanceof Claim.Stands stands) {
-                    refused.add(new Refusal.CollidesWithADeclaration(stands.imp(), spelling));
-                }
-            }
+            ResolvedImport.Held held = new ResolvedImport.Held(
+                    ownTypes.contains(spelling), ownValues.contains(spelling));
             Map<Brought, Ast.Import> distinct = new LinkedHashMap<>();
             for (Claim each : made) {
                 if (each instanceof Claim.Stands(Ast.Import imp, String _, boolean _,
                         Brought what)) {
+                    if (held.asAValue() || held.asAType()) {
+                        refused.add(new Refusal.CollidesWithADeclaration(imp, spelling));
+                    }
                     distinct.putIfAbsent(what, imp);
                 }
             }
@@ -325,19 +310,20 @@ public final class Scoping {
                 for (Ast.Import imp : lines.subList(1, lines.size())) {
                     refused.add(new Refusal.BroughtTwice(imp, spelling, lines.get(0)));
                 }
-                settled.put(spelling, Settled.NOTHING);
+                settled.put(spelling, new ResolvedImport.BringsNothing(held));
                 return;
             }
             if (distinct.size() == 1) {
-                settled.put(spelling, new Settled.Brings(distinct.keySet().iterator().next()));
+                settled.put(spelling,
+                        new ResolvedImport.Brings(distinct.keySet().iterator().next(), held));
                 return;
             }
-            // Every claim on it failed. The name is in scope denoting nothing, so a use of it takes
+            // Every claim on it failed. The name is in scope meaning nothing, so a use of it takes
             // the error type and says nothing more; left out of scope, every use would be reported
             // as an unknown name, which sends the author to a body when what is wrong is the line.
-            settled.put(spelling, Settled.NOTHING);
+            settled.put(spelling, new ResolvedImport.BringsNothing(held));
         });
-        return settled;
+        return new ResolvedImports(settled);
     }
 
     /**
@@ -388,7 +374,7 @@ public final class Scoping {
      */
     public record Scoped(String module, Map<String, Denotation> denotations,
                          Map<String, String> aliases, Resolve.Values values,
-                         List<Refusal> refused) {
+                         ResolvedImports imports, List<Refusal> refused) {
 
         /** Copied, for the reason {@link Exposing.Checked} is: this is an answer a compilation
          *  remembers, and an answer it remembers is a value. */
@@ -419,18 +405,6 @@ public final class Scoping {
             return values.reachable();
         }
 
-        /**
-         * A spelling the import lines claimed and none of them got.
-         *
-         * <p>What the contest between claims settled, for a reader that has to know the answer and
-         * not only what a name means. A behavior brought in under a spelling two lines both
-         * claimed is not brought in by either, and a pass that walked the lines again would find
-         * both and settle it a second time — which is one fact and two rules, said twice to an
-         * author who wrote one pair of lines.
-         */
-        public boolean standsForNothing(String spelling) {
-            return values.reachable().standingForNothing().contains(spelling);
-        }
 
         /** The same over a stage of the declarations something has resolved. */
         public Symbols symbolsOver(Registry<Hir.Def> registry) {
@@ -508,7 +482,7 @@ public final class Scoping {
      * reading would report the name as denoting nothing.
      */
     private static Resolve.Reachable reachable(ModuleUniverse universe, Subject subject,
-                                               Map<String, Settled> settled) {
+                                               ResolvedImports imports) {
         Ast.Module m = subject.module();
         // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
         // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
@@ -527,24 +501,18 @@ public final class Scoping {
         }
         Map<String, ValueName.Stdlib> library = new LinkedHashMap<>();
         Set<String> nothing = new LinkedHashSet<>();
-        // What the import lines settled, read rather than worked out again. A definition another
-        // module publishes is written here bare, like one of this module's own — a value
-        // substituted at its reference, a helper expanded at its call (ADR-0072) — and which ones
-        // arrived is the one decision the lines were read for.
-        settled.forEach((spelling, what) -> {
-            switch (what) {
-                case Settled.Brings(Brought.AHelper(
-                        ModuleUniverse.InSight.Read.PublishedHelper leave)) ->
-                        helpers.putIfAbsent(spelling,
-                                new ValueName.Helper(leave.module(), leave.name()));
-                case Settled.Brings(Brought.ABehavior(ValueName.Behavior named)) ->
+        // What the lines settled, read rather than worked out again. A definition another module
+        // publishes is written here bare, like one of this module's own — a value substituted at
+        // its reference, a helper expanded at its call (ADR-0072).
+        imports.values().forEach((spelling, reach) -> {
+            switch (reach) {
+                case Reach.Reaches(ValueName.Helper named) -> helpers.putIfAbsent(spelling, named);
+                case Reach.Reaches(ValueName.Behavior named) ->
                         behaviors.putIfAbsent(spelling, named);
-                case Settled.Brings(Brought.ALibraryOperation(ValueName.Stdlib named)) ->
-                        library.putIfAbsent(spelling, named);
-                // A data reaches the value namespace through the type namespace, which answers for
-                // it before this table is read.
-                case Settled.Brings _ -> { }
-                case Settled.StandsForNothing _ -> nothing.add(spelling);
+                case Reach.Reaches(ValueName.Stdlib named) -> library.putIfAbsent(spelling, named);
+                case Reach.Reaches _ -> { }
+                case Reach.StandsForNothing _ -> nothing.add(spelling);
+                case Reach.NotInScope _ -> { }
             }
         });
         boolean whole = true;

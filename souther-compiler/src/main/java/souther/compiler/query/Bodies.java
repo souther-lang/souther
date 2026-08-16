@@ -26,6 +26,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -173,33 +174,52 @@ public final class Bodies {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                Set<String> deps = db.ask(new Dependencies(imp.module())).value();
-                if (deps == null) {
-                    continue;
+            borrowed(db, name).forEach((bare, from) -> {
+                Set<String> deps = db.ask(new Dependencies(from)).value();
+                if (deps != null && deps.contains(bare)) {
+                    result.add(bare);
                 }
-                for (String bare : imp.names()) {
-                    if (deps.contains(bare) && !settledAsNothing(db, name, bare)) {
-                        result.add(bare);
-                    }
-                }
-            }
+            });
             return Answer.of(Ordered.set(result));
         }
     }
 
     /**
-     * Whether the import lines claimed {@code bare} and none of them got it.
+     * The behaviors this module borrows by writing a bare name, and which module each is of.
      *
-     * <p>Asked of the scope, which settled it, rather than worked out again from the lines. A pass
-     * that reads the lines finds both claims and can settle the contest for itself — and did, so a
-     * name two import lines both brought in was reported once where scopes are assembled and again
-     * here, two rules for one fact.
+     * <p>Read off what the import lines settled, and not worked out from the lines again. Walked
+     * here, a module that declares a behavior and does not offer it answers yes to "do you declare
+     * one" — so a line refused for that was borrowed from all the same, and an author was told the
+     * module does not expose the name and then told two modules were offering it.
+     *
+     * <p>A name a qualified reference reaches is not here. That claims no bare spelling, so nothing
+     * settled it, and it joins where the one rule that sees it is.
      */
-    private static boolean settledAsNothing(Db db, String module, String bare) {
+    private static Map<String, String> borrowed(Db db, String module) {
+        Map<String, String> out = new LinkedHashMap<>();
         Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(module));
-        return scoped.present() && scoped.value().standsForNothing(bare);
+        if (scoped.present()) {
+            scoped.value().imports().behaviors()
+                    .forEach((bare, named) -> out.put(bare, named.module()));
+        }
+        // And the ones a qualified reference reaches, which claim no bare spelling and so were
+        // settled by no contest. They are borrowed all the same: naming a behavior through its
+        // module reaches it, and the signature and the injected field come with it.
+        Ast.Module m = db.ask(new Front.Available(module)).value();
+        if (m != null) {
+            Scoping.borrowed(CompilationUniverse.over(db), m)
+                    .forEach((from, names) -> names.forEach(bare -> out.putIfAbsent(bare, from)));
+        }
+        return out;
     }
+
+    /** The leave each definition this module imported carries, by the bare name it writes for
+     *  it. What may be read from another module is what this module was left with. */
+    private static Map<String, PublishedHelper> leaves(Db db, String module) {
+        Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(module));
+        return scoped.present() ? scoped.value().imports().leaves() : Map.of();
+    }
+
 
     /** The behaviors a module borrows that may be called by name where they are declared. */
     public record ImportedCallable(String name) implements Key<Set<String>> {
@@ -214,17 +234,12 @@ public final class Bodies {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                Set<String> callable = db.ask(new Callable(imp.module())).value();
-                if (callable == null) {
-                    continue;
+            borrowed(db, name).forEach((bare, from) -> {
+                Set<String> callable = db.ask(new Callable(from)).value();
+                if (callable != null && callable.contains(bare)) {
+                    result.add(bare);
                 }
-                for (String bare : imp.names()) {
-                    if (callable.contains(bare) && !settledAsNothing(db, name, bare)) {
-                        result.add(bare);
-                    }
-                }
-            }
+            });
             return Answer.of(Ordered.set(result));
         }
     }
@@ -276,36 +291,35 @@ public final class Bodies {
             if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.absent();
             }
-            Map<String, Sig> result = new LinkedHashMap<>();
-            Map<String, String> fromModule = new LinkedHashMap<>();   // bare name → its module
-            ModuleUniverse universe = CompilationUniverse.over(db);
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                if (!(universe.module(imp.module())
-                        instanceof ModuleUniverse.InSight.Read there)) {
-                    continue;   // the unknown module is reported where the scope is worked out
-                }
-                for (String bare : imp.names()) {
-                    if (!there.declaresBehavior(bare) || settledAsNothing(db, name, bare)) {
-                        continue;   // a type import, a name it does not declare, or one the
-                                    // import lines claimed and none of them got
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            // A behavior's name is a member of the generated class, so two of them cannot share
+            // one. Two written lines claiming a spelling are a contest and are settled where
+            // claims are; what is left here is a name reached through a qualified reference — it
+            // claims no bare spelling, so no contest saw it, and this is the one rule that does.
+            Map<String, String> from = new LinkedHashMap<>();
+            Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(name));
+            if (scoped.present()) {
+                scoped.value().imports().behaviors()
+                        .forEach((each, named) -> from.put(each, named.module()));
+            }
+            for (Map.Entry<String, Set<String>> reached
+                    : Scoping.borrowed(CompilationUniverse.over(db), m).entrySet()) {
+                for (String each : reached.getValue()) {
+                    String earlier = from.put(each, reached.getKey());
+                    if (earlier != null && !earlier.equals(reached.getKey())) {
+                        return Answer.absent(collision(each, earlier, reached.getKey(),
+                                namedAt(m, each)));
                     }
-                    Map<String, Sig> sigs = db.ask(new Signatures(imp.module())).value();
-                    Sig sig = sigs == null ? null : sigs.get(bare);
-                    if (sig == null) {
-                        continue;
-                    }
-                    String earlier = fromModule.put(bare, imp.module());
-                    if (earlier != null && !earlier.equals(imp.module())) {
-                        // Said already where the claims were settled, unless the second one came
-                        // from a qualified reference — which makes no claim on the bare spelling,
-                        // so nothing settled it and this is the one rule that sees it. A behavior's
-                        // name is a member of the generated class, and two of them cannot share it.
-                        return settledAsNothing(db, name, bare) ? Answer.absent()
-                                : Answer.absent(collision(bare, earlier, imp));
-                    }
-                    result.put(bare, sig);
                 }
             }
+            Map<String, Sig> result = new LinkedHashMap<>();
+            from.forEach((each, declaredBy) -> {
+                Map<String, Sig> sigs = db.ask(new Signatures(declaredBy)).value();
+                Sig sig = sigs == null ? null : sigs.get(each);
+                if (sig != null) {
+                    result.put(each, sig);
+                }
+            });
             return Answer.of(Ordered.map(result));
         }
 
@@ -314,10 +328,29 @@ public final class Bodies {
          * also a member name in the generated class — an injected behavior is a field, and a stage
          * that is one becomes a field here too — so the two cannot both be reached.
          */
-        private Report collision(String bare, String earlier, Ast.Import imp) {
-            return Report.raised(Diagnostic.say(new ModuleMessage.ABehaviorIsNamedFromTwoModules(bare, earlier, imp.module()))
-                            .at(imp.pos())
-                            .hint(new ModuleMessage.ABehaviorsNameIsAlsoItsInjectedField(bare)).build());
+        private Report collision(String bare, String earlier, String andThis, SourcePos at) {
+            return Report.raised(Diagnostic
+                    .say(new ModuleMessage.ABehaviorIsNamedFromTwoModules(bare, earlier, andThis))
+                    .at(at)
+                    .hint(new ModuleMessage.ABehaviorsNameIsAlsoItsInjectedField(bare)).build());
+        }
+
+        /**
+         * Where the qualified reference that reaches {@code bare} is written.
+         *
+         * <p>The reference and not the import line. There is no line: this is a name reached
+         * through its module, and the import that records the dependency was synthesized at the
+         * module header — which is where this was reported, so an author was sent to the top of
+         * the file and told to take an import off a list that does not have one.
+         */
+        private static SourcePos namedAt(Ast.Module m, String bare) {
+            for (Ast.Var ref : Scoping.qualifiedBehaviorRefs(m)) {
+                String written = ref.name();
+                if (written.substring(written.lastIndexOf('.') + 1).equals(bare)) {
+                    return ref.pos();
+                }
+            }
+            return m.pos();
         }
     }
 
@@ -335,17 +368,12 @@ public final class Bodies {
                 return Answer.of(Set.of());
             }
             Set<String> result = new LinkedHashSet<>();
-            for (Ast.Import imp : Names.importsOf(db, name)) {
-                Set<String> injected = db.ask(new Injected(imp.module())).value();
-                if (injected == null) {
-                    continue;
+            borrowed(db, name).forEach((bare, from) -> {
+                Set<String> injected = db.ask(new Injected(from)).value();
+                if (injected != null && injected.contains(bare)) {
+                    result.add(bare);
                 }
-                for (String bare : imp.names()) {
-                    if (injected.contains(bare) && !settledAsNothing(db, name, bare)) {
-                        result.add(bare);
-                    }
-                }
-            }
+            });
             return Answer.of(Ordered.set(result));
         }
     }
@@ -591,25 +619,17 @@ public final class Bodies {
             if (!resolved.present()) {
                 return Answer.absent();
             }
-            ModuleUniverse universe = CompilationUniverse.over(db);
+            // Which definitions of another module this one may read is what its import lines
+            // were left with, and it is settled where claims are settled. Asked of that module
+            // again, a definition it publishes could be read under a spelling no line got — the
+            // claim having lost a contest, or come in on a line that was refused — and the leave
+            // would be granted a second time to a claim that did not stand.
+            Map<String, List<PublishedHelper>> byModule = new LinkedHashMap<>();
+            leaves(db, name).values().forEach(leave -> byModule
+                    .computeIfAbsent(leave.module(), k -> new ArrayList<>()).add(leave));
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-            for (Hir.Import imp : resolved.value().imports()) {
-                // Which of the names this line asked for that module hands over is that module's
-                // to say, and it says so where it was read. Worked out here, off the tree this is
-                // about to hold, the rule would be written a second time over a second
-                // representation — which is how a definition came to be published to one reader
-                // and not to another.
-                Map<String, PublishedHelper> allowed = new LinkedHashMap<>();
-                if (universe.module(imp.module()) instanceof ModuleUniverse.InSight.Read there) {
-                    for (String wanted : imp.names()) {
-                        there.publishedHelper(wanted)
-                                .ifPresent(leave -> allowed.put(leave.name(), leave));
-                    }
-                }
-                if (allowed.isEmpty()) {
-                    continue;   // nothing was handed over, so no body of that module is read
-                }
-                Answer<Hir.Module> from = db.ask(new Settled(imp.module()));
+            for (Map.Entry<String, List<PublishedHelper>> allowed : byModule.entrySet()) {
+                Answer<Hir.Module> from = db.ask(new Settled(allowed.getKey()));
                 // Closed against the table that module's own bodies are expanded against, which is
                 // everything it can name and not only what it declares: a published body may call a
                 // helper that module imported in turn, and a chain of three is where a table of its
@@ -620,14 +640,14 @@ public final class Bodies {
                 // over the question of what it means — and the answer taken here would be this
                 // module's guess about another module's declarations.
                 Answer<Expanding.Of> against =
-                        db.ask(new Expanding(imp.module(), InliningPolicy.FULL));
+                        db.ask(new Expanding(allowed.getKey(), InliningPolicy.FULL));
                 if (!from.present() || !against.present()) {
                     continue;
                 }
                 // Two imports reaching one definition reach one definition: the name it is keyed by
                 // is the module that declares it and its own name, so the second arrival is the same
                 // entry rather than a second copy of the method.
-                publishedClosure(from.value(), allowed.values(), against.value())
+                publishedClosure(from.value(), allowed.getValue(), against.value())
                         .forEach(out::putIfAbsent);
             }
             return Answer.of(out);

@@ -151,13 +151,15 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
         for (Class<?> each : compiled()) {
             for (Executable member : members(each)) {
                 if (member instanceof Method method && Modifier.isStatic(method.getModifiers())
+                        && !Modifier.isPrivate(method.getModifiers())
                         && mentioned(method.getGenericReturnType()).contains(leave)) {
                     minting.add(each.getName() + "#" + member.getName());
                 }
             }
         }
         assertEquals(List.of(), minting,
-                "a leave is granted to a reader, not handed out by whoever asks for one");
+                "nothing hands a leave out to whoever asks: a static one is a door anybody may"
+                        + " walk through, and a private one is a reader of what was granted");
     }
 
     /**
