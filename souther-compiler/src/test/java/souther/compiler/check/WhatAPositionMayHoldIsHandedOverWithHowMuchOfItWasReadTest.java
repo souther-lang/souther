@@ -288,6 +288,70 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         asFarAsRead(ValueSet.ANY, read, "inner");
     }
 
+    /**
+     * A type the walk does not enter leaves its rules unread, and that is said too.
+     *
+     * <p>The walk goes through a field's own type and stops at what wraps one — an optional, a
+     * collection, a sum of records — so a rule written inside one of those reaches no reading here.
+     * A position whose values those rules narrow is not one this can speak for, however plainly the
+     * clauses it did read were read.
+     */
+    @Test
+    void aRuleUnderSomethingTheWalkDoesNotEnterIsARuleUnread() {
+        asFarAsRead(ValueSet.ANY, of("""
+                module demo
+
+                data Inner = String
+                    invariant only = value == "A"
+
+                data Outer = { inner: Inner? }
+                """, "Outer"), "inner");
+        asFarAsRead(ValueSet.ANY, of("""
+                module demo
+
+                data Inner = String
+                    invariant only = value == "A"
+
+                data Outer = { inners: List<Inner> }
+                """, "Outer"), "inners");
+        asFarAsRead(ValueSet.ANY, of("""
+                module demo
+
+                data Yes = { n: Int }
+                    invariant only = n == 1
+                data No = { n: Int }
+                data Answer = Yes | No
+
+                data Outer = { answer: Answer }
+                """, "Outer"), "answer");
+    }
+
+    /**
+     * And a type it does not enter that no rule is written under costs nothing.
+     *
+     * <p>Which is what keeps the answer worth having. A record with a plain field, or with a field
+     * of an enumeration, is a record the walk stops at twice and loses nothing at either stop — a
+     * unit data may write no rule (spec §unit-data), and a primitive has none to write. A reading
+     * that said so at every stop would speak for no position of any record that has a field.
+     */
+    @Test
+    void aTypeTheWalkDoesNotEnterCostsNothingWhereNoRuleIsWrittenUnderIt() {
+        wholly(ValueSet.ANY, of("""
+                module demo
+
+                data Outer = { plain: String }
+                """, "Outer"), "plain");
+        wholly(ValueSet.ANY, of("""
+                module demo
+
+                data Red
+                data Green
+                data Colour = Red | Green
+
+                data Outer = { colour: Colour }
+                """, "Outer"), "colour");
+    }
+
     /** And the rules of one field say nothing about another. */
     @Test
     void whatOneFieldMayHoldIsNotWhatTheFieldBesideItMayHold() {

@@ -10,8 +10,10 @@ import souther.compiler.values.ValueSet;
 import souther.compiler.numeric.Count;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -187,7 +189,14 @@ public final class FieldDomains {
         // and it is the position a reader of a newtype asks about.
         Map<String, ValueSet> admitted = new LinkedHashMap<>();
         Map<String, Boolean> spokenFor = new LinkedHashMap<>();
-        seeded.keys().keySet().forEach(field -> {
+        // Every position that answers to either name. A number is called one thing by the interval
+        // algebra and another by everything else, and the two are filed as they are found — so a
+        // reading keyed by one of the maps would leave a position held only by the other answering
+        // from a default, which is the widest thing there is to say and is said about a position a
+        // clause may well have narrowed.
+        Set<String> positions = new LinkedHashSet<>(seeded.keys().keySet());
+        positions.addAll(seeded.atoms().keySet());
+        positions.forEach(field -> {
             AdmissibleValues<Term> values = seeded.constraints().values();
             // Both names of the position, since a number has one of each and a clause reaching it
             // is filed under whichever the reading recognised. Both are about the same values, so
