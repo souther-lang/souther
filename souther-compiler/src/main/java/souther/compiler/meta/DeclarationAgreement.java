@@ -165,17 +165,30 @@ public final class DeclarationAgreement {
             // question, so a reader was told that what was published cannot be read here whatever
             // had actually gone wrong — a dependency the answer's classes leave out reads the same
             // as an artifact from another compiler.
-            Readback<PublishedUniverse.Read> here = mine.resolved(module);
-            if (here instanceof Readback.NotReady<PublishedUniverse.Read> notRead) {
-                return new Agreement.Unreadable(notRead,
-                        Agreement.Side.THE_MODULE_BEING_EVALUATED);
+            // A switch over the states there are rather than a test and a cast: the cast would work
+            // the answer out a second time, and what a reading hands over is something this holds
+            // from the type rather than from having just ruled the other states out.
+            PublishedUniverse.Read here;
+            switch (mine.resolved(module)) {
+                case Readback.NotReady<PublishedUniverse.Read> notRead -> {
+                    return new Agreement.Unreadable(notRead,
+                            Agreement.Side.THE_MODULE_BEING_EVALUATED);
+                }
+                case Readback.Ready<PublishedUniverse.Read>(PublishedUniverse.Read read) ->
+                        here = read;
             }
-            Readback<PublishedUniverse.Read> there = yours.resolved(module);
-            if (there instanceof Readback.NotReady<PublishedUniverse.Read> notRead) {
-                return new Agreement.Unreadable(notRead, Agreement.Side.THE_ANSWER);
+            PublishedUniverse.Read there;
+            switch (yours.resolved(module)) {
+                case Readback.NotReady<PublishedUniverse.Read> notRead -> {
+                    return new Agreement.Unreadable(notRead, Agreement.Side.THE_ANSWER);
+                }
+                case Readback.Ready<PublishedUniverse.Read>(PublishedUniverse.Read read) ->
+                        there = read;
             }
-            ourSide.put(module, ((Readback.Ready<PublishedUniverse.Read>) here).value());
-            theirSide.put(module, ((Readback.Ready<PublishedUniverse.Read>) there).value());
+            // Both, or neither. Written down as each side is read, a side answered while the other
+            // could not be would leave this module counting as one both sides have.
+            ourSide.put(module, here);
+            theirSide.put(module, there);
             return null;
         }
 

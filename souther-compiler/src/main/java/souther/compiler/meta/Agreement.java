@@ -4,11 +4,13 @@ package souther.compiler.meta;
  * Whether two sets of declarations say the same thing about everything a value crossing between them
  * depends on.
  *
- * <p>Three answers and not two, because "they differ" and "it cannot be told" are different things to
- * have found out. A difference is established: both sides were read and one of them says something
- * else, and what to do about it is to build again. Being unable to tell is not a difference — nothing
- * has been established about the two at all — and a reader that reports it as one says a build is
- * stale on evidence it does not have.
+ * <p>More than two, because "they differ" and "it cannot be told" are different things to have found
+ * out. A difference is established: both sides were read and one of them says something else, and
+ * what to do about it is to build again. Being unable to tell is not a difference — nothing has been
+ * established about the two at all — and a reader that reports it as one says a build is stale on
+ * evidence it does not have. Which is why the ways of not being able to tell are kept apart from
+ * each other too: a set of declarations that could not be read carries why, and an answer that never
+ * said which build it reads by is not a reading that failed.
  */
 public sealed interface Agreement {
 
@@ -50,6 +52,12 @@ public sealed interface Agreement {
      *             someone to rebuild the one thing that is not in question
      */
     record Unreadable(Readback.NotReady<?> reading, Side side) implements Agreement {
+
+        public Unreadable {
+            java.util.Objects.requireNonNull(reading,
+                    "what could not be read is the reading that could not be made");
+            java.util.Objects.requireNonNull(side, "declarations belong to one side or the other");
+        }
 
         /** The module whose declarations could not be read — the reading's answer, not a second
          *  name kept beside it. */

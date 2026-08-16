@@ -9,6 +9,7 @@ import souther.compiler.codegen.Backend;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 
+import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,14 +39,17 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class EveryWayAnArtifactsImportLineCanFailIsNamedTest {
 
     /**
-     * Every refusal the assembly can make is named as a fact about the artifact.
+     * Every refusal the assembly can make is named as the kind of fact it is about.
      *
-     * <p>The arms are not written out. What is held is that this covers the ones there are, read off
-     * the type itself — written out, the list would be a copy of the other table, and a refusal
-     * added to that one would leave this passing while saying nothing about it.
+     * <p>Neither the arms nor what each is named as is written out. Both are read off the refusal:
+     * that there are these and no others comes from the type, and which of the two facts each is
+     * comes from what it carries — a refusal about an import line carries the line, which is what
+     * lets a reader with the source quote it, and one about a declaration carries the declaration.
+     * A table written out here would be a copy of the projection's, and an arm filed under the
+     * wrong one would agree with the copy.
      */
     @Test
-    void everyRefusalTheAssemblyCanMakeIsNamed() {
+    void everyRefusalTheAssemblyCanMakeIsNamedAsWhatItIsAbout() {
         Map<Class<?>, Readback.Failure> named = new LinkedHashMap<>();
         for (Scoping.Refusal refusal : eachRefusal()) {
             named.put(refusal.getClass(), ScopeRefusals.of(List.of(refusal)));
@@ -53,6 +57,23 @@ class EveryWayAnArtifactsImportLineCanFailIsNamedTest {
 
         assertEquals(Set.of(Scoping.Refusal.class.getPermittedSubclasses()), named.keySet(),
                 "every refusal assembling a scope can make is one this boundary names");
+        named.forEach((refusal, fact) -> {
+            Class<? extends Readback.Failure> kind = writtenOnAnImportLine(refusal)
+                    ? Readback.Failure.InvalidExposure.class
+                    : Readback.Failure.InvalidDeclarations.class;
+            assertInstanceOf(kind, fact,
+                    refusal.getSimpleName() + " is named as the other kind of fact");
+        });
+    }
+
+    /** Whether the refusal is about an import line, which is what carrying one says of it. */
+    private static boolean writtenOnAnImportLine(Class<?> refusal) {
+        for (RecordComponent part : refusal.getRecordComponents()) {
+            if (part.getType() == Ast.Import.class) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A refused line is said as a line, and a refused declaration as a declaration. */

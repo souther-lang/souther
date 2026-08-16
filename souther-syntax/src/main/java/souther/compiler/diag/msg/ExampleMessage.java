@@ -136,6 +136,11 @@ public sealed interface ExampleMessage extends Message {
     record BuildWhatAnswersItAgainstThisRevision(String module)
             implements ExampleMessage, Supporting {}
 
+    /** What to do about classes that are short of a module rather than wrong about one: the
+     *  artifact naming it is fine, and what is missing is somewhere for the name to be read from. */
+    record BuildWhatAnswersItAgainstAPathThatCarries(String module)
+            implements ExampleMessage, Supporting {}
+
     /**
      * Whether what answers the behavior was built against this module could not be told — which is
      * not the same as their disagreeing, and is said as its own thing for that reason.
