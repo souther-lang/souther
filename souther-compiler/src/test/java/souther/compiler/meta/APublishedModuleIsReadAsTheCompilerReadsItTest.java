@@ -157,6 +157,49 @@ class APublishedModuleIsReadAsTheCompilerReadsItTest {
                 "which is a name these classes say nothing about, not one they cannot read");
     }
 
+    /**
+     * A module whose declarations cannot be indexed is an absence here, wherever it is reached from.
+     *
+     * <p>Indexing refuses a name written twice, and a module read back from another build can carry
+     * one: it was published under the rules of the compiler that built it. There is nobody to tell —
+     * the source is not this compile's — so it is a module this reader cannot read, and a reader of
+     * <em>that</em> is what this holds. The second ask is the one that matters. A registry that works
+     * a module's declarations out when it is first asked raises again for the next asker, and the
+     * next asker is a module naming it with a qualifier while it is being resolved, which is past
+     * everything that answers absences.
+     */
+    @Test
+    void aModuleWhoseDeclarationsCannotBeIndexedIsAnAbsenceWhereverItIsReachedFrom() {
+        Map<String, PublishedModule.Declarations> published = Map.of(
+                "pub.twice.$Module", moduleClass("pub.twice", List.of(), List.of("A", "B")),
+                "pub.twice.A", dataClass("data Same = String"),
+                "pub.twice.B", dataClass("data Same = Int"),
+                "pub.naming.$Module", moduleClass("pub.naming", List.of(), List.of("Note")),
+                "pub.naming.Note", dataClass("data Note = { s: pub.twice.Same }"));
+        PublishedUniverse universe = PublishedUniverse.of(published::get);
+
+        assertNull(universe.resolved("pub.twice"), "`Same` is declared twice, so it is not indexed");
+
+        assertNull(org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+                        () -> universe.resolved("pub.naming"),
+                        "the module naming it is read back as an absence, not as a raise"),
+                "its field's type is declared by a module this reader cannot read");
+    }
+
+    /** A `$Module` class carrying {@code types}, as another build would have stamped it. */
+    private static PublishedModule.Declarations moduleClass(String module, List<String> imports,
+                                                            List<String> types) {
+        return new PublishedModule.Declarations(new PublishedModule.SoutherModuleView(
+                souther.compiler.codegen.Backend.BOUNDARY_VERSION, "another build", module,
+                "module " + module + " exposing ( Same, Note )", imports, types,
+                List.of(), List.of()), null, null, null);
+    }
+
+    /** The class one declaration was stamped on. */
+    private static PublishedModule.Declarations dataClass(String declaration) {
+        return new PublishedModule.Declarations(null, declaration, null, null);
+    }
+
     /** What the invariant of {@code type} calls, as the front end answered it. */
     private static ValueName calledByTheInvariantOf(Hir.Module module, String type) {
         for (Hir.Def def : module.defs()) {

@@ -76,8 +76,8 @@ public final class PublishedUniverse {
             unreadable.add(module);
             return null;
         }
-        Registry<Ast.Def> registry = Registry.ofWritten(Map.copyOf(written));
-        ModuleUniverse universe = universe(registry);
+        ModuleUniverse universe = universe();
+        Registry<Ast.Def> registry = declaredBy(universe);
         for (String name : Set.copyOf(written.keySet())) {
             if (resolved.containsKey(name)) {
                 continue;
@@ -179,25 +179,45 @@ public final class PublishedUniverse {
     /**
      * What was read, as the universe a module is resolved against.
      *
-     * <p>The declarations come from the same registry resolution reads other modules by, rather than
-     * being indexed here: a name written twice is refused once, where declarations are indexed, and
-     * a module whose declarations cannot be indexed at all has nothing to be built on.
+     * <p>Every module is indexed here, once, and this is the only place indexing one can fail. A
+     * registry that works a module's declarations out when it is first asked raises wherever it is
+     * asked from, and a reader that caught the first ask was caught by the second: a module named
+     * with a qualifier is asked for again while some other module is being resolved, and the raise
+     * came back out of a reading that answers absences.
      */
-    private ModuleUniverse universe(Registry<Ast.Def> registry) {
+    private ModuleUniverse universe() {
         Map<String, ModuleUniverse.InSight> modules = new LinkedHashMap<>(beyondReading);
         for (Map.Entry<String, Ast.Module> each : written.entrySet()) {
-            modules.put(each.getKey(), sighted(registry, each.getValue()));
+            modules.put(each.getKey(), sighted(each.getValue()));
         }
         return new ModuleUniverse.OfWhatIsRead(modules);
     }
 
-    /** One module of that universe: what it wrote and what it declares, or nothing to build on. */
-    private static ModuleUniverse.InSight sighted(Registry<Ast.Def> registry, Ast.Module module) {
+    /** One module of that universe: what it wrote and what it declares, or nothing to be built on. */
+    private static ModuleUniverse.InSight sighted(Ast.Module module) {
         try {
-            return new ModuleUniverse.InSight.Read(module, registry.declaredIn(module.name()));
+            return new ModuleUniverse.InSight.Read(module, Registry.ownDefs(module));
         } catch (CompileException | IllegalArgumentException _) {
             return ModuleUniverse.InSight.UNREADABLE;
         }
+    }
+
+    /**
+     * What resolution reads other modules by: the declarations this universe settled, and nothing
+     * worked out again.
+     *
+     * <p>Built from the universe rather than beside it, so what a scope says a module declares and
+     * what resolution finds there are one answer. A module the universe has nothing to give for is
+     * not among them, and is read the way a module nobody has is read.
+     */
+    private Registry<Ast.Def> declaredBy(ModuleUniverse universe) {
+        Map<String, Map<String, Ast.Def>> declared = new LinkedHashMap<>();
+        for (String name : written.keySet()) {
+            if (universe.module(name) instanceof ModuleUniverse.InSight.Read read) {
+                declared.put(name, read.declarations());
+            }
+        }
+        return Registry.ofRead(Map.copyOf(written), declared);
     }
 
     /**
