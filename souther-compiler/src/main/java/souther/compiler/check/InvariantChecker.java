@@ -261,6 +261,9 @@ public final class InvariantChecker {
      *                    declaration is whether any value of it exists, and that is a question about
      *                    all of them at once ({@link ConstraintState#isBottom})
      * @param atoms the atom each field's own value is, for the fields that are numbers
+     * @param keys what each field is called where it is not a number — which every named position
+     *             has, and which a number has as well. A position is looked up by both, since a
+     *             clause reaching it may be recognised by either
      * @param held the atom the count of each field is, for the fields whose values are counted by
      *             something. A field is in one of these two or in neither, never in both: what
      *             names a number is its own value and what names a list is how much of it there is
@@ -269,8 +272,8 @@ public final class InvariantChecker {
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
      */
-    record Seeded(ConstraintState constraints, Map<String, Term> atoms, Map<String, Term> held,
-                  Reading reading, boolean everyClauseRead) {
+    record Seeded(ConstraintState constraints, Map<String, Term> atoms, Map<String, Term> keys,
+                  Map<String, Term> held, Reading reading, boolean everyClauseRead) {
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
          * asked of {@link #constraints} and is never read off this. */
@@ -382,7 +385,7 @@ public final class InvariantChecker {
             }
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
-            return new Seeded(ConstraintState.top(), Map.of(), Map.of(),
+            return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
                     new Reading(List.of(), Map.of()), false);
         }
         Map<String, Term> atoms = new LinkedHashMap<>();
@@ -421,7 +424,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(constraints, atoms, held, reading, read);
+        return new Seeded(constraints, atoms, keys, held, reading, read);
     }
 
     /**

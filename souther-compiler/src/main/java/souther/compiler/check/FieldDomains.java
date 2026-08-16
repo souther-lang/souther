@@ -4,6 +4,8 @@ import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.ValueSet;
 
 import souther.compiler.numeric.Count;
 import java.util.ArrayList;
@@ -39,7 +41,7 @@ public final class FieldDomains {
 
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), List.of(), Map.of(), true,
+            new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), true,
                     ConstraintState.top(), null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
@@ -52,6 +54,10 @@ public final class FieldDomains {
     /** What each field has to hold, kept apart from what each field is. Same numbers, different
      * question — see {@link Held}. */
     private final Map<String, NumericDomain.Bounds> heldByField;
+    /** Which values each position may hold — see {@link #admits}. */
+    private final Map<String, ValueSet> admittedByField;
+    /** Whether that is the whole of what the rules leave each of them — see {@link #speaksFor}. */
+    private final Map<String, Boolean> spokenForByField;
     /** Whether the reading that produced these bounds ran to the end. Kept because it is what that
      * reading knows about itself: a walk that fell over produces the same empty domain as a value
      * with no rules, and a second reading asked afterwards does not take the same path. */
@@ -70,6 +76,8 @@ public final class FieldDomains {
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
+                         Map<String, ValueSet> admittedByField,
+                         Map<String, Boolean> spokenForByField,
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeSymbol>> narrowers,
                          boolean seeded, ConstraintState constraints, TypeSymbol named,
@@ -77,6 +85,8 @@ public final class FieldDomains {
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.heldByField = heldByField;
+        this.admittedByField = admittedByField;
+        this.spokenForByField = spokenForByField;
         this.directs = directs;
         this.narrowers = narrowers;
         this.seeded = seeded;
@@ -161,6 +171,25 @@ public final class FieldDomains {
                 out.put(field, bounds);
             }
         });
+        // Which values each position may hold, resolved onto paths for the same reason the bounds
+        // are. Every position and not only the fields: what a name wraps is at no path of its own,
+        // and it is the position a reader of a newtype asks about.
+        Map<String, ValueSet> admitted = new LinkedHashMap<>();
+        Map<String, Boolean> spokenFor = new LinkedHashMap<>();
+        seeded.keys().keySet().forEach(field -> {
+            AdmissibleValues<Term> values = seeded.constraints().values();
+            // Both names of the position, since a number has one of each and a clause reaching it
+            // is filed under whichever the reading recognised. Both are about the same values, so
+            // what holds of it is what both leave.
+            ValueSet here = ValueSet.ANY;
+            boolean spoken = true;
+            for (Term name : named(seeded, field)) {
+                here = here.meet(values.at(name));
+                spoken &= values.speaksFor(name);
+            }
+            admitted.put(field, here);
+            spokenFor.put(field, spoken);
+        });
         // Resolved here rather than handed over as atoms. An atom is a name the seeding gave a shape
         // and means nothing once the reading that named it is gone, so a caller holding one could
         // only ask the domain it came from — which is this one, while it is still here.
@@ -176,7 +205,8 @@ public final class FieldDomains {
         });
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
-        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.reading().directs(),
+        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
+                Map.copyOf(spokenFor), seeded.reading().directs(),
                 seeded.reading().narrowers(),
                 seeded.everyClauseRead(), seeded.constraints(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
@@ -346,6 +376,50 @@ public final class FieldDomains {
     public Held heldAt(String path) {
         NumericDomain.Bounds bounds = heldByField.get(path);
         return bounds == null ? null : new Held(bounds);
+    }
+
+    /**
+     * Which values the position at {@code path} may hold.
+     *
+     * <p>{@link ValueSet#ANY} where the rules leave it open, which is also what a position nothing
+     * was written about comes to. Whether the answer is the whole of what the rules leave is
+     * {@link #speaksFor}, and the two have to be read together: a set of two values is a division
+     * the model draws, and the same set beside a rule this could not read is a division the model
+     * may draw more finely.
+     *
+     * <p>{@code path} is read from the value these are of, as {@link #at} is, and what a name wraps
+     * is at {@link #THE_VALUE}. A range is not handed back there and this is: a newtype's value is
+     * the position the newtype is, so it is the position a reader of one asks about.
+     */
+    public ValueSet admits(String path) {
+        return admittedByField.getOrDefault(path, ValueSet.ANY);
+    }
+
+    /**
+     * Whether {@link #admits} is the whole of what the rules leave the position at {@code path}.
+     *
+     * <p>False where a rule reaching it could not be read as a set. The values are still true of
+     * the position — every value they exclude is excluded — but they are wider than the rules, so a
+     * reader dividing the position into classes would be dividing it more coarsely than the model
+     * does, and a reader saying the model divides it in no way at all would be wrong outright.
+     */
+    public boolean speaksFor(String path) {
+        return spokenForByField.getOrDefault(path, true);
+    }
+
+    /** Both names the position at {@code path} answers to. A number has one of each and everything
+     * else has the second, and a clause is filed under whichever the reading recognised. */
+    private static List<Term> named(InvariantChecker.Seeded seeded, String path) {
+        List<Term> names = new ArrayList<>();
+        Term atom = seeded.atoms().get(path);
+        if (atom != null) {
+            names.add(atom);
+        }
+        Term key = seeded.keys().get(path);
+        if (key != null) {
+            names.add(key);
+        }
+        return names;
     }
 
     /**
