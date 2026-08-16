@@ -1,8 +1,14 @@
 package souther.lsp.analysis;
 
 import souther.compiler.Compiler;
+import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Requirements;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.SpecImplementation;
+import souther.compiler.examples.ExampleProvisioning;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
@@ -34,7 +40,9 @@ import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
+import souther.compiler.cst.TopLevelForm;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.fmt.Skeleton;
 import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
 import souther.lsp.protocol.CodeLens;
@@ -51,6 +59,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -93,6 +102,9 @@ public final class Analyzer {
      * said. Held across edits so completion has something to offer while the document being typed in
      * is held out of the compile for its syntax errors. */
     private final NamesFromElsewhere elsewhere = new NamesFromElsewhere();
+
+    /** What the last compile that could answer said each document owes a declaration for. */
+    private final LastAnswered<List<CompletionItem>> behaviorsOwed = new LastAnswered<>();
 
     /**
      * How much of what the rows cover this editor was told to measure. Off by default.
@@ -282,6 +294,7 @@ public final class Analyzer {
     private Compilation compileOf(ModuleGraph graph, souther.compiler.meta.ModulePath path,
                                   Map<String, String> sources, Set<String> broken) {
         elsewhere.forgetAllBut(graph.uris());
+        behaviorsOwed.forgetAllBut(graph.uris());
         readings.keySet().retainAll(Set.copyOf(graph.uris()));
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
             workspaceCompile = Compilation.ofDocuments(sources, broken, path);
@@ -1219,10 +1232,154 @@ public final class Analyzer {
         for (CompletionItem item : fromElsewhere) {
             byLabel.putIfAbsent(item.label(), item);
         }
+        // Ahead of the keywords, so where a declaration may be written the offer is the declaration
+        // rather than the word it starts with. Inside a definition none of these are offered and the
+        // word stands, which is what a `let` binding in a block is written with.
+        for (CompletionItem item : declarationsToWrite(uri, root, cursor, compilation, module)) {
+            byLabel.putIfAbsent(item.label(), item);
+        }
         for (String keyword : CstLexer.keywords()) {
             byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD, null));
         }
         return new ArrayList<>(byLabel.values());
+    }
+
+    /**
+     * The declarations that may be written at the cursor.
+     *
+     * <p>Nothing where the cursor is inside a definition: what may be written there is an
+     * expression, and a declaration offered inside one is an offer to write a syntax error. At the
+     * file level, the forms whose place in a file the cursor is still in — a header opens a file, an
+     * import follows it, and a body item may be written wherever one may.
+     *
+     * <p>Where the compile can say what this module declares, a behavior with no implementation is
+     * offered the {@code let} its signature describes, and every behavior is offered a row. Where it
+     * cannot — which is every keystroke that leaves the document unparseable — the forms are still
+     * offered, stating what they are and nothing that was not read.
+     */
+    private List<CompletionItem> declarationsToWrite(String uri, SyntaxNode root, int cursor,
+                                                     Compilation compilation, String module) {
+        if (enclosingDef(root, cursor) != null) {
+            return List.of();
+        }
+        List<CompletionItem> out = new ArrayList<>();
+        Set<TopLevelForm.Region> here = regionsAt(root, cursor);
+        for (TopLevelForm form : TopLevelForm.values()) {
+            if (here.contains(form.region())) {
+                built(form.starter(), CompletionItem.SNIPPET, null,
+                        DeclarationSkeletons.fixed(form)).ifPresent(out::add);
+            }
+        }
+        if (!here.contains(TopLevelForm.Region.BODY)) {
+            return List.copyOf(out);
+        }
+        out.addAll(behaviorsToWrite(uri, compilation, module));
+        return List.copyOf(out);
+    }
+
+    /**
+     * What the behaviors of {@code module} are still owed, as declarations to write.
+     *
+     * <p>Which behaviors have no implementation is {@link Requirements#injected} — the same question
+     * the emitter asks about which names it has to be given — so an editor and a compile cannot
+     * disagree about whether a behavior is written. A behavior written as a composition is already
+     * its own implementation and is not among them.
+     */
+    private List<CompletionItem> behaviorsToWrite(String uri, Compilation compilation,
+                                                  String module) {
+        List<CompletionItem> answered =
+                behaviorsOwed.of(uri, () -> askBehaviorsToWrite(compilation, module));
+        return answered == null ? List.of() : answered;
+    }
+
+    /** The same, asked of the compile — null where it cannot say what this module declares. */
+    private List<CompletionItem> askBehaviorsToWrite(Compilation compilation, String module) {
+        if (module == null) {
+            return null;
+        }
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        if (prepared == null) {
+            return null;
+        }
+        Map<String, List<BehaviorRequirement>> requirements =
+                compilation.db().ask(new Bodies.Requirements(module)).value();
+        List<CompletionItem> out = new ArrayList<>();
+        for (Hir.BehaviorDef declared : prepared.behaviors()) {
+            if (!(declared instanceof Hir.SpecBehavior behavior)) {
+                continue;
+            }
+            List<SpecImplementation.Parameter> parameters =
+                    SpecImplementation.parameters(behavior);
+            if (parameters.contains(new SpecImplementation.Parameter.Unanswered())) {
+                // A dependency naming nothing settles no parameter, and a skeleton stating one it
+                // did not read would be this server inventing it.
+                continue;
+            }
+            if (prepared.injected(behavior)) {
+                built(TopLevelForm.FN.starter() + " " + behavior.name(), CompletionItem.SNIPPET,
+                        module, DeclarationSkeletons.implementing(behavior.name(), parameters))
+                        .ifPresent(out::add);
+            }
+            List<String> unsupplied = requirements == null ? List.of()
+                    : ExampleProvisioning.unsupplied(List.of(),
+                            Requirements.names(requirements.getOrDefault(behavior.name(), List.of())),
+                            prepared.forExamples());
+            built(TopLevelForm.EXAMPLE.starter() + " " + behavior.name(), CompletionItem.SNIPPET,
+                    module, DeclarationSkeletons.exampleFor(behavior.name(), parameters, unsupplied))
+                    .ifPresent(out::add);
+        }
+        return out;
+    }
+
+    /**
+     * An item writing {@code parts}, or nothing where they do not make a declaration.
+     *
+     * <p>A skeleton is refused where the tokens do not parse or where the formatter did not write
+     * back what it was given. Neither should happen, and where one does the answer is to offer one
+     * candidate fewer rather than to fail the request that asked for all of them.
+     */
+    private static Optional<CompletionItem> built(String label, int kind, String detail,
+                                                  List<Skeleton.Part> parts) {
+        try {
+            return Optional.of(new CompletionItem(label, kind, detail, Skeleton.of(parts)));
+        } catch (Skeleton.Mismatch _) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * The places in a file the cursor is still in.
+     *
+     * <p>A file is read as a header, then its imports, then its body, so where the cursor stands
+     * against what is already written says which of those it is still in front of. A body item may
+     * be written wherever a declaration may.
+     */
+    private static Set<TopLevelForm.Region> regionsAt(SyntaxNode root, int cursor) {
+        Set<TopLevelForm.Region> here = new LinkedHashSet<>();
+        here.add(TopLevelForm.Region.BODY);
+        boolean beforeEveryItem = true;
+        boolean beforeEveryDefinition = true;
+        for (SyntaxNode item : root.childNodes()) {
+            // Where the item is written, not where its node begins: a node reaches back over the
+            // blank line in front of it, and a cursor on that line is in front of the item.
+            int written = writtenFrom(item);
+            if (written < 0 || written >= cursor) {
+                continue;
+            }
+            beforeEveryItem = false;
+            if (item.kind() != SyntaxKind.MODULE_HEADER
+                    && item.kind() != SyntaxKind.EXAMPLES_FILE_HEADER
+                    && item.kind() != SyntaxKind.IMPORT_DECL) {
+                beforeEveryDefinition = false;
+            }
+        }
+        if (beforeEveryItem) {
+            here.add(TopLevelForm.Region.FILE_HEADER);
+        }
+        if (beforeEveryDefinition) {
+            here.add(TopLevelForm.Region.PRELUDE);
+        }
+        return here;
     }
 
     /**
@@ -1262,16 +1419,44 @@ public final class Analyzer {
         return labels;
     }
 
-    /** The top-level definition whose span contains {@code offset}, or {@code null} at the file level. */
+    /**
+     * The top-level definition whose text contains {@code offset}, or {@code null} at the file level.
+     *
+     * <p>Its text, and not its span. A node reaches back over the blank lines and comments in front
+     * of it — the tree covers every character, and they belong to something — so a cursor on the
+     * empty line above a definition is inside its span while being nowhere near it. That line is
+     * where the next declaration is written, and what is bound inside the definition below is bound
+     * nowhere there.
+     */
     private SyntaxNode enclosingDef(SyntaxNode root, int offset) {
         for (SyntaxNode def : root.childNodes()) {
-            if ((def.kind() == SyntaxKind.DATA_DEF || def.kind() == SyntaxKind.BEHAVIOR_DEF
-                    || def.kind() == SyntaxKind.FN_DEF)
-                    && offset >= def.start() && offset <= def.end()) {
+            if (def.kind() != SyntaxKind.DATA_DEF && def.kind() != SyntaxKind.BEHAVIOR_DEF
+                    && def.kind() != SyntaxKind.FN_DEF) {
+                continue;
+            }
+            int written = writtenFrom(def);
+            if (written >= 0 && offset >= written && offset <= def.end()) {
                 return def;
             }
         }
         return null;
+    }
+
+    /** Where {@code node}'s own text begins: its first code token, past the trivia in front of it. */
+    private static int writtenFrom(SyntaxNode node) {
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxToken token) {
+                if (!token.kind().isTrivia()) {
+                    return token.start();
+                }
+            } else if (e instanceof SyntaxNode child) {
+                int written = writtenFrom(child);
+                if (written >= 0) {
+                    return written;
+                }
+            }
+        }
+        return -1;
     }
 
     /**
