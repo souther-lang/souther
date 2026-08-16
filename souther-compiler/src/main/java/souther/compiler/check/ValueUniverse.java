@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.values.Value;
 
@@ -15,8 +16,8 @@ import java.util.List;
  *
  * <p>Not {@link Carrier}, which answers whether a position has an order-preserving count. The two
  * questions come apart at both ends: a boolean has no order and has two values, a string has an
- * order and has no end of them. Answered with the carrier, a boolean was a position nothing could
- * be counted of.
+ * order and has no end of them. They are asked apart here as well as answered apart — nothing below
+ * reads that one — so a change to which types carry an order leaves this where it was.
  *
  * <p>Exhaustive over the primitives, so one added to the language is answered here rather than
  * falling to whichever arm this happened to end with. Where the values cannot be counted out the
@@ -45,14 +46,19 @@ final class ValueUniverse {
                 case INT, DECIMAL, STRING, DATE, TIME, DATETIME, INSTANT, RAW -> null;
             };
         }
-        // An enumeration's cases, taken from the one reading that decides which sums are
-        // enumerations and in which order their cases stand. A second reading of that here would be
-        // a second answer to keep in step with it.
-        if (!(Carrier.ofValue(base, symbols) instanceof Carrier.Ordinal ordinal)) {
+        // An enumeration's cases, in the order the sum declares them. Asked of the sum directly and
+        // not through {@link Carrier}: that one answers whether a position has an order-preserving
+        // count, which is a different question that happens to hold of the same declarations today.
+        // Read through it, a change to which types carry an order would silently change which types
+        // have values that can be written out. Both go to `TypeOps` for what an enumeration is, so
+        // this is one reading of that and not two.
+        if (!(base instanceof Type.Ref ref)
+                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
+                || !TypeOps.isUnitOnlySum(base, symbols)) {
             return null;
         }
         List<Value> values = new ArrayList<>();
-        ordinal.cases().forEach(each -> values.add(Value.of(each)));
-        return List.copyOf(values);
+        TypeOps.leafCases(sum, symbols).forEach(each -> values.add(Value.of(each)));
+        return values.isEmpty() ? null : List.copyOf(values);
     }
 }

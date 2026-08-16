@@ -1,5 +1,6 @@
 package souther.compiler.values;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -64,8 +65,11 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Set<A> unread, boolea
                 said.put(atom, set);
             }
         });
-        values = Map.copyOf(said);
-        unread = Set.copyOf(unread);
+        // Kept in the order the positions were read, as {@link ValueSet} keeps its values: what is
+        // written out of these has to come out the same on two runs of the compiler, and the
+        // iteration order of an immutable copy does not.
+        values = Collections.unmodifiableMap(said);
+        unread = Collections.unmodifiableSet(new LinkedHashSet<>(unread));
     }
 
     /** Nothing read and nothing missed, which is what a reading starts from. */

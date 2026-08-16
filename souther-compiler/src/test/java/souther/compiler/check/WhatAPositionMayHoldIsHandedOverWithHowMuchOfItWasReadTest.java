@@ -58,8 +58,31 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         return read(source, named).domains();
     }
 
+    /** The same, for a model the compiler refuses: what this hands over afterwards is still read by
+     * whatever ran before the refusal reached the caller. */
+    private static FieldDomains ofRefused(String source, String named) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertFalse(compilation.diagnostics().values().stream().flatMap(List::stream).toList()
+                .isEmpty(), "this model is meant to be refused");
+        Symbols symbols = compilation.symbols("demo");
+        TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
+        return FieldDomains.of(name,
+                (Hir.Data) symbols.declarations().declaration(name.key()), symbols);
+    }
+
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
+
+    /** {@code values} are what the position holds, and are the whole of what its rules leave it. */
+    private static void wholly(ValueSet values, FieldDomains read, String path) {
+        assertEquals(new FieldDomains.Admits.EveryRuleRead(values), read.admits(path));
+    }
+
+    /** {@code values} are what the position holds, and the rules may leave fewer. */
+    private static void asFarAsRead(ValueSet values, FieldDomains read, String path) {
+        assertEquals(new FieldDomains.Admits.SomeRuleUnread(values), read.admits(path));
+    }
 
     /** An equality names the one value the position may hold. */
     @Test
@@ -70,8 +93,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant only = value == "A"
                 """, "Gender");
-        assertEquals(ValueSet.just(A), read.admits(FieldDomains.THE_VALUE));
-        assertTrue(read.speaksFor(FieldDomains.THE_VALUE));
+        wholly(ValueSet.just(A), read, FieldDomains.THE_VALUE);
     }
 
     /** Alternatives name both, which is the distinction a model writes this way. */
@@ -83,8 +105,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant either = value == "A" || value == "B"
                 """, "Gender");
-        assertEquals(ValueSet.oneOf(Set.of(A, B)), read.admits(FieldDomains.THE_VALUE));
-        assertTrue(read.speaksFor(FieldDomains.THE_VALUE));
+        wholly(ValueSet.oneOf(Set.of(A, B)), read, FieldDomains.THE_VALUE);
     }
 
     /**
@@ -102,8 +123,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant either = value == "A" || String.matches("[0-9]+", value)
                 """, "Gender");
-        assertTrue(read.admits(FieldDomains.THE_VALUE).isAny());
-        assertFalse(read.speaksFor(FieldDomains.THE_VALUE));
+        asFarAsRead(ValueSet.ANY, read, FieldDomains.THE_VALUE);
     }
 
     /**
@@ -124,8 +144,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Pair = { left: String, right: String }
                     invariant either = left == "A" || String.matches("[0-9]+", right)
                 """, "Pair");
-        assertTrue(read.admits("left").isAny());
-        assertFalse(read.speaksFor("left"));
+        asFarAsRead(ValueSet.ANY, read, "left");
     }
 
     /**
@@ -146,8 +165,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant both = value == "A" && String.matches("[A-Z]", value)
                 """, "Gender");
-        assertEquals(ValueSet.just(A), read.admits(FieldDomains.THE_VALUE));
-        assertFalse(read.speaksFor(FieldDomains.THE_VALUE));
+        asFarAsRead(ValueSet.just(A), read, FieldDomains.THE_VALUE);
     }
 
     /** And a rule it cannot read that names another position costs this one nothing at all.
@@ -163,9 +181,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Pair = { left: String, right: String }
                     invariant both = left == "A" && String.matches("[A-Z]", right)
                 """, "Pair");
-        assertEquals(ValueSet.just(A), read.admits("left"));
-        assertTrue(read.speaksFor("left"));
-        assertFalse(read.speaksFor("right"));
+        wholly(ValueSet.just(A), read, "left");
+        asFarAsRead(ValueSet.ANY, read, "right");
     }
 
     /** A rule this cannot read on its own leaves the position open, and says that it did. */
@@ -177,8 +194,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Gender = String
                     invariant shape = String.matches("[A-Z]", value)
                 """, "Gender");
-        assertTrue(read.admits(FieldDomains.THE_VALUE).isAny());
-        assertFalse(read.speaksFor(FieldDomains.THE_VALUE));
+        asFarAsRead(ValueSet.ANY, read, FieldDomains.THE_VALUE);
     }
 
     /** A position with no rules at all is open, and this can say so: the model divides it in no
@@ -190,8 +206,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
                 data Gender = String
                 """, "Gender");
-        assertTrue(read.admits(FieldDomains.THE_VALUE).isAny());
-        assertTrue(read.speaksFor(FieldDomains.THE_VALUE));
+        wholly(ValueSet.ANY, read, FieldDomains.THE_VALUE);
     }
 
     /** A denial over an enumeration leaves the cases it did not deny. */
@@ -208,9 +223,48 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Painted = { colour: Colour }
                     invariant notRed = colour /= Red
                 """, "Painted");
-        assertEquals(ValueSet.oneOf(Set.of(read.caseNamed("Green"), read.caseNamed("Blue"))),
-                read.domains().admits("colour"));
-        assertTrue(read.domains().speaksFor("colour"));
+        wholly(ValueSet.oneOf(Set.of(read.caseNamed("Green"), read.caseNamed("Blue"))),
+                read.domains(), "colour");
+        // And in the order the model declares them. What is written out of these is a class per
+        // value, and a reader listing them takes the order it is given — so the order has to be one
+        // the model settled rather than one a set happened to store them in, which for an immutable
+        // copy is settled afresh on every run of the compiler.
+        assertEquals(List.of(read.caseNamed("Green"), read.caseNamed("Blue")),
+                List.copyOf(((ValueSet.Finite) read.domains().admits("colour").values()).values()));
+    }
+
+    /**
+     * A reading that never ran says of every position that a rule about it may be unread.
+     *
+     * <p>Which is the answer that costs something to get wrong. A reading that fell over, and one a
+     * caller never asked for, leave the same empty maps a value with no rules leaves — and the
+     * empty answer read as "the model divides this position in no way at all" is the widest claim
+     * there is, made where nothing was read.
+     */
+    @Test
+    void aReadingOfNothingSpeaksForNoPosition() {
+        asFarAsRead(ValueSet.ANY, FieldDomains.NONE, FieldDomains.THE_VALUE);
+        asFarAsRead(ValueSet.ANY, FieldDomains.NONE, "anything");
+    }
+
+    /**
+     * And a clause nothing could type leaves every position of its declaration the same way.
+     *
+     * <p>Such a clause reaches no reading at all, so no reading here knows which position it was
+     * about — and a position it might have divided is one this cannot claim to have read. The
+     * declaration is refused where the clause is written; what is asserted here is that a reader
+     * asking this one afterwards is not told something untrue.
+     */
+    @Test
+    void aClauseNothingCouldTypeLeavesNoPositionSpokenFor() {
+        FieldDomains read = ofRefused("""
+                module demo
+
+                data Pair = { left: String, right: Int }
+                    invariant no = left == "A" && right == "B"
+                """, "Pair");
+        asFarAsRead(ValueSet.ANY, read, "left");
+        asFarAsRead(ValueSet.ANY, read, "right");
     }
 
     /** And the rules of one field say nothing about another. */
@@ -222,8 +276,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Pair = { left: String, right: String }
                     invariant one = left == "A"
                 """, "Pair");
-        assertEquals(ValueSet.just(A), read.admits("left"));
-        assertTrue(read.admits("right").isAny());
-        assertTrue(read.speaksFor("right"));
+        wholly(ValueSet.just(A), read, "left");
+        wholly(ValueSet.ANY, read, "right");
     }
 }

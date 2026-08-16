@@ -1,5 +1,6 @@
 package souther.compiler.values;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -29,7 +30,7 @@ public sealed interface ValueSet {
     record Finite(Set<Value> values) implements ValueSet {
 
         public Finite {
-            values = Set.copyOf(values);
+            values = held(values);
         }
     }
 
@@ -37,8 +38,22 @@ public sealed interface ValueSet {
     record Cofinite(Set<Value> excluded) implements ValueSet {
 
         public Cofinite {
-            excluded = Set.copyOf(excluded);
+            excluded = held(excluded);
         }
+    }
+
+    /**
+     * A set kept as it was given, and unable to be changed after.
+     *
+     * <p>The order is the order the model writes the values in, and it is kept because something
+     * will be written out of one of these: a position admitting three cases of an enumeration is
+     * three classes, and which order a reader lists them in is not a thing to leave to how a set
+     * happened to store them. {@code Set.copyOf} is what this is not — its iteration order is
+     * settled per run of the compiler, so the same model would list them one way today and another
+     * way tomorrow.
+     */
+    private static Set<Value> held(Set<Value> values) {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(values));
     }
 
     /** Every value there is, which is what the rules leave where they say nothing. */

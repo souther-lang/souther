@@ -271,9 +271,24 @@ public final class InvariantChecker {
      *                        where one could not be typed or held nothing this reads — the bounds are
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
+     * @param everyClauseGathered whether every clause of the value reached the readings at all.
+     *                 False where the walk fell over, and false where a clause could not be typed —
+     *                 in both, a rule of the declaration is one no reading here ever saw, so no
+     *                 reading can say it took the declaration in. A different question from
+     *                 {@code everyClauseRead}, which is one reading's account of the clauses it was
+     *                 handed: a clause that reading could not turn into an obligation is one
+     *                 another reading may have taken in whole, and borrowing that answer would
+     *                 settle each reading's completeness by a fragment that is not its own
      */
     record Seeded(ConstraintState constraints, Map<String, Term> atoms, Map<String, Term> keys,
-                  Map<String, Term> held, Reading reading, boolean everyClauseRead) {
+                  Map<String, Term> held, Reading reading, boolean everyClauseRead,
+                  boolean everyClauseGathered) {
+
+        /** What a walk that fell over comes to: no position named, no rule read, and saying so. */
+        static Seeded nothingRead() {
+            return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
+                    new Reading(List.of(), Map.of()), false, false);
+        }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
          * asked of {@link #constraints} and is never read off this. */
@@ -355,6 +370,10 @@ public final class InvariantChecker {
         Denotations at = Denotations.none().locations(bindings.values());
         Known k = Known.top();
         boolean read = true;
+        // A clause nothing could type never reaches `written`, so no reading below sees it and none
+        // of them can spoil a position for it. That is a fact about what was handed over rather
+        // than about any one reading, and it is recorded here where the handing over happens.
+        boolean gathered = true;
         List<Written> written = new ArrayList<>();
         try {
             for (Hir.InvariantClause clause :
@@ -363,6 +382,7 @@ public final class InvariantChecker {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
                 if (stated == null) {
                     read = false;
+                    gathered = false;
                     continue;
                 }
                 written.add(new Written(named, stated));
@@ -385,8 +405,7 @@ public final class InvariantChecker {
             }
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
-            return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), Map.of()), false);
+            return Seeded.nothingRead();
         }
         Map<String, Term> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
@@ -424,7 +443,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(constraints, atoms, keys, held, reading, read);
+        return new Seeded(constraints, atoms, keys, held, reading, read, gathered);
     }
 
     /**

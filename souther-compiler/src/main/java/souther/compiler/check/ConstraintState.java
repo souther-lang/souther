@@ -24,6 +24,13 @@ import java.util.Map;
  * whether a value exists asks here and never assembles the answer out of the parts. A domain added
  * later is a component of this and an arm of {@link #isBottom}, and every such reader has it without
  * being touched.
+ *
+ * <p>One reader still asks the numbers alone, and it is the other question. Whether a path is
+ * reached — whether the conditions guarding a construction can all hold — is asked of
+ * {@code numbers} where the walk reads a branch, so a path made impossible by predicates alone is
+ * walked and what stands on it is reported. That is a mistake of the same shape as the one above,
+ * and it is not this one: what it moves is which constructions are reported at, and a change to
+ * that is its own change with its own reason to make.
  */
 record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
                        AdmissibleValues<Term> values) {

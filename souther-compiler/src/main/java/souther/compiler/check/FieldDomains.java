@@ -39,10 +39,17 @@ public final class FieldDomains {
      */
     public static final String THE_VALUE = "";
 
-    /** Nothing known of any field. */
+    /**
+     * Nothing known of any field.
+     *
+     * <p>Which is not the same as a value with nothing written about it, and answers as the first:
+     * no clause of anything was gathered here, so {@link #admits} says of every position that a
+     * rule about it may be unread. A caller holding this holds it because it chose not to read a
+     * declaration or had none to read, and neither of those is a reading that found no rules.
+     */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), true,
-                    ConstraintState.top(), null, null, null, Map.of(), () -> true);
+                    false, ConstraintState.top(), null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -62,6 +69,8 @@ public final class FieldDomains {
      * reading knows about itself: a walk that fell over produces the same empty domain as a value
      * with no rules, and a second reading asked afterwards does not take the same path. */
     private final boolean seeded;
+    /** Whether every clause of this value reached the readings at all — see {@link #admits}. */
+    private final boolean everyClauseGathered;
     /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
@@ -80,7 +89,8 @@ public final class FieldDomains {
                          Map<String, Boolean> spokenForByField,
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeSymbol>> narrowers,
-                         boolean seeded, ConstraintState constraints, TypeSymbol named,
+                         boolean seeded, boolean everyClauseGathered,
+                         ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
@@ -90,6 +100,7 @@ public final class FieldDomains {
         this.directs = directs;
         this.narrowers = narrowers;
         this.seeded = seeded;
+        this.everyClauseGathered = everyClauseGathered;
         this.constraints = constraints;
         this.named = named;
         this.data = data;
@@ -208,7 +219,8 @@ public final class FieldDomains {
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(spokenFor), seeded.reading().directs(),
                 seeded.reading().narrowers(),
-                seeded.everyClauseRead(), seeded.constraints(), named, data, symbols, settled,
+                seeded.everyClauseRead(), seeded.everyClauseGathered(),
+                seeded.constraints(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
@@ -379,32 +391,59 @@ public final class FieldDomains {
     }
 
     /**
+     * Which values a position may hold, and whether that is the whole of what its rules leave it.
+     *
+     * <p>One answer and not two, because the two are read together or read wrongly. A set of two
+     * values is a division the model draws at that position; the same set beside a rule this
+     * reading could not take in is a division the model may draw more finely; and both are the same
+     * set. Handed over as a set with a second answer beside it, a caller may take the set and leave
+     * the answer — which is what {@link Held} is here to stop happening to a bound, one question
+     * earlier.
+     */
+    public sealed interface Admits {
+
+        /** The whole of what the rules leave the position. */
+        record EveryRuleRead(ValueSet values) implements Admits {}
+
+        /**
+         * These values, and the rules may leave fewer.
+         *
+         * <p>A rule reaching the position was not read as a set, or the reading never reached the
+         * position at all. Which of those it was is not said, because what a reader does about it
+         * is the same: the values hold — everything they exclude is excluded — and they are not a
+         * division of the position.
+         */
+        record SomeRuleUnread(ValueSet values) implements Admits {}
+
+        /** The values, which bound the position from above whichever of the two this is. */
+        ValueSet values();
+    }
+
+    /**
      * Which values the position at {@code path} may hold.
      *
      * <p>{@link ValueSet#ANY} where the rules leave it open, which is also what a position nothing
-     * was written about comes to. Whether the answer is the whole of what the rules leave is
-     * {@link #speaksFor}, and the two have to be read together: a set of two values is a division
-     * the model draws, and the same set beside a rule this could not read is a division the model
-     * may draw more finely.
+     * was written about comes to — told apart from a position this could not read by which of the
+     * two answers carries it.
      *
      * <p>{@code path} is read from the value these are of, as {@link #at} is, and what a name wraps
      * is at {@link #THE_VALUE}. A range is not handed back there and this is: a newtype's value is
      * the position the newtype is, so it is the position a reader of one asks about.
      */
-    public ValueSet admits(String path) {
-        return admittedByField.getOrDefault(path, ValueSet.ANY);
-    }
-
-    /**
-     * Whether {@link #admits} is the whole of what the rules leave the position at {@code path}.
-     *
-     * <p>False where a rule reaching it could not be read as a set. The values are still true of
-     * the position — every value they exclude is excluded — but they are wider than the rules, so a
-     * reader dividing the position into classes would be dividing it more coarsely than the model
-     * does, and a reader saying the model divides it in no way at all would be wrong outright.
-     */
-    public boolean speaksFor(String path) {
-        return spokenForByField.getOrDefault(path, true);
+    public Admits admits(String path) {
+        ValueSet values = admittedByField.getOrDefault(path, ValueSet.ANY);
+        // A clause that never reached the readings cannot have spoiled the position it was about,
+        // because no reading here ever saw which position that was. A walk that fell over and a
+        // clause nothing could type are both that, and both leave maps that read exactly like a
+        // value with no rules — so what the gathering knows about itself is asked, rather than
+        // guessed from the maps being empty.
+        //
+        // Not `allRulesRead`, and not the flag under it. That one is one reading's account of the
+        // clauses it was handed, and a clause it could not turn into an obligation is one this
+        // reading may have taken in whole; borrowing it would settle this reading's completeness by
+        // a fragment that is not this reading's.
+        return everyClauseGathered && spokenForByField.getOrDefault(path, true)
+                ? new Admits.EveryRuleRead(values) : new Admits.SomeRuleUnread(values);
     }
 
     /** Both names the position at {@code path} answers to. A number has one of each and everything
