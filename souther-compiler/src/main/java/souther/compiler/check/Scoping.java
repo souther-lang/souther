@@ -419,6 +419,19 @@ public final class Scoping {
             return values.reachable();
         }
 
+        /**
+         * A spelling the import lines claimed and none of them got.
+         *
+         * <p>What the contest between claims settled, for a reader that has to know the answer and
+         * not only what a name means. A behavior brought in under a spelling two lines both
+         * claimed is not brought in by either, and a pass that walked the lines again would find
+         * both and settle it a second time — which is one fact and two rules, said twice to an
+         * author who wrote one pair of lines.
+         */
+        public boolean standsForNothing(String spelling) {
+            return values.reachable().standingForNothing().contains(spelling);
+        }
+
         /** The same over a stage of the declarations something has resolved. */
         public Symbols symbolsOver(Registry<Hir.Def> registry) {
             return Symbols.of(module, registry, denotations, aliases);

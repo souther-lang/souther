@@ -179,13 +179,26 @@ public final class Bodies {
                     continue;
                 }
                 for (String bare : imp.names()) {
-                    if (deps.contains(bare)) {
+                    if (deps.contains(bare) && !settledAsNothing(db, name, bare)) {
                         result.add(bare);
                     }
                 }
             }
             return Answer.of(Ordered.set(result));
         }
+    }
+
+    /**
+     * Whether the import lines claimed {@code bare} and none of them got it.
+     *
+     * <p>Asked of the scope, which settled it, rather than worked out again from the lines. A pass
+     * that reads the lines finds both claims and can settle the contest for itself — and did, so a
+     * name two import lines both brought in was reported once where scopes are assembled and again
+     * here, two rules for one fact.
+     */
+    private static boolean settledAsNothing(Db db, String module, String bare) {
+        Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(module));
+        return scoped.present() && scoped.value().standsForNothing(bare);
     }
 
     /** The behaviors a module borrows that may be called by name where they are declared. */
@@ -207,7 +220,7 @@ public final class Bodies {
                     continue;
                 }
                 for (String bare : imp.names()) {
-                    if (callable.contains(bare)) {
+                    if (callable.contains(bare) && !settledAsNothing(db, name, bare)) {
                         result.add(bare);
                     }
                 }
@@ -272,8 +285,9 @@ public final class Bodies {
                     continue;   // the unknown module is reported where the scope is worked out
                 }
                 for (String bare : imp.names()) {
-                    if (!there.declaresBehavior(bare)) {
-                        continue;   // a type import, or a name the module does not declare
+                    if (!there.declaresBehavior(bare) || settledAsNothing(db, name, bare)) {
+                        continue;   // a type import, a name it does not declare, or one the
+                                    // import lines claimed and none of them got
                     }
                     Map<String, Sig> sigs = db.ask(new Signatures(imp.module())).value();
                     Sig sig = sigs == null ? null : sigs.get(bare);
@@ -282,7 +296,12 @@ public final class Bodies {
                     }
                     String earlier = fromModule.put(bare, imp.module());
                     if (earlier != null && !earlier.equals(imp.module())) {
-                        return Answer.absent(collision(bare, earlier, imp));
+                        // Said already where the claims were settled, unless the second one came
+                        // from a qualified reference — which makes no claim on the bare spelling,
+                        // so nothing settled it and this is the one rule that sees it. A behavior's
+                        // name is a member of the generated class, and two of them cannot share it.
+                        return settledAsNothing(db, name, bare) ? Answer.absent()
+                                : Answer.absent(collision(bare, earlier, imp));
                     }
                     result.put(bare, sig);
                 }
@@ -322,7 +341,7 @@ public final class Bodies {
                     continue;
                 }
                 for (String bare : imp.names()) {
-                    if (injected.contains(bare)) {
+                    if (injected.contains(bare) && !settledAsNothing(db, name, bare)) {
                         result.add(bare);
                     }
                 }
