@@ -174,6 +174,76 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
                 "a fault is not a statement about the artifact");
     }
 
+    /**
+     * A module compiled here that also sits on the path is two answers to one name, whether or not
+     * this compiler can read the one on the path.
+     *
+     * <p>The question is whether the path has the name. It was asked by reading the module and
+     * looking at what came out, which put every way an artifact can fail into the failure domain of
+     * a question whose whole answer is yes or no — so a stale jar of a module this project also
+     * compiles ended the compilation instead of being the shadowing it is.
+     */
+    @Test
+    void aModuleCompiledHereIsShadowedByAnUnreadableArtifactOfTheSameName() {
+        Set<String> codes = new LinkedHashSet<>();
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.uses
+
+                data Page = { n: Int }
+                """), new Fabricated(Map.of(
+                        "app.uses.$Module", moduleClass(Backend.BOUNDARY_VERSION + 1, "app.uses",
+                                List.of(), List.of("Page"), List.of()),
+                        "app.uses.Page", dataClass("data Page = String"))));
+        for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
+            codes.add(said.diagnostic().code());
+        }
+
+        assertTrue(codes.contains("E1503"),
+                "one name with two answers, said as the shadowing it is: " + codes);
+    }
+
+    /**
+     * And it is answered without reading the artifact at all.
+     *
+     * <p>Measured by what is asked rather than by what comes out, because both a reading and a
+     * presence check answer this one the same way — the difference is the range of failures each
+     * carries. These classes answer for the declarations class and throw for anything past it, so a
+     * question that reads reaches the throw and a question that asks about presence does not.
+     */
+    @Test
+    void whetherThePathHasTheNameIsAnsweredWithoutReadingWhatItCarries() {
+        PublishedClasses.Declarations onlyTheModuleClass = moduleClass(
+                Backend.BOUNDARY_VERSION, "app.uses", List.of(), List.of("Page"), List.of());
+        ModulePath path = new ModulePath() {
+            @Override
+            public byte[] bytes(String binaryName) {
+                return null;
+            }
+
+            @Override
+            public PublishedClasses declarations() {
+                return binaryName -> {
+                    if (binaryName.equals("app.uses.$Module")) {
+                        return onlyTheModuleClass;
+                    }
+                    throw new IllegalStateException("read past the name: " + binaryName);
+                };
+            }
+        };
+
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module app.uses
+
+                data Page = { n: Int }
+                """), path);
+        Set<String> codes = new LinkedHashSet<>();
+        for (Located said : compilation.diagnostics().get(new SourceId("0"))) {
+            codes.add(said.diagnostic().code());
+        }
+
+        assertTrue(codes.contains("E1503"), codes::toString);
+    }
+
     /** Reading one that is fine still answers a module, with its import lines read. */
     @Test
     void oneThisCompilerCanReadComesBackReady() {

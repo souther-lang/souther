@@ -103,13 +103,11 @@ public final class PublishedUniverse {
      * cannot be read here is another.
      */
     public boolean declares(String module) {
-        PublishedClasses.Declarations found = classes.of(souther.compiler.jvm.SoutherJvmAbi.nameOf(
-                new souther.compiler.jvm.GeneratedClass.ModuleDeclarations(module)).binaryName());
-        // The same thing `ModuleReadback` calls nothing published: a class of that name with
-        // no declarations on it is a class this compiler put nothing on, not something it failed to
-        // read. Asked the same way in both places, so a reader is not sent to look for a boundary
-        // revision that has nothing to do with it.
-        return found != null && found.module() != null;
+        // The same question the readback answers with `SaysNothing`, asked of the same function: a
+        // class of that name with no declarations on it is a class this compiler put nothing on, not
+        // something it failed to read. Two spellings of it would come apart, and a reader would be
+        // sent to look for a boundary revision that has nothing to do with it.
+        return ModuleReadback.carry(module, classes);
     }
 
     /** Reads {@code module} and everything its declarations name, as far as these classes go. */

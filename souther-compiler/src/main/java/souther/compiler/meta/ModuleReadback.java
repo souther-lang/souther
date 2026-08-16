@@ -60,10 +60,26 @@ public final class ModuleReadback {
         return new SourceProvenance.APublishedModule(module);
     }
 
+    /**
+     * Whether {@code classes} say anything at all about {@code module}, as against saying something
+     * this compiler will not read.
+     *
+     * <p>Asked of the classes, and not by reading. Whether the path carries a name is settled by
+     * whether there is a class of it with declarations on it; whether what those declarations say
+     * can be read back is a further question with its own answer, and a caller that wanted only the
+     * first used to get it by doing the whole reading and looking at what came out. That put every
+     * way a readback can fail into the failure domain of a question that does not depend on any of
+     * them — a module compiled here that also sits on the path, in a jar built by another compiler,
+     * ended the compilation from a question whose whole answer is yes or no.
+     */
+    public static boolean carry(String module, PublishedClasses classes) {
+        PublishedClasses.Declarations found = declarationsOf(module, classes);
+        return found != null && found.module() != null;
+    }
+
     /** What {@code classes} carry for {@code moduleName}. */
     public static Readback read(String moduleName, PublishedClasses classes) {
-        PublishedClasses.Declarations found = classes.of(
-                SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(moduleName)).binaryName());
+        PublishedClasses.Declarations found = declarationsOf(moduleName, classes);
         if (found == null || found.module() == null) {
             return new Readback.SaysNothing();
         }
@@ -132,6 +148,15 @@ public final class ModuleReadback {
 
     private static Readback unreadable(String module, Readback.Failure why) {
         return new Readback.Unreadable(module, why);
+    }
+
+    /** What {@code classes} carry on {@code module}'s declarations class, or null where there is no
+     *  such class. Asked one way, so that {@link #carry} and {@link #read} cannot come to differ
+     *  about whether the path has a name. */
+    private static PublishedClasses.Declarations declarationsOf(String module,
+                                                                PublishedClasses classes) {
+        return classes.of(
+                SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(module)).binaryName());
     }
 
     /**

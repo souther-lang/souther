@@ -11,8 +11,6 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.Citation;
-import souther.compiler.diag.SourceProvenance;
 import souther.compiler.check.Exposing;
 import souther.compiler.check.Scoping;
 import souther.compiler.frontend.CstFrontend;
@@ -1029,7 +1027,11 @@ public final class Front {
             if (layout == null || path == null || !layout.idOfModule().containsKey(name)) {
                 return Answer.of(Boolean.FALSE);
             }
-            if (ModuleReadback.read(name, path.declarations()) instanceof Readback.SaysNothing) {
+            // Whether the path has the name, and not whether what it has can be read. Two modules
+            // under one name are two answers to what that name means however either of them was
+            // built, so this never depended on the reading — and asking by reading put every way an
+            // artifact can fail into a question whose whole answer is yes or no.
+            if (!ModuleReadback.carry(name, path.declarations())) {
                 return Answer.of(Boolean.FALSE);
             }
             return Answer.absent(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath(name))
