@@ -35,6 +35,18 @@ public sealed interface ReadableModule permits ModuleReadback.AsRead {
     /** The module as the front end read it, with its library import lines dropped. */
     Ast.Module module();
 
+    /**
+     * What it declares, by the name written there — indexed once, where it was read.
+     *
+     * <p>Here rather than worked out by whoever needs it, because indexing is a step of the reading
+     * and can refuse: a set of declarations one module may not have is an artifact this compiler
+     * will not read ({@link Readback.Failure.InvalidDeclarations}). A reader that indexed for itself
+     * would be asking, after the fact, a question the reading has already answered — and would have
+     * to decide what to do when the answer is no, which is how a known failure came to travel as a
+     * raise out of a lookup.
+     */
+    Map<String, Ast.Def> declarations();
+
     /** The behaviors this module publishes no implementation for. */
     Set<String> injectedBehaviors();
 

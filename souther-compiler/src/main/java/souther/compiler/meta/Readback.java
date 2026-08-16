@@ -110,6 +110,55 @@ public sealed interface Readback {
                 rest = List.copyOf(rest);
             }
         }
+
+        /**
+         * Its declarations are not a set of declarations one module may have.
+         *
+         * <p>A published module can carry such a set: it was published under the rules of the
+         * compiler that built it, and a rule this one has that that one did not is broken by an
+         * artifact nobody here can edit. Which is what makes it a fact about the artifact rather
+         * than a report — indexing this module's declarations is refused, so there is no module
+         * here to have declarations at all.
+         *
+         * <p>At least one, and the type says so, for the reason {@link InvalidExposure} says it.
+         */
+        record InvalidDeclarations(DeclarationRejection first, List<DeclarationRejection> rest)
+                implements Failure {
+
+            public InvalidDeclarations {
+                java.util.Objects.requireNonNull(first,
+                        "a declarations failure is at least one declaration");
+                rest = List.copyOf(rest);
+            }
+        }
+    }
+
+    /**
+     * One declaration of an artifact that this compiler will not index, as a fact about the
+     * artifact.
+     *
+     * <p>The same shape as {@link Exposure}, and here for the same reason. What the indexing finds
+     * is a refusal carrying the declaration it refused — an AST node, with the place in the
+     * published text it was parsed from — and the place is in a text nobody holds. So the refusal is
+     * projected here, and what crosses is which declaration and which rule.
+     *
+     * <p>Told apart from the reasons a readback fails, because the two are at different
+     * granularities and about different things: a {@link Failure} says which part of reading an
+     * artifact did not hold, and this says what is wrong with the declarations it carries. Flattened
+     * into {@code Failure}, the reasons a set of declarations can be refused would be arms of the
+     * type that says how far a reading got.
+     */
+    sealed interface DeclarationRejection {
+
+        /** The declaration this is about. */
+        String declaration();
+
+        /** The module declares the name twice. */
+        record DeclaredTwice(String declaration) implements DeclarationRejection {}
+
+        /** It is named after a built-in {@code Option} case, which no module may declare
+         *  (ADR-0035). */
+        record BuiltInOptionCaseDeclared(String declaration) implements DeclarationRejection {}
     }
 
     /**

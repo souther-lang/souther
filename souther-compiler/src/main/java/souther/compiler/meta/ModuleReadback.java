@@ -1,7 +1,9 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.Registry;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourceProvenance;
@@ -33,11 +35,12 @@ import java.util.Set;
  * arrives with no types written and is settled again here — including one that names what a value is
  * and leaves what it holds open, which is why no type variable has to be written for it to cross.
  *
- * <p>Reading the import lines is part of reading the module and not a step after it. A module comes
- * out of here with its library names already answered ({@link ReadableModule}), because the lines
- * that carried them are dropped once read and nothing else says what its bare names mean. Split in
- * two, a caller did the first and not the second, and an invariant that called a name its module
- * imported bare then resolved against nothing in every project but the one that wrote it.
+ * <p>Reading the import lines is part of reading the module and not a step after it, and so is
+ * indexing what it declares. A module comes out of here with its library names already answered and
+ * its declarations already indexed ({@link ReadableModule}), because both can fail and both used to
+ * be left to whoever wanted them: a caller that read the module and not the import lines held one
+ * whose bare names resolved against nothing in every project but the one that wrote it, and a
+ * caller that indexed afterwards had a known failure arriving as a raise from inside a lookup.
  *
  * <p>Nothing here raises for an artifact this compiler will not read. Every such failure is a
  * {@link Readback.Failure}, named where it is found by the code that knows its shape, so what
@@ -187,6 +190,17 @@ public final class ModuleReadback {
             // of this module here, whatever the class carries.
             return unreadable(moduleName, new Readback.Failure.AnotherModule(parsed.name()));
         }
+        // Indexed before the import lines are read, because that is the order the two questions
+        // depend on each other in: what the module declares is settled by what it wrote, and
+        // whether a line may bring a name in is asked against the declarations. Read the other way
+        // round, a line is held against a set of declarations this compiler has already refused.
+        DeclaredNames.Index<Ast.Def> declared = Registry.indexed(parsed);
+        if (!declared.refusals().isEmpty()) {
+            List<Readback.DeclarationRejection> refused = declared.refusals().stream()
+                    .map(ModuleReadback::asAnArtifactsRejection).toList();
+            return unreadable(moduleName, new Readback.Failure.InvalidDeclarations(
+                    refused.get(0), refused.subList(1, refused.size())));
+        }
         // Which imports are needed is asked of the header and the declarations — everything that was
         // published except the import lines themselves.
         Exposing.Checked checked =
@@ -198,7 +212,7 @@ public final class ModuleReadback {
                     crossed.get(0), crossed.subList(1, crossed.size())));
         }
         return new Readback.Ready(
-                new AsRead(checked.module(), injected, checked.exposed()));
+                new AsRead(checked.module(), declared.declarations(), injected, checked.exposed()));
     }
 
     /**
@@ -208,12 +222,14 @@ public final class ModuleReadback {
      * can make one, and nothing inside it does — so a value of this type is a reading that got to
      * the end, rather than a value somebody assembled that looks like one.
      */
-    record AsRead(Ast.Module module, Set<String> injectedBehaviors,
+    record AsRead(Ast.Module module, Map<String, Ast.Def> declarations,
+                  Set<String> injectedBehaviors,
                   Map<String, ValueName.Stdlib> libraryNames) implements ReadableModule {
 
         /** Copied, because this is an answer a compilation remembers and an answer it remembers is
          *  a value. */
         AsRead {
+            declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
             injectedBehaviors = Collections.unmodifiableSet(new LinkedHashSet<>(injectedBehaviors));
             libraryNames = Collections.unmodifiableMap(new LinkedHashMap<>(libraryNames));
         }
@@ -236,6 +252,28 @@ public final class ModuleReadback {
      * check is one this boundary has to say something about, and one that reached here with nothing
      * to say would be an artifact refused for a reason nobody can name.
      */
+    /**
+     * A declaration the indexing refused, as a fact about the artifact it was found in.
+     *
+     * <p>The declaration goes and the node stays behind, for the reason a refused import line's
+     * does: what the indexing hands back is the form it refused, and every place in that form is a
+     * place in a text this reading assembled. What crosses is which declaration and which rule.
+     *
+     * <p>A switch over every rule there is, with nothing to fall through to. A rule added to the
+     * indexing is one this boundary has to say something about, and one that reached here with
+     * nothing to say would be an artifact refused for a reason nobody can name.
+     */
+    private static Readback.DeclarationRejection asAnArtifactsRejection(
+            DeclaredNames.Refusal<Ast.Def> refusal) {
+        String declaration = refusal.refused().name();
+        return switch (refusal) {
+            case DeclaredNames.Refusal.DeclaredTwice<Ast.Def> _ ->
+                    new Readback.DeclarationRejection.DeclaredTwice(declaration);
+            case DeclaredNames.Refusal.ABuiltInOptionCaseIsDeclared<Ast.Def> _ ->
+                    new Readback.DeclarationRejection.BuiltInOptionCaseDeclared(declaration);
+        };
+    }
+
     private static Readback.Exposure asAnArtifactsFailure(Exposing.Refusal refusal) {
         return switch (refusal) {
             case Exposing.Refusal.NoSuchLibraryFunction r ->

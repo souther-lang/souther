@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.CompileException;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -40,17 +41,32 @@ public final class SyntaxSymbols implements NameSense {
 
     /** No module at all — for signatures written over primitives and type variables only. */
     public static SyntaxSymbols none() {
-        return new SyntaxSymbols("", Registry.ofWritten(Map.of()), Map.of(), Map.of());
+        return new SyntaxSymbols("", Registry.empty(), Map.of(), Map.of());
     }
 
-    /** A lone module, resolved with nothing else in sight: bare names are its own definitions. */
+    /**
+     * A lone module, resolved with nothing else in sight: bare names are its own definitions.
+     *
+     * <p>The module is indexed here and refused here. This is the door a source comes in at with
+     * nowhere for a report to be collected, so a declaration the module may not have is raised as
+     * the report — which is what a compilation wants of its own source. What it is not is a lookup
+     * that refuses: the raise is at the one statement that builds the table, and what comes out
+     * answers every later question about what the module declares.
+     */
     public static SyntaxSymbols of(Ast.Module m) {
+        DeclaredNames.Index<Ast.Def> declared = Registry.indexed(m);
+        if (!declared.refusals().isEmpty()) {
+            throw CompileException.of(DeclarationRefusals.reported(declared.refusals().get(0)));
+        }
         Map<String, Denotation> names = new HashMap<>();
-        for (Ast.Def def : Registry.ownDefs(m).values()) {
+        for (Ast.Def def : declared.declarations().values()) {
             names.put(def.name(),
                     new Denotation.Denotes(TypeSymbols.declared(def.declaredKey())));
         }
-        return new SyntaxSymbols(m.name(), Registry.ofWritten(Map.of(m.name(), m)), names, Map.of());
+        return new SyntaxSymbols(m.name(),
+                Registry.ofRead(Map.of(m.name(), declared.declarations()),
+                        Map.of(m.name(), Registry.baseNames(m.exposing()))),
+                names, Map.of());
     }
 
     /** A module resolved against a registry that reads its declarations however it likes — the form

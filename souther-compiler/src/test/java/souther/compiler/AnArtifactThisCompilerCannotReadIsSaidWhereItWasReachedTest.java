@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -244,6 +245,53 @@ class AnArtifactThisCompilerCannotReadIsSaidWhereItWasReachedTest {
 
         assertEquals(Set.of("E1023"), codes,
                 "the author's own mistake, and nothing about a line nothing published names");
+    }
+
+    /**
+     * What it declares is not a set of declarations one module may have.
+     *
+     * <p>The declarations came back as source, so they were indexed like source — and a name a
+     * published module declared twice was reported to the author of the project importing it. What
+     * they saw was {@code E1011}, "data `Held` is already defined", under the caret of their own
+     * {@code import} line: a rule about a file they do not have, quoted at a line of theirs that
+     * does not break it. Reading an artifact is one question with one answer, and this is one of the
+     * ways the answer is no.
+     */
+    @Test
+    void oneThatDeclaresANameTwice() {
+        Fabricated path = new Fabricated(Map.of(
+                "lib.pub.$Module", new PublishedClasses.Declarations(
+                        new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
+                                "0.0.1-other", "module lib.pub exposing ( Held )",
+                                List.of(), List.of("Held", "Twice"), List.of(), List.of()),
+                        null, null, null),
+                "lib.pub.Held", dataClass("data Held = String"),
+                "lib.pub.Twice", dataClass("data Held = Int")));
+
+        bothAreSaidOnTheSource(path);
+        assertFalse(saidAboutTheSource(path).contains("E1011"),
+                "and not as a rule about declarations, said to somebody who declared none of them");
+    }
+
+    /**
+     * And a declaration named after a built-in {@code Option} case, which is the other rule the
+     * indexing has.
+     *
+     * <p>Here because the two rules are two arms of what crosses, and an arm nothing reaches is an
+     * arm nothing holds to anything. A module that declares {@code Some} was published under rules
+     * that allowed it (ADR-0035 is this compiler's), which is exactly the case an artifact carries
+     * and a source of this compile cannot.
+     */
+    @Test
+    void oneThatDeclaresABuiltInOptionCase() {
+        bothAreSaidOnTheSource(new Fabricated(Map.of(
+                "lib.pub.$Module", new PublishedClasses.Declarations(
+                        new PublishedClasses.SoutherModuleView(Backend.BOUNDARY_VERSION,
+                                "0.0.1-other", "module lib.pub exposing ( Held )",
+                                List.of(), List.of("Held", "Some"), List.of(), List.of()),
+                        null, null, null),
+                "lib.pub.Held", dataClass("data Held = String"),
+                "lib.pub.Some", dataClass("data Some = String"))));
     }
 
     /**

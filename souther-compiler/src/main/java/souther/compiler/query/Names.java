@@ -6,6 +6,7 @@ import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.check.DeclarationRefusals;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Scoping;
@@ -186,8 +187,23 @@ public final class Names {
         };
     }
 
-    /** What a module declares, by the name written there — checked once, here, because the names
-     * are the same at every stage and every later registry reads them through this. */
+    /**
+     * What a module declares, by the name written there — asked once, here, because the names are
+     * the same at every stage and every later registry reads them through this.
+     *
+     * <p>Where the answer is worked out depends on where the module came from, and nothing above
+     * has to know which: a source of this compilation is indexed here and a declaration it may not
+     * have is reported against the file its author holds; a module off the class path was indexed
+     * where it was read back, and one whose declarations could not be indexed never became a module
+     * this compilation has. So the two are one question with one answer, and a caller holding the
+     * answer cannot tell — which is the point, since a caller that could would be a second place the
+     * rule is written.
+     *
+     * <p>Indexing an artifact here is what this replaces. The declarations came back as source, so
+     * they were indexed like source, and a name a published module declared twice was reported to
+     * the author of the project importing it — {@code E1011}, under the caret of their own
+     * {@code import} line, about a file they do not have and did not write.
+     */
     public record Declarations(String name) implements Key<Map<String, Ast.Def>> {
         @Override
         public String module() {
@@ -202,20 +218,20 @@ public final class Names {
                 // ask a question that is answering itself.
                 return Answer.absent();
             }
-            Answer<Ast.Module> m = db.ask(new Front.Available(name));
-            if (!m.present()) {
-                return Answer.absent();
+            Answer<Ast.Module> mine = db.ask(new Front.Exposed(name));
+            if (mine.present()) {
+                // A declaration the module may not have is reported and left out; the ones it may
+                // have are what it declares. So a name written twice does not take every other name
+                // in the file with it.
+                DeclaredNames.Index<Ast.Def> declared = Registry.indexed(mine.value());
+                List<Report> reports = new ArrayList<>();
+                for (DeclaredNames.Refusal<Ast.Def> refused : declared.refusals()) {
+                    reports.add(Report.of(DeclarationRefusals.reported(refused)));
+                }
+                return Answer.of(declared.declarations(), reports);
             }
-            // A declaration the module may not have is reported and left out; the ones it may have
-            // are what it declares. So a name written twice does not take every other name in the
-            // file with it.
-            DeclaredNames.Of<Ast.Def> declared = DeclaredNames.of(m.value().defs(),
-                    Ast.Def::name, Ast.Def::written, Ast.Def::pos);
-            List<Report> reports = new ArrayList<>();
-            for (CompileException rejected : declared.rejected()) {
-                reports.addAll(Report.of(rejected));
-            }
-            return Answer.of(declared.defs(), reports);
+            Front.FromPath.OnThePath fromPath = Front.onThePath(db, name);
+            return fromPath == null ? Answer.absent() : Answer.of(fromPath.declarations());
         }
     }
 

@@ -33,23 +33,33 @@ public final class Symbols implements NameSense {
         return new Symbols("", Registry.empty(), Map.of(), Map.of());
     }
 
-    /** A lone module, compiled with nothing else in sight: bare names are its own definitions. */
+    /**
+     * A lone module, compiled with nothing else in sight: bare names are its own definitions.
+     *
+     * <p>Indexed here, so that what comes back is a symbol table over declarations this module has.
+     * A declaration it may not have is refused where the module is read — reported against the
+     * source that wrote it, or answered as an artifact this compiler will not read — so one that
+     * survived as far as a resolved module is a module nothing read, which is a fault here rather
+     * than something to say to anybody.
+     */
     public static Symbols of(Hir.Module m) {
+        DeclaredNames.Index<Hir.Def> declared = Registry.indexed(m);
+        if (!declared.refusals().isEmpty()) {
+            throw new IllegalStateException("`"
+                    + declared.refusals().get(0).refused().name() + "` is a declaration "
+                    + m.name() + " may not have, and a module still carrying one was never read");
+        }
         Map<String, Denotation> names = new HashMap<>();
-        for (Hir.Def def : TypeChecker.ownDefs(m).values()) {
+        for (Hir.Def def : declared.declarations().values()) {
             names.put(def.name(), new Denotation.Denotes(def.declares()));
         }
-        return new Symbols(m.name(), Registry.of(Map.of(m.name(), m)), names, Map.of());
+        return new Symbols(m.name(),
+                Registry.ofRead(Map.of(m.name(), declared.declarations()),
+                        Map.of(m.name(), Registry.baseNames(m.exposing()))),
+                names, Map.of());
     }
 
-    /** A module compiled against a registry: {@code names} is what its bare names mean (own plus
-     * imported) and {@code aliases} maps each {@code import ... as} alias to its module. */
-    public static Symbols of(Hir.Module m, Map<String, Hir.Module> registry,
-                             Map<String, Denotation> names, Map<String, String> aliases) {
-        return of(m.name(), Registry.of(registry), names, aliases);
-    }
-
-    /** As {@link #of(Hir.Module, Map, Map, Map)}, over a registry that reads its declarations
+    /** A module compiled over a registry that reads its declarations
      * however it likes — the form a query-backed compilation uses, where a module's definitions are
      * asked for one at a time rather than held in a map.
      *
