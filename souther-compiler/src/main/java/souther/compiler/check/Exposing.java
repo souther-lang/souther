@@ -4,13 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Reads standard-library {@code exposing} imports (spec §stdlib). Souther auto-imports nothing: a
@@ -55,7 +49,7 @@ public final class Exposing {
      * writing a {@code let}. That was said here about the collision alone while the other two still
      * raised, and it was as true of them.
      */
-    public record Checked(Ast.Module module, Map<String, ValueName.Stdlib> exposed,
+    public record Checked(Ast.Module module, List<Scoping.Claim> claims,
                           List<Refusal> refused) {
 
         /**
@@ -65,7 +59,7 @@ public final class Exposing {
          * every reader of it sees without anything being asked again.
          */
         public Checked {
-            exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
+            claims = List.copyOf(claims);
             refused = List.copyOf(refused);
         }
     }
@@ -80,9 +74,11 @@ public final class Exposing {
      * reached from. Built as a diagnostic here, the second reader would have to take one apart to
      * make the other, and the position it carries would be a line of a text nobody holds.
      *
-     * <p>The library counterpart of {@link Scoping.Refusal}, which says the same three things about
-     * an import of a module this compilation has. Same rules, different namespace: that one answers
-     * for {@code import app.pricing ( Quote )} and this one for {@code import List ( map )}.
+     * <p>One arm, and it is a fact about the library and not about this module: the library
+     * publishes no operation of that name, so the line claims nothing. Two lines claiming one
+     * spelling, or a line claiming a spelling this module declares, are not here — those are
+     * settled between claims ({@link Scoping}), where every claim is, and settling them here would
+     * make what an author is told depend on whether the name happened to arrive from the library.
      */
     public sealed interface Refusal {
 
@@ -94,30 +90,23 @@ public final class Exposing {
 
         /** The standard library publishes no operation of that name in that module. */
         record NoSuchLibraryFunction(Ast.Import imp, String name) implements Refusal {}
-
-        /** Two library modules publish the bare name, so importing both leaves it saying neither.
-         *  {@code earlier} is the one that has it, there being no reason for the second to win. */
-        record BroughtTwice(Ast.Import imp, String name, ValueName.Stdlib earlier,
-                            ValueName.Stdlib andThis) implements Refusal {}
-
-        /** The name is also declared here, so it would stand for two things. */
-        record CollidesWithADeclaration(Ast.Import imp, String name) implements Refusal {}
     }
 
     /**
      * {@code module} read for its library imports: checked, dropped, and what they brought in.
      *
      * <p>Nothing in the module is rewritten. A name written bare is still written bare, and what it
-     * means is one question asked in one place — resolution, against {@link Checked#exposed}.
+     * means is one question asked in one place — {@link Scoping}, which settles this line's claims
+     * beside every other line's.
      */
     public static Checked check(Ast.Module module) {
         Validated validated = validate(module);
-        return new Checked(withoutLibraryImports(module, validated.kept()), validated.exposed(),
+        return new Checked(withoutLibraryImports(module, validated.kept()), validated.claims(),
                 validated.refused());
     }
 
     /** What {@link #validate} answers, before the module is rebuilt around it. */
-    private record Validated(Map<String, ValueName.Stdlib> exposed, List<Ast.Import> kept,
+    private record Validated(List<Scoping.Claim> claims, List<Ast.Import> kept,
                              List<Refusal> refused) {}
 
     /**
@@ -132,53 +121,29 @@ public final class Exposing {
      * says is what a name means where no binding answers it.
      */
     private static Validated validate(Ast.Module module) {
-        Set<String> ownNames = new HashSet<>();
-        for (Ast.FnDef fn : module.fns()) {
-            ownNames.add(fn.name());
-        }
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            ownNames.add(b.name());
-        }
-
-        Set<String> declaredData = new HashSet<>();
-        for (Ast.Def def : module.defs()) {
-            declaredData.add(def.name());
-        }
-
-        Map<String, ValueName.Stdlib> exposed = new HashMap<>();
+        List<Scoping.Claim> claims = new ArrayList<>();
         List<Ast.Import> kept = new ArrayList<>();
         List<Refusal> refused = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
             if (!Prelude.isQualifier(imp.module())) {
-                kept.add(imp);   // an ordinary user-module import — resolved elsewhere
+                kept.add(imp);   // an ordinary user-module import — read where the universe is
                 continue;
             }
             for (String name : imp.names()) {
                 // The import line writes both halves of a library name: the module it names is the
-                // alias, and each name in its list is the operation. What is brought in is that pair,
-                // so nothing downstream has to take a spelling apart to get at either.
+                // alias, and each name in its list is the operation. What is brought in is that
+                // pair, so nothing downstream has to take a spelling apart to get at either.
                 ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
-                if (!Prelude.isLibraryFunction(operation.qualified())) {
+                if (Prelude.isLibraryFunction(operation.qualified())) {
+                    claims.add(new Scoping.Claim.Stands(imp, name, true,
+                            new Scoping.Brought.ALibraryOperation(operation)));
+                } else {
                     refused.add(new Refusal.NoSuchLibraryFunction(imp, name));
-                    // Not brought in, so a use of it is a name resolution answers for itself and
-                    // reports where it is written. That is a second thing said about one mistaken
-                    // line, and it is what a refused import of a user module does too — `Scoping`
-                    // puts a refused name in the type namespace as standing for nothing and there
-                    // is no such treatment for the value namespace on either path. Measured on
-                    // both before leaving it alone; making the two agree is not this check's.
-                    continue;
-                }
-                if (declaredData.contains(name) || ownNames.contains(name)) {
-                    refused.add(new Refusal.CollidesWithADeclaration(imp, name));
-                    continue;   // the name is refused; what it means until then is the declaration
-                }
-                ValueName.Stdlib prior = exposed.putIfAbsent(name, operation);
-                if (prior != null && !prior.equals(operation)) {
-                    refused.add(new Refusal.BroughtTwice(imp, name, prior, operation));
+                    claims.add(new Scoping.Claim.DoesNot(imp, name, true));
                 }
             }
         }
-        return new Validated(exposed, kept, refused);
+        return new Validated(claims, kept, refused);
     }
 
     private static Ast.Module withoutLibraryImports(Ast.Module module, List<Ast.Import> kept) {

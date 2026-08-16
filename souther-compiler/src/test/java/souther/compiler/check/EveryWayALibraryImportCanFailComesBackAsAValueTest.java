@@ -12,14 +12,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
- * Every way an {@code import List ( ... )} line can fail comes back as a refusal, and which of them
- * it was is on the value.
+ * The one way an {@code import List ( ... )} line fails as a library import comes back as a
+ * refusal, and it is raised nowhere.
  *
- * <p>The contract this rests on, as against what a reader does with it. Two of the three used to be
- * raised, so a reader could only tell them apart by catching and taking a diagnostic apart, and a
- * reader that caught neither lost the compile. What each of them says, and where, is the reader's:
- * a line of a source this compilation has is quoted on that line, and the same failure in a module
- * read off the class path is a fact about an artifact.
+ * <p>The contract this rests on, as against what a reader does with it. It used to be raised, so a
+ * reader could only tell it apart by catching and taking a diagnostic apart, and a reader that did
+ * not catch lost the compile. What it says, and where, is the reader's: a line of a source this
+ * compilation has is quoted on that line, and the same failure in a module read off the class path
+ * is a fact about an artifact.
+ *
+ * <p>One way, where there used to be three. A name two lines both bring in, and a name this module
+ * also declares, are not failures of a library import — they are contests between what the lines
+ * claim, and are settled where every claim is ({@link Scoping}). Settled here instead, what an
+ * author was told depended on whether the name happened to arrive from the library: the same two
+ * lines naming a user module were answered by a different rule, and one crossing the two was
+ * answered by neither.
+ *
+ * <p>What is left is a fact about the library rather than about this module — it publishes no
+ * operation of that name — so the line claims nothing, and there is nothing for a contest to be
+ * between.
  */
 class EveryWayALibraryImportCanFailComesBackAsAValueTest {
 
@@ -44,35 +55,25 @@ class EveryWayALibraryImportCanFailComesBackAsAValueTest {
         assertEquals("List", said.imp().module(), "the line it was written on says which module");
     }
 
+    /** A contest between claims, which this does not settle and does not see. */
     @Test
-    void oneNameFromTwoLibraryModules() {
-        List<Exposing.Refusal> refused = refusedIn("""
+    void aNameTwoLinesBothBringInIsNoFailureOfEitherLine() {
+        assertEquals(List.of(), refusedIn("""
                 module app.own
                 import Map ( insert )
                 import Set ( insert )
-                """);
-
-        assertEquals(1, refused.size(), refused::toString);
-        Exposing.Refusal.BroughtTwice said = assertInstanceOf(
-                Exposing.Refusal.BroughtTwice.class, refused.get(0));
-        assertEquals("insert", said.name());
-        assertEquals("Map.insert", said.earlier().qualified(), "the one that has it");
-        assertEquals("Set.insert", said.andThis().qualified(), "the one that does not get it");
+                """));
     }
 
+    /** The same, for a claim against a declaration written here. */
     @Test
-    void aNameThisModuleAlsoDeclares() {
-        List<Exposing.Refusal> refused = refusedIn("""
+    void aNameThisModuleAlsoDeclaresIsNoFailureOfTheLine() {
+        assertEquals(List.of(), refusedIn("""
                 module app.own
                 import List ( map )
 
                 let map (x) = x
-                """);
-
-        assertEquals(1, refused.size(), refused::toString);
-        Exposing.Refusal.CollidesWithADeclaration said = assertInstanceOf(
-                Exposing.Refusal.CollidesWithADeclaration.class, refused.get(0));
-        assertEquals("map", said.name());
+                """));
     }
 
     /**

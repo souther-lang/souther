@@ -56,7 +56,7 @@ class WhatAScopeReadsOfTheModulesAroundItTest {
      *
      * <p>Nothing a reader writes is answered by that table, and reading it anyway puts every
      * importing module's scope behind an edit to a library import line in a module it imports
-     * from — which is the projection {@code Front.Exposed} and {@code Front.LibraryNames} were
+     * from — which is the projection {@code Front.Exposed} and {@code Front.LibraryClaims} were
      * split into to avoid.
      */
     @Test
@@ -67,9 +67,9 @@ class WhatAScopeReadsOfTheModulesAroundItTest {
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         assertTrue(compilation.db().ask(new Names.ModuleScope("scope.order")).present());
 
-        assertTrue(compilation.db().isComputed(new Front.LibraryNames("scope.order")),
+        assertTrue(compilation.db().isComputed(new Front.LibraryClaims("scope.order")),
                 "the module being scoped writes bare what its own import lines brought in");
-        assertFalse(compilation.db().isComputed(new Front.LibraryNames("scope.money")),
+        assertFalse(compilation.db().isComputed(new Front.LibraryClaims("scope.money")),
                 "and nothing it writes is answered by what the module it imports from may write"
                         + " bare");
     }

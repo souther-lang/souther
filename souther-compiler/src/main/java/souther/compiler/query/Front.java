@@ -312,7 +312,7 @@ public final class Front {
      * dropped.
      *
      * <p>The half of {@link Checked} that a reader walking declarations wants. What those lines
-     * brought in is the other half and is asked for as {@link LibraryNames}: nearly everything here
+     * brought in is the other half and is asked for as {@link LibraryClaims}: nearly everything here
      * reads the module and would be rebuilt by an edit to any import line if it held the table too.
      * Neither half is computed twice — both are projections of the one reading.
      *
@@ -385,8 +385,8 @@ public final class Front {
                 return read.injectedBehaviors();
             }
 
-            public Map<String, ValueName.Stdlib> libraryNames() {
-                return read.libraryNames();
+            public List<Scoping.Claim> libraryClaims() {
+                return read.libraryClaims();
             }
         }
 
@@ -575,21 +575,21 @@ public final class Front {
      * carried; a module off the path carries it the same way, and answering an empty table there
      * left every bare name in a published invariant denoting nothing.
      */
-    public record LibraryNames(String name) implements Key<Map<String, ValueName.Stdlib>> {
+    public record LibraryClaims(String name) implements Key<List<Scoping.Claim>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, ValueName.Stdlib>> compute(Db db) {
+        public Answer<List<Scoping.Claim>> compute(Db db) {
             Answer<Exposing.Checked> checked = db.ask(new Checked(name));
             if (checked.present()) {
-                return Answer.of(Ordered.map(checked.value().exposed()));
+                return Answer.of(List.copyOf(checked.value().claims()));
             }
             FromPath.OnThePath onThePath = onThePath(db, name);
             return onThePath == null ? Answer.absent()
-                    : Answer.of(Ordered.map(onThePath.libraryNames()));
+                    : Answer.of(List.copyOf(onThePath.libraryClaims()));
         }
     }
 
@@ -727,18 +727,6 @@ public final class Front {
                     Report.raised(Diagnostic.at(imp.pos())
                             .say(new ImportMessage.NameIsNotAStandardLibraryFunction(
                                     named, imp.module()))
-                            .build());
-            case Exposing.Refusal.BroughtTwice(Ast.Import imp, String named,
-                                               ValueName.Stdlib earlier,
-                                               ValueName.Stdlib andThis) ->
-                    Report.raised(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.NameIsPublishedByTwoModules(
-                                    named, earlier.qualified(), andThis.qualified()))
-                            .build());
-            case Exposing.Refusal.CollidesWithADeclaration(Ast.Import imp, String named) ->
-                    Report.of(Diagnostic.at(imp.pos())
-                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(named))
-                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
                             .build());
         };
     }

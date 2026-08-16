@@ -190,7 +190,7 @@ class NoPublicWayToTurnASpellingIntoATypeIdentityTest {
                         // have, and writing a declaration's class into the metadata.
                         "SyntaxSymbols.java: def.declaredKey()",
                         "Scoping.java: own.declaredKey()",
-                        "Scoping.java: brought.declaredKey()",
+                        "Scoping.java: declared.declaredKey()",
                         "ModuleMetadata.java: def.declaredKey()",
                         // The address a declaration world has just been asked about and answered for.
                         "Registry.java: address",

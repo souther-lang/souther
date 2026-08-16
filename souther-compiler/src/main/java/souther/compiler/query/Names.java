@@ -843,6 +843,28 @@ public final class Names {
         return used;
     }
 
+    /**
+     * The behaviors a module reaches by naming them through their module, as resolution answered
+     * them.
+     *
+     * <p>A projection, so a reader wanting these is not put behind everything else resolution
+     * worked out. What they are used for is what a composition borrows — a signature, an injected
+     * field — and none of that changes when a body elsewhere does.
+     */
+    public record QualifiedBehaviors(String name) implements Key<List<Resolve.QualifiedUse>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<Resolve.QualifiedUse>> compute(Db db) {
+            Answer<Resolve.Resolution> resolution = db.ask(new Resolution(name));
+            return resolution.present() ? Answer.of(List.copyOf(resolution.value().qualified()))
+                    : Answer.absent();
+        }
+    }
+
     /** The resolved module — {@link Resolution} without the record of how it got there. */
     public record Resolved(String name) implements Key<Hir.Module> {
         @Override
@@ -1302,7 +1324,7 @@ public final class Names {
 
     private static List<Dependency> dependencies(Ast.Module m, Set<String> modules) {
         List<Dependency> deps = new ArrayList<>();
-        Map<String, String> qualifiers = Scoping.aliases(m);
+        Map<String, String> qualifiers = Scoping.qualifiersWritten(m);
         for (Ast.Import imp : m.imports()) {
             deps.add(new Dependency(imp.module(), imp.pos()));
         }
