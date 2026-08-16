@@ -17,8 +17,9 @@ import java.util.Map;
  * holding one for a file other than this is not holding a mistake.
  *
  * @param diagnostic what was found
- * @param primarySourceId the source the primary region is in, or null when it names none — which
- *        covers a single-source compile, where the caller knows the file it handed over
+ * @param primarySourceId the source the primary region is in, or null when nothing says: a
+ *        position the compiler synthesized, and a report a compile could pin on no source of its
+ *        own. A compile of one source is not one of those — it names that source like any other
  */
 public record Located(Diagnostic diagnostic, SourceId primarySourceId) {
 

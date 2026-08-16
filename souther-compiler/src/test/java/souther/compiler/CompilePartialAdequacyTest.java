@@ -685,9 +685,9 @@ class CompilePartialAdequacyTest {
                         souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
                         souther.compiler.observe.Incompleteness.Scope.BEHAVIOR, "submit");
         souther.compiler.observe.Incompleteness aboutTheSource =
-                souther.compiler.observe.Incompleteness.of(
+                souther.compiler.observe.Incompleteness.ofSource(
                         souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
-                        souther.compiler.observe.Incompleteness.Scope.SOURCE, "3");
+                        new souther.compiler.source.SourceId("3"));
 
         assertTrue(aboutOne.countsAgainst("submit"));
         assertFalse(aboutOne.countsAgainst("cancel"));

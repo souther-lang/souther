@@ -1,5 +1,7 @@
 package souther.compiler.observe;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,8 +55,8 @@ class AReasonCountsAgainstWhatContainsItTest {
      */
     @Test
     void aSourceThatWasNotEvaluatedCountsAgainstEveryBehavior() {
-        Incompleteness source = Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                Incompleteness.Scope.SOURCE, "trip.sou");
+        Incompleteness source = Incompleteness.ofSource(
+                Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("trip.sou"));
 
         assertTrue(source.countsAgainst("submit"));
         assertTrue(source.countsAgainst("cancel"));
@@ -70,8 +72,8 @@ class AReasonCountsAgainstWhatContainsItTest {
     @Test
     void nothingLargerThanABehaviorNamesOne() {
         assertEquals(java.util.Optional.empty(),
-                Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                        Incompleteness.Scope.SOURCE, "trip.sou").behavior());
+                Incompleteness.ofSource(Incompleteness.Code.OBSERVATION_ABSENT,
+                        new SourceId("trip.sou")).behavior());
         assertEquals(java.util.Optional.empty(),
                 Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
                         Incompleteness.Scope.MODULE, "example.trip").behavior());
@@ -102,5 +104,24 @@ class AReasonCountsAgainstWhatContainsItTest {
         assertThrows(IllegalArgumentException.class,
                 () -> Incompleteness.of(Incompleteness.Code.VALUE_TRUNCATED,
                         Incompleteness.Scope.POSITION, "submit/request.kind"));
+    }
+
+    /**
+     * Nor can a source, and for a reason of its own.
+     *
+     * <p>A source is identified rather than spelled: what a compilation files one under is a
+     * {@link SourceId}, and a module name, a display name and a message are strings that fit
+     * wherever a string is wanted. Rebuilding one here would be the way round the type that keeps
+     * them apart — the same way round a run took when it was handed {@code Main} for a source and
+     * paired it with positions filed under {@code 0}.
+     */
+    @Test
+    void aSourceCannotBeMadeFromASpelling() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
+                        Incompleteness.Scope.SOURCE, "example.trip"));
+        assertThrows(IllegalArgumentException.class,
+                () -> Incompleteness.at(Incompleteness.Code.OBSERVATION_ABSENT,
+                        Incompleteness.Scope.SOURCE, "example.trip", null));
     }
 }

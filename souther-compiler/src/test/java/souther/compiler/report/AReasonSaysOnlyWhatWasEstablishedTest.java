@@ -29,8 +29,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
 
     @Test
     void aSourceWithNoObservationSaysThatAndNotWhyItHadNone() {
-        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                Incompleteness.Scope.SOURCE, "1"), id -> "trip.sou");
+        String said = Reasons.said(Incompleteness.ofSource(
+                Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1")), id -> "trip.sou");
 
         assertEquals("no rows were read from `trip.sou`, so what they cover is unknown", said);
     }
@@ -45,8 +45,8 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
      */
     @Test
     void theSubjectOfASourceIsTheNameAndNotTheId() {
-        Incompleteness gap = Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                Incompleteness.Scope.SOURCE, "1");
+        Incompleteness gap = Incompleteness.ofSource(
+                Incompleteness.Code.OBSERVATION_ABSENT, new SourceId("1"));
 
         String said = Reasons.said(gap, id -> "1".equals(id.value()) ? "b/model.sou" : id.value());
 

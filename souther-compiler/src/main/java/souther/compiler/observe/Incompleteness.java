@@ -152,6 +152,8 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return new Incompleteness(code, new Target.OfSource(source), Optional.empty());
     }
 
+    /** @throws IllegalArgumentException for a scope whose subject is not a name — a source is
+     *          {@link #ofSource} and a position is {@link #atPosition} */
     public static Incompleteness of(Code code, Scope scope, String subject) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
     }
@@ -159,6 +161,7 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
     /** A reason about a place. The coordinate and not a reference over one: a reference holds a
      *  source beside the one the coordinate has, this reads the coordinate's, and a signature that
      *  still asked for the pair would let a caller write a half nothing reads. */
+    /** @throws IllegalArgumentException for a scope whose subject is not a name, as {@link #of} */
     public static Incompleteness at(Code code, Scope scope, String subject, SourcePos where) {
         return new Incompleteness(code, Target.of(scope, subject),
                 Optional.ofNullable(where).map(Citation::of));

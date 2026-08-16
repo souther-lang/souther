@@ -662,8 +662,9 @@ public final class Main {
     /**
      * Which of the files handed over a source id names, or null when it names none of them.
      *
-     * <p>A compile of one source names none, and the one file it was given is the answer however the
-     * diagnostic is tagged — which is why one item is not read as "the source called 0, or nothing".
+     * <p>One file handed over is the answer however the diagnostic is tagged — which is why one
+     * item is not read as "the source called 0, or nothing". A compile of one source names it like
+     * any other now, so this is for the report that could be pinned on none.
      */
     private static Path pathOf(List<Path> sources, SourceId sourceId) {
         int at = indexOf(sources, sourceId);
@@ -689,9 +690,9 @@ public final class Main {
      * line from {@code a/model.sou} and then say the rows of {@code model.sou} were not read.
      *
      * <p>Matched on the id and nothing else, which is where this parts from {@link #indexOf}. That
-     * answers for a diagnostic, which may name no source at all: a compile of one file tags its
-     * problems with nothing, and the one file handed over is the answer however the diagnostic is
-     * tagged. A reason in a report always names one, so an id that is none of these files is an id
+     * answers for a diagnostic, which may name no source at all — a report this compile could pin on
+     * none — and the one file handed over is then the answer. A reason in a report always names one,
+     * so an id that is none of these files is an id
      * about a source this command did not hand over, and answering with the only file would be
      * inventing the very correspondence this is here to stop being guessed at.
      */
@@ -715,9 +716,9 @@ public final class Main {
     /**
      * Which of the files handed over a source id names, or -1 when it names none of them.
      *
-     * <p>For a diagnostic, which may name no source: a compile of one file tags its problems with
-     * nothing, so the single file is the answer whatever the id reads. Not for a reason in a report,
-     * which always names one — {@link #namesOf} matches on the id alone.
+     * <p>For a diagnostic, which may name no source — a report this compile could pin on none — so
+     * the single file is the answer whatever the id reads. Not for a reason in a report, which
+     * always names one: {@link #namesOf} matches on the id alone.
      */
     private static int indexOf(List<Path> sources, SourceId sourceId) {
         if (sources.size() == 1) {

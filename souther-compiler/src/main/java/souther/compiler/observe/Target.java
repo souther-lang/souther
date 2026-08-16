@@ -198,14 +198,19 @@ public sealed interface Target {
     /**
      * The target a scope and a subject stand for, where the subject is a name.
      *
-     * <p>{@code POSITION} is not among them: its subject is two names and cannot be recovered from
-     * one. Producers of a position use {@link Incompleteness#atPosition} and pass both.
+     * <p>Two are not among them, and for the same reason: their subject is not a name.
+     * {@code POSITION} is two names and cannot be recovered from one, so a producer uses
+     * {@link Incompleteness#atPosition} and passes both. {@code SOURCE} is a {@link SourceId} — what
+     * a compilation files a source under, which a module name and a display name are not — and
+     * rebuilding one out of a spelling here is the way round the type that says so. A producer uses
+     * {@link Incompleteness#ofSource} and passes the identity it already holds.
      */
     static Target of(Incompleteness.Scope scope, String subject) {
         return switch (scope) {
             case BEHAVIOR -> new OfBehavior(subject);
-            case SOURCE -> new OfSource(new SourceId(subject));
             case MODULE -> new OfModule(subject);
+            case SOURCE -> throw new IllegalArgumentException(
+                    "a source is identified, not spelled: " + subject);
             case POSITION -> throw new IllegalArgumentException(
                     "a position needs the behavior it is in: " + subject);
         };

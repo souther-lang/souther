@@ -161,8 +161,9 @@ public final class SoutherProcessor extends AbstractProcessor {
         });
     }
 
-    /** Which of the sources handed over an id names, or -1 when it names none of them. A compile of
-     *  one source names none, and the one file it was given is the answer however it is tagged. */
+    /** Which of the sources handed over an id names, or -1 when it names none of them. One file
+     *  handed over is the answer however a diagnostic is tagged, including one this compile could
+     *  pin on no source. */
     private static int indexOf(List<Source> sources, SourceId sourceId) {
         if (sources.size() == 1) {
             return 0;
