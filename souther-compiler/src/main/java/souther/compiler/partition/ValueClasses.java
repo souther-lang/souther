@@ -116,6 +116,27 @@ final class ValueClasses {
         }
     }
 
+    /**
+     * The value as a row would be seen to carry it, or null where nothing here observes one.
+     *
+     * <p>What a class is asked with. A class knows what it holds and answers about an observation,
+     * so crossing a set of values with a list of classes is putting each value to each class — and
+     * the alternative, matching a value against what a class is called, would be a second copy of
+     * how a class is named.
+     *
+     * <p>Bare, without the names the position wears. A classifier that reads through names takes
+     * off the ones that are there and answers about the rest, so a value handed over as it stands
+     * is answered by the same classifier a row is.
+     */
+    static ObservedValue observed(Value value) {
+        return switch (value) {
+            case Value.Text text -> new ObservedValue.Text(text.value());
+            case Value.Truth truth -> new ObservedValue.Bool(truth.value());
+            case Value.Number number -> new ObservedValue.Decimal(number.value());
+            case Value.Case one -> new ObservedValue.Unit(one.data());
+        };
+    }
+
     /** Whether an observed value is the one this class is of. */
     private static boolean holds(ObservedValue seen, Value value) {
         return switch (value) {

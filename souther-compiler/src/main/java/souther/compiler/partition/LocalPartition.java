@@ -12,11 +12,13 @@ import souther.compiler.check.TypeView;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.UnreadReason;
+import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
@@ -156,8 +158,8 @@ public sealed interface LocalPartition {
         // What the type declares, crossed with what the position can hold. Neither reading is the
         // other's input: a case the rules refuse is still a case of the type, and it is here that
         // it stops being a class of this position.
-        List<PartitionClass> declared =
-                constructibleAt(PartitionClasses.of(view, symbols), view, admissible, symbols);
+        List<PartitionClass> declared = constructibleAt(PartitionClasses.of(view, symbols), view,
+                admissible, admitted, symbols);
         // And where the type states none, the values its rules name. Asked in this order rather
         // than merged: what a type declares is what the position's values are, and a rule naming
         // some of them divides what is left rather than replacing it — which is a narrowing, and is
@@ -274,12 +276,62 @@ public sealed interface LocalPartition {
      * position cannot hold is not one of its values at all, and the classes of an axis are over the
      * values it has.
      *
+     * <p>Against both readings of what the position can hold, since a rule reaches whichever of
+     * them has a word for it. {@code value >= Qualified} is an interval and {@code value ==
+     * Qualified} is a set of values, and the two say the same thing about the same position — read
+     * against the intervals alone, the first took two cases away and the second left all three, so
+     * which cases a report asked for turned on how the author spelled one rule.
+     *
      * @param within what the rules on the position leave its values, or null where nothing bounds
      *               them
      */
     private static List<PartitionClass> constructibleAt(List<PartitionClass> declared, TypeView view,
                                                         NumericDomain.Bounds within,
-                                                        Symbols symbols) {
+                                                        AdmissibleSet admitted, Symbols symbols) {
+        return admits(constructibleWithin(declared, view, within, symbols), admitted);
+    }
+
+    /**
+     * The classes of {@code declared} left by the values the rules admit.
+     *
+     * <p>Sound whether or not the reading ran to the end of the rules: the set is an upper bound in
+     * either case, so a class holding none of its values holds none of the values the rules leave.
+     * Which is the whole of the asymmetry — a set read in part may not be <em>made</em> into
+     * classes, and it may always take one away.
+     *
+     * <p>Only where every value the rules admit is one some class recognises. A value none of them
+     * does is the two readings disagreeing about what stands at this position, and the classes are
+     * the position's own: taking them away on the strength of a set that does not fit them would
+     * leave a position with no classes because two readings of it did not line up.
+     *
+     * <p>Asked of the classes rather than by matching what they are called. A class knows what it
+     * holds, and a reading that rebuilt the names would be a second copy of how a class is named.
+     */
+    private static List<PartitionClass> admits(List<PartitionClass> declared,
+                                               AdmissibleSet admitted) {
+        if (declared.isEmpty()
+                || !(admitted.approximation() instanceof ValueSet.Finite finite)) {
+            return declared;
+        }
+        List<PartitionClass> kept = new ArrayList<>();
+        for (Value value : finite.values()) {
+            ObservedValue seen = ValueClasses.observed(value);
+            List<PartitionClass> holding = declared.stream()
+                    .filter(each -> each.classifier().membershipOf(seen) == Membership.MATCH)
+                    .toList();
+            if (holding.isEmpty()) {
+                return declared;   // the two readings are not about the same values
+            }
+            holding.stream().filter(each -> !kept.contains(each)).forEach(kept::add);
+        }
+        return List.copyOf(kept);
+    }
+
+    /** The same, against what the intervals leave. */
+    private static List<PartitionClass> constructibleWithin(List<PartitionClass> declared,
+                                                            TypeView view,
+                                                            NumericDomain.Bounds within,
+                                                            Symbols symbols) {
         if (within == null || declared.isEmpty()
                 || !(Carrier.ofValue(view.declared(), symbols) instanceof Carrier.Ordinal order)) {
             return declared;   // no order for a rule to name a value on, so nothing is taken away

@@ -302,9 +302,11 @@ public final class Partitions {
                 // everything else. Ranges here would ask the rows for a distinction between the two
                 // sides of a value the behavior treats alike.
                 NumericDomain.Bounds only = domainOf(base, term);
-                keep(out, measured, axis.carrying(
-                        singledClasses(points, term, axis.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, term.carrierAt(axis.type(), symbols))),
+                NumericTerm at = term;
+                Axis here2 = axis;
+                keep(out, measured, refine(axis,
+                        () -> singledClasses(points, at, here2.type(), only, symbols),
+                        mergedPoints(axis.cuts(), points, at.carrierAt(axis.type(), symbols))),
                         new BodyCutInspection.Evidence(), rules);
                 continue;
             }
@@ -339,17 +341,6 @@ public final class Partitions {
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
             Carrier carrier = term.carrierAt(axis.type(), symbols);
-            // The ranges a cut leaves, where the position has no finer partition of its own. On an
-            // enumeration it has: the cases are the classes, and `s < Qualified` divides them into
-            // `{Prospecting}` and `{Qualified, Won}`, which is coarser than the cases. The meet of
-            // the two is the case partition, so the cut adds no class — and a class list rebuilt
-            // from the ranges would take away distinctions the model already made. The line is still
-            // a line and still owes its rows; only the classes stay as they were.
-            List<PartitionClass> classes = carrier instanceof Carrier.Ordinal ? List.of()
-                    : Intervals.classesOf(
-                            Intervals.of(reachable, domain == null ? null : domain.min(),
-                                    domain == null ? null : domain.max()),
-                            term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             //
@@ -357,13 +348,46 @@ public final class Partitions {
             // a rule that went unread either: what it says was understood. So the answer there is
             // that the rules were exhausted, which is what keeps `Blocked` meaning that a
             // comparison could not be interpreted rather than everything that came to nothing.
-            keep(out, measured, axis.measuredAt(axis.id(), term).carrying(
-                    classes.isEmpty() ? axis.classes() : classes,
+            NumericDomain.Bounds within = domain;
+            NumericTerm measuredAt = term;
+            Axis read = axis;
+            keep(out, measured, refine(axis.measuredAt(axis.id(), term),
+                    () -> Intervals.classesOf(
+                            Intervals.of(reachable, within == null ? null : within.min(),
+                                    within == null ? null : within.max()),
+                            measuredAt, read.type(), symbols),
                     merged(axis.cuts(), reachable, carrier)),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
                 undividedIn(measured), List.copyOf(rules), between);
+    }
+
+    /**
+     * The same position, with what a body's rules add to it.
+     *
+     * <p>Refinement and not replacement. What a body draws is evidence arriving after the model's
+     * own, and evidence only ever tells a position's values apart more finely — so where the model
+     * already divides the position, the lines a body draws are lines among those classes and the
+     * classes stay as they are. Rebuilt from the lines, a position the model divides three ways
+     * would come back divided two ways, and the loss reads as the model never having stated the
+     * third.
+     *
+     * <p>Which is a rule about the classes and not about the carrier. It stood as a test for an
+     * enumeration, being where it was first noticed; a position whose rules name the values it
+     * holds is divided just as finely and had no such test, so a {@code guard} over it replaced
+     * what the model states.
+     *
+     * <p>The lines are taken either way. A line is still a line where it divides nothing new, and
+     * still owes its rows.
+     *
+     * @param otherwise the classes to use where the model divides the position no way, asked for
+     *                  only there — a position that already has classes has no use for them, and
+     *                  working them out would be a reading whose answer is thrown away
+     */
+    private static Axis refine(Axis axis, java.util.function.Supplier<List<PartitionClass>> otherwise,
+                               List<Cut> cuts) {
+        return axis.carrying(axis.derivable() ? axis.classes() : otherwise.get(), cuts);
     }
 
     /**
