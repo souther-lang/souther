@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.values.Value;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -157,6 +158,19 @@ final class CardinalityTransfer {
                 : Cardinality.none(new Emptiness.AtAField(emptiestAt, emptiest));
     }
 
+    /**
+     * How many values {@code type} has, where they are something that can be written out.
+     *
+     * <p>Nothing proven where they cannot be, which is the answer every shape this does not read
+     * gets. A type whose values can be written out has at least one of them: a list with nothing in
+     * it is not a type, and the count of none is a claim that carries a proof.
+     */
+    private static Cardinality howManyValues(Type type, Symbols symbols) {
+        List<Value> every = ValueUniverse.of(type, symbols);
+        return every == null || every.isEmpty() ? Cardinality.UNKNOWN
+                : Cardinality.atMost(every.size());
+    }
+
     /** {@code count} as it stands at {@code path}, which is where a proof of none says it sits. */
     private static Cardinality at(String path, Cardinality count) {
         return count instanceof Cardinality.None it
@@ -177,7 +191,10 @@ final class CardinalityTransfer {
                                Set<TypeSymbol> worn) {
         return switch (type) {
             case Type.Prim prim -> switch (prim) {
-                case BOOL -> Cardinality.atMost(2);
+                // As many as it has values, which is a question with an answer of its own. Written
+                // here as a number, the count and the values would be two records of one fact with
+                // nothing holding them together.
+                case BOOL -> howManyValues(type, symbols);
                 case INT -> values.wholeValuesAt(path);
                 // Spaced too finely to count between two ends, or not spaced at all. A string bounded
                 // in length and a date bounded at both ends are finite and are not counted here: what
