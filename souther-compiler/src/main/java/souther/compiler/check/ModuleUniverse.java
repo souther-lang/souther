@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -182,6 +181,68 @@ public interface ModuleUniverse {
             public Set<String> behaviorNamesToSuggest() {
                 return behaviors;
             }
+
+    /**
+     * Leave to go and read one definition of another module, and which one.
+     *
+     * <p>Whether a module hands a definition over is a fact about that module: it declared the
+     * definition, it wrote a body here rather than leaving one to be supplied, and it exposed the name.
+     * That is settled where a module becomes a reading ({@link ModuleUniverse.InSight.Read}), and this
+     * is what a reading answers with when it says yes.
+     *
+     * <p>Written as a value rather than left as a {@code boolean} because of what happens after the
+     * answer. Reading another module's bodies is a thing some passes have to do — a published helper is
+     * expanded at the call, so the body has to arrive — and the pass that does it holds the other
+     * module's whole tree while it works. Told only "yes" and left holding the tree, it may reach the
+     * body under a name nothing agreed to hand over, and the next reader of the same tree may work the
+     * rule out again and get a different answer. That is how the rule came to be written twice, once
+     * over each representation.
+     *
+     * <p>So the body is reached through this and not through a name. Holding another module's tree is
+     * one capability and deciding what may be taken from it is another, and the second is not implied
+     * by the first: a pass with the tree and no leave has nothing it may read.
+     *
+     * <p>Made nowhere else. It is declared inside the reading and its constructor is private, so the
+     * only code that can say a definition is published is the code that settles what a module
+     * publishes. Package-private would have left every class beside that one able to write a leave for
+     * itself, which is a rule kept by nobody looking rather than by anything.
+     */
+    public static final class PublishedHelper {
+
+        private final String module;
+        private final String name;
+
+            private PublishedHelper(String module, String name) {
+            this.module = Objects.requireNonNull(module, "the module that publishes it");
+            this.name = Objects.requireNonNull(name, "what it is declared as there");
+        }
+
+        /** The module that publishes it, under the name it declared. */
+        public String module() {
+            return module;
+        }
+
+        /** What it is declared as there, which is also what a reader writes for it. */
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof PublishedHelper published
+                    && module.equals(published.module) && name.equals(published.name);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(module, name);
+        }
+
+        @Override
+        public String toString() {
+            return module + "." + name;
+        }
+        }
 
             /** Two of these say the same thing when every fact they settled is the same. Written
              *  out because this ends up inside an answer a compilation remembers, and an answer

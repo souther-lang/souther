@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Denotation;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -63,8 +64,15 @@ public final class Scoping {
         // from is what makes it, and settles nothing after that: two lines asking for one spelling
         // are one contest, and reading the library ones apart from the rest is how `map` could
         // arrive from a library import and a user module at once with nobody saying so.
+        //
+        // In the order the lines are written, and not in the order the two sets of claims were
+        // gathered. Which line a contest is reported at, and which is shown as the one that has
+        // the name already, is read off this — so gathered order would put the library line first
+        // whatever the author wrote, and an author who wrote the user-module line first would be
+        // shown their first line as the mistake and their second as what it collided with.
         List<Claim> claims = new ArrayList<>(subject.libraryClaims());
         claims.addAll(claimsOf(universe, m, aliases, refused));
+        claims.sort(java.util.Comparator.comparingInt(each -> written(each.imp())));
         Map<String, Settled> settled = adjudicate(claims, ownNames, refused);
 
         Map<String, Denotation> denotations = new LinkedHashMap<>();
@@ -93,6 +101,19 @@ public final class Scoping {
     }
 
     /**
+     * Where a line is written, as one number, so claims can be put in the order an author reads
+     * them.
+     *
+     * <p>A line the author did not write is last. An import synthesized from a qualified reference
+     * stands at the module header, which is before every line that was written, and showing it as
+     * the one that has a name already would name a line nobody can go and look at.
+     */
+    private static int written(Ast.Import imp) {
+        SourcePos at = imp.pos();
+        return at == null ? Integer.MAX_VALUE : at.line() * 1000 + at.column();
+    }
+
+    /**
      * One import line asking for one spelling.
      *
      * <p>Written down before anything is decided, because deciding needs all of them. A spelling
@@ -108,13 +129,23 @@ public final class Scoping {
         /** The spelling it asks for. */
         String name();
 
+        /** Whether an author wrote this name on an import list.
+         *
+         * <p>A name that was not is one a qualified reference asked for — {@code app.third.quote}
+         * reaches into that module whether or not a line says so, and an import is synthesized to
+         * record the dependency. It claims no bare spelling: the reference names its module, so
+         * there is nothing for it to be ambiguous with, and a contest it took part in would be
+         * reported on a line nobody wrote. */
+        boolean written();
+
         /** The line asked, and the module it names hands this over. */
-        record Stands(Ast.Import imp, String name, Brought what) implements Claim {}
+        record Stands(Ast.Import imp, String name, boolean written, Brought what)
+                implements Claim {}
 
         /** The line asked, and there is nothing to hand over — the claim does not stand at all.
          *  Told apart from a claim that stands and is not adopted, which is a decision between
          *  claims rather than a fact about this one. */
-        record DoesNot(Ast.Import imp, String name) implements Claim {}
+        record DoesNot(Ast.Import imp, String name, boolean written) implements Claim {}
     }
 
     /**
@@ -133,8 +164,13 @@ public final class Scoping {
         /** A behavior, which a reader calls. */
         record ABehavior(ValueName.Behavior name) implements Brought {}
 
-        /** A definition the module hands over, which a reader writes bare. */
-        record AHelper(ValueName.Helper name) implements Brought {}
+        /** A definition the module hands over, which a reader writes bare.
+         *
+         * <p>Carries the leave the reading granted and not a name made from the spelling. A leave
+         * that survives the contest is a leave the reader may redeem, so what may be taken from
+         * that module afterwards is what was settled here — asked of the module again instead, the
+         * answer would be what it publishes rather than what this module was left with. */
+        record AHelper(ModuleUniverse.InSight.Read.PublishedHelper leave) implements Brought {}
 
         /** An operation of the standard library, which an {@code import List ( map )} line lets a
          *  reader write without its qualifier. */
@@ -193,7 +229,7 @@ public final class Scoping {
                 }
                 aliases.put(imp.alias(), imp.module());
             }
-            for (String imported : imp.names()) {
+            for (Ast.ImportedName imported : imp.importedNames()) {
                 Claim made = claim(imp, imported, there, refused);
                 if (made != null) {
                     claims.add(made);
@@ -204,25 +240,28 @@ public final class Scoping {
     }
 
     /** What one name on one import line asks for, of a module that can answer. */
-    private static Claim claim(Ast.Import imp, String imported, ModuleUniverse.InSight.Read there,
-                               List<Refusal> refused) {
+    private static Claim claim(Ast.Import imp, Ast.ImportedName named,
+                               ModuleUniverse.InSight.Read there, List<Refusal> refused) {
+        String imported = named.text();
+        boolean written = named.pos() != null;
         if (!there.exposes(imported)) {
             refused.add(new Refusal.NotExposed(imp, imported));
-            return new Claim.DoesNot(imp, imported);
+            return new Claim.DoesNot(imp, imported, written);
         }
         Ast.Def declared = there.declaration(imported);
         if (declared != null) {
-            return new Claim.Stands(imp, imported,
+            return new Claim.Stands(imp, imported, written,
                     new Brought.ADeclaration(TypeSymbols.declared(declared.declaredKey())));
         }
         if (there.declaresBehavior(imported)) {
-            return new Claim.Stands(imp, imported,
+            return new Claim.Stands(imp, imported, written,
                     new Brought.ABehavior(new ValueName.Behavior(imp.module(), imported)));
         }
-        java.util.Optional<PublishedHelper> published = there.publishedHelper(imported);
+        java.util.Optional<ModuleUniverse.InSight.Read.PublishedHelper> published =
+                there.publishedHelper(imported);
         if (published.isPresent()) {
-            return new Claim.Stands(imp, imported,
-                    new Brought.AHelper(new ValueName.Helper(imp.module(), imported)));
+            return new Claim.Stands(imp, imported, written,
+                    new Brought.AHelper(published.get()));
         }
         if (there.declaresValue(imported)) {
             // Declared and exposed, and nothing to hand over. Nothing is wrong with the line and
@@ -231,14 +270,14 @@ public final class Scoping {
             return null;
         }
         refused.add(new Refusal.NoSuchName(imp, imported));
-        return new Claim.DoesNot(imp, imported);
+        return new Claim.DoesNot(imp, imported, written);
     }
 
     /** Every name a line asks for, claimed by nothing — the line could not do its job at all. */
     private static List<Claim> none(Ast.Import imp) {
         List<Claim> claims = new ArrayList<>();
-        for (String name : imp.names()) {
-            claims.add(new Claim.DoesNot(imp, name));
+        for (Ast.ImportedName name : imp.importedNames()) {
+            claims.add(new Claim.DoesNot(imp, name.text(), name.pos() != null));
         }
         return claims;
     }
@@ -252,29 +291,32 @@ public final class Scoping {
      * means two things means neither, and choosing by the order the lines were read would give the
      * same mistaken program two meanings.
      *
-     * <p>A declaration of this module's own beats every claim on its spelling. That is not a
-     * contest this settles differently from the way the author reads it: the definition is written
-     * here, and what is wrong is the line that tried to bring another one in under its name.
+     * <p>A declaration of this module's own beats every claim on its spelling, and the line that
+     * made the claim is told so. It beats it where it is, though, and not everywhere: a
+     * {@code let} of a name and a data brought in under it are one spelling in two namespaces, and
+     * taking the data away as well would report a type nothing declares at every field written
+     * with it — a second thing said about the one line already refused. Which namespace a
+     * declaration holds is what the projections read, and each keeps its own.
      */
     private static Map<String, Settled> adjudicate(List<Claim> claims, Set<String> ownNames,
                                                    List<Refusal> refused) {
         Map<String, List<Claim>> byName = new LinkedHashMap<>();
         for (Claim each : claims) {
-            byName.computeIfAbsent(each.name(), k -> new ArrayList<>()).add(each);
+            if (each.written()) {
+                byName.computeIfAbsent(each.name(), k -> new ArrayList<>()).add(each);
+            }
         }
         Map<String, Settled> settled = new LinkedHashMap<>();
         byName.forEach((spelling, made) -> {
-            if (ownNames.contains(spelling)) {
-                for (Claim each : made) {
-                    if (each instanceof Claim.Stands stands) {
-                        refused.add(new Refusal.CollidesWithADeclaration(stands.imp(), spelling));
-                    }
+            for (Claim each : made) {
+                if (ownNames.contains(spelling) && each instanceof Claim.Stands stands) {
+                    refused.add(new Refusal.CollidesWithADeclaration(stands.imp(), spelling));
                 }
-                return;   // the declaration written here is what the spelling means
             }
             Map<Brought, Ast.Import> distinct = new LinkedHashMap<>();
             for (Claim each : made) {
-                if (each instanceof Claim.Stands(Ast.Import imp, String _, Brought what)) {
+                if (each instanceof Claim.Stands(Ast.Import imp, String _, boolean _,
+                        Brought what)) {
                     distinct.putIfAbsent(what, imp);
                 }
             }
@@ -426,20 +468,6 @@ public final class Scoping {
     }
 
     /**
-     * Puts {@code names} in scope as names that denote nothing.
-     *
-     * <p>An import line that could not do its job was refused on that line. A name it was to bring
-     * in is in scope all the same, denoting nothing — so a use of it takes the error type and says
-     * nothing more. Leaving it out of scope instead would report an unknown type at every use, which
-     * sends the author to a field when what is wrong is the import.
-     */
-    private static void nameless(Map<String, Denotation> denotations, List<String> names) {
-        for (String written : names) {
-            denotations.putIfAbsent(written, Denotation.STANDS_FOR_NOTHING);
-        }
-    }
-
-    /**
      * What already answers to {@code alias} as a qualifier, or null where nothing does.
      *
      * <p>An alias must be a qualifier nothing else already is: another alias, a module of this
@@ -492,8 +520,10 @@ public final class Scoping {
         // arrived is the one decision the lines were read for.
         settled.forEach((spelling, what) -> {
             switch (what) {
-                case Settled.Brings(Brought.AHelper(ValueName.Helper named)) ->
-                        helpers.putIfAbsent(spelling, named);
+                case Settled.Brings(Brought.AHelper(
+                        ModuleUniverse.InSight.Read.PublishedHelper leave)) ->
+                        helpers.putIfAbsent(spelling,
+                                new ValueName.Helper(leave.module(), leave.name()));
                 case Settled.Brings(Brought.ABehavior(ValueName.Behavior named)) ->
                         behaviors.putIfAbsent(spelling, named);
                 case Settled.Brings(Brought.ALibraryOperation(ValueName.Stdlib named)) ->

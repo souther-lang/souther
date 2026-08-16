@@ -4,7 +4,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Scoping;
-import souther.compiler.types.ValueName;
 import java.util.List;
 
 import java.util.Map;

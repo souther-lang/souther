@@ -1,7 +1,6 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.types.ValueName;
 import souther.compiler.check.Scoping;
 import java.util.List;
 

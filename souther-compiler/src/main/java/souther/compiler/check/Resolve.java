@@ -747,6 +747,12 @@ public final class Resolve {
         if (named != null) {
             return behaviorReached(ref, named);
         }
+        if (reachable.standingForNothing().contains(written)) {
+            // A name an import line was to bring in and could not. Said on that line, so a stage
+            // that writes it says nothing more — the same answer a name in a body gets, and for
+            // the same reason: a reader sent here is sent to a composition that is right.
+            return unanswered(ref);
+        }
         if (!reachable.behaviorsWhole()) {
             // An import that could not be followed may have been where this name came from.
             // Whatever is wrong with that module is reported there.

@@ -124,37 +124,40 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
      *
      * <p>The third rule as a type. A pass that expands a published body across the boundary has to
      * hold the other module's tree, and holding it is not leave to take anything from it: the body
-     * is reached by redeeming a {@link PublishedHelper}, and a reading is the only thing that makes
-     * one. Left as a {@code boolean} and a name, the pass would hold the tree and the name and
-     * could reach a definition nothing agreed to hand over — which is how the publication rule came
-     * to be written twice, once over each representation.
+     * is reached by redeeming a leave, and a reading is the only thing that makes one. Left as a
+     * {@code boolean} and a name, the pass would hold the tree and the name and could reach a
+     * definition nothing agreed to hand over — which is how the publication rule came to be written
+     * twice, once over each representation.
      *
-     * <p>An introduction rule is only closed if it is closed everywhere. An abstract method or a
-     * comment prevents an omission and not a false assertion, so what is asked is of every class
-     * this build produces: nothing public makes one, and the only thing that answers with one is
-     * the reading.
+     * <p>What is asked is where a leave can be made, and not where one can be seen. A leave travels
+     * — the claim that survived the contest carries it, which is what lets the reader redeem
+     * exactly what it was granted — so counting the places that hand one back would count carriers,
+     * and a carrier grants nothing. Making one is what the language can close: the constructor is
+     * private, and it is declared inside the reading, so the code that can write a leave is the
+     * code that settles what a module publishes. Package-private would have left every class beside
+     * that one able to write its own, which is a rule kept by nobody looking.
      */
     @Test
     void onlyAReadingSaysADefinitionIsPublished() {
-        for (Constructor<?> each : PublishedHelper.class.getDeclaredConstructors()) {
-            assertTrue(!Modifier.isPublic(each.getModifiers()),
-                    () -> "a leave nothing granted is one anybody may write: " + each);
+        Class<?> leave = ModuleUniverse.InSight.Read.PublishedHelper.class;
+        for (Constructor<?> each : leave.getDeclaredConstructors()) {
+            assertTrue(Modifier.isPrivate(each.getModifiers()),
+                    () -> "a leave anything beside the reading can write is granted by nobody: "
+                            + each);
         }
-        List<String> answering = new ArrayList<>();
+        assertEquals(ModuleUniverse.InSight.Read.class, leave.getEnclosingClass(),
+                "a leave is written by what grants it");
+        List<String> minting = new ArrayList<>();
         for (Class<?> each : compiled()) {
             for (Executable member : members(each)) {
-                if (!Modifier.isPublic(member.getModifiers())) {
-                    continue;
-                }
-                Type answered = member instanceof Method method
-                        ? method.getGenericReturnType() : each;
-                if (mentioned(answered).contains(PublishedHelper.class)) {
-                    answering.add(each.getName() + "#" + member.getName());
+                if (member instanceof Method method && Modifier.isStatic(method.getModifiers())
+                        && mentioned(method.getGenericReturnType()).contains(leave)) {
+                    minting.add(each.getName() + "#" + member.getName());
                 }
             }
         }
-        assertEquals(List.of(ModuleUniverse.InSight.Read.class.getName() + "#publishedHelper"),
-                answering, "a leave is granted where publication is settled, and nowhere else");
+        assertEquals(List.of(), minting,
+                "a leave is granted to a reader, not handed out by whoever asks for one");
     }
 
     /**

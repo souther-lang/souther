@@ -14,7 +14,7 @@ import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.PipelineSigs;
-import souther.compiler.check.PublishedHelper;
+import souther.compiler.check.ModuleUniverse.InSight.Read.PublishedHelper;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Sig;

@@ -4,13 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Reads standard-library {@code exposing} imports (spec §stdlib). Souther auto-imports nothing: a
@@ -141,11 +135,11 @@ public final class Exposing {
                 // pair, so nothing downstream has to take a spelling apart to get at either.
                 ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
                 if (Prelude.isLibraryFunction(operation.qualified())) {
-                    claims.add(new Scoping.Claim.Stands(imp, name,
+                    claims.add(new Scoping.Claim.Stands(imp, name, true,
                             new Scoping.Brought.ALibraryOperation(operation)));
                 } else {
                     refused.add(new Refusal.NoSuchLibraryFunction(imp, name));
-                    claims.add(new Scoping.Claim.DoesNot(imp, name));
+                    claims.add(new Scoping.Claim.DoesNot(imp, name, true));
                 }
             }
         }
