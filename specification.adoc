@@ -2101,7 +2101,7 @@ Construction is done with a record literal that writes the constructed type name
 
 [[a-construction-names-a-data]]What is constructed MUST be a data. [[a-construction-names-fields-of-its-type]]A field written in the literal MUST be one that data declares, and [[a-construction-is-written-where-one-may-be]]a construction MUST be written where one is allowed — not, for instance, inside an `+invariant+`, which states a condition over a value rather than building one (<<invariant-expressions>>).
 
-[[a-data-can-be-constructed]]A data MUST be constructible at all. A self-referential data reaches itself with nothing to bottom out on, so no first value of it can be built; the self-reference belongs at an occurrence that has a base case — an optional, or a collection the rules let be empty (<<self-referential-data>>).
+[[a-data-can-be-constructed]]A data MUST be constructible at all, and it comes to have no value in more than one way. Rules that cannot all hold leave nothing satisfying them. A `+Set+` asked to hold more values that differ than its element has cannot be filled. A self-referential data reaches itself with nothing to bottom out on, so no first value of it can be built; the self-reference belongs at an occurrence that has a base case — an optional, or a collection the rules let be empty (<<self-referential-data>>). All of them are one count coming to nothing, and the refusal says which of them was shown.
 
 [,text]
 ----
@@ -4379,11 +4379,15 @@ Reported where a `+let+` and a data of one module carry one name (<<a-spelling-a
 
 [,text]
 ----
-data `OrgMember` cannot be constructed: it needs a value of itself through a mandatory field, with
-nothing to bottom out.
+data `OrgMember` cannot be constructed: it needs a value of itself, with nothing to bottom out.
+
+data `Discount` cannot be constructed: its rules cannot all hold, so no value satisfies them.
+
+data `Pair` cannot be constructed: `value` must hold at least 2 values that differ, and there are
+only 1 to choose from.
 ----
 
-Reported at the declaration (<<a-data-can-be-constructed>>). Self-reference is what an org chart or a tree is made of, and it bottoms out at an optional, or at a collection the rules on it let be empty (<<self-referential-data>>); with neither on the cycle there is no first value.
+Reported at the declaration (<<a-data-can-be-constructed>>). One code for every way a data comes to have no value, and the sentence says which of them was shown. Self-reference is what an org chart or a tree is made of, and it bottoms out at an optional, or at a collection the rules on it let be empty (<<self-referential-data>>); with neither on the cycle there is no first value.
 
 [#e1014]
 === A construction writes a field the type does not have

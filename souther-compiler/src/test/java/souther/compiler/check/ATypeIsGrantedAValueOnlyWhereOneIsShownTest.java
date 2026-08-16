@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeSymbol;
 
@@ -12,6 +11,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every declaration a module reaches, answered together.
@@ -45,7 +45,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
     private static void hasNoValue(String source, String... names) {
         Map<String, Cardinality> solved = solved(source);
         for (String each : names) {
-            assertEquals(Cardinality.NO_VALUE, solved.get(each), each + " has no value");
+            assertTrue(solved.get(each).none(), each + " has no value");
         }
     }
 

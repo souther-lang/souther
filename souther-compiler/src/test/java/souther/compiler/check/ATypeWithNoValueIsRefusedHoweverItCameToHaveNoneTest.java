@@ -39,6 +39,24 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
         assertEquals(List.of("E1013"), codesFor(source), "`" + data + "` has no value to be built");
     }
 
+    /**
+     * Which sentence each refusal is, named by the message rather than by its wording.
+     *
+     * <p>A refusal is right about the declaration and wrong about the reason for as long as one
+     * sentence is written for every way a count comes to nothing, and a reading of the codes cannot
+     * tell the two apart. What is asserted here is the sentence that was chosen.
+     */
+    private static List<String> saidBy(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return compilation.diagnostics().values().stream()
+                .flatMap(List::stream)
+                .map(Located::diagnostic)
+                .filter(each -> "E1013".equals(each.code()))
+                .map(each -> each.said().getClass().getSimpleName())
+                .toList();
+    }
+
     private static void admits(String source) {
         assertEquals(List.of(), codesFor(source), "a value of this can be written");
     }
@@ -310,5 +328,71 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 data A = { b: B }
                 data B = { a: A, bad: Bad }
                 """), "granting `Bad` a value leaves `A` and `B` where they were");
+    }
+
+    /**
+     * A declaration whose rules cannot all hold is told that, and not that it refers to itself.
+     *
+     * <p>There is no field here to make optional. The sentence about self-reference was the only one
+     * written, so every way of coming to no value was told the way one of them came to it.
+     */
+    @Test
+    void aDeclarationWhoseRulesCannotAllHoldIsNotToldItRefersToItself() {
+        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
+                module demo
+
+                data Bad = Int
+                    invariant no = value >= 2 && value <= 1
+                """));
+    }
+
+    /** And a set too small for its element is told about the two counts. */
+    @Test
+    void aSetItsElementCannotFillIsToldWhichCountsDoNotMeet() {
+        assertEquals(List.of("ASetCannotBeFilledFromItsElement"), saidBy("""
+                module demo
+
+                data One = Int
+                    invariant only = value >= 1 && value <= 1
+
+                data Pair = Set<One>
+                    invariant two = Set.size(value) >= 2
+                """));
+    }
+
+    /**
+     * A cycle with nothing to stop it keeps the sentence it has.
+     *
+     * <p>The reading arrives at this one from the bottom the rising starts at, which is not a proof
+     * of anything until the rising has finished. What the sentence rests on is that it did finish
+     * with these two still at nothing.
+     */
+    @Test
+    void aCycleWithNowhereToStopIsToldItNeedsAValueOfItself() {
+        assertEquals(List.of("DataCannotBeConstructed"), saidBy("""
+                module demo
+
+                data A = { b: B }
+                data B = { a: A }
+                """));
+    }
+
+    /**
+     * And a cycle with a case that stops is refused nothing.
+     *
+     * <p>The other side of the same reading: the bottom the rising starts at is where both of these
+     * begin as well, and a bottom left standing as a proof would refuse a model that builds.
+     */
+    @Test
+    void aCycleWithACaseThatStopsIsRefusedNothing() {
+        assertEquals(List.of(), saidBy("""
+                module demo
+
+                data Stop
+
+                data Recursive = { s: S }
+
+                data S = Recursive | Stop
+                """));
     }
 }

@@ -3,7 +3,6 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -13,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * One step of the count, taken with the answers about everything else handed in.
@@ -28,7 +28,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
+    /**
+     * An answer of none handed in.
+     *
+     * <p>What showed it is not read here and could be any of them: a declaration reached by name is
+     * read for its count, and the proof it carries is left where it is.
+     */
+    private static final Cardinality NO_VALUE = Cardinality.none(new Emptiness.ConflictingRules());
+
     private static Cardinality upperOf(String source, String name, Object... assumed) {
+        return upperOf(source, name, def -> def, assumed);
+    }
+
+    /** The same, with the declaration handed to {@code as} before it is read. */
+    private static Cardinality upperOf(String source, String name,
+                                       java.util.function.UnaryOperator<Hir.Def> as,
+                                       Object... assumed) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         // A clause nothing could type is a clause nothing reads, and a model with one in it would
@@ -46,7 +61,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         }
         for (Hir.Def def : compilation.module("demo").defs().stream().map(Derived.Def::read).toList()) {
             if (def.name().equals(name)) {
-                return CardinalityTransfer.upperOf(TypeSymbols.declared(new TypeKey(symbols.module(), name)), def, symbols, solution, _ -> false);
+                return CardinalityTransfer.upperOf(TypeSymbols.declared(new TypeKey(symbols.module(), name)), as.apply(def), symbols, Answers.settled(solution), _ -> false);
             }
         }
         throw new IllegalArgumentException("no such declaration: " + name);
@@ -90,12 +105,12 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
     @Test
     void rulesThatCannotAllHoldLeaveNoValue() {
-        assertEquals(Cardinality.NO_VALUE, upperOf("""
+        assertTrue((upperOf("""
                 module demo
 
                 data Bad = Int
                     invariant no = value >= 2 && value <= 1
-                """, "Bad"));
+                """, "Bad")).none());
     }
 
     @Test
@@ -120,7 +135,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
     /** The row the product exists for: what has no value takes the record with it. */
     @Test
     void aRecordWithAFieldOfNoValueHasNoValueHoweverLittleIsKnownBeside() {
-        assertEquals(Cardinality.NO_VALUE, upperOf("""
+        assertTrue((upperOf("""
                 module demo
 
                 data Any = Int
@@ -128,7 +143,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Empty = Int
 
                 data Beside = { a: Any, b: Empty }
-                """, "Beside", "Any", Cardinality.UNKNOWN, "Empty", Cardinality.NO_VALUE));
+                """, "Beside", "Any", Cardinality.UNKNOWN, "Empty", NO_VALUE)).none());
     }
 
     @Test
@@ -142,8 +157,40 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 """;
         assertEquals(Cardinality.atMost(2), upperOf(source, "Either",
                 "Left", Cardinality.atMost(1), "Right", Cardinality.atMost(1)));
-        assertEquals(Cardinality.NO_VALUE, upperOf(source, "Either",
-                "Left", Cardinality.NO_VALUE, "Right", Cardinality.NO_VALUE));
+        assertTrue((upperOf(source, "Either",
+                "Left", NO_VALUE, "Right", NO_VALUE)).none());
+    }
+
+    /**
+     * A case resolution read and found nothing for leaves the sum unknown, whatever the rest come to.
+     *
+     * <p>What a name nobody could resolve stands for is not none: it is a case this reading never
+     * took in, and adding nothing for it says the sum has no value on the strength of a shape that
+     * was never read. Every other arm here answers that way already — a type standing for another, a
+     * form only an expression reaches — and the sum is where the same rule was not applied.
+     *
+     * <p>The refusal that follows is what makes it worth saying. A sum answered none is refused where
+     * it is declared, so a model with one name spelled wrong is told the name and then told the type
+     * cannot be built.
+     */
+    @Test
+    void aSumWithACaseThatNamesNothingIsUnknownAndNotNone() {
+        String source = """
+                module demo
+
+                data Left
+                data Right
+                data Either = Left | Right
+                """;
+        assertEquals(Cardinality.UNKNOWN, upperOf(source, "Either",
+                        def -> {
+                            Hir.SumData sum = (Hir.SumData) def;
+                            return new Hir.SumData(sum.written(), sum.declares(),
+                                    java.util.List.of(sum.cases().get(0).unanswered(), sum.cases().get(1)),
+                                    sum.decoder(), sum.encoder(), sum.pos());
+                        },
+                        "Left", Cardinality.atMost(1), "Right", NO_VALUE),
+                "one case nothing names, and the other with no value");
     }
 
     /** And the same two answers the other way round: a case of no value adds none. */
@@ -155,7 +202,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Left
                 data Right
                 data Either = Left | Right
-                """, "Either", "Left", Cardinality.UNKNOWN, "Right", Cardinality.NO_VALUE));
+                """, "Either", "Left", Cardinality.UNKNOWN, "Right", NO_VALUE));
     }
 
     /** A `None` is a value of an optional whatever it wraps, including a type nothing can build. */
@@ -167,7 +214,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Empty = Int
 
                 data Held = { x: Empty? }
-                """, "Held", "Empty", Cardinality.NO_VALUE));
+                """, "Held", "Empty", NO_VALUE));
     }
 
     @Test
@@ -186,7 +233,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
                 data Any = Set<One>
                 """;
-        assertEquals(Cardinality.NO_VALUE, upperOf(source, "Two", "One", Cardinality.atMost(1)),
+        assertTrue(upperOf(source, "Two", "One", Cardinality.atMost(1)).none(),
                 "two of a value there is one of");
         assertEquals(Cardinality.atMost(1), upperOf(source, "Just", "One", Cardinality.atMost(1)));
         assertEquals(Cardinality.atMost(2), upperOf(source, "Any", "One", Cardinality.atMost(1)),
@@ -232,8 +279,8 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Keyed = { m: Map<String, One> }
                     invariant some = Map.size(m) >= 1
                 """;
-        assertEquals(Cardinality.atMost(1), upperOf(source, "Bare", "Empty", Cardinality.NO_VALUE));
-        assertEquals(Cardinality.NO_VALUE, upperOf(source, "Holding", "Empty", Cardinality.NO_VALUE));
+        assertEquals(Cardinality.atMost(1), upperOf(source, "Bare", "Empty", NO_VALUE));
+        assertTrue((upperOf(source, "Holding", "Empty", NO_VALUE)).none());
         assertEquals(Cardinality.UNKNOWN, upperOf(source, "Keyed", "One", Cardinality.atMost(1)),
                 "there is no end of keys to hold it under");
     }
@@ -255,14 +302,14 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data NoList = { l: List<Empty> }
                     invariant empty = List.length(l) == 0
                 """;
-        assertEquals(Cardinality.atMost(1), upperOf(source, "NoSet", "Empty", Cardinality.NO_VALUE));
-        assertEquals(Cardinality.atMost(1), upperOf(source, "NoList", "Empty", Cardinality.NO_VALUE));
+        assertEquals(Cardinality.atMost(1), upperOf(source, "NoSet", "Empty", NO_VALUE));
+        assertEquals(Cardinality.atMost(1), upperOf(source, "NoList", "Empty", NO_VALUE));
     }
 
     /** A floor a record wrote about a field reaches the collection the field's name wraps. */
     @Test
     void aFloorWrittenAtTheFieldIsReadThereAndNotAtTheNamesOwnDeclaration() {
-        assertEquals(Cardinality.NO_VALUE, upperOf("""
+        assertTrue((upperOf("""
                 module demo
 
                 data One = Int
@@ -272,6 +319,6 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
                 data Outer = { held: Held }
                     invariant two = Set.size(held.value) >= 2
-                """, "Outer", "One", Cardinality.atMost(1), "Held", Cardinality.UNKNOWN));
+                """, "Outer", "One", Cardinality.atMost(1), "Held", Cardinality.UNKNOWN)).none());
     }
 }

@@ -62,9 +62,53 @@ public sealed interface DataMessage extends Message {
     /** A union written where it stands declares nothing about what its cases share. */
     record NameTheUnionWithADeclaration(String union) implements DataMessage, Supporting {}
 
-    /** A data reaches itself through a field that is always there, so none of it can be built. */
+    /**
+     * A data needs a value of itself, through names with nothing to bottom out.
+     *
+     * <p>The first of the refusals a type with no value is given. They share a code and differ in
+     * what the reading proved, which is carried with the count and read in one place: a sentence
+     * chosen anywhere else would be chosen by looking at the declaration a second time, and the
+     * second look is free to pick the one the count did not mean.
+     */
     @Code(DiagnosticCode.E1013)
     record DataCannotBeConstructed(String data) implements DataMessage, Reported {}
+
+    /** The rules a data states contradict, so nothing satisfies all of them. */
+    @Code(DiagnosticCode.E1013)
+    record ItsRulesCannotAllHold(String data) implements DataMessage, Reported {}
+
+    /** A set is asked to hold more values that differ than its element has. */
+    @Code(DiagnosticCode.E1013)
+    record ASetCannotBeFilledFromItsElement(String data, String at, long asked, long available)
+            implements DataMessage, Reported {}
+
+    /** The rules leave a collection no size it may have. */
+    @Code(DiagnosticCode.E1013)
+    record NoSizeItsRulesAdmit(String data, String at) implements DataMessage, Reported {}
+
+    /** A collection the rules will not let be empty, of something there is no value of. */
+    @Code(DiagnosticCode.E1013)
+    record ACollectionThatCannotBeEmptyHasNothingToHold(String data, String at)
+            implements DataMessage, Reported {}
+
+    /** Every case of a sum has no value, so the sum has none. */
+    @Code(DiagnosticCode.E1013)
+    record NoCaseOfItHasAValue(String data) implements DataMessage, Reported {}
+
+    /** A data holds a type that has no value. */
+    @Code(DiagnosticCode.E1013)
+    record ItHoldsATypeWithNoValue(String data, String held) implements DataMessage, Reported {}
+
+    /** What would give a self-referring data a value, where the recursion runs through a field. */
+    record ItWouldHaveOneIfTheFieldCouldBeAbsent(String data, String field)
+            implements DataMessage, Supporting {}
+
+    /** The same, where it runs through a collection the rules will not let be empty. */
+    record ItWouldHaveOneIfTheCollectionCouldBeEmpty(String data, String at)
+            implements DataMessage, Supporting {}
+
+    /** The same, where every case of a sum holds it. */
+    record ACaseThatDoesNotHoldItWouldGiveItOne(String data) implements DataMessage, Supporting {}
 
     @Code(DiagnosticCode.E1010)
     record ACaseDeclaresTheDiscriminatorField(String caseName, String field, String sum) implements DataMessage, Reported {}

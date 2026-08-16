@@ -483,22 +483,89 @@ public final class DataChecker {
      * and rules that cannot all hold leave none. All of them are one count coming to nothing.
      *
      * <p>What that count is and how it is reached is {@link TypeCardinality}; which of the
-     * declarations with no value to say so about is {@link UninhabitableTypes}. What is left here is
-     * saying it.
+     * declarations with no value to say so about, and what showed it of the one the report sits at,
+     * is {@link UninhabitableTypes}. What is left here is saying it.
+     *
+     * <p>The proof arrives with the group and nothing here reads the declaration again to work out
+     * which sentence to write. That is the whole of why it arrives: a reader that picked between two
+     * sentences by looking at the declaration a second time would be a second reader of a question
+     * the count already answered, free to pick the sentence the count did not mean.
      */
     static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols) {
         List<CompileException> found = new ArrayList<>();
-        for (List<TypeSymbol> group : UninhabitableTypes.withNoValueOfTheirOwn(declarations,
-                TypeCardinality.solve(declarations, symbols))) {
-            // The group is one thing to say and is said at the first of them the module declares.
-            // Which one that is settles where the report sits and not what it is about: the others
-            // have no value in the same way and for the same reason.
-            Hir.Def at = (Hir.Def) symbols.declarations().declaration(group.get(0).key());
-            found.add(CompileException.of(Diagnostic.at(at.pos())
-                    .say(new DataMessage.DataCannotBeConstructed(at.name()))
-                    .build()));
+        for (UninhabitableTypes.UninhabitableGroup group : UninhabitableTypes.withNoValueOfTheirOwn(
+                declarations, TypeCardinality.solve(declarations, symbols))) {
+            Hir.Def at = (Hir.Def) symbols.declarations().declaration(group.reportedAt().key());
+            found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
+                    FieldDomains.THE_VALUE, group.why()).build()));
         }
         return found;
+    }
+
+    /**
+     * The one place a proof of having no value is read as a sentence.
+     *
+     * <p>Exhaustive over {@link Emptiness}, which is what makes a proof added later a build that
+     * stops here rather than a refusal quietly told one of the sentences already written.
+     *
+     * <p>{@link Emptiness.AtAField} is descended through and the rest are not. It says where a lack
+     * sits and states nothing of its own, so the sentence is its child's and the position it names is
+     * carried down for the child to write; every other shape asserts something — a sum has none
+     * because all of its cases do, and picking one of them to speak for the rest would answer a
+     * question about which case is at fault that nothing asked.
+     *
+     * @param path where in the declaration the proof so far has reached
+     */
+    private static Diagnostic.Builder told(Diagnostic.Builder at, String data, String path,
+                                           Emptiness why) {
+        return switch (why) {
+            case Emptiness.AtAField it -> told(at, data, it.path(), it.under());
+            case Emptiness.NoBaseInComponent it -> suggested(
+                    at.say(new DataMessage.DataCannotBeConstructed(data)), data, it.through());
+            case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _ ->
+                    at.say(new DataMessage.ItsRulesCannotAllHold(data));
+            case Emptiness.SetRequiresTooManyDistinctValues it ->
+                    at.say(new DataMessage.ASetCannotBeFilledFromItsElement(
+                            data, written(path), it.asked(), it.available()));
+            case Emptiness.NoAllowedCollectionSize _ ->
+                    at.say(new DataMessage.NoSizeItsRulesAdmit(data, written(path)));
+            case Emptiness.NonEmptyCollectionWithNoElement _ ->
+                    at.say(new DataMessage.ACollectionThatCannotBeEmptyHasNothingToHold(
+                            data, written(path)));
+            case Emptiness.AcrossEveryCase _ -> at.say(new DataMessage.NoCaseOfItHasAValue(data));
+            case Emptiness.TheNameHasNone it ->
+                    at.say(new DataMessage.ItHoldsATypeWithNoValue(data, it.name().name()));
+        };
+    }
+
+    /**
+     * What would give a self-referring declaration a value, where anything can be said.
+     *
+     * <p>Read off how this one reaches the others and not off the refusal. What makes a recursion
+     * bottom out depends on the way round it runs, and one suggestion written for all of them told
+     * an author holding a non-empty list of itself to write a list. Where the shape is one nothing
+     * safe can be said about, nothing is: a refusal owes the author the reason and does not owe an
+     * invented way out.
+     */
+    private static Diagnostic.Builder suggested(Diagnostic.Builder at, String data,
+                                                Emptiness through) {
+        return switch (through) {
+            case Emptiness.AtAField it when it.under() instanceof Emptiness.TheNameHasNone ->
+                    at.hint(new DataMessage.ItWouldHaveOneIfTheFieldCouldBeAbsent(
+                            data, written(it.path())));
+            case Emptiness.AtAField it
+                    when it.under() instanceof Emptiness.NonEmptyCollectionWithNoElement ->
+                    at.hint(new DataMessage.ItWouldHaveOneIfTheCollectionCouldBeEmpty(
+                            data, written(it.path())));
+            case Emptiness.AcrossEveryCase _ ->
+                    at.hint(new DataMessage.ACaseThatDoesNotHoldItWouldGiveItOne(data));
+            default -> at;
+        };
+    }
+
+    /** How a position is written in the model, what a newtype wraps being spelled `value`. */
+    private static String written(String path) {
+        return FieldDomains.THE_VALUE.equals(path) ? "value" : path;
     }
 
     static void checkData(CheckContext ctx,

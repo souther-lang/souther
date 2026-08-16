@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.numeric.Cardinality;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -13,6 +12,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Granting a declaration a value, held against every way another one reaches it.
@@ -52,7 +52,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Symbols symbols = compilation.symbols("demo");
         TypeCardinality.Cardinalities solved =
                 TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols);
-        assertEquals(Cardinality.NO_VALUE, solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))),
+        assertTrue(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
                 "`" + reader + "` has no value while nothing is granted");
         assertFalse(solved.granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), granted))))
                         .get(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
@@ -134,9 +134,8 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Symbols symbols = compilation.symbols("demo");
-        assertEquals(Cardinality.NO_VALUE,
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols)
-                        .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))),
+        assertTrue(TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols)
+                        .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))).none(),
                 "and what it wraps was not granted anything");
     }
 
@@ -170,8 +169,9 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
         TypeCardinality.Cardinalities solved =
                 TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols);
 
-        assertEquals(List.of(Cardinality.NO_VALUE, Cardinality.NO_VALUE),
-                List.of(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "A"))), solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "B")))),
+        assertEquals(List.of(true, true),
+                List.of(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "A"))).none(),
+                        solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), "B"))).none()),
                 "neither of them can be built");
     }
 }
