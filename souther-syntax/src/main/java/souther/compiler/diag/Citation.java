@@ -8,13 +8,17 @@ import java.util.SequencedMap;
 /**
  * Where the code something is about is written, as a report is entitled to say it.
  *
- * <p>A position is put to two uses and only one of them can be wrong. Sending a reader somewhere —
- * a caret, a range, an editor jumping — is right whatever the position stands for, because it is
- * where this compile met the code and the only place a reader can be sent. Saying the code is
- * <em>written</em> there is right only where it is. Nothing distinguished the two, so every surface
- * that wanted the first published the second: an unreached arm of {@code List.filter} was reported
- * at the caller's {@code 15:23} by the adequacy report in both of its renderings and by the JSON a
- * diagnostic is read from, and one renderer out of four said what the position stood for.
+ * <p>A position was put to two uses and only one of them could be wrong. Sending a reader to a
+ * position in a file the reader holds — a caret, a range, an editor jumping — is right whatever code
+ * is at it, because it is where this compile met that code. Saying the code is <em>written</em>
+ * there is right only where it is. Nothing distinguished the two, so every surface that wanted the
+ * first published the second: an unreached arm of {@code List.filter} was reported at the caller's
+ * {@code 15:23} by the adequacy report in both of its renderings and by the JSON a diagnostic is
+ * read from, and one renderer out of four said what the position stood for.
+ *
+ * <p>And a position in a text the reader does not hold is not the first either, which is the other
+ * half and is why this has five arms rather than two: whether a reader can be sent somewhere is a
+ * question about the text, and what is written there is a question about the code.
  *
  * <p>So the two are separate values. {@link SourcePos} is where this compile placed a node, and every
  * pass reads it freely. This is the other one, and it is what a report holds: a coverage site, a

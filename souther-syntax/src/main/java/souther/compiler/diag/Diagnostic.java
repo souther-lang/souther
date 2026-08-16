@@ -162,6 +162,10 @@ public final class Diagnostic {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
+        if (primary instanceof Primary.Unavailable(SourceProvenance known)
+                && !known.equals(provenance)) {
+            throw new MovedSomewhereElsesCode(known, provenance);
+        }
         DeclaringCode declaring = new DeclaringCode(provenance);
         List<LabeledRegion> also = new ArrayList<>(secondary);
         for (SourcePos other : where.subList(1, where.size())) {
@@ -171,6 +175,28 @@ public final class Diagnostic {
                 new Primary.AtARegion(Region.point(where.get(0).standingInFor(declaring))),
                 List.copyOf(also),
                 literalMessage, diff, notes, suggestion, said);
+    }
+
+    /**
+     * A report told its code was written somewhere other than where it already says.
+     *
+     * <p>Moving a report is a change to where a reader is sent and is not a change to what the
+     * report is about. A caller supplies where the code is because a report with nothing pointed at
+     * has no answer of its own to read; one that has an answer is not asking, and being handed a
+     * different one means somebody worked it out again from what was to hand.
+     *
+     * <p>Marked, for the reason {@code DiagnosticPlace.NotAPlace} is: what raises this runs where an
+     * analysis may fall open, and an unmarked refusal would be swallowed there.
+     */
+    public static final class MovedSomewhereElsesCode extends IllegalArgumentException
+            implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        MovedSomewhereElsesCode(SourceProvenance known, SourceProvenance given) {
+            super("this report says its code is written in " + known + " and was moved as though it"
+                    + " were written in " + given);
+        }
     }
 
     /**

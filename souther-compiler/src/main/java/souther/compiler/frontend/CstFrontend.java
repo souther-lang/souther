@@ -38,7 +38,7 @@ public final class CstFrontend {
      * reading one of its own sources — parses through
      * {@link #parseWithSlices(String, String, SourceId)}; a caller reading a text put back together
      * out of what a module published parses through {@link #parseWhatAModulePublished}, because
-     * those positions are in no file and are not where the code is.
+     * those positions are in a text this compile holds no file for.
      */
     public static Ast.Module parse(String source, String defaultModuleName) {
         return parse(source, defaultModuleName, Placement.aTextWithNoIdentity());

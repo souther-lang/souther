@@ -59,9 +59,6 @@ public record SourcePos(int line, int column, Placement placement) {
         this(line, column, Placement.aTextWithNoIdentity());
     }
 
-    /** The source this is in, or null where the text it is in has no identity in this compilation.
-     *  A {@link SourceId} rather than a name, so that what a caller chose to call a module cannot
-     *  arrive here instead. */
     /**
      * Which source of this compilation this is read from, and what to say where it is none.
      *

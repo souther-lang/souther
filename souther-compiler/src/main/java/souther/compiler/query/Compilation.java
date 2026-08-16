@@ -512,10 +512,10 @@ public final class Compilation {
      * {@code found} where a reader can be sent to it — itself, for the reports already pointing at a
      * source this compile holds.
      *
-     * <p>Which of them those are is the citation's answer, asked once, rather than a source test
-     * here and a provenance test after it. Where the code came from is looked up by the module this
-     * walk was about: a report with nowhere to point has nothing to read it off, and one that has
-     * agrees with it, so both are moved on the same terms.
+     * <p>Which of them those are, and what to say about them, is one question rather than a source
+     * test here and a provenance lookup after it. What a report is moved with is what it already says
+     * about where its code is written; the module this walk was about answers only for a report that
+     * says nothing, which is the one case with nothing to prefer.
      *
      * <p>What a raised report carried as the text its pass threw it with is dropped with the move
      * ({@link Report#legacyMessage}). That text was rendered with the old coordinate written into
