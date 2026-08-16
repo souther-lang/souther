@@ -683,12 +683,4 @@ public final class DeclarationAgreement {
         }
     }
 
-    private static <T> Map<String, T> byName(List<T> declarations,
-                                             java.util.function.Function<T, String> name) {
-        Map<String, T> byName = new LinkedHashMap<>();
-        for (T declaration : declarations) {
-            byName.put(name.apply(declaration), declaration);
-        }
-        return byName;
-    }
 }
