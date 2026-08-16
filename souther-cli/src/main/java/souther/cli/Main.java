@@ -716,14 +716,14 @@ public final class Main {
     /**
      * Which of the files handed over a source id names, or -1 when it names none of them.
      *
-     * <p>For a diagnostic, which may name no source — a report this compile could pin on none — so
-     * the single file is the answer whatever the id reads. Not for a reason in a report, which
-     * always names one: {@link #namesOf} matches on the id alone.
+     * <p>On the id and nothing else. The one file handed over used to be the answer for whatever it
+     * was asked, including for no id at all, because a report could arrive here without one and the
+     * single file was the only guess to be had. A report says which source it points into now, so
+     * there is nothing left to guess — and the guess was answering for reports it had no business
+     * answering for: handed one file and a report about another, it quoted that file at the
+     * report's numbers, which put a caret past the end of a line the author never wrote.
      */
     private static int indexOf(List<Path> sources, SourceId sourceId) {
-        if (sources.size() == 1) {
-            return 0;
-        }
         for (int i = 0; i < sources.size(); i++) {
             if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
                 return i;
