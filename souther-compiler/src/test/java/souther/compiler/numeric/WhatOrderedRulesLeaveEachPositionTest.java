@@ -111,14 +111,24 @@ class WhatOrderedRulesLeaveEachPositionTest {
         assertFalse(either.isBottom());
     }
 
-    /** And a choice both sides of which hold nothing holds nothing. */
+    /**
+     * And a choice both sides of which hold nothing holds nothing, and keeps both.
+     *
+     * <p>Where one side can be taken, the other's ranges go with it — nothing satisfies that side,
+     * so what it said narrows nothing. Where neither can be taken, no side speaks for the other, and
+     * answering with either would leave which position is named to the order the two were written
+     * in.
+     */
     @Test
-    void aChoiceWithNothingOnEitherSideHoldsNothing() {
+    void aChoiceWithNothingOnEitherSideHoldsNothingAndKeepsBoth() {
         OrderedIntervals<String> left = OrderedIntervals.at(A, above(6))
                 .meet(OrderedIntervals.at(A, below(2)));
         OrderedIntervals<String> right = OrderedIntervals.at(B, above(6))
                 .meet(OrderedIntervals.at(B, below(2)));
 
         assertTrue(left.join(right).isBottom());
+        assertEquals(Set.of(A, B), left.join(right).holdingNothing());
+        assertEquals(left.join(right).holdingNothing(), right.join(left).holdingNothing(),
+                "and the same either way round");
     }
 }

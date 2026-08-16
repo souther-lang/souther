@@ -128,6 +128,55 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 """));
     }
 
+    /**
+     * A choice every alternative of which is impossible, shown the same way either way round.
+     *
+     * <p>Two situations were being answered with one rule. An alternative nobody can take leaves the
+     * answer to the others, and its evidence goes with it — but where <em>every</em> alternative is
+     * impossible, no one of them speaks for the rest, and taking the first one that was found to be
+     * impossible out of the answer settles the proof by the order the operands were written in.
+     *
+     * <p>That is the rule {@link Emptiness.AcrossEveryCase} is written for a sum: what proves it has
+     * none is the whole list. Here the alternatives are kept and the one place that chooses a proof
+     * — {@link Emptiness#preferred}, and the order the value declares its positions — chooses it.
+     */
+    @Test
+    void aChoiceNoAlternativeOfWhichCanBeTakenIsShownTheSameWayEitherWayRound() {
+        Emptiness expected =
+                new Emptiness.AtAField("s", new Emptiness.EmptyOrderedInterval());
+        assertEquals(expected, only("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = s < "" || (b == true && b == false)
+                """), "the order is the one that can name what it found, whichever side it is on");
+        assertEquals(expected, only("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = (b == true && b == false) || s < ""
+                """), "and the operands the other way round");
+    }
+
+    /** And the place named is the first the value declares, not the first the reading gave up on. */
+    @Test
+    void thePlaceAChoiceNamesIsTheFirstTheValueDeclares() {
+        Emptiness expected =
+                new Emptiness.AtAField("a", new Emptiness.EmptyOrderedInterval());
+        assertEquals(expected, only("""
+                module demo
+
+                data X = { a: String, b: String }
+                    invariant no = a < "" || b < ""
+                """));
+        assertEquals(expected, only("""
+                module demo
+
+                data X = { a: String, b: String }
+                    invariant no = b < "" || a < ""
+                """), "and the operands the other way round");
+    }
+
     /** Rules that contradict in a way no range holds, which is the general form. */
     @Test
     void rulesThatCannotAllHoldAreCarriedAsThat() {

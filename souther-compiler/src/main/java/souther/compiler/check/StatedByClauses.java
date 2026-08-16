@@ -93,12 +93,28 @@ record StatedByClauses(AdmissibleValues<Term> values, OrderedIntervals<Term> ord
          * Either alternative holding, an alternative that admits nothing being one nobody can take.
          *
          * <p>Asked of the pair and not of each language, which is the whole point of reading them
-         * together. Dropping a branch takes its unread rules with it, and rightly: no value
-         * satisfies that branch, so what could not be read inside it narrows nothing that a value
-         * of this type is under.
+         * together.
+         *
+         * <p><b>Every alternative impossible is not one alternative impossible.</b> Where one of
+         * them cannot be taken, the answer is the other and the first one's evidence goes with it —
+         * nothing satisfies it, so what it said narrows nothing a value of this type is under, its
+         * unread rules included. Where <em>all</em> of them cannot be taken, no one of them speaks
+         * for the rest: taking the first to be found impossible out of the answer would settle the
+         * proof by the order the operands were written in, and the same model written two ways would
+         * be refused two ways. So they are kept, and the one place that chooses a proof
+         * ({@link Emptiness#preferred}, and the order the value declares its positions) chooses it.
+         * That is the rule {@link Emptiness.AcrossEveryCase} states for a sum, arrived at here for
+         * the same reason.
+         *
+         * <p>Kept by meeting them, which is what a state holding nothing may be narrowed to: the
+         * choice admits nothing whichever way round it is read, and every position either
+         * alternative left empty is one the choice leaves empty.
          */
         @Override
         public StatedByClauses either(StatedByClauses one, StatedByClauses other) {
+            if (one.holdsNothing() && other.holdsNothing()) {
+                return one.meet(other);
+            }
             if (one.holdsNothing()) {
                 return other;
             }

@@ -93,8 +93,16 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges) {
      * Asked of the whole side rather than position by position: a branch with one position empty is
      * a branch no value satisfies, and hulling its other positions in would widen the answer by ends
      * no value of the model is ever at.
+     *
+     * <p>Both sides holding nothing is a different case and is not that one. No side speaks for the
+     * other there, and answering with either would settle which position is named by the order the
+     * two were written in — so they are met, which is empty whichever way round it is read and keeps
+     * every position either of them left empty.
      */
     public OrderedIntervals<A> join(OrderedIntervals<A> other) {
+        if (isBottom() && other.isBottom()) {
+            return meet(other);
+        }
         if (isBottom()) {
             return other;
         }

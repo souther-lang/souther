@@ -132,6 +132,30 @@ class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
     }
 
     /**
+     * And the sentence is the same one whichever way round the alternatives are written.
+     *
+     * <p>The proof is chosen where proofs are chosen, and the choice must not have been made already
+     * by whichever alternative the reading gave up on first. Written the other way round, the same
+     * model was told the general sentence with no place in it.
+     */
+    @Test
+    void aChoiceIsToldTheSameSentenceEitherWayRound() {
+        String said = "NothingIsLeftForThatPositionToHold";
+        assertEquals(List.of(said), saidBy("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = s < "" || (b == true && b == false)
+                """));
+        assertEquals(List.of(said), saidBy("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = (b == true && b == false) || s < ""
+                """), "and the operands the other way round");
+    }
+
+    /**
      * And an alternative that does admit something leaves the choice open.
      *
      * <p>The negative control for the one above. Dropping an impossible alternative must leave the
