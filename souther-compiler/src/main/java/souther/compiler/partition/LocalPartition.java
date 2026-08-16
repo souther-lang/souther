@@ -68,5 +68,13 @@ public sealed interface LocalPartition {
      * which is the point: the values are as wide as the rules could be read as, and a rule this
      * could not read can divide the position as easily as the ones it could.
      */
-    record Blocked(BlockReason why) implements LocalPartition {}
+    record Blocked(BlockReason why) implements LocalPartition {
+
+        public Blocked {
+            if (why == null) {
+                throw new IllegalArgumentException(
+                        "a position blocked by nothing is an open one, which is a different answer");
+            }
+        }
+    }
 }

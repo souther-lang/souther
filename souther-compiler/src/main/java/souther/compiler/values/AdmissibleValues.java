@@ -51,7 +51,7 @@ import java.util.Set;
  * this reading could not follow the distinction the model draws.
  */
 public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> unread,
-                                  UnreadReason dropped) {
+                                  boolean dropped) {
 
     /**
      * @param values  what each position admits. A position at {@link ValueSet#ANY} is left out, so
@@ -60,10 +60,11 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      *                and not only which: two of these are lifted by different work and reported
      *                differently, and a reader handed the positions alone would have to go back to
      *                the rules to find out which it was
-     * @param dropped what stopped a rule that was left unread anywhere in this reading, or null
-     *                where none was. A disjunction needs it in order to know that a branch widened
-     *                it, and needs the reason with it so the positions it spoils say the same thing
-     *                as the branch that spoiled them
+     * @param dropped whether a rule was left unread anywhere in this reading, which is what a
+     *                disjunction needs in order to know that a branch widened it. What stopped that
+     *                rule is not carried: a position the other branch spoke about is spoiled by
+     *                there having been an alternative it could not read, and not by whatever the
+     *                rule in that alternative was about
      */
     public AdmissibleValues {
         Map<A, ValueSet> said = new LinkedHashMap<>();
@@ -81,12 +82,12 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
-        return new AdmissibleValues<>(Map.of(), Map.of(), null);
+        return new AdmissibleValues<>(Map.of(), Map.of(), false);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
-        return new AdmissibleValues<>(Map.of(atom, set), Map.of(), null);
+        return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false);
     }
 
     /**
@@ -99,7 +100,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     public static <A> AdmissibleValues<A> unreadable(Set<A> named, UnreadReason why) {
         Map<A, UnreadReason> spoiled = new LinkedHashMap<>();
         named.forEach(each -> spoiled.put(each, why));
-        return new AdmissibleValues<>(Map.of(), spoiled, why);
+        return new AdmissibleValues<>(Map.of(), spoiled, true);
     }
 
     /** What {@code atom} may hold, everything being admitted where nothing was said. */
@@ -130,7 +131,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         Map<A, ValueSet> out = new LinkedHashMap<>(values);
         other.values.forEach((atom, set) -> out.merge(atom, set, ValueSet::meet));
         return new AdmissibleValues<>(out, union(unread, other.unread),
-                dropped != null ? dropped : other.dropped);
+                dropped || other.dropped);
     }
 
     /**
@@ -150,28 +151,28 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
             }
         });
         Map<A, UnreadReason> spoiled = union(unread, other.unread);
-        // Spoiled by the other branch, so what stopped that branch is what is said here: the
-        // position is open because a rule over there went unread, and naming this branch's reason
-        // would send a reader to the half of the disjunction that was read in full.
-        if (other.dropped != null) {
-            spoiled = spoiling(spoiled, values.keySet(), other.dropped);
+        // Spoiled by there having been an alternative this could not read, which is what happened
+        // to them: a value satisfying that branch is under no obligation from this one. Not by what
+        // the unread rule was about — a rule relating two other positions relates this one to
+        // nothing, and lending its reason here would say that it did.
+        if (other.dropped) {
+            spoiled = spoiling(spoiled, values.keySet());
         }
-        if (dropped != null) {
-            spoiled = spoiling(spoiled, other.values.keySet(), dropped);
+        if (dropped) {
+            spoiled = spoiling(spoiled, other.values.keySet());
         }
-        return new AdmissibleValues<>(out, spoiled, dropped != null ? dropped : other.dropped);
+        return new AdmissibleValues<>(out, spoiled, dropped || other.dropped);
     }
 
-    /** The same, with {@code these} spoiled by {@code why} where nothing has spoiled them already.
-     *  A reason already recorded for a position is the rule that named it, which is nearer than a
-     *  branch that widened it from outside. */
-    private static <A> Map<A, UnreadReason> spoiling(Map<A, UnreadReason> had, Set<A> these,
-                                                     UnreadReason why) {
+    /** The same, with {@code these} left open by an alternative — where nothing has spoiled them
+     *  already. A reason already recorded for a position is a rule that named it, which is nearer
+     *  than a branch that widened it from outside. */
+    private static <A> Map<A, UnreadReason> spoiling(Map<A, UnreadReason> had, Set<A> these) {
         if (these.isEmpty()) {
             return had;
         }
         Map<A, UnreadReason> out = new LinkedHashMap<>(had);
-        these.forEach(each -> out.putIfAbsent(each, why));
+        these.forEach(each -> out.putIfAbsent(each, UnreadReason.ALTERNATIVE_NOT_READ));
         return out;
     }
 

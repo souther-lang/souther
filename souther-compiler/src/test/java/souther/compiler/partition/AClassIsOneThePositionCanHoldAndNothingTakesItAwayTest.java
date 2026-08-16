@@ -15,7 +15,10 @@ import souther.compiler.query.Shapes;
 import java.util.List;
 import java.util.Map;
 
+import souther.compiler.values.AdmissibleSet;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -76,9 +79,32 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 guards.unread(), guards.singled(), guards.between()));
     }
 
+    /** The one axis, whichever phase produced it. */
+    private static Axis only(Partitions.Partitioning partitioning) {
+        assertEquals(1, partitioning.axes().size(), partitioning.axes().toString());
+        return partitioning.axes().get(0);
+    }
+
     private static List<String> classesOf(Partitions.Partitioning partitioning) {
         assertEquals(1, partitioning.axes().size(), partitioning.axes().toString());
-        return partitioning.axes().get(0).classes().stream().map(PartitionClass::id).toList();
+        return classesAt(partitioning, partitioning.axes().get(0).path().toString());
+    }
+
+    /** The classes of the position at {@code path}, where a behavior has more than one. */
+    private static List<String> classesAt(Partitions.Partitioning partitioning, String path) {
+        return partitioning.axes().stream()
+                .filter(each -> each.path().toString().equals(path))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no axis at " + path + " in "
+                        + partitioning.axes()))
+                .classes().stream().map(PartitionClass::id).toList();
+    }
+
+    /** The classes at {@code path}, off the declarations alone. */
+    private static List<String> declaredAt(String source, String behavior, String path) {
+        Read read = of(source, behavior);
+        return classesAt(Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE),
+                path);
     }
 
     /**
@@ -179,6 +205,79 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 """, "classify"));
     }
 
+    /**
+     * A case a rule refuses is not a class of the position, said as a denial as well as as a naming.
+     *
+     * <p>The other half of the same crossing, and the half a mixed sum reaches. Where every value
+     * of a type can be written out — a boolean, a sum of unit cases — a denial is turned into the
+     * values it leaves where it is read, and the crossing sees a finite set. Where they cannot, it
+     * stays a denial: {@code State} has a case holding a record, so {@code /= Missing} is every
+     * value but one and names none of the ones left.
+     *
+     * <p>A class is dropped where the rules leave it nothing, which is one rule and two proofs. A
+     * finite set proves it by holding no value of the class; a denial proves it by excluding every
+     * value the class holds, which is provable of a class that is one value and not of one that is
+     * a record.
+     */
+    @Test
+    void aCaseADenialRefusesIsNotAClassEither() {
+        assertEquals(List.of("Present"), declared("""
+                module g
+
+                data Missing
+                data Present = { note: String }
+                data State = Missing | Present
+
+                data AvailableState = State
+                    invariant here = value /= Missing
+
+                data Accepted = { at: String }
+
+                behavior classify : (s: AvailableState) -> Accepted
+                """, "classify"));
+    }
+
+    /** And a denial over a boolean leaves the other value, which is the same rule where the values
+     *  can be written out. */
+    @Test
+    void aDenialOverABooleanLeavesTheOtherValue() {
+        assertEquals(List.of("false"), declared("""
+                module g
+
+                data No = Bool
+                    invariant here = value /= true
+
+                data Accepted = { at: String }
+
+                behavior classify : (n: No) -> Accepted
+                """, "classify"));
+    }
+
+    /**
+     * A denial of one value of a class that holds many takes the class away from nothing.
+     *
+     * <p>What the proof is for. A record case holds every value its fields can be given, so a rule
+     * refusing one of them refuses none of the class — and a crossing that dropped it on a match
+     * would take away a class the model states and the position can reach.
+     */
+    @Test
+    void aDenialOfOneValueDoesNotTakeAwayAClassThatHoldsMany() {
+        assertEquals(List.of("Missing", "Present"), declaredAt("""
+                module g
+
+                data Missing
+                data Present = { note: String }
+                data State = Missing | Present
+
+                data Held = { state: State, note: String }
+                    invariant here = note /= "x"
+
+                data Accepted = { at: String }
+
+                behavior classify : (h: Held) -> Accepted
+                """, "classify", "h.state"));
+    }
+
     /** A case the rule leaves is still a class, so the crossing takes away only what it must. */
     @Test
     void aRuleThatRefusesNothingLeavesEveryCase() {
@@ -196,6 +295,59 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
                 behavior classify : (s: StageI) -> Accepted
                 """, "classify"));
+    }
+
+    /**
+     * How much of the rules the classes were derived under survives every phase.
+     *
+     * <p>Nothing reads it yet, which is the whole reason to hold it here: a phase that dropped it
+     * would leave every measure saying what it says today, and the loss would show up the day
+     * somebody asks whether a class is one a value can be built for. The classes are the values the
+     * model singled out either way; what the answer beside them says is that a rule went unread and
+     * may yet refuse one of them.
+     */
+    @Test
+    void howMuchWasReadSurvivesTheBodyAsWellAsTheDeclarations() {
+        String model = """
+                module g
+
+                data Code = String
+                    invariant enumerated = value == "a" || value == "b"
+                    invariant shape = String.matches("[a-z]", value)
+
+                data Accepted = { at: String }
+                data Refused = { at: String }
+
+                behavior classify : (c: Code) -> Accepted | Refused
+                    constructs Accepted, Refused
+
+                let classify (c) =
+                    if String.length(c.value) == 1 then Accepted { at = "x" }
+                    else Refused { at = "y" }
+                """;
+        Read read = of(model, "classify");
+        Partitions.Partitioning base =
+                Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE);
+
+        assertInstanceOf(AdmissibleSet.Completeness.Partial.class, only(base).read(),
+                "a rule about this position went unread, and the classes were made anyway");
+        assertEquals(only(base).read(), only(withThresholdsOf(read, base)).read(),
+                "what a body draws does not change what was read about the position's values");
+    }
+
+    /** The same partitioning, with what the behavior's body draws taken in. */
+    private static Partitions.Partitioning withThresholdsOf(Read read,
+                                                            Partitions.Partitioning base) {
+        Bodies.Elaborated checked =
+                read.compilation().db().ask(new Bodies.Checked(read.module())).value();
+        assertNotNull(checked, "the model under test compiles");
+        Core body = checked.behaviorBodies().get(read.spec().name());
+        assertNotNull(body, "the behavior under test has a body");
+        GuardThresholds.Guards guards = GuardThresholds.of(read.spec().name(), body,
+                CoverageSites.of(checked.behaviorBodies()),
+                read.spec().params().stream().map(Hir.Param::name).toList(), read.symbols());
+        return Partitions.withThresholds(base, guards.thresholds(), read.symbols(),
+                guards.unread(), guards.singled(), guards.between());
     }
 
     /**

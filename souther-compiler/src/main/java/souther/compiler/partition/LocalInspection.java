@@ -44,17 +44,48 @@ import java.util.Set;
 public record LocalInspection(LocalReading reading, LocalPartition partition) {
 
     /**
+     * Every arm, against the reading it is paired with.
+     *
      * <p>An open position is a reading that ran to the end. The sentence "the model divides this
      * position no way" is what a report goes on to write, and it may not be reached from a reading
      * that could not take in a rule about the position — which is the defect this whole protocol
-     * was rebuilt around (issue #772). Refused where the pair is made, so that no value of this
-     * exists carrying the contradiction.
+     * was rebuilt around (issue #772).
+     *
+     * <p>And the other two for the same reason, since each of them repeats something the reading
+     * already says. A {@code Divided} carries the completeness the classes were derived under, and
+     * a caller pairing it with another would promote a reading short of the rules to one that ran
+     * to the end — the same claim as the first, made one step further along. A {@code Blocked} says
+     * a rule about the position went unread, which the reading is the one to know.
+     *
+     * <p>Checked where the pair is made rather than trusted to the derivation, so that no value of
+     * this exists carrying the contradiction. The derivation is the only producer today; that is a
+     * fact about this month rather than about the type.
      */
     public LocalInspection {
-        if (partition instanceof LocalPartition.Open && !reading.admitted().isComplete()) {
-            throw new IllegalArgumentException(
-                    "a reading short of the rules is not an open position: "
-                            + reading.admitted().whyPartial());
+        AdmissibleSet admitted = reading.admitted();
+        switch (partition) {
+            case LocalPartition.Open _ -> {
+                if (!admitted.isComplete()) {
+                    throw new IllegalArgumentException(
+                            "a reading short of the rules is not an open position: "
+                                    + admitted.whyPartial());
+                }
+            }
+            case LocalPartition.Divided divided -> {
+                if (!divided.completeness().equals(admitted.completeness())) {
+                    throw new IllegalArgumentException(
+                            "classes said to be read " + divided.completeness()
+                                    + " off a reading that was " + admitted.completeness());
+                }
+            }
+            case LocalPartition.Blocked blocked -> {
+                if (admitted.whyPartial() == null
+                        || !blocked.why().equals(stopped(admitted.whyPartial()))) {
+                    throw new IllegalArgumentException(
+                            "blocked by " + blocked.why() + " on a reading that says "
+                                    + admitted.completeness());
+                }
+            }
         }
     }
 
@@ -172,7 +203,7 @@ public record LocalInspection(LocalReading reading, LocalPartition partition) {
     private static BlockReason stopped(UnreadReason why) {
         return switch (why) {
             case RELATES_TWO_POSITIONS -> new BlockReason.ComparisonBetweenPositions();
-            case FORM_NOT_READ -> new BlockReason.UnreadValueRule();
+            case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new BlockReason.UnreadValueRule();
             case NOT_REACHED -> new BlockReason.ValueRulesNotReached();
         };
     }
@@ -266,47 +297,48 @@ public record LocalInspection(LocalReading reading, LocalPartition partition) {
     /**
      * The classes of {@code declared} left by the values the rules admit.
      *
-     * <p>Sound whether or not the reading ran to the end of the rules: the set is an upper bound in
-     * either case, so a class holding none of its values holds none of the values the rules leave.
-     * A set read in part makes classes as readily as one read whole — the values the model singled
-     * out are the same values — and what the completeness beside it decides is what may be said
-     * about the classes afterwards, not whether there are any.
+     * <p>One rule: a class is dropped where the rules leave it nothing. Each class is asked, since
+     * knowing what a class holds is what settles it — a finite set proves a class empty by holding
+     * no value of it, and a set written as a denial proves it by excluding every value the class
+     * has, which a class that is one value can say and a class holding a record cannot
+     * ({@link PartitionClass#leftAnythingBy}).
      *
-     * <p>Only where every value the rules admit is one some class recognises. A value none of them
-     * does is the two readings disagreeing about what stands at this position, and the classes are
+     * <p>Sound whether or not the reading ran to the end of the rules: the set is an upper bound in
+     * either case, so a class the rules leave nothing is a class this position cannot hold. A set
+     * read in part makes classes as readily as one read whole — the values the model singled out
+     * are the same values — and what the completeness beside it decides is what may be said about
+     * the classes afterwards, not whether there are any.
+     *
+     * <p>Only where the classes and the set are about the same values. A value none of the classes
+     * holds is the two readings disagreeing about what stands at this position, and the classes are
      * the position's own: taking them away on the strength of a set that does not fit them would
      * leave a position with no classes because two readings of it did not line up.
-     *
-     * <p>Asked of the classes rather than by matching what they are called. A class knows what it
-     * holds, and a reading that rebuilt the names would be a second copy of how a class is named.
      */
     private static List<PartitionClass> admits(List<PartitionClass> declared,
                                                AdmissibleSet admitted) {
-        if (declared.isEmpty()
-                || !(admitted.approximation() instanceof ValueSet.Finite finite)) {
+        if (declared.isEmpty() || admitted.approximation().isAny()) {
             return declared;
         }
-        List<PartitionClass> kept = new ArrayList<>();
-        for (Value value : finite.values()) {
-            ObservedValue seen = ValueClasses.observed(value);
-            List<PartitionClass> holding = declared.stream()
-                    .filter(each -> each.classifier().membershipOf(seen) == Membership.MATCH)
-                    .toList();
-            if (holding.isEmpty()) {
-                return declared;   // the two readings are not about the same values
-            }
-            kept.addAll(holding);
+        if (admitted.approximation() instanceof ValueSet.Finite finite
+                && !finite.values().isEmpty() && finite.values().stream()
+                        .anyMatch(value -> declared.stream().noneMatch(each -> holds(each, value)))) {
+            return declared;   // the two readings are not about the same values
         }
-        // In the order the type declares them, and not the order the rule names them. The classes
-        // are the position's and a reader lists them as the model wrote them, so `== Won || ==
-        // Prospecting` and `== Prospecting || == Won` are one partition rather than two orderings
-        // of it.
-        List<PartitionClass> left = declared.stream().filter(kept::contains).toList();
+        List<PartitionClass> left = declared.stream()
+                .filter(each -> each.leftAnythingBy(admitted.approximation(),
+                        value -> holds(each, value)))
+                .toList();
         // Nothing left is not a position with no classes: it is a position that can hold none of
         // its own values, which is a value nothing can build and is refused where the declaration
         // is (E1013). Read as an empty partition it would come back as one the model divides no
         // way, which is the sentence this reading is here to stop.
         return left.isEmpty() ? declared : left;
+    }
+
+    /** Whether a class holds one value, asked of the class. A reading that matched what a class is
+     *  called would be a second copy of how a class is named. */
+    private static boolean holds(PartitionClass each, Value value) {
+        return each.classifier().membershipOf(ValueClasses.observed(value)) == Membership.MATCH;
     }
 
     /** The same, against what the intervals leave. */

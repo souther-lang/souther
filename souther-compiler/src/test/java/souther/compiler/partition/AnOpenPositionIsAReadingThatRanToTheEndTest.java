@@ -166,6 +166,34 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
      * where the pair is made, so no value carrying the contradiction exists — rather than left to
      * a condition each place that builds one has to remember.
      */
+    /**
+     * And neither arm may say something else about the reading it is paired with.
+     *
+     * <p>The same claim as above, made one step further along. A {@code Divided} carries the
+     * completeness its classes were derived under, and a caller pairing it with another would
+     * promote a reading short of the rules to one that ran to the end — which is what the axis goes
+     * on to carry. A {@code Blocked} says a rule went unread, which the reading is the one to know.
+     */
+    @Test
+    void neitherArmMaySayMoreThanTheReadingDoes() {
+        LocalReading partial = read("Email").reading();
+        LocalReading whole = read("Gender").reading();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new LocalInspection(partial, new LocalPartition.Divided(
+                        List.of(), new CutEvidence.Present(
+                                List.of(Cut.at(souther.compiler.check.Carrier.WHOLE,
+                                        souther.compiler.numeric.Count.ZERO,
+                                        new OriginRef.InvariantOrigin(named("Amount"), "min"))),
+                                false),
+                        AdmissibleSet.READ_IN_FULL)),
+                "classes said to be read in full off a reading that was not");
+        assertThrows(IllegalArgumentException.class,
+                () -> new LocalInspection(whole,
+                        new LocalPartition.Blocked(new BlockReason.UnreadValueRule())),
+                "blocked on a reading that says every rule was read");
+    }
+
     @Test
     void aReadingShortOfTheRulesIsNotAnOpenPosition() {
         LocalReading partial = read("Email").reading();

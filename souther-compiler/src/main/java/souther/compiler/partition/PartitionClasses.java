@@ -9,6 +9,8 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -119,7 +121,7 @@ final class PartitionClasses {
         for (PartitionClass each : of(new TypeView(view.declared(), List.of(), view.shape()),
                 symbols)) {
             out.add(PartitionClass.ungeneratable(each.id(), each.label(),
-                    Classifier.under(worn, each.classifier()), why));
+                    Classifier.under(worn, each.classifier()), why).holding(each.denotes()));
         }
         return out;
     }
@@ -133,15 +135,19 @@ final class PartitionClasses {
     /** The two values of a {@code Bool}, under the names the position writes them under. */
     private static List<PartitionClass> eitherWay(List<TypeSymbol> worn,
                                                   List<TypeReachName.Written> writes) {
+        // Each holds the one value it is named after, which is what lets a rule denying that value
+        // be read as refusing the whole class.
         return List.of(
                 PartitionClass.of("true", "true",
                         Classifier.under(worn, Classifier.byShape(v -> isBool(v, true))),
                         RepresentativeSource.under(writes,
-                                RepresentativeSource.of(FixtureTemplate.bool(true)))),
+                                RepresentativeSource.of(FixtureTemplate.bool(true))))
+                        .holding(ValueSet.just(Value.truth(true))),
                 PartitionClass.of("false", "false",
                         Classifier.under(worn, Classifier.byShape(v -> isBool(v, false))),
                         RepresentativeSource.under(writes,
-                                RepresentativeSource.of(FixtureTemplate.bool(false)))));
+                                RepresentativeSource.of(FixtureTemplate.bool(false))))
+                        .holding(ValueSet.just(Value.truth(false))));
     }
 
     /** Whether an optional holds anything, which is the one division its type makes. */
@@ -198,9 +204,13 @@ final class PartitionClasses {
             return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
         }
         if (!(symbols.declarations().declaration(leaf.key()) instanceof Hir.Data data)) {
-            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
+            // A case that holds nothing, so the case is the whole of what the class has: naming it
+            // builds it, and a rule denying it denies every value of this class. A case holding a
+            // record says nothing here, which is why this is written where the two are told apart.
+            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
                     RepresentativeSource.under(writes,
-                            RepresentativeSource.of(FixtureTemplate.unitCase(names))));
+                            RepresentativeSource.of(FixtureTemplate.unitCase(names))))
+                    .holding(ValueSet.just(Value.of(leaf)));
         }
         if (data.newtype()) {
             List<FixtureTemplate> inner = Partitions.insideTheNewtype(leaf, symbols);

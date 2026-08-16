@@ -163,18 +163,22 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     }
 
     /**
-     * A position an alternative takes back is spoiled by what stopped the <em>other</em> branch.
+     * A position an alternative takes back says that an alternative took it back.
      *
-     * <p>The position is open because a rule over there went unread. Naming this branch's reason —
-     * it has none, having been read in full — would send a reader to the half of the disjunction
-     * that was understood.
+     * <p>What happened to it, and not what the unread rule was about. The position is open because
+     * a value satisfying the other branch is under no obligation from this one — and the rule over
+     * there may name positions this one never mentions, so borrowing its reason would say of this
+     * position something no rule said about it.
      */
     @Test
-    void aPositionTakenBackByAnAlternativeSaysWhatStoppedThatAlternative() {
+    void aPositionTakenBackByAnAlternativeSaysAnAlternativeTookItBack() {
         AdmissibleValues<String> either = says(VALUE, A)
-                .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ));
+                .join(AdmissibleValues.unreadable(Set.of(OTHER),
+                        UnreadReason.RELATES_TWO_POSITIONS));
 
-        assertEquals(UnreadReason.FORM_NOT_READ, either.whyUnread(VALUE));
+        assertEquals(UnreadReason.ALTERNATIVE_NOT_READ, either.whyUnread(VALUE));
+        assertEquals(UnreadReason.RELATES_TWO_POSITIONS, either.whyUnread(OTHER),
+                "the position the rule named keeps what the rule was");
     }
 
     /** And where a rule already named the position, that is what is said: a rule written about this

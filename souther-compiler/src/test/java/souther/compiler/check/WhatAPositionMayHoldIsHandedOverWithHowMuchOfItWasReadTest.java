@@ -148,7 +148,29 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 data Pair = { left: String, right: String }
                     invariant either = left == "A" || String.matches("[0-9]+", right)
                 """, "Pair");
-        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "left");
+    }
+
+    /**
+     * And what such a position is told is that an alternative took it back, whatever the unread
+     * branch was about.
+     *
+     * <p>{@code left /= right} relates two positions and {@code code} is neither of them, so the
+     * reason the branch stopped is not a reason about {@code code}. Lent across, a report would
+     * tell an author that a rule compares {@code code} with another position, and no rule does.
+     */
+    @Test
+    void aPositionAnAlternativeTookBackIsNotToldWhatTheOtherBranchWasAbout() {
+        FieldDomains read = of("""
+                module demo
+
+                data Triple = { left: String, right: String, code: String }
+                    invariant either = left /= right || code == "A"
+                """, "Triple");
+
+        asFarAsRead(ValueSet.ANY, UnreadReason.ALTERNATIVE_NOT_READ, read, "code");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "left");
+        asFarAsRead(ValueSet.ANY, UnreadReason.RELATES_TWO_POSITIONS, read, "right");
     }
 
     /**

@@ -72,14 +72,16 @@ final class ValueClasses {
         }
         Classifier is = Classifier.under(worn, Classifier.byShape(seen -> holds(seen, value)));
         FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, symbols);
-        return stands == null
+        return (stands == null
                 // A name the position wears that nothing here writes. The class is the position's
                 // either way and a row already sitting in it still covers it; what is absent is the
                 // offer of a new row (issue #696).
                 ? PartitionClass.ungeneratable(bare.text(), bare.text(), is,
                         "nothing here can write a value of this position")
                 : PartitionClass.of(bare.text(), bare.text(), is,
-                        RepresentativeSource.of(stands));
+                        RepresentativeSource.of(stands)))
+                // The one value it was made from, which is the whole of what it holds.
+                .holding(ValueSet.just(value));
     }
 
     /**

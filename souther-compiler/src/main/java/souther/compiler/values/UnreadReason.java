@@ -31,6 +31,21 @@ public enum UnreadReason {
     FORM_NOT_READ,
 
     /**
+     * A rule stated as an alternative to the ones about this position went unread.
+     *
+     * <p>The position is left open by a branch that never named it. {@code left /= right || code
+     * == "A"} says nothing about {@code code} where the first alternative holds, so the values the
+     * second names are not the whole of what {@code code} may be — and what went unread is the
+     * other branch rather than anything written about this position.
+     *
+     * <p>Its own arm because the reason a branch stopped is not a reason about the positions the
+     * other branch spoke of. Lent across, {@link #RELATES_TWO_POSITIONS} arrived at a position no
+     * comparison had related to anything, and the word it projects to told the author their rule
+     * compares it with another.
+     */
+    ALTERNATIVE_NOT_READ,
+
+    /**
      * The reading never reached the rules about this position.
      *
      * <p>A different thing from a rule it read and could not use. The walk that gathers clauses
