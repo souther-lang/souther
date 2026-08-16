@@ -58,11 +58,11 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 """));
     }
 
-    /** A set too small for its element, carried with the two counts that do not meet. */
+    /** A set too small for what it holds, carried with the bound the comparison was made against. */
     @Test
     void aSetTooSmallForItsElementIsCarriedWithBothCounts() {
         assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
-                        new Emptiness.SetRequiresTooManyDistinctValues(2, 1)), only("""
+                        new Emptiness.SetRequiresTooManyDistinctValues(1)), only("""
                 module demo
 
                 data One = Int
@@ -77,7 +77,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
     @Test
     void thePositionAProofNamesIsWhereTheRulesWereWritten() {
         assertEquals(new Emptiness.AtAField("pair",
-                        new Emptiness.SetRequiresTooManyDistinctValues(2, 1)), only("""
+                        new Emptiness.SetRequiresTooManyDistinctValues(1)), only("""
                 module demo
 
                 data One = Int

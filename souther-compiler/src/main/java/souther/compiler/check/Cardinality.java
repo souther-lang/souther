@@ -152,9 +152,16 @@ public sealed interface Cardinality {
          * of them.
          */
         static Standing narrower(Standing one, Standing other) {
-            long here = one.boundOr(Long.MAX_VALUE);
-            long there = other.boundOr(Long.MAX_VALUE);
-            return here <= there ? one : other;
+            // Asked of the two forms and not of a number standing in for the wider of them. Having
+            // no bound is not a large number, and reading it as one leaves it tied with the largest
+            // number there is — so a bound that was proven would lose to one that was not.
+            if (one instanceof Unknown) {
+                return other;
+            }
+            if (other instanceof Unknown) {
+                return one;
+            }
+            return ((AtMost) one).bound() <= ((AtMost) other).bound() ? one : other;
         }
     }
 

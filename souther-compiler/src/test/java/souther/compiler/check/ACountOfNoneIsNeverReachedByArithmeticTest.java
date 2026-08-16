@@ -83,4 +83,18 @@ class ACountOfNoneIsNeverReachedByArithmeticTest {
         assertEquals(Cardinality.UNKNOWN,
                 Cardinality.Standing.narrower(Cardinality.UNKNOWN, Cardinality.UNKNOWN));
     }
+
+    /**
+     * Having no bound is not the largest number, so the largest number is narrower than it.
+     *
+     * <p>Both ways round, because a reading that stands the unknown in for a number puts the two of
+     * them level and then answers with whichever it was handed first.
+     */
+    @Test
+    void aBoundThatWasProvenIsNarrowerThanNoBoundHoweverLargeItIs() {
+        assertEquals(Cardinality.atMost(Long.MAX_VALUE), Cardinality.Standing.narrower(
+                Cardinality.UNKNOWN, Cardinality.atMost(Long.MAX_VALUE)));
+        assertEquals(Cardinality.atMost(Long.MAX_VALUE), Cardinality.Standing.narrower(
+                Cardinality.atMost(Long.MAX_VALUE), Cardinality.UNKNOWN));
+    }
 }

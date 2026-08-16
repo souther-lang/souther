@@ -312,8 +312,7 @@ final class CardinalityTransfer {
         // nothing fills. Asked whatever the number, because it is one question and not an
         // enumeration.
         if (!counts.mayHoldAtMost(path, distinct)) {
-            return Cardinality.none(new Emptiness.SetRequiresTooManyDistinctValues(
-                    counts.leastHeldAt(path), distinct));
+            return Cardinality.none(new Emptiness.SetRequiresTooManyDistinctValues(distinct));
         }
         if (distinct > ENUMERATION_LIMIT) {
             return Cardinality.UNKNOWN;

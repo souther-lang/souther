@@ -77,9 +77,9 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1013)
     record ItsRulesCannotAllHold(String data) implements DataMessage, Reported {}
 
-    /** A set is asked to hold more values that differ than its element has. */
+    /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
-    record ASetCannotBeFilledFromItsElement(String data, String at, long asked, long available)
+    record ASetCannotBeFilledFromItsElement(String data, String at, long available)
             implements DataMessage, Reported {}
 
     /** The rules leave a collection no size it may have. */

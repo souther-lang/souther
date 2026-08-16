@@ -49,12 +49,18 @@ public sealed interface Emptiness {
     record EmptyNumericInterval() implements Emptiness {}
 
     /**
-     * A set is asked to hold more values that differ than its element has.
+     * A set is asked to hold more values that differ than there are of what it holds.
      *
-     * @param asked     the fewest it is asked to hold
-     * @param available how many values the element has
+     * <p>One number and not two. What was compared is whether the rules admit any size this small,
+     * so the fewest they do admit is a number nothing here read — the reading that would answer it
+     * is a different one from the reading that refused, and putting its answer beside this one would
+     * be two precisions in one sentence.
+     *
+     * @param available an upper bound on how many values of what it holds differ, which is what the
+     *                  comparison was made against. A bound and not a count: it may have been
+     *                  rounded up, and the refusal holds because no size even that small is admitted
      */
-    record SetRequiresTooManyDistinctValues(long asked, long available) implements Emptiness {}
+    record SetRequiresTooManyDistinctValues(long available) implements Emptiness {}
 
     /** The rules leave a collection no size at all: not empty, and no size above it either. */
     record NoAllowedCollectionSize() implements Emptiness {}
