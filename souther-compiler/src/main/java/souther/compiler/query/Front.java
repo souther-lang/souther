@@ -9,6 +9,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceProvenance;
@@ -248,15 +249,15 @@ public final class Front {
             Ast.Module joined = withAttachedRows(db, raw, layout.exampleFilesOf()
                     .getOrDefault(name, List.of()));
             Exposing.Checked checked = Exposing.check(joined);
-            if (checked.conflicts().isEmpty()) {
+            if (checked.refused().isEmpty()) {
                 return Answer.of(checked);
             }
-            // A library import naming something this module declares. Reported here because this is
-            // where the import lines are read, and reported rather than raised so the rest of the
-            // module — and every other file beside it — is still read and still answers.
+            // An import line that could not do its job. Reported here because this is where the
+            // import lines are read, and reported rather than raised so the rest of the module —
+            // and every other file beside it — is still read and still answers.
             List<Report> reports = new ArrayList<>();
-            for (Diagnostic conflict : checked.conflicts()) {
-                reports.add(Report.of(conflict));
+            for (Exposing.Refusal refusal : checked.refused()) {
+                reports.add(said(refusal));
             }
             return Answer.of(checked, reports);
         }
@@ -440,6 +441,13 @@ public final class Front {
                     continue;
                 }
                 Exposing.Checked checked = Exposing.check(published.module());
+                if (!checked.refused().isEmpty()) {
+                    // The artifact path, still doing what it did while the check raised: a module
+                    // whose import lines this compiler cannot read ends the compilation, over a line
+                    // of a text nobody holds. What it says is now the refusal's own sentence rather
+                    // than whichever one the check happened to raise from.
+                    throw CompileException.of(said(checked.refused().get(0)).diagnostic());
+                }
                 read.put(name, checked);
                 injected.put(name, published.injectedBehaviors());
                 List<String> reaches = List.copyOf(reaches(checked.module()).keySet());
@@ -642,6 +650,40 @@ public final class Front {
         throw new IllegalStateException(
                 "a module off the path is written where this compile has no file, and " + at
                         + " says otherwise");
+    }
+
+    /**
+     * What to tell the author about a library import line that could not do its job.
+     *
+     * <p>A switch over every refusal there is, with nothing to fall through to, for the reason
+     * {@link Names} says it about the other namespace: a rule added to the check is a rule this
+     * compilation has to have something to say about, and one that reached here with nothing to say
+     * would be an import quietly bringing in nothing.
+     *
+     * <p>The place comes from the line the refusal names, which is where a reader of a module this
+     * compilation has source for is sent. A module read off the class path refuses the same way over
+     * a line nobody holds, and what is done about that is not this.
+     */
+    private static Report said(Exposing.Refusal refusal) {
+        return switch (refusal) {
+            case Exposing.Refusal.NoSuchLibraryFunction(Ast.Import imp, String named) ->
+                    Report.raised(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.NameIsNotAStandardLibraryFunction(
+                                    named, imp.module()))
+                            .build());
+            case Exposing.Refusal.BroughtTwice(Ast.Import imp, String named,
+                                               ValueName.Stdlib earlier,
+                                               ValueName.Stdlib andThis) ->
+                    Report.raised(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.NameIsPublishedByTwoModules(
+                                    named, earlier.qualified(), andThis.qualified()))
+                            .build());
+            case Exposing.Refusal.CollidesWithADeclaration(Ast.Import imp, String named) ->
+                    Report.of(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(named))
+                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
+                            .build());
+        };
     }
 
     /** A module off the path needing one that is not there. */

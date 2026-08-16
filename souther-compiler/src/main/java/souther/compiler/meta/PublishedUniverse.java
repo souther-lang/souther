@@ -127,10 +127,11 @@ public final class PublishedUniverse {
                         ? ModuleUniverse.InSight.UNREADABLE : ModuleUniverse.InSight.UNKNOWN);
                 continue;
             }
-            Exposing.Checked read;
-            try {
-                read = Exposing.check(published.module());
-            } catch (CompileException | IllegalArgumentException _) {
+            Exposing.Checked read = Exposing.check(published.module());
+            if (!read.refused().isEmpty()) {
+                // An import line of a module nobody here wrote. There is no author to tell — the
+                // source is not this compile's — so what these classes carry is something this
+                // reader cannot read, which is the answer a reader of this is waiting for.
                 unreadable.add(name);
                 beyondReading.put(name, ModuleUniverse.InSight.UNREADABLE);
                 continue;
