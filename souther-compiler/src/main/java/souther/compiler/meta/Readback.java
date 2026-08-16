@@ -109,14 +109,6 @@ public sealed interface Readback {
                 java.util.Objects.requireNonNull(first, "an exposure failure is at least one line");
                 rest = List.copyOf(rest);
             }
-
-            /** All of them, the first included, in the order the lines are written. */
-            public List<Exposure> all() {
-                List<Exposure> every = new java.util.ArrayList<>();
-                every.add(first);
-                every.addAll(rest);
-                return List.copyOf(every);
-            }
         }
     }
 
