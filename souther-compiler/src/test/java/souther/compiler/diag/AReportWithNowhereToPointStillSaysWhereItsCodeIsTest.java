@@ -153,4 +153,44 @@ class AReportWithNowhereToPointStillSaysWhereItsCodeIsTest {
         assertEquals(THE_CODE, reached.provenance(), "the same code");
         assertTrue(reached.at().isIn(new SourceId("app.sou")), "somewhere the reader holds");
     }
+
+    /**
+     * A label of its own does not become the place it points at.
+     *
+     * <p>A report with nowhere to point may still carry a label somewhere a reader can be sent — the
+     * guard a boundary finding was drawn by is in this compile's own source while the body the
+     * finding is about is not. Read as the thing to put the marker on, that label gives a report
+     * that says it points nowhere a line and a column that came from something else, which is the
+     * reading this family of types exists to stop: the header said the report was at the guard while
+     * the sentence under it said there was nowhere here to point at.
+     *
+     * <p>Which is not the rule that lets a label be the anchor. A problem written in two files is
+     * read from each of them, and on the second the label is what the marker goes on — but that is
+     * two places changing places, and a report with no place of its own has nothing to change with.
+     *
+     * <p>And the label keeps what it says. Anchored, its sentence is not written anywhere: an anchor
+     * is what the message is about, so nothing prints a note for it.
+     */
+    @Test
+    void aLabelOfItsOwnDoesNotBecomeThePlaceItPointsAt() {
+        Diagnostic said = Diagnostic.atCodeWrittenOutOfSight(THE_CODE)
+                .say(new ModuleMessage.CannotReadAFieldOnASum("x", "S"))
+                .secondary(Region.point(new SourcePos(2, 3, new SourceId("app.sou"))),
+                        new ModuleMessage.RenameItOrDropTheDependency("lib.rule"))
+                .build();
+        Located located = new Located(said, ReportContext.inFile(new SourceId("app.sou")));
+
+        DiagnosticView view = DiagnosticView.of(said, located.context());
+
+        assertTrue(view.anchor().isEmpty(),
+                () -> "nothing here is what the report is about: " + view.anchor());
+        assertEquals(1, view.others().size(), "and the label is still a label");
+
+        String out = new HumanRenderer(false).render(located,
+                _ -> new SourceContext("app.sou", "line one\nline two here\n"), Locale.ENGLISH);
+
+        assertFalse(out.lines().findFirst().orElseThrow().contains("2:3"),
+                () -> "the report is not at the guard's line: " + out);
+        assertTrue(out.contains("Rename"), () -> "and the label still says what it says: " + out);
+    }
 }

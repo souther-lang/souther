@@ -269,8 +269,11 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
     private static List<Citation> citations(Compilation compilation) {
         List<Citation> citations = new ArrayList<>();
         for (Db.Found found : compilation.reports()) {
-            if (((Primary.InSource) found.report().diagnostic().primary()).place().region().start() != null) {
-                citations.add(Citation.of(((Primary.InSource) found.report().diagnostic().primary()).place().region().start()));
+            // Of the reports that point somewhere. One that points at nothing says where its code
+            // is on the primary itself, and has no position to project a citation from.
+            if (found.report().diagnostic().primary()
+                    instanceof Primary.InSource(DiagnosticPlace.InSource place)) {
+                citations.add(Citation.of(place.region().start()));
             }
         }
         return citations;

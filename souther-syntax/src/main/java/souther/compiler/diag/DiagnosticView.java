@@ -98,8 +98,9 @@ public record DiagnosticView(SpotResolution primary, Optional<Shown> anchor,
                         unquotable.add(new Unquotable(out, label.said()));
             }
         }
-        int at = anchorAmong(shown, published);
-        if (at < 0 && !Objects.equals(context.filedUnder().orElse(null), published)) {
+        int at = anchorAmong(shown, published, primary instanceof SpotResolution.Found);
+        if (nothingIsIn(shown, published)
+                && !Objects.equals(context.filedUnder().orElse(null), published)) {
             throw new IllegalArgumentException(
                     "no place of this diagnostic is in " + published
                             + " and it is not listed under it either; it points into "
@@ -117,25 +118,49 @@ public record DiagnosticView(SpotResolution primary, Optional<Shown> anchor,
     }
 
     /**
-     * Which of {@code shown} is in {@code published}, or -1.
+     * Which of {@code shown} the marker goes on in {@code published}, or -1.
      *
-     * <p>Compared through {@link Spot#knownToBeOneText}, so a place is the anchor when it can be
-     * shown to be in that file and not when nothing rules it out. A place in a text the surface
-     * named answers here as readily as one in a source, which is what lets an editor anchor a report
-     * parsed out of the very document it is publishing.
+     * <p>Compared through {@link Spot#knownToBeIn}, so a place is the anchor when it can be shown to
+     * be in that file and not when nothing rules it out. A place in a text the surface named answers
+     * here as readily as one in a source, which is what lets an editor anchor a report parsed out of
+     * the very document it is publishing.
+     *
+     * <p>A label is the anchor only where the report has a place of its own somewhere else. That is
+     * what "the two change places" means: a problem written in two files is read from each of them,
+     * and on the second the label is what the marker goes on. A report that has no place at all is
+     * not in that case — it has nothing to change places with, and anchoring it on a label would
+     * give a report that says it points nowhere a line and a column that came from something else,
+     * which is the reading this whole family of types exists to stop. Its labels stay labels, each
+     * keeping the sentence that says why it is pointed at.
      */
-    private static int anchorAmong(List<Shown> shown, SourceId published) {
+    private static int anchorAmong(List<Shown> shown, SourceId published, boolean hasAPlaceOfItsOwn) {
         // A caller naming no file is not asking which of several it is reading: it has one text and
-        // everything is quoted from it, so the first place is the one the marker goes on. Read as
-        // "no place is in this file", it would leave a caller that holds the text with no caret.
+        // everything is quoted from it, so the report's own place is the one the marker goes on.
+        // Read as "no place is in this file", it would leave a caller that holds the text with no
+        // caret.
         if (published == null) {
-            return shown.isEmpty() ? -1 : 0;
+            return hasAPlaceOfItsOwn ? 0 : -1;
         }
         for (int i = 0; i < shown.size(); i++) {
-            if (Spot.knownToBeIn(shown.get(i).spot(), published)) {
+            boolean itsOwn = shown.get(i) instanceof Shown.ItsSubject;
+            if ((itsOwn || hasAPlaceOfItsOwn) && Spot.knownToBeIn(shown.get(i).spot(), published)) {
                 return i;
             }
         }
         return -1;
+    }
+
+    /**
+     * Whether the report points into no part of {@code published}.
+     *
+     * <p>Asked apart from which place the marker goes on, because the two differ for a report with
+     * no place of its own: it is said on the file a label of its is in — an author editing that file
+     * is told — while nothing there is the thing the report is about.
+     */
+    private static boolean nothingIsIn(List<Shown> shown, SourceId published) {
+        if (published == null) {
+            return false;   // a caller naming no file is not asking about one
+        }
+        return shown.stream().noneMatch(one -> Spot.knownToBeIn(one.spot(), published));
     }
 }

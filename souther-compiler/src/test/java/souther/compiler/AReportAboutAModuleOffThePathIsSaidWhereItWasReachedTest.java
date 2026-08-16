@@ -14,6 +14,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.WhereCodeIsWritten;
 import souther.compiler.meta.ModuleReadback;
@@ -532,7 +533,6 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                         new NameMessage.WriteItOnItsOwn("x")));
     }
 
-    /** Where the report about {@code module} is said. */
     /** The report about {@code module}, read for where it may be said. */
     private static Diagnostic whereTheReportAboutIsSaidIn(Compilation compilation, String module) {
         for (Db.Found found : compilation.reports()) {
@@ -543,11 +543,16 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         throw new AssertionError("nothing was reported about " + module);
     }
 
+    /** Where the report about {@code module} sends a reader, of the reports that send one at all.
+     *  A report about a module off the path is anchored before it is read back here, so a run in
+     *  which none of them points anywhere is a fixture that stopped reaching the module. */
     private static SourcePos whereTheReportAboutIsSaid(Compilation compilation, String module) {
         List<SourcePos> said = new ArrayList<>();
         for (Db.Found found : compilation.reports()) {
-            if (module.equals(found.module()) && ((Primary.InSource) found.report().diagnostic().primary()).place().region().start() != null) {
-                said.add(((Primary.InSource) found.report().diagnostic().primary()).place().region().start());
+            if (module.equals(found.module())
+                    && found.report().diagnostic().primary()
+                            instanceof Primary.InSource(DiagnosticPlace.InSource place)) {
+                said.add(place.region().start());
             }
         }
         assertFalse(said.isEmpty(), "nothing was reported about " + module);
