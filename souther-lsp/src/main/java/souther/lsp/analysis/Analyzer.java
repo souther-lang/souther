@@ -4,6 +4,7 @@ import souther.compiler.Compiler;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Requirements;
+import souther.compiler.check.Sig;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SpecImplementation;
 import souther.compiler.examples.ExampleProvisioning;
@@ -1277,10 +1278,11 @@ public final class Analyzer {
     /**
      * What the behaviors of {@code module} are still owed, as declarations to write.
      *
-     * <p>Which behaviors have no implementation is {@link Requirements#injected} — the same question
-     * the emitter asks about which names it has to be given — so an editor and a compile cannot
-     * disagree about whether a behavior is written. A behavior written as a composition is already
-     * its own implementation and is not among them.
+     * <p>Two sets, not one. An implementation is owed by a behavior written as a signature with
+     * nothing implementing it, which is {@link Requirements#injected} — the same question the
+     * emitter asks about what it has to be given. A row may be written for any behavior at all: a
+     * composition has no implementation to offer, since it is its own, and has rows like anything
+     * else.
      */
     private List<CompletionItem> behaviorsToWrite(String uri, Compilation compilation,
                                                   String module) {
@@ -1289,43 +1291,99 @@ public final class Analyzer {
         return answered == null ? List.of() : answered;
     }
 
-    /** The same, asked of the compile — null where it cannot say what this module declares. */
+    /**
+     * The same, asked of the compile — null where it cannot say what this module declares.
+     *
+     * <p>Null for each of the three questions going unanswered, and not only for the first. A
+     * module's requirements not being answered is not that module requiring nothing: a row written
+     * from that would leave out the stand-in its target needs, which is E1908 the moment it is
+     * completed. Answering nothing is what lets the last answer that was given stand.
+     */
     private List<CompletionItem> askBehaviorsToWrite(Compilation compilation, String module) {
         if (module == null) {
             return null;
         }
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        if (prepared == null) {
-            return null;
-        }
         Map<String, List<BehaviorRequirement>> requirements =
                 compilation.db().ask(new Bodies.Requirements(module)).value();
+        Map<String, Sig> signatures = compilation.db().ask(new Bodies.Signatures(module)).value();
+        if (prepared == null || requirements == null || signatures == null) {
+            return null;
+        }
         List<CompletionItem> out = new ArrayList<>();
         for (Hir.BehaviorDef declared : prepared.behaviors()) {
-            if (!(declared instanceof Hir.SpecBehavior behavior)) {
-                continue;
-            }
-            List<SpecImplementation.Parameter> parameters =
-                    SpecImplementation.parameters(behavior);
-            if (parameters.contains(new SpecImplementation.Parameter.Unanswered())) {
-                // A dependency naming nothing settles no parameter, and a skeleton stating one it
-                // did not read would be this server inventing it.
-                continue;
-            }
-            if (prepared.injected(behavior)) {
-                built(TopLevelForm.FN.starter() + " " + behavior.name(), CompletionItem.SNIPPET,
-                        module, DeclarationSkeletons.implementing(behavior.name(), parameters))
-                        .ifPresent(out::add);
-            }
-            List<String> unsupplied = requirements == null ? List.of()
-                    : ExampleProvisioning.unsupplied(List.of(),
-                            Requirements.names(requirements.getOrDefault(behavior.name(), List.of())),
-                            prepared.forExamples());
-            built(TopLevelForm.EXAMPLE.starter() + " " + behavior.name(), CompletionItem.SNIPPET,
-                    module, DeclarationSkeletons.exampleFor(behavior.name(), parameters, unsupplied))
-                    .ifPresent(out::add);
+            implementationToWrite(prepared, declared, module).ifPresent(out::add);
+            rowToWrite(prepared, declared, signatures, requirements, module).ifPresent(out::add);
         }
         return out;
+    }
+
+    /** The {@code let} a behavior is owed, where it is owed one. */
+    private static Optional<CompletionItem> implementationToWrite(
+            Prepared prepared, Hir.BehaviorDef declared, String module) {
+        if (!(declared instanceof Hir.SpecBehavior behavior) || !prepared.injected(behavior)) {
+            return Optional.empty();
+        }
+        List<SpecImplementation.Parameter> parameters = SpecImplementation.parameters(behavior);
+        if (parameters.contains(new SpecImplementation.Parameter.Unanswered())) {
+            // A dependency naming nothing settles no parameter, and a skeleton stating one it did
+            // not read would be this server inventing it.
+            return Optional.empty();
+        }
+        return built(TopLevelForm.FN.starter() + " " + behavior.name(), CompletionItem.SNIPPET,
+                module, DeclarationSkeletons.implementing(behavior.name(), parameters));
+    }
+
+    /**
+     * A row for a behavior: as many arguments as it takes, and what nothing stands in for.
+     *
+     * <p>How many it takes is the signature's, which is what a row is held to whether the behavior
+     * is written as one or composed out of others — a composition takes what its first stage takes,
+     * and nothing here works that out a second time. What it depends on is the same:
+     * {@link Bodies.Requirements} carries a composition's stages' requirements as its own, so a row
+     * for one supplies what the stages want.
+     *
+     * <p>A behavior that is itself injected requires nothing and is not a key there, which is
+     * absence meaning what it says rather than the question going unanswered.
+     */
+    private static Optional<CompletionItem> rowToWrite(
+            Prepared prepared, Hir.BehaviorDef declared, Map<String, Sig> signatures,
+            Map<String, List<BehaviorRequirement>> requirements, String module) {
+        Sig sig = signatures.get(declared.name());
+        if (sig == null) {
+            return Optional.empty();
+        }
+        List<String> unsupplied = ExampleProvisioning.unsupplied(List.of(),
+                Requirements.names(requirements.getOrDefault(declared.name(), List.of())),
+                prepared.forExamples());
+        return built(TopLevelForm.EXAMPLE.starter() + " " + declared.name(),
+                CompletionItem.SNIPPET, module,
+                DeclarationSkeletons.exampleFor(declared.name(), argumentsOf(declared, sig),
+                        unsupplied));
+    }
+
+    /**
+     * What to write in each of a row's argument places.
+     *
+     * <p>How many there are is the signature's. What each is called is a label and nothing more —
+     * what stands there is a value, not the parameter — so it is taken from the declaration where
+     * there is one to take it from, and held to the count rather than deciding it. A composition
+     * names no parameters of its own, and a row for one says what it takes without saying what its
+     * first stage happened to call them.
+     */
+    private static List<String> argumentsOf(Hir.BehaviorDef declared, Sig sig) {
+        List<String> labels = new ArrayList<>();
+        if (declared instanceof Hir.SpecBehavior behavior
+                && behavior.params().size() == sig.ins().size()) {
+            for (Hir.Param param : behavior.params()) {
+                labels.add(param.name());
+            }
+            return labels;
+        }
+        for (int i = 0; i < sig.ins().size(); i++) {
+            labels.add("arg");
+        }
+        return labels;
     }
 
     /**
@@ -1353,36 +1411,51 @@ public final class Analyzer {
     }
 
     /**
-     * The places in a file the cursor is still in.
+     * The places in a file the cursor is in.
      *
-     * <p>A file is read as a header, then its imports, then its body, so where the cursor stands
-     * against what is already written says which of those it is still in front of. A body item may
-     * be written wherever a declaration may.
+     * <p>A file is read as a header, then its imports, then its body, and a form may be written at
+     * the cursor when writing it there leaves the file still in that order. So both sides of the
+     * cursor are read: what stands before it says what it is past, and what stands after it says
+     * what it may not be written in front of. An import offered above one already written is an
+     * offer to write a file whose imports are not together, and a definition offered above one is an
+     * offer to write a definition the imports come after.
+     *
+     * <p>A header is offered only to a file with none. There is one, it opens the file, and a second
+     * is not something to write.
      */
     private static Set<TopLevelForm.Region> regionsAt(SyntaxNode root, int cursor) {
-        Set<TopLevelForm.Region> here = new LinkedHashSet<>();
-        here.add(TopLevelForm.Region.BODY);
-        boolean beforeEveryItem = true;
-        boolean beforeEveryDefinition = true;
+        int headerEnds = -1;
+        boolean hasHeader = false;
+        int lastImportEnds = -1;
+        int firstDefinition = Integer.MAX_VALUE;
+        boolean anythingBefore = false;
         for (SyntaxNode item : root.childNodes()) {
             // Where the item is written, not where its node begins: a node reaches back over the
             // blank line in front of it, and a cursor on that line is in front of the item.
             int written = writtenFrom(item);
-            if (written < 0 || written >= cursor) {
+            if (written < 0) {
                 continue;
             }
-            beforeEveryItem = false;
-            if (item.kind() != SyntaxKind.MODULE_HEADER
-                    && item.kind() != SyntaxKind.EXAMPLES_FILE_HEADER
-                    && item.kind() != SyntaxKind.IMPORT_DECL) {
-                beforeEveryDefinition = false;
+            anythingBefore |= written < cursor;
+            switch (item.kind()) {
+                case MODULE_HEADER, EXAMPLES_FILE_HEADER -> {
+                    hasHeader = true;
+                    headerEnds = Math.max(headerEnds, item.end());
+                }
+                case IMPORT_DECL -> lastImportEnds = Math.max(lastImportEnds, item.end());
+                default -> firstDefinition = Math.min(firstDefinition, written);
             }
         }
-        if (beforeEveryItem) {
+        Set<TopLevelForm.Region> here = new LinkedHashSet<>();
+        if (!hasHeader && !anythingBefore) {
             here.add(TopLevelForm.Region.FILE_HEADER);
         }
-        if (beforeEveryDefinition) {
+        boolean pastTheHeader = cursor >= headerEnds;
+        if (pastTheHeader && cursor <= firstDefinition) {
             here.add(TopLevelForm.Region.PRELUDE);
+        }
+        if (pastTheHeader && cursor >= lastImportEnds) {
+            here.add(TopLevelForm.Region.BODY);
         }
         return here;
     }

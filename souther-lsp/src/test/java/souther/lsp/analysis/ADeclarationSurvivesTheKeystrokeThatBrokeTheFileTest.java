@@ -11,6 +11,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -78,6 +79,51 @@ class ADeclarationSurvivesTheKeystrokeThatBrokeTheFileTest {
                         .containsKey("let findMember"),
                 "a behavior that is no longer written was offered from what was remembered");
     }
+
+    /**
+     * A question the compiler did not answer is not an answer of nothing.
+     *
+     * <p>A document may parse and still leave the compiler unable to say what a behavior depends on
+     * or what it takes. A row written from that would state no stand-in for what its target depends
+     * on, which is E1908 the moment it is completed — so what those questions going unanswered
+     * means is that nothing is answered here either, and the last answer that was given stands.
+     *
+     * <p>The module is made unanswerable by a composition that composes with itself, which is a
+     * mistake reported where it is written and leaves what every behavior in the module requires
+     * with no answer. The rows already offered are about behaviors that composition says nothing
+     * about, and none of them stop needing what they needed.
+     */
+    @Test
+    void aQuestionTheCompilerDidNotAnswerIsNotAnAnswerOfNothing() {
+        Analyzer analyzer = new Analyzer();
+        CompletionItem whole = offered(analyzer, DEPENDING).get("example place");
+        assertNotNull(whole, "nothing offered a row while the compiler could answer");
+        assertTrue(whole.writes().text().contains("with findMember = value"),
+                "the row does not supply what nothing stands in for: " + whole.writes().text());
+
+        CompletionItem afterTheCycle = offered(analyzer, DEPENDING + CYCLE).get("example place");
+        assertNotNull(afterTheCycle,
+                "the offer went away when a question about the module went unanswered");
+        assertTrue(afterTheCycle.writes().text().contains("with findMember = value"),
+                "a row was offered with nothing standing in for what it depends on: "
+                        + afterTheCycle.writes().text());
+    }
+
+    private static final String DEPENDING = """
+            module m
+
+            data MemberId = String
+
+            behavior findMember : (id: MemberId) -> MemberId
+
+            behavior place : (id: MemberId) -> MemberId
+                depends on findMember
+
+            let place (id, findMember) = findMember(id)
+            """;
+
+    /** A composition that reaches itself: what this module requires has no answer while it stands. */
+    private static final String CYCLE = "\nbehavior loop = loop >-> place\n";
 
     private static Map<String, CompletionItem> offered(Analyzer analyzer, String source) {
         Map<String, String> sources = new LinkedHashMap<>();

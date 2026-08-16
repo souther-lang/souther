@@ -157,6 +157,88 @@ class ADeclarationIsOfferedWhereOneMayBeWrittenTest {
                 "an import was offered after a definition, where it will not parse");
     }
 
+    /**
+     * And a definition may not be written above an import, which is the same fact read forwards.
+     *
+     * <p>Where a form may stand is not settled by what is behind the cursor alone. A definition
+     * written above an import leaves a file whose imports come after a definition, which is the
+     * order the parse refuses — the same refusal, met from the other side.
+     */
+    @Test
+    void aDefinitionIsNotOfferedAboveAnImport() {
+        String withImports = """
+                module m
+
+                import up ( A )
+
+                data B = { v: Int }
+                """;
+        List<String> lines = withImports.lines().toList();
+        Map<String, CompletionItem> aboveTheImport =
+                at(withImports, lines.indexOf("import up ( A )"), 0);
+        assertNull(aboveTheImport.get("data").writes(),
+                "a definition was offered above an import, where the imports would follow it");
+        assertNotNull(aboveTheImport.get("import").writes(),
+                "an import was not offered beside the imports");
+
+        Map<String, CompletionItem> belowIt =
+                at(withImports, (int) withImports.lines().count(), 0);
+        assertNotNull(belowIt.get("data").writes(), "a definition was not offered below the imports");
+        assertNull(belowIt.get("import").writes(),
+                "an import was offered below a definition");
+    }
+
+    /** A file that has a header is not offered another, above it or anywhere else. */
+    @Test
+    void aFileThatHasAHeaderIsNotOfferedAnother() {
+        assertNull(at(MODULE, 0, 0).get("module").writes(),
+                "a second header was offered to a file that has one");
+        assertNull(atEndOfFile().get("module").writes(),
+                "a header was offered halfway down a file");
+    }
+
+    /**
+     * A composition has rows like anything else, and is offered them.
+     *
+     * <p>It has no implementation to be offered — it is its own — but a row for one takes what it
+     * takes and depends on what its stages depend on, which is the answer a composition made worth
+     * asking for in the first place. A candidate set drawn from what may be implemented would leave
+     * exactly the case that reading was for.
+     */
+    @Test
+    void aCompositionIsOfferedARowAndNoImplementation() {
+        String composed = """
+                module m
+
+                data A = { v: Int }
+                data B = { v: Int }
+                data C = { v: Int }
+
+                behavior first : (a: A) -> B
+                    constructs B
+
+                let first (a) = B { v = a.v }
+
+                behavior second : (b: B) -> C
+                    constructs C
+                    depends on store
+
+                behavior store : (c: C) -> C
+
+                let second (b, store) = store(C { v = b.v })
+
+                behavior both = first >-> second
+                """;
+        Map<String, CompletionItem> items = at(composed, (int) composed.lines().count(), 0);
+
+        CompletionItem row = items.get("example both");
+        assertNotNull(row, "a composition was offered no row: " + items.keySet());
+        assertTrue(row.writes().text().contains("with store = value"),
+                "the row does not supply what the stages depend on: " + row.writes().text());
+        assertFalse(items.containsKey("let both"),
+                "a composition was offered an implementation, which it already is");
+    }
+
     private static Map<String, CompletionItem> atEndOfFile() {
         return at((int) MODULE.lines().count(), 0);
     }

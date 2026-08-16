@@ -47,13 +47,12 @@ class ADeclarationSkeletonRepeatsNothingTheSignatureSaidTest {
         assertEquals(List.of("id", "fallback", "body"), holeTextsOf(built));
     }
 
-    /** A row takes the inputs and not what is injected, and says so with as many arguments. */
+    /** A row states an argument apiece for what the behavior takes. */
     @Test
-    void aRowStatesAsManyArgumentsAsTheBehaviorTakesInputs() {
-        Skeleton.Built built = Skeleton.of(DeclarationSkeletons.exampleFor("place", List.of(
-                new Parameter.Input("id"),
-                new Parameter.Input("other"),
-                new Parameter.Injected("findMember")), List.of()));
+    void aRowStatesAnArgumentApiece() {
+        Skeleton.Built built =
+                Skeleton.of(DeclarationSkeletons.exampleFor("place", List.of("id", "other"),
+                        List.of()));
         assertEquals("example place\n    | (id, other) -> expected\n", built.text());
         assertEquals(List.of("id", "other", "expected"), holeTextsOf(built));
     }
@@ -62,8 +61,7 @@ class ADeclarationSkeletonRepeatsNothingTheSignatureSaidTest {
     @Test
     void aRowSuppliesWhatNothingElseStandsInFor() {
         Skeleton.Built built = Skeleton.of(DeclarationSkeletons.exampleFor("place",
-                List.of(new Parameter.Input("id"), new Parameter.Injected("findMember")),
-                List.of("findMember")));
+                List.of("id"), List.of("findMember")));
         assertTrue(built.text().contains("with findMember = value"),
                 "the row does not supply what nothing stands in for: " + built.text());
         assertEquals(List.of("id", "value", "expected"), holeTextsOf(built));
@@ -79,8 +77,7 @@ class ADeclarationSkeletonRepeatsNothingTheSignatureSaidTest {
     @Test
     void aDependencySomethingAlreadyStandsInForIsNotAskedForAgain() {
         Skeleton.Built built = Skeleton.of(DeclarationSkeletons.exampleFor("place",
-                List.of(new Parameter.Input("id"), new Parameter.Injected("findMember")),
-                List.of()));
+                List.of("id"), List.of()));
         assertTrue(!built.text().contains("with"),
                 "a row was offered a stand-in for a dependency that has one: " + built.text());
     }

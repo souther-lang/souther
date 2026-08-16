@@ -69,28 +69,24 @@ final class DeclarationSkeletons {
     }
 
     /**
-     * An {@code example} for a behavior: one row, stating as many arguments as the behavior takes
-     * inputs, supplying what nothing already stands in for, and expecting something.
+     * An {@code example} for a behavior: one row, stating an argument apiece, supplying what nothing
+     * already stands in for, and expecting something.
      *
-     * <p>The row states the inputs alone. What a behavior depends on is not passed to it — a row
-     * supplies that through {@code with}, or a {@code fake} table beside the rows does — so a row
-     * with a place for every parameter would have one place too many for each dependency.
+     * <p>{@code arguments} is one label per place the row states, which is what the behavior takes
+     * at its boundary. What it depends on is not among them — a row supplies that through
+     * {@code with}, or a {@code fake} table beside the rows does — so a row with a place per
+     * dependency as well would have one place too many for each.
      */
-    static List<Skeleton.Part> exampleFor(String target,
-                                          List<SpecImplementation.Parameter> parameters,
+    static List<Skeleton.Part> exampleFor(String target, List<String> arguments,
                                           List<String> unsupplied) {
         List<Skeleton.Part> parts = new ArrayList<>();
         parts.add(literal(starterOf(TopLevelForm.EXAMPLE), name(target), spelt(SyntaxKind.PIPE),
                 spelt(SyntaxKind.LPAREN)));
-        int written = 0;
-        for (SpecImplementation.Parameter parameter : parameters) {
-            if (parameter instanceof SpecImplementation.Parameter.Input input) {
-                if (written > 0) {
-                    parts.add(literal(spelt(SyntaxKind.COMMA)));
-                }
-                parts.add(hole(Skeleton.Category.EXPRESSION, input.nameSuggestion()));
-                written++;
+        for (int i = 0; i < arguments.size(); i++) {
+            if (i > 0) {
+                parts.add(literal(spelt(SyntaxKind.COMMA)));
             }
+            parts.add(hole(Skeleton.Category.EXPRESSION, arguments.get(i)));
         }
         parts.add(literal(spelt(SyntaxKind.RPAREN)));
         for (int i = 0; i < unsupplied.size(); i++) {
