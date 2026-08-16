@@ -54,6 +54,9 @@ public final class Resolve {
 
     private final SyntaxSymbols symbols;
     private final Reachable reachable;
+    /** {@link Reachable#byName()}, worked out once: a bare name is looked up for every name this
+     * pass reads, and the table does not change while it reads. */
+    private final Map<String, ValueName> reaches;
     private final Elsewhere elsewhere;
     /** Every name this pass answered, in the order it met them. */
     private final List<TypeUse> denotations = new ArrayList<>();
@@ -105,6 +108,7 @@ public final class Resolve {
     private Resolve(SyntaxSymbols symbols, Values values) {
         this.symbols = symbols;
         this.reachable = values.reachable();
+        this.reaches = reachable.byName();
         this.elsewhere = values.elsewhere();
     }
 
@@ -176,6 +180,27 @@ public final class Resolve {
             helpers = Collections.unmodifiableMap(new LinkedHashMap<>(helpers));
             behaviors = Collections.unmodifiableMap(new LinkedHashMap<>(behaviors));
             exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
+        }
+
+        /**
+         * Every bare spelling this reaches something by, and what writing it would mean.
+         *
+         * <p>The order the three tables are consulted in is a rule, and it is written once — here.
+         * An import brings a library name in, and everything the module already has is what that
+         * spelling means instead. Resolving a bare name reads this, so a reader listing what may be
+         * written here reads the answer resolution reads rather than a second assembly of the same
+         * three tables: two of those would agree until one of them moved, and nothing would say
+         * which had.
+         *
+         * <p>A binding in force and a type written as a value are not here. Both are answered before
+         * this table is consulted — the first from the bindings that hold at the position, the
+         * second from the type scope — so neither is a fact about the module.
+         */
+        public Map<String, ValueName> byName() {
+            Map<String, ValueName> reached = new LinkedHashMap<>(helpers);
+            behaviors.forEach(reached::putIfAbsent);
+            exposed.forEach(reached::putIfAbsent);
+            return Collections.unmodifiableMap(reached);
         }
 
         /**
@@ -1260,20 +1285,10 @@ public final class Resolve {
             return new ValueName.OfType(written, d.type(),
                     applied ? null : ConstructionOrigin.own());
         }
-        // a helper or a behavior, applied or handed over by name — which the inliner expands into a
-        // block that applies it
-        ValueName.Helper helper = reachable.helpers().get(written);
-        if (helper != null) {
-            return helper;
-        }
-        ValueName.Behavior behavior = reachable.behaviors().get(written);
-        if (behavior != null) {
-            return behavior;
-        }
-        // A name an import let this module write without its qualifier. Asked last: an import brings
-        // a name in, and everything the module already has — a binding in force, its own
-        // declarations — is what that name means here instead.
-        return reachable.exposed().get(written);
+        // A helper or a value of this module, a behavior it reaches, or a name an import let it
+        // write without a qualifier — asked of the one table that says which, so that a reader
+        // listing what may be written here reads the same answer this does.
+        return reaches.get(written);
     }
 
     /**
