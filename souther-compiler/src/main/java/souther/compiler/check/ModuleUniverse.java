@@ -81,13 +81,16 @@ public interface ModuleUniverse {
          */
         final class Read implements InSight {
 
+            private final String module;
             private final Registry.Declared<Ast.Def> declared;
             private final Set<String> behaviors;
             private final Set<String> values;
             private final Set<String> publishedHelpers;
 
-            private Read(Registry.Declared<Ast.Def> declared, Set<String> behaviors,
-                         Set<String> values, Set<String> publishedHelpers) {
+            private Read(String module, Registry.Declared<Ast.Def> declared,
+                         Set<String> behaviors, Set<String> values,
+                         Set<String> publishedHelpers) {
+                this.module = module;
                 this.declared = declared;
                 this.behaviors = Collections.unmodifiableSet(new LinkedHashSet<>(behaviors));
                 this.values = Set.copyOf(values);
@@ -118,7 +121,7 @@ public interface ModuleUniverse {
                         published.add(fn.name());
                     }
                 }
-                return new Read(declared, behaviors, values, published);
+                return new Read(module.name(), declared, behaviors, values, published);
             }
 
             /**
@@ -153,10 +156,18 @@ public interface ModuleUniverse {
                 return values.contains(name);
             }
 
-            /** Whether it hands a definition of that name to a reader that asks for it: exposed,
-             *  and with a body written here to hand over. */
-            public boolean publishesHelper(String name) {
-                return publishedHelpers.contains(name);
+            /**
+             * Leave to read the definition of that name, where the module hands one over: exposed,
+             * and with a body written here rather than left to be supplied.
+             *
+             * <p>The answer is the leave and not a {@code boolean}, because what follows a yes is
+             * another module's body being read. {@link PublishedHelper} is what a reader shows for
+             * it, and a reader that only holds the other module's tree has nothing to show.
+             */
+            public java.util.Optional<PublishedHelper> publishedHelper(String name) {
+                return publishedHelpers.contains(name)
+                        ? java.util.Optional.of(new PublishedHelper(module, name))
+                        : java.util.Optional.empty();
             }
 
             /**
@@ -178,6 +189,7 @@ public interface ModuleUniverse {
             @Override
             public boolean equals(Object other) {
                 return other instanceof Read read
+                        && module.equals(read.module)
                         && declared.equals(read.declared)
                         && behaviors.equals(read.behaviors)
                         && values.equals(read.values)
@@ -186,12 +198,12 @@ public interface ModuleUniverse {
 
             @Override
             public int hashCode() {
-                return Objects.hash(declared, behaviors, values, publishedHelpers);
+                return Objects.hash(module, declared, behaviors, values, publishedHelpers);
             }
 
             @Override
             public String toString() {
-                return "Read[declares=" + declared.declarations().keySet()
+                return "Read[" + module + " declares=" + declared.declarations().keySet()
                         + ", exposes=" + declared.exposed() + ", behaviors=" + behaviors
                         + ", values=" + values + ", publishes=" + publishedHelpers + "]";
             }

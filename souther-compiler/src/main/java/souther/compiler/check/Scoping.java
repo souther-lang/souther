@@ -330,7 +330,7 @@ public final class Scoping {
                 continue;
             }
             for (String imported : imp.names()) {
-                if (there.publishesHelper(imported)) {
+                if (there.publishedHelper(imported).isPresent()) {
                     helpers.putIfAbsent(imported,
                             new ValueName.Helper(imp.module(), imported));
                 }
@@ -462,7 +462,7 @@ public final class Scoping {
         }
         Set<String> names = new LinkedHashSet<>();
         for (String name : imp.names()) {
-            if (there.publishesHelper(name)) {
+            if (there.publishedHelper(name).isPresent()) {
                 names.add(name);
                 continue;
             }
