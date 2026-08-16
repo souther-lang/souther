@@ -35,7 +35,6 @@ public final class Compilation {
 
     private final Db db = new Db();
     /** Which source each id was, for a caller that identifies sources by index. */
-    private boolean saysWhichSource = true;
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
     /** Whether a diagnostic of this compilation says which source it is in. A compile of one source
      *  does not: the caller knows the file it handed over. */
@@ -104,10 +103,6 @@ public final class Compilation {
     public static Compilation ofSource(String source, String defaultModuleName, ModulePath path) {
         Compilation c = ofSources(List.of(source), path);
         c.db.set(new Front.DefaultName(), defaultModuleName);
-        // There is only one source, so an error carries no origin: the caller knows which file it
-        // handed over, and a rendered id would be a file number nobody asked for.
-        c.indexOfId.clear();
-        c.saysWhichSource = false;
         return c;
     }
 
@@ -675,10 +670,18 @@ public final class Compilation {
 
     /**
      * Which source a report's primary region is in, as a caller holding its own list of files is
-     * told — none, for a compile of one source, where that caller knows the file it handed over.
+     * told — none where nothing says.
+     *
+     * <p>The same answer whatever the caller handed over. A compile of one source used to answer
+     * none here, on the grounds that the caller knows the file it gave: what that did was leave the
+     * primary naming nothing while every secondary named the one source there was, so a renderer
+     * comparing the two read them as two files and printed a file name over a note in the file it
+     * was already quoting. Whether to print a name is the renderer's question, and it already
+     * answers it by comparing the anchor with the place; whether a caller wants to see ids at all is
+     * answered by the names it gives them.
      */
     public SourceId sourceIdOf(Db.Found found) {
-        return saysWhichSource ? locatedSourceIdOf(found) : null;
+        return locatedSourceIdOf(found);
     }
 
     /**

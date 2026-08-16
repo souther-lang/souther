@@ -65,8 +65,12 @@ class MultiFileDiagnosticOriginTest {
         assertEquals(new SourceId("0"), e.sourceId());
     }
 
+    /** A compile of one source tags its error with that source, as a compile of several does. It
+     *  used to tag nothing, which left the primary naming no file while the secondaries named the
+     *  one there was — and a renderer comparing them printed a file name over a note in the file it
+     *  was already quoting. */
     @Test
-    void aSingleModuleCompileCarriesNoOrigin() {
+    void aSingleModuleCompileCarriesTheOneSourceItWasGiven() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module solo
                 data Out = { v: Int }
@@ -75,7 +79,8 @@ class MultiFileDiagnosticOriginTest {
                 let f (s) = Out { v = s }
                 """));
 
-        assertNull(e.sourceId(), "there is only one source; the caller knows which");
+        assertEquals(new SourceId("0"), e.sourceId(),
+                "the one source is a source, and an error in it says so");
     }
 
     @Test

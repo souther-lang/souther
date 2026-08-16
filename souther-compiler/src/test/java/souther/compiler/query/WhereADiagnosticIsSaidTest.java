@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,15 +45,24 @@ class WhereADiagnosticIsSaidTest {
                 "the entry and the file it is filed under agree, or nothing can be quoted");
     }
 
+    /**
+     * A compile of one source names it like any other.
+     *
+     * <p>It used to name none, on the grounds that a caller holding one file knows which it is. What
+     * that left was a primary naming nothing and every secondary naming the one source there was, so
+     * a renderer comparing the two read them as two files and printed a file name over a note in the
+     * file it was already quoting. Whether to print an id at all is answered by the names a caller
+     * gives, and never by leaving the report unable to say where it is.
+     */
     @Test
-    void aCallerHoldingItsOwnFileIsToldNothingAboutWhichSource() {
+    void aCompileOfOneSourceNamesItLikeAnyOther() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
         c.answerEverything();
 
         Db.Found only = c.db().allReports().get(0);
 
-        assertNull(c.sourceIdOf(only),
-                "one source: the caller knows the file it handed over");
+        assertEquals(new SourceId("0"), c.sourceIdOf(only),
+                "the one source is a source, and a report in it says so");
     }
 
     @Test

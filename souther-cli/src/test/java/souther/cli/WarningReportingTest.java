@@ -88,12 +88,15 @@ class WarningReportingTest {
     }
 
     /**
-     * A compile of one file names no source — {@code Compilation.ofSource} drops the index, since the
-     * caller knows the file it handed over — so the position would be lost if the renderer read the
-     * index as "quote no line".
+     * A compile of one file names that file, as a compile of several does, and the line is quoted
+     * from it.
+     *
+     * <p>It used to name none, on the grounds that the caller knows the file it handed over. What
+     * the renderer then had to do was fall back to the one file it was given — and a secondary in
+     * that same file, which named it, read as being somewhere else.
      */
     @Test
-    void aSingleFileWarningNamesNoSourceAndIsStillQuoted() throws Exception {
+    void aSingleFileWarningNamesTheOneSourceAndIsQuotedFromIt() throws Exception {
         Path file = write("probe.sou", UNPROVEN);
         List<Located> warnings = new ArrayList<>();
 
@@ -101,9 +104,8 @@ class WarningReportingTest {
                 List.of(), warnings);
 
         assertEquals(1, warnings.size(), warnings.toString());
-        assertEquals(Located.NO_SOURCE, warnings.get(0).primarySourceId(),
-                "a single-source compile tags nothing, and the renderer has to fall back to the "
-                        + "one file it was given");
+        assertEquals(new SourceId("0"), warnings.get(0).primarySourceId(),
+                "the one source is a source, and a warning in it says so");
         assertTrue(compile(file, "--lang", "en").contains("probe.sou:8:5"));
     }
 
