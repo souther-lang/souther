@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Citation;
@@ -248,7 +250,12 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
         List<Delivered> places = new ArrayList<>();
         for (Db.Found found : compilation.reports()) {
             Diagnostic said = found.report().diagnostic();
-            addPlace(places, "caret", said.region());
+            // Only a caret a reader can be sent to. A report pointing at nothing, or into a text
+            // this compilation cannot name, is offering nobody a place — which is what the arms
+            // say, so there is nothing here to test a region for.
+            if (said.primary() instanceof Primary.InSource(DiagnosticPlace.InSource place)) {
+                places.add(new Delivered("caret", place.region().start().quotedFrom()));
+            }
             for (LabeledRegion label : said.secondary()) {
                 if (label.place() instanceof DiagnosticPlace.InSource in) {
                     places.add(new Delivered("label", in.region().start().quotedFrom()));
@@ -258,21 +265,15 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
         return places;
     }
 
-    private static void addPlace(List<Delivered> places, String from, Region region) {
-        if (region == null || region.start() == null || region.end() == null) {
-            return;   // a report with nowhere to point is #769's, and is not a place being offered
-        }
-        if (DiagnosticPlace.of(region) instanceof DiagnosticPlace.InSource in) {
-            places.add(new Delivered(from, in.region().start().quotedFrom()));
-        }
-    }
-
     /** What every report says about where the code it is about is written. */
     private static List<Citation> citations(Compilation compilation) {
         List<Citation> citations = new ArrayList<>();
         for (Db.Found found : compilation.reports()) {
-            if (found.report().diagnostic().pos() != null) {
-                citations.add(Citation.of(found.report().diagnostic().pos()));
+            // Of the reports that point somewhere. One that points at nothing says where its code
+            // is on the primary itself, and has no position to project a citation from.
+            if (found.report().diagnostic().primary()
+                    instanceof Primary.InSource(DiagnosticPlace.InSource place)) {
+                citations.add(Citation.of(place.region().start()));
             }
         }
         return citations;

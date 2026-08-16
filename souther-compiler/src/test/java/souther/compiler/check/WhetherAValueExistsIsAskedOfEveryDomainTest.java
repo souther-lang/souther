@@ -2,7 +2,11 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.values.AdmissibleValues;
@@ -20,11 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A state holding nothing, whichever of its domains is the one that holds nothing.
  *
- * <p>A clause reaches whatever domain has a word for it, and the domains do not overlap: a relation
- * between numbers reaches the interval algebra and says nothing to the facts, and a predicate about
- * a string reaches the facts and says nothing to the numbers. So a contradiction can be held
- * entirely by one of them while every other one is untouched, and a reader asking a single domain
- * whether a value exists answers yes whenever it asked the domain that had never heard of the rules.
+ * <p>A clause reaches whatever domain has a word for it. Some clauses reach more than one — a bound
+ * on an {@code Int} is an affine relation and a bound on an order, and each domain abstracts it in a
+ * way that is safe on its own — and some reach exactly one: a predicate about a string reaches the
+ * facts and says nothing to the numbers, and a date bounded against a written date reaches the
+ * ordering and says nothing to either. So a contradiction can be held entirely by one of them while
+ * every other is untouched, and a reader asking a single domain whether a value exists answers yes
+ * whenever it asked the domain that had never heard of the rules.
  *
  * <p>Each domain is put at its own bottom on its own here, because that is the shape of the mistake:
  * not that the answer was wrong about a state where everything contradicts, but that it was wrong
@@ -64,6 +70,22 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         assertFalse(valuesAtBottom().facts().isBottom());
     }
 
+    /**
+     * A position whose ends cross, which is a contradiction over an order the numbers do not hold.
+     *
+     * <p>The interval algebra carries one number per position and only for the positions a model
+     * adds and subtracts, so a date bounded above a date it is bounded below of reaches nothing
+     * there; the values are a finite set and an ordering names no finite set. Neither had heard of
+     * the rule.
+     */
+    @Test
+    void aPositionWhoseEndsCrossLeavesNothing() {
+        assertTrue(orderedAtBottom().isBottom());
+        assertFalse(orderedAtBottom().numbers().isBottom(), "and the other domains are untouched");
+        assertFalse(orderedAtBottom().facts().isBottom());
+        assertFalse(orderedAtBottom().values().isBottom());
+    }
+
     private static ConstraintState numbersAtBottom() {
         // `1 <= 0`, which is how a reading already says that what it stands in is never reached.
         return ConstraintState.top()
@@ -80,6 +102,14 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
                 .taking(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))));
     }
 
+    private static ConstraintState orderedAtBottom() {
+        return ConstraintState.top()
+                .taking(OrderedIntervals.at(A_POSITION,
+                        new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)))
+                .taking(OrderedIntervals.at(A_POSITION,
+                        new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))));
+    }
+
     /**
      * A tripwire and not the proof above it.
      *
@@ -92,7 +122,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     @Test
     void everyDomainOfTheStateIsOneThisTestPutAtItsOwnBottom() {
         RecordComponent[] domains = ConstraintState.class.getRecordComponents();
-        assertEquals(3, domains.length,
+        assertEquals(4, domains.length,
                 "each domain of the state needs a case above putting that one, and only that one, "
                         + "at its bottom");
     }

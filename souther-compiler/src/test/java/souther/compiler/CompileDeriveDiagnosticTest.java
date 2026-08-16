@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.HumanRenderer;
@@ -39,7 +41,7 @@ class CompileDeriveDiagnosticTest {
                 """;
         Diagnostic d = diagnosticOf(src);
 
-        assertEquals(4, d.pos().line());
+        assertEquals(4, ((Primary.InSource) d.primary()).place().region().start().line());
         String out = new HumanRenderer(false).render(d, new SourceContext("demo.sou", src),
                 Locale.ENGLISH);
         assertTrue(out.contains("`集計.entries`"), out);
@@ -64,7 +66,7 @@ class CompileDeriveDiagnosticTest {
                 """;
         Diagnostic d = diagnosticOf(src);
 
-        assertEquals(4, d.pos().line());
+        assertEquals(4, ((Primary.InSource) d.primary()).place().region().start().line());
         String out = new HumanRenderer(false).render(d, new SourceContext("demo.sou", src),
                 Locale.ENGLISH);
         assertTrue(out.contains("`座席.where`"), out);

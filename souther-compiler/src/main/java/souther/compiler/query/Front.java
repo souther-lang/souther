@@ -7,6 +7,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Primary;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.ImportMessage;
@@ -457,7 +458,11 @@ public final class Front {
                 // brought the other out. Both are said.
                 Diagnostic.Builder reserved = reservedNamespaceTaken(name);
                 if (reserved != null) {
-                    refused.put(name, reserved.build());
+                    // The same as the two below: the name was taken by a module this compile has no
+                    // file for, so the report says which module and points nowhere.
+                    refused.put(name,
+                            reserved.atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(name))
+                                    .build());
                 }
                 if (readback instanceof Readback.NotReady.Unreadable<ReadableModule>(
                         String about, Readback.Failure why)) {
@@ -686,10 +691,11 @@ public final class Front {
      * a readback failure says the same sentence for it; what is this one's is the report around it —
      * whose module it is about, and that there is one thing to do about any of them.
      */
-    private static Diagnostic cannotBeReadBack(String module, Readback.Failure why) {
+    static Diagnostic cannotBeReadBack(String module, Readback.Failure why) {
         return ReadbackReasons
                 .said(Diagnostic.say(new ModuleMessage.TheModuleCannotBeReadBack(module)), why)
                 .hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(module))
+                .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
                 .build();
     }
 
@@ -715,10 +721,24 @@ public final class Front {
         };
     }
 
-    /** A module off the path needing one that is not there. */
-    private static Diagnostic needs(String needed, String module) {
+    /**
+     * A module off the path needing one that is not there.
+     *
+     * <p>The code is written in {@code module}, which this compile has no file for, so there is
+     * nowhere to send a reader and the module is what a reader is told instead
+     * ({@link Primary.Unavailable}). Said here rather than left for {@link #saidAbout} to work out:
+     * a report that says nothing about where its code is may be moved anywhere, and one that says
+     * refuses a move that would put it somewhere else
+     * ({@link Diagnostic.MovedSomewhereElsesCode}).
+     *
+     * <p>Package-private for the reason {@link #cannotBeReadBack} is: what it answers is which
+     * provenance this compilation is reporting about, which is a fact this package states rather
+     * than a fragment of one method.
+     */
+    static Diagnostic needs(String needed, String module) {
         return Diagnostic.say(new ModuleMessage.AModuleItNeedsIsNotOnThePath(needed, module))
                 .hint(new ModuleMessage.AddItToThisProjectsDependencies(needed))
+                .atCodeWrittenOutOfSight(ModuleReadback.provenanceOf(module))
                 .build();
     }
 
@@ -1020,7 +1040,7 @@ public final class Front {
                 return Answer.of(Boolean.FALSE);
             }
             return Answer.absent(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath(name))
-                            .hint(new ModuleMessage.RenameItOrDropTheDependency(name)).build()));
+                            .hint(new ModuleMessage.RenameItOrDropTheDependency(name)).nowhere().build()));
         }
     }
 

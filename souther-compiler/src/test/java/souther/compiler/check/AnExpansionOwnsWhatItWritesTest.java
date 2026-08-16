@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -135,7 +137,7 @@ class AnExpansionOwnsWhatItWritesTest {
                         """));
         assertTrue(e.getMessage().contains("takes 2 argument(s), but is written with 1"),
                 e.getMessage());
-        assertEquals(6, e.diagnostic().region().start().line(),
+        assertEquals(6, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
                 "the inner lambda's line, not the outer one's: " + e.getMessage());
     }
 

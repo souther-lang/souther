@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -41,7 +43,7 @@ class WhereADiagnosticIsSaidTest {
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
-        assertEquals(new SourceId("0"), found.get(new SourceId("0")).get(0).primarySourceId(),
+        assertEquals(new SourceId("0"), found.get(new SourceId("0")).get(0).context().filedUnder().orElse(null),
                 "the entry and the file it is filed under agree, or nothing can be quoted");
     }
 
@@ -61,7 +63,7 @@ class WhereADiagnosticIsSaidTest {
 
         Db.Found only = c.db().allReports().get(0);
 
-        assertEquals(new SourceId("0"), c.sourceIdOf(only),
+        assertEquals(new SourceId("0"), c.filedUnderOf(only),
                 "the one source is a source, and a report in it says so");
     }
 
@@ -77,7 +79,7 @@ class WhereADiagnosticIsSaidTest {
                 """), souther.compiler.meta.ModulePath.EMPTY);
         c.answerEverything();
 
-        List<SourceId> said = c.db().allReports().stream().map(c::sourceIdOf).toList();
+        List<SourceId> said = c.db().allReports().stream().map(c::filedUnderOf).toList();
 
         assertTrue(said.contains(new SourceId("1")), "the mistake is in the second source: " + said);
     }

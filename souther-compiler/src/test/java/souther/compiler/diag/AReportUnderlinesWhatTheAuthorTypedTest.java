@@ -87,7 +87,7 @@ class AReportUnderlinesWhatTheAuthorTypedTest {
                 data Box = { v: %s . Missing }
                 """.formatted(NFD));
 
-        Region region = report.region();
+        Region region = ((Primary.InSource) report.primary()).place().region();
         assertEquals(region.start().line(), region.end().line());
         assertEquals((NFD + " . Missing").length(),
                 region.end().column() - region.start().column(),
@@ -105,7 +105,7 @@ class AReportUnderlinesWhatTheAuthorTypedTest {
 
     /** How many columns a report's primary region covers. */
     private static int width(Diagnostic report) {
-        Region region = report.region();
+        Region region = ((Primary.InSource) report.primary()).place().region();
         assertEquals(region.start().line(), region.end().line(), "a name is one line's worth");
         return region.end().column() - region.start().column();
     }

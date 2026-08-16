@@ -407,15 +407,17 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
      * standing, and ranges rebuilt from a cut would be a partition of a position into things that
      * are not its values.
      *
-     * <p>Where the two come apart is here. {@code value > Won} refuses every case, so the crossing
-     * leaves the position no classes at all — a declaration nothing can construct, which is a rule
-     * this compiler does not yet refuse (issue #780). Read as "no classes, so a line may supply
-     * some", the report would divide an enumeration into ranges of the count its cases are ordered
-     * by.
+     * <p>Where the two would come apart is a position whose rules leave no case at all. Read as "no
+     * classes, so a line may supply some", the report would divide an enumeration into ranges of the
+     * count its cases are ordered by. No body reaches that reading now: a declaration whose rules
+     * leave its position no value is refused where the declaration is, so there is no elaborated
+     * body for a line to be drawn in. What is asserted here is that refusal, because it is what
+     * closes the branch — and a change that admitted such a declaration again would have to answer
+     * the crossing question this class is about.
      */
     @Test
-    void aLineOnAnEnumerationSuppliesNoClassesEvenWhereItsRulesLeftNone() {
-        String refusesEveryCase = """
+    void noBodyDrawsALineOnAPositionWhoseRulesLeftNoCase() {
+        Compilation compilation = Compilation.ofSource("""
                 module g
 
                 data Prospecting
@@ -435,11 +437,51 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 let classify (s) =
                     if s.value < Qualified then Accepted { at = "x" }
                     else Refused { at = "y" }
+                """, "Main");
+        compilation.answerEverything();
+
+        assertEquals(List.of("E1013"), compilation.diagnostics().values().stream()
+                        .flatMap(List::stream)
+                        .map(each -> each.diagnostic().code())
+                        .toList(),
+                "`value > Won` names no case, so `StageI` has no value to be built");
+    }
+
+    /**
+     * A line a body draws on an enumeration leaves the cases the rules left standing.
+     *
+     * <p>The reachable half of the same crossing. {@code value > Prospecting} leaves two of the
+     * three, which are classes of the position; the line the body draws through them divides values
+     * they already tell apart, and ranges rebuilt from it would replace the cases with the counts
+     * they are ordered by.
+     */
+    @Test
+    void aLineABodyDrawsOnAnEnumerationLeavesTheCasesItsRulesLeft() {
+        String model = """
+                module g
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                data StageI = Stage
+                    invariant past = value > Prospecting
+
+                data Accepted = { at: String }
+                data Refused = { at: String }
+
+                behavior classify : (s: StageI) -> Accepted | Refused
+                    constructs Accepted, Refused, Won
+
+                let classify (s) =
+                    if s.value < Won then Accepted { at = "x" }
+                    else Refused { at = "y" }
                 """;
 
-        assertEquals(declared(refusesEveryCase, "classify"),
-                withBody(refusesEveryCase, "classify"),
-                "a line supplies no classes to a position these cannot be about");
+        assertEquals(List.of("Qualified", "Won"), declared(model, "classify"));
+        assertEquals(declared(model, "classify"), withBody(model, "classify"),
+                "a line supplies no classes to a position whose cases are already its classes");
     }
 
     /**

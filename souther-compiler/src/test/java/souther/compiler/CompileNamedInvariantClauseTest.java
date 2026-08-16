@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.InvariantMessage;
 import org.junit.jupiter.api.Test;
 
@@ -243,7 +245,7 @@ class CompileNamedInvariantClauseTest {
                     invariant _ = value > 0
                 """));
         assertInstanceOf(InvariantMessage.UnderscoreCannotNameAClause.class, e.diagnostics().get(0).said());
-        assertEquals(3, e.diagnostics().get(0).pos().line(), "reported at the clause, not at a use");
+        assertEquals(3, ((Primary.InSource) e.diagnostics().get(0).primary()).place().region().start().line(), "reported at the clause, not at a use");
     }
 
     /**

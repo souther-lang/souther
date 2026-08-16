@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 
@@ -194,7 +196,7 @@ class AWarningAboutAClauseSendsAReaderToItTest {
 
         LabeledRegion one = warnings.get(0).secondary().get(0);
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("1")),
-                warnings.get(0).pos().quotedFrom(),
+                ((Primary.InSource) warnings.get(0).primary()).place().region().start().quotedFrom(),
                 "the construction is in the second source");
         assertEquals(new SourceId("0"),
                 ((souther.compiler.diag.DiagnosticPlace.InSource) one.place()).source(),

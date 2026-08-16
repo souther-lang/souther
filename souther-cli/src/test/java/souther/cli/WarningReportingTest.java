@@ -104,7 +104,7 @@ class WarningReportingTest {
                 List.of(), warnings);
 
         assertEquals(1, warnings.size(), warnings.toString());
-        assertEquals(new SourceId("0"), warnings.get(0).primarySourceId(),
+        assertEquals(new SourceId("0"), warnings.get(0).context().filedUnder().orElse(null),
                 "the one source is a source, and a warning in it says so");
         assertTrue(compile(file, "--lang", "en").contains("probe.sou:8:5"));
     }

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -74,7 +76,7 @@ class ANameAFailedImportStandsInForIsReportedOnceTest {
     private static List<Integer> lines(String... sources) {
         List<Integer> found = new ArrayList<>();
         for (Diagnostic d : diagnostics(sources)) {
-            found.add(d.pos().line());
+            found.add(((Primary.InSource) d.primary()).place().region().start().line());
         }
         return found;
     }

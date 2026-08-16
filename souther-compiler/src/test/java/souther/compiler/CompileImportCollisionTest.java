@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.msg.MessageKeys;
@@ -63,7 +65,7 @@ class CompileImportCollisionTest {
                         data Line = { a: Amount }
                         """)));
 
-        assertEquals(3, e.diagnostic().region().start().line(), "the caret is on the second import");
+        assertEquals(3, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(), "the caret is on the second import");
         assertEquals(1, e.diagnostic().secondary().size(), "the first import is labelled too");
         assertEquals(2, ((souther.compiler.diag.DiagnosticPlace.InSource) e.diagnostic().secondary().get(0).place()).region().start().line());
     }

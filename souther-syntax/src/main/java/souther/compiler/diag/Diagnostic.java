@@ -84,14 +84,16 @@ public final class Diagnostic {
         return code == null ? null : code.titleKey();
     }
 
-    /** Where this points, or null where it points nowhere. A report that has something to say
-     *  instead says it through {@link #primary()}; every surface that only wanted a region reads
-     *  this and is told the same nothing it was told before. */
-    public Region region() {
-        return Primary.regionOf(primary);
-    }
-
-    /** What this points at, which is a region or is nowhere and where the code is. */
+    /**
+     * What this points at.
+     *
+     * <p>There is no accessor beside this one answering "the region, if there is one". Four of the
+     * things a primary can be came back as a region or a null through such an accessor, and each
+     * reader read the null as whichever of them it had in mind: the editor as "put the marker at the
+     * top", the caller lending a place to a label as "there is no place", the renderer as "quote
+     * nothing". A reader that wants the region says which case it is in first, and having said so
+     * has seen that the others exist.
+     */
     public Primary primary() {
         return primary;
     }
@@ -111,14 +113,18 @@ public final class Diagnostic {
      */
     public WhereCodeIsWritten whereItsCodeIsWritten() {
         return switch (primary) {
-            case null -> WhereCodeIsWritten.Unstated.IT;
+            case Primary.Nowhere _ -> WhereCodeIsWritten.Unstated.IT;
             case Primary.Unavailable(SourceProvenance from) ->
                     new WhereCodeIsWritten.Elsewhere(from);
-            case Primary.AtARegion(Region region) ->
-                    Citation.of(region.start()) instanceof Citation.Elsewhere elsewhere
-                            ? new WhereCodeIsWritten.Elsewhere(elsewhere.provenance())
-                            : WhereCodeIsWritten.Here.IT;
+            case Primary.InSource(DiagnosticPlace.InSource place) -> writtenAt(place.region());
+            case Primary.InAnUnnamedText(UnnamedRegion where) -> writtenAt(where.region());
         };
+    }
+
+    private static WhereCodeIsWritten writtenAt(Region region) {
+        return Citation.of(region.start()) instanceof Citation.Elsewhere elsewhere
+                ? new WhereCodeIsWritten.Elsewhere(elsewhere.provenance())
+                : WhereCodeIsWritten.Here.IT;
     }
 
     public List<LabeledRegion> secondary() {
@@ -139,12 +145,6 @@ public final class Diagnostic {
 
     public String suggestion() {
         return suggestion;
-    }
-
-    /** The primary source position (the region's start). */
-    public SourcePos pos() {
-        Region region = region();
-        return region == null ? null : region.start();
     }
 
     /**
@@ -204,7 +204,7 @@ public final class Diagnostic {
             also.add(new LabeledRegion(Region.point(other.standingInFor(declaring)), alsoHere));
         }
         return new Diagnostic(severity, code,
-                new Primary.AtARegion(Region.point(where.get(0).standingInFor(declaring))),
+                Primary.at(Region.point(where.get(0).standingInFor(declaring))),
                 List.copyOf(also),
                 literalMessage, diff, notes, suggestion, said);
     }
@@ -259,7 +259,7 @@ public final class Diagnostic {
      * either of those has a catalog key by now. {@code pos} may be null for a position-less error. */
     public static Diagnostic literal(SourcePos pos, String message) {
         return new Diagnostic(Severity.ERROR, null,
-                pos == null ? null : new Primary.AtARegion(Region.point(pos)),
+                pos == null ? Primary.Nowhere.IT : Primary.at(Region.point(pos)),
                 List.of(), message, null, List.of(), null, null);
     }
 
@@ -325,7 +325,20 @@ public final class Diagnostic {
         }
 
         public Builder at(SourcePos pos) {
-            this.primary = pos == null ? null : new Primary.AtARegion(Region.point(pos));
+            this.primary = pos == null ? Primary.Nowhere.IT : Primary.at(Region.point(pos));
+            return this;
+        }
+
+        /**
+         * The report is not about a stretch of text.
+         *
+         * <p>Said outright, because it is a thing to say and not the absence of one. A module
+         * declared here and also on the path is wrong about neither line; a compile that ran out of
+         * room is not a fact about the source. Which file such a report is listed under is answered
+         * where it is shown, by a caller that holds the files.
+         */
+        public Builder nowhere() {
+            this.primary = Primary.Nowhere.IT;
             return this;
         }
 
@@ -357,16 +370,16 @@ public final class Diagnostic {
          */
         public Builder at(SourcePos pos, int width) {
             if (pos == null) {
-                this.primary = null;
+                this.primary = Primary.Nowhere.IT;
             } else {
-                this.primary = new Primary.AtARegion(
+                this.primary = Primary.at(
                         pos.wasCopiedHere() ? Region.point(pos) : Region.ofWidth(pos, width));
             }
             return this;
         }
 
         public Builder at(Region region) {
-            this.primary = region == null ? null : new Primary.AtARegion(region);
+            this.primary = region == null ? Primary.Nowhere.IT : Primary.at(region);
             return this;
         }
 
@@ -387,6 +400,15 @@ public final class Diagnostic {
          */
         public <M extends Message & Supporting> Builder secondary(Region region, M label) {
             this.secondary.add(new LabeledRegion(region, label));
+            return this;
+        }
+
+        /** A second thing to say, about a place already classified — what a site pointing at another
+         *  report's place has, that place having gone through {@link DiagnosticPlace#of} once
+         *  already. */
+        public <M extends Message & Supporting> Builder secondary(DiagnosticPlace.InSource place,
+                                                                  M label) {
+            this.secondary.add(new LabeledRegion(place, label));
             return this;
         }
 
@@ -412,6 +434,13 @@ public final class Diagnostic {
         public Diagnostic build() {
             if (code == null) {
                 throw new IllegalStateException("a diagnostic reports a rule; call `say`");
+            }
+            if (primary == null) {
+                // Not the same as pointing nowhere, which is `nowhere()` and is a thing to say. This
+                // is a site that has not said, and a report that reached a reader unsaid used to
+                // have its file worked out from wherever it was filed.
+                throw new IllegalStateException(
+                        "a diagnostic says where it points; call `at` or `nowhere`");
             }
             return new Diagnostic(code.severity(), code, primary, List.copyOf(secondary), null,
                     diff, List.copyOf(notes), suggestion, said);
