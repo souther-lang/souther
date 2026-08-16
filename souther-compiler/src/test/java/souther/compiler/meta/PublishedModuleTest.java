@@ -214,15 +214,15 @@ class PublishedModuleTest {
                 module shared.money exposing ( Amount )
                 data Amount = Int
                 """);
-        PublishedModule.Classes stale = binaryName -> {
-            PublishedModule.Declarations d =
+        PublishedClasses stale = binaryName -> {
+            PublishedClasses.Declarations d =
                     new ClassFileDeclarations(classes::get).of(binaryName);
             if (d == null || d.module() == null) {
                 return d;
             }
-            PublishedModule.SoutherModuleView m = d.module();
-            return new PublishedModule.Declarations(
-                    new PublishedModule.SoutherModuleView(m.compat() + 1, "0.0.1-old", m.name(),
+            PublishedClasses.SoutherModuleView m = d.module();
+            return new PublishedClasses.Declarations(
+                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old", m.name(),
                             m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
@@ -246,15 +246,15 @@ class PublishedModuleTest {
                 data Amount = Int
                 let taxed (a: Amount) = Amount(a.value * 110 / 100)
                 """);
-        PublishedModule.Classes older = binaryName -> {
-            PublishedModule.Declarations d =
+        PublishedClasses older = binaryName -> {
+            PublishedClasses.Declarations d =
                     new ClassFileDeclarations(classes::get).of(binaryName);
             if (d == null || d.module() == null) {
                 return d;
             }
-            PublishedModule.SoutherModuleView m = d.module();
-            return new PublishedModule.Declarations(
-                    new PublishedModule.SoutherModuleView(m.compat() - 1, "0.0.1-older", m.name(),
+            PublishedClasses.SoutherModuleView m = d.module();
+            return new PublishedClasses.Declarations(
+                    new PublishedClasses.SoutherModuleView(m.compat() - 1, "0.0.1-older", m.name(),
                             m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
@@ -279,15 +279,15 @@ class PublishedModuleTest {
                 readBack("shared.money", classes).module().fns().stream()
                         .map(Ast.FnDef::name).toList());
 
-        PublishedModule.Classes stale = binaryName -> {
-            PublishedModule.Declarations d =
+        PublishedClasses stale = binaryName -> {
+            PublishedClasses.Declarations d =
                     new ClassFileDeclarations(classes::get).of(binaryName);
             if (d == null || d.module() == null) {
                 return d;
             }
-            PublishedModule.SoutherModuleView m = d.module();
-            return new PublishedModule.Declarations(
-                    new PublishedModule.SoutherModuleView(m.compat() + 1, "0.0.1-old", m.name(),
+            PublishedClasses.SoutherModuleView m = d.module();
+            return new PublishedClasses.Declarations(
+                    new PublishedClasses.SoutherModuleView(m.compat() + 1, "0.0.1-old", m.name(),
                             m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };

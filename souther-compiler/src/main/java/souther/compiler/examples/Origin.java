@@ -1,6 +1,6 @@
 package souther.compiler.examples;
 
-import souther.compiler.meta.PublishedModule;
+import souther.compiler.meta.PublishedClasses;
 
 /**
  * Which declarations a value crossing into an answer is read by.
@@ -25,7 +25,7 @@ public sealed interface Origin permits Origin.Published, TheCompilesOwn {
     /**
      * The declarations the answer's classes carry.
      *
-     * <p>{@link PublishedModule.Classes} is how they are read and not what they are. What has to be
+     * <p>{@link PublishedClasses} is how they are read and not what they are. What has to be
      * compared is what a crossing depends on, and that is a module's declarations however they are
      * carried — the same question would be asked of a digest, of a canonical form, of declarations
      * arriving some way class files are not involved in. This holds the reader that exists today,
@@ -34,5 +34,5 @@ public sealed interface Origin permits Origin.Published, TheCompilesOwn {
      * @param classes where the declarations of the answer's module, and of the modules its
      *                declarations reach into, are read from
      */
-    record Published(PublishedModule.Classes classes) implements Origin {}
+    record Published(PublishedClasses classes) implements Origin {}
 }

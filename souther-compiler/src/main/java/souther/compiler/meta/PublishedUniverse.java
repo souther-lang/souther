@@ -38,7 +38,7 @@ import java.util.Set;
  */
 public final class PublishedUniverse {
 
-    private final PublishedModule.Classes classes;
+    private final PublishedClasses classes;
     private final Map<String, Ast.Module> written = new LinkedHashMap<>();
     private final Map<String, Exposing.Checked> checked = new LinkedHashMap<>();
     private final Map<String, Set<String>> injected = new LinkedHashMap<>();
@@ -49,12 +49,12 @@ public final class PublishedUniverse {
     // and an import of the second is the importer's mistake while an import of the first is not.
     private final Map<String, ModuleUniverse.InSight> beyondReading = new LinkedHashMap<>();
 
-    private PublishedUniverse(PublishedModule.Classes classes) {
+    private PublishedUniverse(PublishedClasses classes) {
         this.classes = classes;
     }
 
     /** The universe those classes declare. Nothing is read until a module is asked for. */
-    public static PublishedUniverse of(PublishedModule.Classes classes) {
+    public static PublishedUniverse of(PublishedClasses classes) {
         return new PublishedUniverse(classes);
     }
 
@@ -102,7 +102,7 @@ public final class PublishedUniverse {
      * cannot be read here is another.
      */
     public boolean declares(String module) {
-        PublishedModule.Declarations found = classes.of(souther.compiler.jvm.SoutherJvmAbi.nameOf(
+        PublishedClasses.Declarations found = classes.of(souther.compiler.jvm.SoutherJvmAbi.nameOf(
                 new souther.compiler.jvm.GeneratedClass.ModuleDeclarations(module)).binaryName());
         // The same thing `PublishedModule.read` calls nothing published: a class of that name with
         // no declarations on it is a class this compiler put nothing on, not something it failed to

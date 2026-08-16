@@ -16,7 +16,7 @@ import java.util.function.Function;
  * a jar entry. Under an annotation processor the same annotations are reachable through
  * {@code Elements} without the bytes, which is a second reader of the same shape.
  */
-public final class ClassFileDeclarations implements PublishedModule.Classes {
+public final class ClassFileDeclarations implements PublishedClasses {
 
     private final Function<String, byte[]> bytesOf;
 
@@ -26,12 +26,12 @@ public final class ClassFileDeclarations implements PublishedModule.Classes {
     }
 
     @Override
-    public PublishedModule.Declarations of(String binaryName) {
+    public PublishedClasses.Declarations of(String binaryName) {
         byte[] bytes = bytesOf.apply(binaryName);
         if (bytes == null) {
             return null;
         }
-        PublishedModule.SoutherModuleView module = null;
+        PublishedClasses.SoutherModuleView module = null;
         String data = null;
         String signature = null;
         Boolean injected = null;
@@ -46,7 +46,7 @@ public final class ClassFileDeclarations implements PublishedModule.Classes {
                 injected = bool(a, "injected");
             }
         }
-        return new PublishedModule.Declarations(module, data, signature, injected);
+        return new PublishedClasses.Declarations(module, data, signature, injected);
     }
 
     private static List<Annotation> annotations(byte[] bytes) {
@@ -56,8 +56,8 @@ public final class ClassFileDeclarations implements PublishedModule.Classes {
                 .orElse(List.of());
     }
 
-    private static PublishedModule.SoutherModuleView moduleView(Annotation a) {
-        return new PublishedModule.SoutherModuleView(
+    private static PublishedClasses.SoutherModuleView moduleView(Annotation a) {
+        return new PublishedClasses.SoutherModuleView(
                 integer(a, "compat"), string(a, "compiler"), string(a, "name"), string(a, "header"),
                 strings(a, "imports"), strings(a, "types"), strings(a, "behaviors"),
                 strings(a, "invariantHelpers"));

@@ -830,7 +830,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     @Test
     void declarationsThatCannotBeReadBackCannotBeToldEitherWay() {
-        PublishedModule.Classes incomplete = missing("example.stale.Title",
+        PublishedClasses incomplete = missing("example.stale.Title",
                 declarationsOf(MODEL));
 
         Agreement held = DeclarationAgreement.of("example.stale", "rename", declarationsOf(MODEL), incomplete);
@@ -933,12 +933,12 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     }
 
     /** {@code classes} with {@code absent} not on it, as an incomplete jar has it. */
-    private static PublishedModule.Classes missing(String absent, PublishedModule.Classes classes) {
+    private static PublishedClasses missing(String absent, PublishedClasses classes) {
         return binaryName -> binaryName.equals(absent) ? null : classes.of(binaryName);
     }
 
     /** The classes one build of a model spread over several sources emits. */
-    private static PublishedModule.Classes declarationsOf(List<String> sources) {
+    private static PublishedClasses declarationsOf(List<String> sources) {
         Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
         Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
         assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");
@@ -953,7 +953,7 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      * broken source would arrive here as "the declarations could not be read", which is a different
      * answer that would look like the one being asked for.
      */
-    private static PublishedModule.Classes declarationsOf(String source) {
+    private static PublishedClasses declarationsOf(String source) {
         Compilation compiled = Compilation.ofSource(source, "Main");
         Map<String, byte[]> classes = compiled.db().ask(new Output.All()).value();
         assertEquals(List.of(), diagnosed(compiled), "the model this is measured against compiles");

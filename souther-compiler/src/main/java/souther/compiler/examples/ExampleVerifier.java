@@ -35,7 +35,7 @@ import souther.compiler.observe.Stage;
 
 import souther.compiler.meta.Agreement;
 import souther.compiler.meta.DeclarationAgreement;
-import souther.compiler.meta.PublishedModule;
+import souther.compiler.meta.PublishedClasses;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -131,7 +131,7 @@ public final class ExampleVerifier {
     public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
                                      Symbols symbols, Map<String, Sig> sigs,
                                      EvaluationArtifact artifact,
-                                     Supplier<PublishedModule.Classes> declared,
+                                     Supplier<PublishedClasses> declared,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      Deadline deadline, EvaluationPolicy policy,
@@ -266,7 +266,7 @@ public final class ExampleVerifier {
     private final Answerer answerer;
     /** Where the declarations the rows are written for are read from, asked for only if something
      * has to be held against them. A run of this compile's own answers never calls it. */
-    private final Supplier<PublishedModule.Classes> declared;
+    private final Supplier<PublishedClasses> declared;
     /**
      * What each set of declarations was held to say for each behavior, so one answer is not read
      * twice.
@@ -280,7 +280,7 @@ public final class ExampleVerifier {
      * behaviors, and what each of them reaches is its own — so a memo kept by the classes alone
      * would answer for the second behavior with what was worked out about the first.
      */
-    private final Map<PublishedModule.Classes, Map<String, Agreement>> agreements =
+    private final Map<PublishedClasses, Map<String, Agreement>> agreements =
             new IdentityHashMap<>();
     /** The behaviors an answer could not be established for have already been reported about. A
      * behavior's rows may be written in more than one block, and what is reported is about neither
@@ -294,7 +294,7 @@ public final class ExampleVerifier {
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
-                            Supplier<PublishedModule.Classes> declared) {
+                            Supplier<PublishedClasses> declared) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;

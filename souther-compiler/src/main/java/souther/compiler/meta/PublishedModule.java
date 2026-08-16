@@ -37,34 +37,17 @@ import java.util.Set;
  */
 public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) {
 
-    /** Where the annotations of one compiled module are read from — a jar on the classpath, the
-     * classes of a compile in progress. A name it does not know is {@code null}. */
-    public interface Classes {
-
-        /** The declarations on {@code binaryName}'s class, or null if there is no such class. */
-        Declarations of(String binaryName);
-    }
-
-    /** What one class was annotated with. A class carries at most one of each. */
-    public record Declarations(SoutherModuleView module, String data, String behaviorSignature,
-                               Boolean behaviorInjected) {}
-
-    /** The {@code $Module} annotation's members. */
-    public record SoutherModuleView(int compat, String compiler, String name, String header,
-                                    List<String> imports, List<String> types,
-                                    List<String> behaviors, List<String> invariantHelpers) {}
-
     /**
      * The module named {@code moduleName}, or null when {@code classes} has no {@code $Module} for
      * it — the name is not a compiled Souther module, or is one from before modules carried their
      * declarations.
      */
-    public static PublishedModule read(String moduleName, Classes classes) {
-        Declarations found = classes.of(SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(moduleName)).binaryName());
+    public static PublishedModule read(String moduleName, PublishedClasses classes) {
+        PublishedClasses.Declarations found = classes.of(SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(moduleName)).binaryName());
         if (found == null || found.module() == null) {
             return null;
         }
-        SoutherModuleView m = found.module();
+        PublishedClasses.SoutherModuleView m = found.module();
         // A member this compiler asks for and the writer did not write reads as its default. The
         // header is the one that cannot be defaulted — without it there is no module to parse — so a
         // module that carries none was written by something this compiler does not agree with,
@@ -76,13 +59,13 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         Set<String> injected = new LinkedHashSet<>();
         for (String type : m.types()) {
             declarations.append('\n').append(declaration(classes, m, type, moduleName + "." + type,
-                    Declarations::data)).append('\n');
+                    PublishedClasses.Declarations::data)).append('\n');
         }
         for (String behavior : m.behaviors()) {
             String binaryName = SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorInterface(moduleName, behavior)).binaryName();
             declarations.append('\n')
                     .append(declaration(classes, m, behavior, binaryName,
-                            Declarations::behaviorSignature))
+                            PublishedClasses.Declarations::behaviorSignature))
                     .append('\n');
             if (Boolean.TRUE.equals(classes.of(binaryName).behaviorInjected())) {
                 injected.add(behavior);
@@ -187,10 +170,10 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         return word.substring(from, to);
     }
 
-    private static String declaration(Classes classes, SoutherModuleView m, String name,
+    private static String declaration(PublishedClasses classes, PublishedClasses.SoutherModuleView m, String name,
                                       String binaryName,
-                                      java.util.function.Function<Declarations, String> member) {
-        Declarations found = classes.of(binaryName);
+                                      java.util.function.Function<PublishedClasses.Declarations, String> member) {
+        PublishedClasses.Declarations found = classes.of(binaryName);
         String text = found == null ? null : member.apply(found);
         if (text == null) {
             throw CompileException.of(Diagnostic.say(new ModuleMessage.TheClassCarryingTheDeclarationIsNotOnThePath(name, m.name()))
@@ -200,7 +183,7 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         return text;
     }
 
-    private static CompileException incompatible(SoutherModuleView m) {
+    private static CompileException incompatible(PublishedClasses.SoutherModuleView m) {
         return CompileException.of(Diagnostic.say(new ModuleMessage.TheModuleWasCompiledByAnotherSouther(m.name(), m.compiler()))
                         
                         .hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(m.name())).build());

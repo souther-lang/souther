@@ -71,8 +71,8 @@ public final class DeclarationAgreement {
      * @param ours     where the declarations the rows are written for are read from
      * @param theirs   where the declarations the answer reads values by are read from
      */
-    public static Agreement of(String module, String behavior, PublishedModule.Classes ours,
-                               PublishedModule.Classes theirs) {
+    public static Agreement of(String module, String behavior, PublishedClasses ours,
+                               PublishedClasses theirs) {
         return new Crossing(PublishedUniverse.of(ours), PublishedUniverse.of(theirs))
                 .heldFrom(new ValueName.Behavior(module, behavior));
     }

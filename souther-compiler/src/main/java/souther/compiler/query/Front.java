@@ -18,6 +18,7 @@ import souther.compiler.check.Scoping;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
+import souther.compiler.meta.PublishedClasses;
 import souther.compiler.meta.PublishedModule;
 import souther.compiler.types.ValueName;
 
@@ -398,7 +399,7 @@ public final class Front {
             // and a route to it may turn up long after, so a place written down as it was read is
             // the places it had by then — with two dependencies of a project both reaching a third,
             // which of them was read first decided whether the second's importer was told anything.
-            PublishedModule.Classes classes = path.declarations();
+            PublishedClasses classes = path.declarations();
             Map<String, Exposing.Checked> read = new LinkedHashMap<>();
             Map<String, Set<String>> injected = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
