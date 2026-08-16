@@ -68,6 +68,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                     "every case " + it.cases().stream().map(each -> shape(each)).toList();
             case Emptiness.ConflictingRules _ -> "rules contradict";
             case Emptiness.EmptyNumericInterval _ -> "an empty range";
+            case Emptiness.EmptyOrderedInterval _ -> "ends with nothing between them";
             case Emptiness.SetRequiresTooManyDistinctValues it -> "a set over at most " + it.available();
             case Emptiness.NoAllowedCollectionSize _ -> "no size";
         };
@@ -77,14 +78,65 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         return these.stream().map(TypeSymbol::name).toList();
     }
 
-    /** Rules that contradict, which is what the one sentence written before never said. */
+    /**
+     * A position bounded above a value it is bounded below of, carried as that and with its place.
+     *
+     * <p>Nearer than {@link Emptiness.ConflictingRules}, which says the rules contradict and nothing
+     * further. Two domains hold this contradiction — the interval algebra reads the numbers and the
+     * ordering reads the ends — and which proof is carried has to be the one that can say what it
+     * found, whichever of them a reader happens to ask first.
+     */
+    @Test
+    void endsWithNothingBetweenThemAreCarriedAsThatAndNotAsRulesContradicting() {
+        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+                        new Emptiness.EmptyOrderedInterval()), only("""
+                module demo
+
+                data Bad = Int
+                    invariant no = value >= 2 && value <= 1
+                """));
+    }
+
+    /**
+     * And a position on an order the numbers do not carry is shown by the same proof.
+     *
+     * <p>The whole point of the two issues this closes: one shape, one proof, one sentence. A date
+     * bounded above a date it is bounded below of was not refused at all, and refusing it under the
+     * general sentence would leave the same model told two different things depending on what
+     * carries it.
+     */
+    @Test
+    void anOrderTheNumbersDoNotCarryIsShownByTheSameProof() {
+        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+                        new Emptiness.EmptyOrderedInterval()), only("""
+                module demo
+
+                data Bad = Date
+                    invariant no = value >= Date("2020-01-01") && value <= Date("2010-01-01")
+                """));
+    }
+
+    /** And the place named is the field, where the rules were written about one. */
+    @Test
+    void thePlaceAnEmptyOrderNamesIsTheFieldTheRulesBound() {
+        assertEquals(new Emptiness.AtAField("at",
+                        new Emptiness.EmptyOrderedInterval()), only("""
+                module demo
+
+                data Held = { at: Date }
+                    invariant no = at >= Date("2020-01-01") && at <= Date("2010-01-01")
+                """));
+    }
+
+    /** Rules that contradict in a way no range holds, which is the general form. */
     @Test
     void rulesThatCannotAllHoldAreCarriedAsThat() {
         assertEquals(new Emptiness.ConflictingRules(), only("""
                 module demo
 
-                data Bad = Int
-                    invariant no = value >= 2 && value <= 1
+                data Bad = String
+                    invariant no = String.matches("[A-Z]+", value)
+                        && Bool.not(String.matches("[A-Z]+", value))
                 """));
     }
 
@@ -162,7 +214,8 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 """);
         assertEquals(List.of(List.of("Bad"), List.of("A", "B")),
                 reported.stream().map(each -> named(each.members())).toList());
-        assertEquals(new Emptiness.ConflictingRules(), reported.get(0).why());
+        assertEquals(new Emptiness.AtAField(FieldDomains.THE_VALUE,
+                new Emptiness.EmptyOrderedInterval()), reported.get(0).why());
         if (!(reported.get(1).why() instanceof Emptiness.NoBaseInComponent)) {
             throw new AssertionError("the cycle is left with nothing to bottom out: "
                     + reported.get(1).why());
@@ -253,8 +306,9 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 data Both = { n: Int, held: Bad }
                     invariant no = n >= 2 && n <= 1
                 """;
-        assertEquals(new Emptiness.ConflictingRules(), reported(before).get(1).why());
-        assertEquals(new Emptiness.ConflictingRules(), reported(after).get(1).why(),
-                "and the fields the other way round");
+        assertEquals(new Emptiness.AtAField("n", new Emptiness.EmptyOrderedInterval()),
+                reported(before).get(1).why());
+        assertEquals(new Emptiness.AtAField("n", new Emptiness.EmptyOrderedInterval()),
+                reported(after).get(1).why(), "and the fields the other way round");
     }
 }

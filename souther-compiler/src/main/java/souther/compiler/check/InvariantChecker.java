@@ -462,9 +462,15 @@ public final class InvariantChecker {
         // And which values each position is left, off the same clauses and at the same moment. What
         // reached this value is the walk's answer and is given to both readings; what each of them
         // makes of a clause is its own, so neither can widen the other's idea of what it was handed.
-        ConstraintState constraints = k.constraints().taking(AdmissibleReading.of(
-                written.stream().map(Written::clause).toList(), c.terms, at,
-                positions(atoms, keys, typeAt), symbols));
+        List<Core> reaching = written.stream().map(Written::clause).toList();
+        Map<Term, Type> positions = positions(atoms, keys, typeAt);
+        ConstraintState constraints = k.constraints()
+                .taking(AdmissibleReading.of(reaching, c.terms, at, positions, symbols))
+                // And where the same clauses leave each position stopping, off the same list at the
+                // same moment. A third reading of one list and not a second pass over another's
+                // answer: what an ordering says about where a position stops is not something the
+                // value sets hold, and what a denial leaves is not something a range holds.
+                .taking(OrderedReading.of(reaching, c.terms, at, positions, symbols));
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             Term atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());

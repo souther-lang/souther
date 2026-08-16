@@ -63,6 +63,22 @@ public sealed interface Emptiness {
     record EmptyNumericInterval() implements Emptiness {}
 
     /**
+     * The rules bound a position above a value they bound it below of, so nothing is between them.
+     *
+     * <p>The declaration's own rules, which is what tells this from {@link EmptyNumericInterval}:
+     * that one is a position whose <em>type</em> leaves it no value to be counted between, reached
+     * while counting the positions of a record. This is the rules contradicting, reached before any
+     * position is counted, and it is {@link ConflictingRules} with the place and the reason filled
+     * in.
+     *
+     * <p>Over whatever order the position has. {@code value > 5 && value < 3} and
+     * {@code value > Date("2020-01-01") && value < Date("2010-01-01")} are one shape and are shown
+     * one way, so they are refused in one sentence — which they were not, for as long as only the
+     * first reached a domain.
+     */
+    record EmptyOrderedInterval() implements Emptiness {}
+
+    /**
      * A set is asked to hold more values that differ than there are of what it holds.
      *
      * <p>One number and not two. What was compared is whether the rules admit any size this small,
@@ -150,10 +166,43 @@ public sealed interface Emptiness {
      */
     enum Nearness { DIRECT, STRUCTURAL, PROPAGATED }
 
+    /**
+     * Which of two proofs of one count is written, either of which may be absent.
+     *
+     * <p>The rule the constructors are cut by, made a function so that it is applied and not
+     * remembered. Nearer first, and then the more particular of two equally near ones:
+     * {@link ConflictingRules} is the general form and anything else says more, so a state where two
+     * domains both hold a contradiction writes the one that can name what it found.
+     *
+     * <p>For two proofs of the <em>same</em> count. Which of several positions a record is refused
+     * for is a different question — it is settled by the order the fields are declared in — and is
+     * asked where the positions are.
+     */
+    static Emptiness preferred(Emptiness one, Emptiness other) {
+        if (one == null) {
+            return other;
+        }
+        if (other == null) {
+            return one;
+        }
+        int nearer = one.category().compareTo(other.category());
+        if (nearer != 0) {
+            return nearer < 0 ? one : other;
+        }
+        return general(one) && !general(other) ? other : one;
+    }
+
+    /** Whether this proof says the rules contradict and nothing further. */
+    private static boolean general(Emptiness why) {
+        return why instanceof ConflictingRules;
+    }
+
     /** How near this proof is to the declaration it is about. */
     default Nearness category() {
         return switch (this) {
-            case ConflictingRules _ -> Nearness.DIRECT;
+            // The declaration's own rules. An empty interval is one of these and not a shape: it is
+            // the rules contradicting, with the place and the reason filled in.
+            case ConflictingRules _, EmptyOrderedInterval _ -> Nearness.DIRECT;
             case EmptyNumericInterval _, SetRequiresTooManyDistinctValues _,
                  NoAllowedCollectionSize _ -> Nearness.STRUCTURAL;
             case TheNameHasNone _, NoBaseInComponent _ -> Nearness.PROPAGATED;

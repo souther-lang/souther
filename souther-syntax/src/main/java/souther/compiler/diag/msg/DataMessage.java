@@ -77,6 +77,17 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1013)
     record ItsRulesCannotAllHold(String data) implements DataMessage, Reported {}
 
+    /**
+     * The rules bound one position above a value they bound it below of.
+     *
+     * <p>{@link ItsRulesCannotAllHold} with the place and the reason filled in. The general sentence
+     * is true of this and says only that something contradicts, which leaves an author reading every
+     * clause to find out which two ends are the pair — and the reading knows.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NothingLiesBetweenTheEndsItsRulesPlace(String data, String at)
+            implements DataMessage, Reported {}
+
     /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
     record ASetCannotBeFilledFromItsElement(String data, String at, long available)

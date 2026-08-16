@@ -13,6 +13,8 @@ import souther.compiler.numeric.Count;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Optional;
+import java.util.SequencedMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,8 +56,8 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), List.of(), Map.of(), true,
-                    Set.of(THE_VALUE), ConstraintState.top(), null, null, null, Map.of(),
-                    () -> true);
+                    Set.of(THE_VALUE), new LinkedHashMap<>(), ConstraintState.top(),
+                    null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -80,6 +82,9 @@ public final class FieldDomains {
     /** Where a clause of this value did not reach the readings at all, as the paths the stops
      * happened at — see {@link #admits}. */
     private final Set<String> notGathered;
+    /** Where each position of this value sits, in the order the value declares them. What a domain
+     * holds is what a reading called a position; which place in the value that is, is known here. */
+    private final SequencedMap<Term, String> positions;
     /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
@@ -99,6 +104,7 @@ public final class FieldDomains {
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeSymbol>> narrowers,
                          boolean seeded, Set<String> notGathered,
+                         SequencedMap<Term, String> positions,
                          ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
@@ -110,6 +116,7 @@ public final class FieldDomains {
         this.narrowers = narrowers;
         this.seeded = seeded;
         this.notGathered = notGathered;
+        this.positions = positions;
         this.constraints = constraints;
         this.named = named;
         this.data = data;
@@ -133,6 +140,20 @@ public final class FieldDomains {
      */
     public boolean infeasible() {
         return constraints.isBottom();
+    }
+
+    /**
+     * Why the rules leave no value, or empty where they may leave one.
+     *
+     * <p>{@link #infeasible} with the answer instead of the fact. Asked of the same state and never
+     * assembled beside it: a caller reading one of them and deciding the other for itself would have
+     * two accounts of one reading to keep in step.
+     *
+     * <p>The places are this value's, in the order it declares them. What a state holds is what its
+     * readings call a position, and where in the value that sits is known here and nowhere else.
+     */
+    public Optional<Emptiness> holdsNothing() {
+        return constraints.holdsNothing(positions);
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
@@ -239,10 +260,16 @@ public final class FieldDomains {
         });
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
+        // Every name a position answers to, filed under the place it sits at, in the order the
+        // value declares its positions. A proof that names a place is settled by this order: read
+        // off a domain's own map, the place named would be the one whose clause was read first.
+        SequencedMap<Term, String> placeOf = new LinkedHashMap<>();
+        positions.forEach(field ->
+                named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), seeded.reading().directs(),
                 seeded.reading().narrowers(),
-                seeded.everyClauseRead(), seeded.notGathered(),
+                seeded.everyClauseRead(), seeded.notGathered(), placeOf,
                 seeded.constraints(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing

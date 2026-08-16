@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -121,8 +122,10 @@ final class CardinalityTransfer {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses, and nearer than anything they could say.
-        if (FieldDomains.granting(named, data, symbols, granted).infeasible()) {
-            return Cardinality.none(new Emptiness.ConflictingRules());
+        Optional<Emptiness> contradiction =
+                FieldDomains.granting(named, data, symbols, granted).holdsNothing();
+        if (contradiction.isPresent()) {
+            return Cardinality.none(contradiction.get());
         }
         OccurrenceCounts counts = OccurrenceCounts.of(named, data, symbols, granted);
         OccurrenceValues values = OccurrenceValues.of(named, data, symbols, granted);
