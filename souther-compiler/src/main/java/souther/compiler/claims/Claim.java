@@ -44,5 +44,12 @@ public record Claim(TermPath at, TypeSymbol named, List<String> reasons, SourceP
 
     public Claim {
         reasons = List.copyOf(reasons);
+        if (said == null) {
+            // An arm that answers nothing reaches an `unreachable` to do it (spec
+            // §an-arm-that-answers-nothing-is-not-an-arm), so one with nowhere to point at is this
+            // reading and the one that found the arm disagreeing about what the arm is made of.
+            throw new IllegalArgumentException(
+                    "a claim about `" + named.name() + "` at `" + at + "` with nothing declaring it");
+        }
     }
 }

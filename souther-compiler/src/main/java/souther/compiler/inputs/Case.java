@@ -113,6 +113,21 @@ public sealed interface Case {
         public ValueSet denotes() {
             return null;
         }
+
+        /**
+         * Neither answer is refused by a set of values.
+         *
+         * <p>A rule names values, and absence is not one of them: nothing the reading can write
+         * down says whether an optional holds something. Left to the rule above, {@code None} is
+         * dropped by any finite set for holding none of its values — which is true of every value
+         * and says nothing about absence, and now that a refusal takes an arm out of what the rows
+         * are owed, that is a row nobody is asked for on the strength of a set that was never about
+         * this.
+         */
+        @Override
+        public boolean leftAnythingBy(ValueSet admitted) {
+            return true;
+        }
     }
 
     /**

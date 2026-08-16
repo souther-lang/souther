@@ -24,7 +24,6 @@ import java.util.Set;
  * @param classes  exclusive and exhaustive over the term's values, or empty where the model does
  *                 not divide them
  * @param cuts     the values the classes meet at, each carrying every rule that drew it there
- * @param read     how much of what the rules say about this position's values was read
  * @param pending  where nothing has answered for this position yet, what the structural reading
  *                 found — and so what this position is left with if nothing else answers. Null on
  *                 an axis that already has evidence, which needs no fallback.

@@ -38,15 +38,14 @@ public final class ClaimDiagnostics {
     }
 
     /**
-     * One refusal, or nothing where there is nowhere to point.
+     * One refusal, or nothing where there is no position to have refused it.
      *
-     * <p>An arm answering nothing with no {@code unreachable} in it has no place of its own — a
-     * construction one of whose fields aborts is one, and what aborts there is reported where it is
-     * written. Nothing is said rather than said at the behavior: a diagnostic whose place is not the
-     * thing it is about sends a reader somewhere they cannot act.
+     * <p>A claim always has somewhere to point — an arm answers nothing by reaching an
+     * {@code unreachable}, which is where it is written. What can be absent is the position: a claim
+     * about one this reading never made is unproven and never arrives here.
      */
     private static Diagnostic refusal(Claim claim, Position at) {
-        if (claim.said() == null || at == null) {
+        if (at == null) {
             return null;
         }
         return Diagnostic.at(claim.said())

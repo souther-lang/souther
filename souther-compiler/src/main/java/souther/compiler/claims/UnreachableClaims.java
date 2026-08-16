@@ -111,7 +111,7 @@ public final class UnreachableClaims {
             // Cases written together on one arm are one run of code, and it declares the same thing
             // about every one of them.
             arm.caseTypes().forEach(each -> found.add(new Claim(path, each, why,
-                    said.isEmpty() ? null : said.get(0).at(), standing)));
+                    said.get(0).at(), standing)));
         }
     }
 

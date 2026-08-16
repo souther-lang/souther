@@ -27,7 +27,6 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.claims.Claims;
-import souther.compiler.claims.UnreachableClaims;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowClasses;
@@ -258,27 +257,12 @@ public final class Adequacy {
 
         @Override
         public Answer<Map<String, Claims>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            if (!prepared.present() || !scope.present()) {
-                return Answer.absent();
-            }
+            // Read from the check that made them, and not made again here. The refusal of a
+            // contradicted claim is that check's report and this is the same judging projected for
+            // the measures — asked twice, a build could refuse a claim the report called unproven.
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked == null ? Map.of() : checked.behaviorBodies();
-            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
-            Map<String, Claims> out = new LinkedHashMap<>();
-            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
-                if (!(behavior instanceof Hir.SpecBehavior spec)) {
-                    continue;   // a composition has no body of its own to read this off
-                }
-                out.put(spec.name(), Claims.of(
-                        UnreachableClaims.of(bodies.get(spec.name()), domainOf(readInputs, spec),
-                                scope.value()),
-                        domainOf(readInputs, spec)));
-            }
-            return Answer.of(Ordered.map(out));
+            return checked == null ? Answer.absent() : Answer.of(Ordered.map(checked.claims()));
         }
     }
 
