@@ -1,0 +1,142 @@
+package souther.compiler.values;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * What a reading that could not take a rule in leaves, and what it says about having left it.
+ *
+ * <p>The whole risk of reading values out of rules is here. A reading that answers "no value" from a
+ * rule it did not read refuses a model somebody can write, so a rule left unread has to widen and
+ * never narrow; and a position left wide because a rule was unread is not a position the model says
+ * nothing about, so the two have to be told apart.
+ *
+ * <p>The connectives do not treat an unread rule alike, which is what these are written around. A
+ * rule stated beside others only narrows, so one that went unread costs precision at the positions
+ * it named. A rule stated as an alternative to others widens, so one that went unread takes back
+ * everything the other alternative said — including at positions it never mentions.
+ */
+class AnUnreadRuleWidensAndSaysThatItDidTest {
+
+    private static final String VALUE = "value";
+    private static final String OTHER = "other";
+    private static final Value A = Value.text("A");
+    private static final Value B = Value.text("B");
+
+    private static AdmissibleValues<String> says(String atom, Value value) {
+        return AdmissibleValues.at(atom, ValueSet.just(value));
+    }
+
+    /** A rule read and nothing else is what it says, and this can speak for the position. */
+    @Test
+    void aRuleReadIsWhatItSays() {
+        AdmissibleValues<String> read = says(VALUE, A);
+        assertEquals(ValueSet.just(A), read.at(VALUE));
+        assertTrue(read.speaksFor(VALUE));
+        assertFalse(read.isBottom());
+    }
+
+    /** Two of them stated together leave nothing, and that is a refusal. */
+    @Test
+    void twoRulesStatedTogetherCanLeaveNothing() {
+        assertTrue(says(VALUE, A).meet(says(VALUE, B)).isBottom());
+    }
+
+    /** Stated as alternatives the same two leave both values, and refuse nothing. */
+    @Test
+    void theSameTwoAsAlternativesLeaveBoth() {
+        AdmissibleValues<String> either = says(VALUE, A).join(says(VALUE, B));
+        assertEquals(ValueSet.oneOf(Set.of(A, B)), either.at(VALUE));
+        assertFalse(either.isBottom());
+        assertTrue(either.speaksFor(VALUE));
+    }
+
+    /**
+     * A rule this could not read, stated beside one it could, narrows nothing and refuses nothing.
+     *
+     * <p>And leaves the position it does not name spoken for. Nothing here relates one position to
+     * another, so a rule that narrows a position names it — which is what makes this safe rather
+     * than merely convenient.
+     */
+    @Test
+    void anUnreadRuleStatedBesideAnotherNarrowsNothing() {
+        AdmissibleValues<String> both = says(VALUE, A).meet(AdmissibleValues.unreadable(Set.of()));
+        assertEquals(ValueSet.just(A), both.at(VALUE));
+        assertFalse(both.isBottom());
+        assertTrue(both.speaksFor(VALUE));
+    }
+
+    /** And where it names a position, that position is one this can no longer speak for. */
+    @Test
+    void anUnreadRuleNamingAPositionLeavesItSpokenForByNothing() {
+        AdmissibleValues<String> both =
+                says(VALUE, A).meet(AdmissibleValues.unreadable(Set.of(OTHER)));
+        assertTrue(both.speaksFor(VALUE));
+        assertFalse(both.speaksFor(OTHER));
+        assertEquals(ValueSet.ANY, both.at(OTHER));
+    }
+
+    /**
+     * A rule this could not read, stated as an alternative, takes back what the other alternative
+     * said.
+     *
+     * <p>Even where it names nothing. A value satisfying the branch this could not read is under no
+     * obligation from the branch it could, so the position is open — and a reading that merged the
+     * two maps would answer that the model admits one value there.
+     */
+    @Test
+    void anUnreadAlternativeTakesBackWhatTheOtherSaid() {
+        AdmissibleValues<String> either =
+                says(VALUE, A).join(AdmissibleValues.unreadable(Set.of()));
+        assertEquals(ValueSet.ANY, either.at(VALUE));
+        assertFalse(either.isBottom());
+    }
+
+    /**
+     * And says so: the position is open because of this reading and not because of the model.
+     *
+     * <p>The two are the same answer about the values and opposite answers to a reader asking what
+     * the model divides. Whichever side the unread alternative is written on.
+     */
+    @Test
+    void aPositionLeftOpenByAnUnreadAlternativeIsNotOneNothingWasSaidAbout() {
+        assertFalse(says(VALUE, A).join(AdmissibleValues.unreadable(Set.of())).speaksFor(VALUE));
+        assertFalse(AdmissibleValues.<String>unreadable(Set.of()).join(says(VALUE, A))
+                .speaksFor(VALUE));
+    }
+
+    /** A position neither alternative spoke about is open because neither said anything, which this
+     * can speak for. */
+    @Test
+    void aPositionNeitherAlternativeSpokeAboutIsOpenAndSpokenFor() {
+        AdmissibleValues<String> either = says(VALUE, A).join(says(VALUE, B));
+        assertEquals(ValueSet.ANY, either.at(OTHER));
+        assertTrue(either.speaksFor(OTHER));
+    }
+
+    /**
+     * A position only one alternative spoke about is open, and open because of the model.
+     *
+     * <p>The other branch admits every value there, so every value is admitted — and nothing about
+     * that answer was lost by this reading.
+     */
+    @Test
+    void aPositionOneAlternativeLeftOpenIsOpenBecauseTheModelLeavesItSo() {
+        AdmissibleValues<String> either = says(VALUE, A).join(AdmissibleValues.top());
+        assertEquals(ValueSet.ANY, either.at(VALUE));
+        assertTrue(either.speaksFor(VALUE));
+    }
+
+    /** Nothing read at all says nothing about anything and speaks for all of it. */
+    @Test
+    void aReadingOfNoRulesSaysNothingAndMissedNothing() {
+        assertEquals(ValueSet.ANY, AdmissibleValues.<String>top().at(VALUE));
+        assertTrue(AdmissibleValues.<String>top().speaksFor(VALUE));
+        assertFalse(AdmissibleValues.<String>top().isBottom());
+    }
+}

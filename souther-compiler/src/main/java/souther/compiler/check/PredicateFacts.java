@@ -33,6 +33,19 @@ final class PredicateFacts {
         return NONE;
     }
 
+    /**
+     * Whether the predicates settled here cannot all hold.
+     *
+     * <p>A claim about the values and not about the reading: what it takes to reach it is one key
+     * settled both ways, which is a contradiction whatever the predicate says. So it is read where a
+     * value is asked for as well as where a path is — a declaration stating a predicate of its value
+     * and denying the same predicate of the same value has no value, and nothing about that answer
+     * needs the numbers.
+     */
+    boolean isBottom() {
+        return bottom;
+    }
+
     /** The facts with {@code key} settled. Settling it both ways makes the path infeasible. */
     PredicateFacts assume(Term key, boolean positive) {
         if (bottom) {
