@@ -46,6 +46,16 @@ class ADeclarationIsOfferedWhereOneMayBeWrittenTest {
             let place (id, findMember) = findMember(id)
             """;
 
+    /** The same with a table and a row written under it, for asking about a cursor inside one. */
+    private static final String WITH_ROWS = MODULE + """
+
+            fake findMember
+                | _ -> Missing { why = "none" }
+
+            example place
+                | "the author" : (MemberId("m-1")) -> Missing { why = "none" }
+            """;
+
     @Test
     void aBehaviorWithNoImplementationIsOfferedTheOneItsSignatureDescribes() {
         Map<String, CompletionItem> items = atEndOfFile();
@@ -89,6 +99,32 @@ class ADeclarationIsOfferedWhereOneMayBeWrittenTest {
         assertNotNull(items.get("fake"), "`fake` is not a keyword and was never offered");
     }
 
+    /**
+     * A row is a definition too, and what is written in one is an expression.
+     *
+     * <p>An {@code example} and a {@code fake} are read as one thing each, the way a {@code let} is,
+     * and what stands in their rows is what a row states and what it expects. A declaration offered
+     * at a cursor in one is offered inside an expression, and taking it up writes a whole definition
+     * into the middle of a row.
+     */
+    @Test
+    void insideARowNoDeclarationIsOffered() {
+        List<String> lines = WITH_ROWS.lines().toList();
+        int row = lines.indexOf("    | \"the author\" : (MemberId(\"m-1\")) -> Missing { why = \"none\" }");
+        assertTrue(row > 0, "the row this asks about is not written: " + lines);
+
+        Map<String, CompletionItem> items = at(WITH_ROWS, row, 30);
+        assertNull(items.get("let").writes(), "a declaration was offered inside a row");
+        assertFalse(items.containsKey("let findMember"),
+                "an implementation was offered from inside a row");
+        assertFalse(items.containsKey("example place"),
+                "a row was offered from inside a row");
+
+        int table = lines.indexOf("    | _ -> Missing { why = \"none\" }");
+        assertNull(at(WITH_ROWS, table, 12).get("let").writes(),
+                "a declaration was offered inside a table");
+    }
+
     /** Inside a definition no declaration is offered, and the words are words again. */
     @Test
     void insideADefinitionTheWordsAreOfferedAndNotTheDeclarations() {
@@ -126,8 +162,12 @@ class ADeclarationIsOfferedWhereOneMayBeWrittenTest {
     }
 
     private static Map<String, CompletionItem> at(int line, int character) {
+        return at(MODULE, line, character);
+    }
+
+    private static Map<String, CompletionItem> at(String source, int line, int character) {
         Map<String, String> sources = new LinkedHashMap<>();
-        sources.put(URI, MODULE);
+        sources.put(URI, source);
         List<CompletionItem> items = new Analyzer()
                 .completions(URI, new Position(line, character), ModuleGraph.of(sources));
         Map<String, CompletionItem> byLabel = new LinkedHashMap<>();

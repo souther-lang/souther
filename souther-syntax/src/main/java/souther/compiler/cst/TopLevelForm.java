@@ -110,7 +110,18 @@ public enum TopLevelForm {
         return words;
     }
 
-    /** Whether the tokens ahead open this form, past any modifiers written in front of it. */
+    /**
+     * Whether the tokens ahead open this form, past any modifiers written in front of it.
+     *
+     * <p>The first word, and not all of them. What opens a form and what it is written with are the
+     * same everywhere but one: an {@code examples for} header is two words, and a file whose first
+     * line is {@code examples m} has opened one and left a word out. Reading it as opening nothing
+     * takes the line away from the routine that would say which word is missing, and takes the
+     * header off the file with it — so what is read here is enough to say which form it is, and
+     * saying what is wrong with the rest of it belongs to whatever reads the form.
+     *
+     * <p>Enough because the opening words differ: no two forms begin with the same one.
+     */
     public boolean startsAt(Lookahead ahead) {
         int i = 0;
         for (Word modifier : modifiers) {
@@ -118,12 +129,7 @@ public enum TopLevelForm {
                 i++;
             }
         }
-        for (Word word : words) {
-            if (!word.matchesAt(ahead, i++)) {
-                return false;
-            }
-        }
-        return true;
+        return words.getFirst().matchesAt(ahead, i);
     }
 
     /** The form the tokens ahead open, or empty where they open none. */

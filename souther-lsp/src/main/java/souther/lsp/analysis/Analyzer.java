@@ -1270,9 +1270,6 @@ public final class Analyzer {
                         DeclarationSkeletons.fixed(form)).ifPresent(out::add);
             }
         }
-        if (!here.contains(TopLevelForm.Region.BODY)) {
-            return List.copyOf(out);
-        }
         out.addAll(behaviorsToWrite(uri, compilation, module));
         return List.copyOf(out);
     }
@@ -1334,9 +1331,17 @@ public final class Analyzer {
     /**
      * An item writing {@code parts}, or nothing where they do not make a declaration.
      *
-     * <p>A skeleton is refused where the tokens do not parse or where the formatter did not write
-     * back what it was given. Neither should happen, and where one does the answer is to offer one
-     * candidate fewer rather than to fail the request that asked for all of them.
+     * <p>Fail-open, deliberately. A skeleton is refused where the tokens do not parse or where the
+     * formatter did not write back what it was given, and neither is about what an author typed:
+     * every name in one comes from a declaration the compiler read, so both mean a defect in the
+     * formatter or the grammar. What that costs here is one candidate fewer, which nothing says out
+     * loud — this server has no channel to say it on, since its output is the protocol.
+     *
+     * <p>Taken over the alternative, which is to let it out and lose the whole list: an editor would
+     * be left with no completion at all, for every request against that document, over a candidate
+     * that was never the one being asked for. What guards against it going unnoticed is that every
+     * form is built in a test, and a behavior's is built over each model those tests are written
+     * against.
      */
     private static Optional<CompletionItem> built(String label, int kind, String detail,
                                                   List<Skeleton.Part> parts) {
@@ -1419,6 +1424,11 @@ public final class Analyzer {
         return labels;
     }
 
+    /** The top-level definitions, each of which is written as one thing and holds what it binds. */
+    private static final Set<SyntaxKind> DEFINITIONS = Set.of(
+            SyntaxKind.DATA_DEF, SyntaxKind.BEHAVIOR_DEF, SyntaxKind.FN_DEF,
+            SyntaxKind.EXAMPLE_DEF, SyntaxKind.FAKE_DEF);
+
     /**
      * The top-level definition whose text contains {@code offset}, or {@code null} at the file level.
      *
@@ -1427,11 +1437,16 @@ public final class Analyzer {
      * empty line above a definition is inside its span while being nowhere near it. That line is
      * where the next declaration is written, and what is bound inside the definition below is bound
      * nowhere there.
+     *
+     * <p>The rows of an {@code example} and of a {@code fake} are definitions here as much as a
+     * {@code let} is. What is written in one is an expression — a row's inputs, what it expects, what
+     * a table answers with — so a declaration offered inside one would be offered inside an
+     * expression, and a binding written in a row's block holds there and is in force at a cursor in
+     * it.
      */
     private SyntaxNode enclosingDef(SyntaxNode root, int offset) {
         for (SyntaxNode def : root.childNodes()) {
-            if (def.kind() != SyntaxKind.DATA_DEF && def.kind() != SyntaxKind.BEHAVIOR_DEF
-                    && def.kind() != SyntaxKind.FN_DEF) {
+            if (!DEFINITIONS.contains(def.kind())) {
                 continue;
             }
             int written = writtenFrom(def);

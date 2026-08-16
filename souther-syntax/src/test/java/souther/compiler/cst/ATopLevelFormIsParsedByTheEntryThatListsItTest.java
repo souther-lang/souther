@@ -116,6 +116,26 @@ class ATopLevelFormIsParsedByTheEntryThatListsItTest {
         assertEquals(Optional.empty(), TopLevelForm.at(lookahead("partial")));
     }
 
+    /**
+     * A form whose opening is two words is opened by the first of them.
+     *
+     * <p>{@code examples m} is a file that opened a header and left a word out, and the routine that
+     * reads the form is what says so. A file where nothing opened is a file with no header at all —
+     * the line is taken as a mistake of no particular kind, and every other file that names this one
+     * stops being about a module.
+     */
+    @Test
+    void aHeaderMissingItsSecondWordStillOpensTheHeader() {
+        assertEquals(Optional.of(TopLevelForm.EXAMPLES_FILE_HEADER),
+                TopLevelForm.at(lookahead("examples m")));
+
+        CstParser.Result parsed = CstParser.parse("examples m\n");
+        assertEquals(List.of(SyntaxKind.EXAMPLES_FILE_HEADER),
+                parsed.root().childNodes().stream().map(SyntaxNode::kind).toList(),
+                "the header was taken as a mistake of no particular kind");
+        assertEquals(1, parsed.errors().size(), "and said to be one thing wrong: " + parsed.errors());
+    }
+
     /** The meaningful tokens of {@code source}, as a reader ahead of them. */
     private static TopLevelForm.Lookahead lookahead(String source) {
         List<GreenToken> tokens = CstLexer.lex(source).tokens().stream()
