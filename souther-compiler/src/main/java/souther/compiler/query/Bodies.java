@@ -14,6 +14,7 @@ import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.Scoping;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -266,7 +267,7 @@ public final class Bodies {
                 if (src == null) {
                     continue;   // the unknown module is reported where the scope is worked out
                 }
-                Set<String> declared = Names.behaviorNames(src);
+                Set<String> declared = Scoping.behaviorNames(src);
                 for (String bare : imp.names()) {
                     if (!declared.contains(bare)) {
                         continue;   // a type import, or a name the module does not declare

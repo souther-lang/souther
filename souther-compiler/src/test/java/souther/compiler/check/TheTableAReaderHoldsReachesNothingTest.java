@@ -1,5 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.Ast;
+import souther.compiler.frontend.CstFrontend;
+
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.ParameterizedType;
@@ -45,16 +48,21 @@ class TheTableAReaderHoldsReachesNothingTest {
     }
 
     /**
-     * And the pair the resolve pass is handed does carry one.
+     * And one put beside a table is found.
      *
      * <p>Here so that the check above is known to be able to see one. Told that the table carries
      * nothing by a test that could not have found anything, a reader learns nothing — and this is
-     * the very thing the table was separated from.
+     * the very thing the table was separated from. Written as a shape of its own rather than read
+     * off the pair the resolve pass is handed, because that pair is no longer a record: what may be
+     * put together is closed there, which is a different guarantee and is held elsewhere.
      */
     @Test
-    void thePairHandedToTheResolvePassCarriesOne() {
-        assertEquals(List.of("elsewhere: Elsewhere"), asking(Resolve.Values.class));
+    void oneSetBesideATableIsFound() {
+        assertEquals(List.of("elsewhere: Elsewhere"), asking(AsIfBesideOne.class));
     }
+
+    /** A table with a way of asking beside it. */
+    private record AsIfBesideOne(Resolve.Reachable table, Resolve.Elsewhere elsewhere) {}
 
     /**
      * And one held inside a collection is found.
@@ -71,6 +79,27 @@ class TheTableAReaderHoldsReachesNothingTest {
 
     /** A table whose entries can each answer a question. */
     private record AsIfATableOfThem(Map<String, Resolve.Elsewhere> byName) {}
+
+    /**
+     * The pair says the same thing when its parts do.
+     *
+     * <p>It is not a record — what may be put together is closed — so what a record would have
+     * written is written by hand, and this is what says the hand-written one still holds. An answer
+     * a compilation remembers is compared with the next one to decide whether the work that read it
+     * has to be done again, and one that never equals the last is an answer nothing is ever kept
+     * past.
+     */
+    @Test
+    void thePairIsAValue() {
+        Ast.Module m = CstFrontend.parse("""
+                module one exposing ( A )
+                data A = { n: Int }
+                """);
+
+        assertEquals(Resolve.Values.of(m), Resolve.Values.of(m),
+                "two of these over one module say the same thing");
+        assertEquals(Resolve.Values.of(m).hashCode(), Resolve.Values.of(m).hashCode());
+    }
 
     /** The parts of {@code held} that can answer a question. */
     private static List<String> asking(Class<?> held) {

@@ -37,15 +37,22 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
     @Override
     public InSight module(String name) {
         Ast.Module m = db.ask(new Front.Available(name)).value();
-        // What this compilation declares there, asked of the one question that answers it — so
-        // that what a scope says a name denotes and what the declarations say is declared there
-        // cannot disagree, and so that a name written twice is refused once, where it is indexed.
-        // A module in an import cycle has nothing to give here: what it declares rests on the
-        // module that rests on it.
-        Answer<Map<String, Ast.Def>> declarations = db.ask(new Names.Declarations(name));
-        Map<String, ValueName.Stdlib> library = db.ask(new Front.LibraryNames(name)).value();
-        if (m != null && declarations.present() && library != null) {
-            return new InSight.Read(m, declarations.value(), library);
+        if (m != null) {
+            // What this compilation declares there, asked of the one question that answers it — so
+            // that what a scope says a name denotes and what the declarations say is declared
+            // there cannot disagree, and so that a name written twice is refused once, where it is
+            // indexed. A module in an import cycle has nothing to give here: what it declares
+            // rests on the module that rests on it.
+            //
+            // Asked only once there is a module to ask it of. Whether a module is in a cycle is
+            // worked out over the whole workspace, and a name nothing here has is not a question
+            // about the shape of the workspace — an import of a misspelt module would otherwise
+            // put every module's imports on the far side of this one's answer.
+            Answer<Map<String, Ast.Def>> declarations = db.ask(new Names.Declarations(name));
+            Map<String, ValueName.Stdlib> library = db.ask(new Front.LibraryNames(name)).value();
+            if (declarations.present() && library != null) {
+                return new InSight.Read(m, declarations.value(), library);
+            }
         }
         // Nothing to give — and now why. A file the caller held back reports its own error, so an
         // importer of it is left alone rather than told the module is unknown. Asked after the

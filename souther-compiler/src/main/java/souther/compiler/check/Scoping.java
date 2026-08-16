@@ -138,7 +138,7 @@ public final class Scoping {
         }
         Resolve.Values values =
                 new Resolve.Values(reachable(universe, read), new OfTheUniverse(universe));
-        refused.addAll(oneSpellingTwice(universe, m));
+        refused.addAll(oneSpellingTwice(universe, read));
         return new Scoped(m.name(), denotations, aliases, values, refused);
     }
 
@@ -371,17 +371,21 @@ public final class Scoping {
      * <p>A behavior and a {@code let} of one name are not two: they are the declaration and the
      * implementation of one thing (ADR-0072).
      */
-    private static List<Refusal> oneSpellingTwice(ModuleUniverse universe, Ast.Module m) {
+    private static List<Refusal> oneSpellingTwice(ModuleUniverse universe,
+                                                  ModuleUniverse.InSight.Read read) {
+        Ast.Module m = read.module();
         List<Refusal> refused = new ArrayList<>();
-        Map<String, Ast.Def> declared = new LinkedHashMap<>();
-        for (Ast.Def def : m.defs()) {
+        // What the module has, as the universe answered it — not what its text writes. A
+        // declaration it does not have is refused where declarations are indexed, and a second
+        // reading of the text here would be a second answer to which of them it has.
+        Map<String, Ast.Def> declared = read.declarations();
+        for (Ast.Def def : declared.values()) {
             // A standard-library qualifier is the only spelling that reaches the library, so a data
             // of that name hides it — from every module, since the qualifier is not this module's
             // to shadow. Refused where it is declared, as a reserved module name is.
             if (Prelude.isQualifier(def.name())) {
                 refused.add(new Refusal.TakesTheLibraryQualifier(def));
             }
-            declared.put(def.name(), def);
         }
         Set<String> implementing = behaviorNames(m);
         for (Ast.FnDef fn : m.fns()) {
@@ -433,9 +437,7 @@ public final class Scoping {
         Ast.Module from = read.module();
         Set<String> names = new LinkedHashSet<>(HelperInliner.publishedNames(from, imp.names()));
         Set<String> declared = new LinkedHashSet<>(behaviorNames(from));
-        for (Ast.Def def : from.defs()) {
-            declared.add(def.name());
-        }
+        declared.addAll(read.declarations().keySet());
         Set<String> exposed = new LinkedHashSet<>(from.exposing());
         for (String name : imp.names()) {
             if (declared.contains(name) && exposed.contains(name)) {

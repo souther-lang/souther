@@ -23,6 +23,18 @@ import java.util.Map;
  *
  * <p>Asked one name at a time rather than handed over as a set, because a compilation that reaches
  * no other module reads none.
+ *
+ * <p>What it answers is what may be built on, and that is the whole of what it answers. A universe
+ * that will not let a module be built on says nothing further about it — not its text, not the
+ * behaviors it declares — so a reader here does not have to know which of several questions to ask
+ * to get the most that can be had. The cost falls where it should: every module answered that way
+ * is one already refused for a reason its author has been given, and what is lost is a second
+ * report about it.
+ *
+ * <p>It is worth knowing that a compilation refuses one on grounds that are not about the module at
+ * all. A module in an import cycle has been read, and what stops it is a rule about the set it is
+ * in; that rule is written into what a compilation says a module declares, so it arrives here.
+ * Whether it belongs there is its own question and not one this seam settles.
  */
 public interface ModuleUniverse {
 

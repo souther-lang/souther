@@ -211,11 +211,62 @@ public final class Resolve {
      * up inside an answer a compilation remembers, and a reader holding the pair holds a way to
      * reach the whole compilation; a reader holding the table holds a table.
      */
-    public record Values(Reachable reachable, Elsewhere elsewhere) {
+    public static final class Values {
+
+        private final Reachable reachable;
+        private final Elsewhere elsewhere;
+
+        /**
+         * Made where a scope is assembled, and nowhere a caller can reach.
+         *
+         * <p>The two are not free of each other: the table says what the modules around this one
+         * brought in, and the other is the way of asking those same modules a further question. Put
+         * together by a caller, they could be a table from one set of modules beside a way of
+         * asking a different set — what an import brought in decided by one and what a qualifier
+         * names by the other, which is the disagreement this whole seam is here to make
+         * unwritable.
+         */
+        Values(Reachable reachable, Elsewhere elsewhere) {
+            this.reachable = reachable;
+            this.elsewhere = elsewhere;
+        }
 
         /** A module resolved on its own: what it declares, and nothing else in sight. */
         public static Values of(Ast.Module m) {
             return new Values(Reachable.of(m), Elsewhere.NONE);
+        }
+
+        /** What the module can name without a binding. */
+        public Reachable reachable() {
+            return reachable;
+        }
+
+        Elsewhere elsewhere() {
+            return elsewhere;
+        }
+
+        /**
+         * Two of these say the same thing when their parts do.
+         *
+         * <p>Written out because this is not a record, and it ends up inside an answer a
+         * compilation remembers: an answer that never equals the last one is an answer nothing that
+         * read it is ever kept past.
+         */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Values values
+                    && reachable.equals(values.reachable)
+                    && elsewhere.equals(values.elsewhere);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(reachable, elsewhere);
+        }
+
+        @Override
+        public String toString() {
+            return "Values[reachable=" + reachable + ", elsewhere=" + elsewhere + "]";
         }
     }
 

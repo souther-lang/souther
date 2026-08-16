@@ -11,6 +11,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.check.Exposing;
+import souther.compiler.check.Scoping;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
@@ -685,7 +686,7 @@ public final class Front {
                 FromPath.OnThePath fromPath = onThePath(db, name);
                 m = fromPath == null ? null : fromPath.module();
             }
-            return m == null ? Answer.absent() : Answer.of(Names.behaviorNames(m));
+            return m == null ? Answer.absent() : Answer.of(Scoping.behaviorNames(m));
         }
     }
 

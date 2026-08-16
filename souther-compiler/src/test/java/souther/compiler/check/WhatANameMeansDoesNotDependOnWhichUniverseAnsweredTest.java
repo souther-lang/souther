@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -148,6 +149,10 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         assertEquals(Denotation.STANDS_FOR_NOTHING, scoped.denotations().get("Mid"),
                 "a name an import could not bring in is in scope denoting nothing, so a use of it"
                         + " takes the error type rather than reporting an unknown type at each use");
+        assertFalse(scoped.reachable().behaviorsWhole(),
+                "and the behaviors in scope are not claimed to be all of them: a bare name this"
+                        + " module writes may have come from the module that could not be read, so"
+                        + " a misspelt one is left unanswered rather than reported here");
     }
 
     /**

@@ -1305,18 +1305,19 @@ public final class Names {
      * reader here and the scope disagreeing about which imports a module has is a reader holding a
      * signature the scope never brought a name in for.
      *
-     * <p>Asked of what the module wrote, not of what this compilation will let anything be built
-     * on. Which modules one names is how the import graph is walked and how a cycle is found, so an
-     * answer that stopped at a module in a cycle could not find the half of the cycle that closes
-     * it.
+     * <p>The module's own lines are read off what it wrote, so a module nothing may be built on
+     * still has the imports it wrote. The ones a qualified reference asks for are not: which
+     * behaviors another module declares is a question about that module, and a universe that will
+     * not let it be built on does not answer it. Nothing is synthesized then — what the reference
+     * names is answered where the reference is written, and an import invented for it would say it
+     * a second time against a line nobody wrote.
+     *
+     * <p>Not what a cycle is found by. That is walked off the spellings a module writes
+     * ({@link Cycles}), which is why a cycle written with no import line at all is still found.
      */
     public static List<Ast.Import> importsOf(Db db, String name) {
         Ast.Module m = db.ask(new Front.Available(name)).value();
         return m == null ? List.of() : Scoping.importsOf(CompilationUniverse.over(db), m);
-    }
-
-    static Set<String> behaviorNames(Ast.Module m) {
-        return Scoping.behaviorNames(m);
     }
 
     /** The same, of a module resolution has been over. */
