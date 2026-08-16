@@ -25,21 +25,41 @@ import java.util.Set;
  * reading refutes took something more than the values to settle. Which something is not recorded, so
  * it is not claimed either.
  */
-record Known(NumericDomain<Term> numbers, PredicateFacts facts, List<Quantified> quantified,
+record Known(ConstraintState constraints, List<Quantified> quantified,
                      Set<Term> spoken, Unguarded unguarded) {
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
      * clauses are read at all, and both readings are asked about the same clauses. */
-    record Unguarded(NumericDomain<Term> numbers, PredicateFacts facts) {
+    record Unguarded(ConstraintState constraints) {
 
         Unguarded taking(LinearForm<Term> f, Rel rel, Map<Term, Granularity> kinds) {
-            return new Unguarded(numbers.assume(f, rel, kinds), facts);
+            return new Unguarded(constraints.taking(f, rel, kinds));
         }
 
         Unguarded taking(Term key, boolean positive) {
-            return new Unguarded(numbers, facts.assume(key, positive));
+            return new Unguarded(constraints.taking(key, positive));
         }
+
+        NumericDomain<Term> numbers() {
+            return constraints.numbers();
+        }
+
+        PredicateFacts facts() {
+            return constraints.facts();
+        }
+    }
+
+    /** The relations between numbers this state holds. Handed out because a bound is read off an
+     * interval and off nothing else; whether anything satisfies the state at all is
+     * {@link ConstraintState#isBottom} and is not assembled from this. */
+    NumericDomain<Term> numbers() {
+        return constraints.numbers();
+    }
+
+    /** The predicates this state has settled, read the same way and for the same reason. */
+    PredicateFacts facts() {
+        return constraints.facts();
     }
 
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value
@@ -47,20 +67,20 @@ record Known(NumericDomain<Term> numbers, PredicateFacts facts, List<Quantified>
     enum Held { OF_THE_VALUE, ON_THE_PATH }
 
     static Known top() {
-        return new Known(NumericDomain.top(), PredicateFacts.none(), List.of(), Set.of(),
-                new Unguarded(NumericDomain.top(), PredicateFacts.none()));
+        return new Known(ConstraintState.top(), List.of(), Set.of(),
+                new Unguarded(ConstraintState.top()));
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
     Known taking(LinearForm<Term> f, Rel rel, Held held, Map<Term, Granularity> kinds) {
-        return new Known(numbers.assume(f, rel, kinds), facts, quantified, spoken,
+        return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
     Known taking(Term key, boolean positive, Held held) {
-        return new Known(numbers, facts.assume(key, positive), quantified, spoken,
+        return new Known(constraints.taking(key, positive), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded);
     }
 
@@ -89,7 +109,7 @@ record Known(NumericDomain<Term> numbers, PredicateFacts facts, List<Quantified>
         }
         Set<Term> all = new HashSet<>(spoken);
         all.addAll(terms);
-        return new Known(numbers, facts, quantified, all, unguarded);
+        return new Known(constraints, quantified, all, unguarded);
     }
 
     /** Whether an assumption on this path named {@code term}. */
@@ -103,6 +123,6 @@ record Known(NumericDomain<Term> numbers, PredicateFacts facts, List<Quantified>
         }
         List<Quantified> all = new ArrayList<>(quantified);
         all.addAll(more);
-        return new Known(numbers, facts, List.copyOf(all), spoken, unguarded);
+        return new Known(constraints, List.copyOf(all), spoken, unguarded);
     }
 }

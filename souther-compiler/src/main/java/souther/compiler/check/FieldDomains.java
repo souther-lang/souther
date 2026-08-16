@@ -39,8 +39,8 @@ public final class FieldDomains {
 
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), List.of(), Map.of(), false, true,
-                    NumericDomain.top(), null, null, null, Map.of(), () -> true);
+            new FieldDomains(Map.of(), Map.of(), List.of(), Map.of(), true,
+                    ConstraintState.top(), null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -52,12 +52,14 @@ public final class FieldDomains {
     /** What each field has to hold, kept apart from what each field is. Same numbers, different
      * question — see {@link Held}. */
     private final Map<String, NumericDomain.Bounds> heldByField;
-    private final boolean infeasible;
     /** Whether the reading that produced these bounds ran to the end. Kept because it is what that
      * reading knows about itself: a walk that fell over produces the same empty domain as a value
      * with no rules, and a second reading asked afterwards does not take the same path. */
     private final boolean seeded;
-    private final NumericDomain numbers;
+    /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
+     * question about all of it and is asked of it; the numbers are read out of it where a bound is
+     * what a caller is after. */
+    private final ConstraintState constraints;
     /** What this was read from, so that it can be read again without one declaration's clauses. */
     private final TypeSymbol named;
     private final Hir.Data data;
@@ -69,17 +71,16 @@ public final class FieldDomains {
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
                          List<InvariantChecker.Direct> directs,
-                         Map<String, List<TypeSymbol>> narrowers, boolean infeasible,
-                         boolean seeded, NumericDomain numbers, TypeSymbol named, Hir.Data data,
-                         Symbols symbols, Map<String, Count> settled,
+                         Map<String, List<TypeSymbol>> narrowers,
+                         boolean seeded, ConstraintState constraints, TypeSymbol named,
+                         Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.directs = directs;
         this.narrowers = narrowers;
-        this.infeasible = infeasible;
         this.seeded = seeded;
-        this.numbers = numbers;
+        this.constraints = constraints;
         this.named = named;
         this.data = data;
         this.symbols = symbols;
@@ -94,9 +95,14 @@ public final class FieldDomains {
      * means every position here holds anything while the other means none of them holds anything: a
      * report that took the second for the first would ask for rows at edges of a value nobody can
      * build.
+     *
+     * <p>Asked of the whole state and not of the numbers in it. A rule reaches whichever domain has
+     * a word for it, so a contradiction can be held entirely by a domain that has nothing to do with
+     * intervals — and a reading that asked the numbers alone answered that a value exists because
+     * the domain it asked had never heard of the rules.
      */
     public boolean infeasible() {
-        return infeasible;
+        return constraints.isBottom();
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
@@ -171,8 +177,8 @@ public final class FieldDomains {
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.reading().directs(),
-                seeded.reading().narrowers(), seeded.numbers().isBottom(),
-                seeded.everyClauseRead(), seeded.numbers(), named, data, symbols, settled,
+                seeded.reading().narrowers(),
+                seeded.everyClauseRead(), seeded.constraints(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
@@ -374,7 +380,7 @@ public final class FieldDomains {
         // What the reading that made these bounds knows about itself comes first. A second reading
         // asked afterwards walks the declarations and not the same path, so it can come back clean
         // about a projection that was never computed.
-        if (!seeded || !numbers.projectionIsLossless()) {
+        if (!seeded || !constraints.numbers().projectionIsLossless()) {
             return false;
         }
         Boolean read = everyRuleRead;

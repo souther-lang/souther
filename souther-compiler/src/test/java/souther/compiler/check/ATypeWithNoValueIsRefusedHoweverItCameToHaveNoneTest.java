@@ -212,6 +212,43 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 """);
     }
 
+    /**
+     * A predicate stated and denied of one value, which reaches no number anywhere.
+     *
+     * <p>The reading settles this where it stands: a predicate settled both ways leaves nothing for
+     * a value to be, and it has left it that way all along. What the count read was the numbers
+     * alone, so a contradiction held entirely by another domain was a type this said could be
+     * built.
+     */
+    @Test
+    void aPredicateStatedAndDeniedOfOneValueIsRefused() {
+        refuses("Shouted", """
+                module demo
+
+                data Shouted = String
+                    invariant no = String.matches("[A-Z]+", value)
+                        && Bool.not(String.matches("[A-Z]+", value))
+                """);
+    }
+
+    /**
+     * And the same two predicates about two positions, which contradict nothing.
+     *
+     * <p>What tells them apart is the value each is stated of and not the words either is written
+     * with. A reading that settled a predicate by how it reads would have this record refused for
+     * saying two things that hold together in every value of it.
+     */
+    @Test
+    void twoPositionsStatingOppositePredicatesAreAdmitted() {
+        admits("""
+                module demo
+
+                data Pair = { shouted: String, quiet: String }
+                    invariant here = String.matches("[A-Z]+", shouted)
+                        && Bool.not(String.matches("[A-Z]+", quiet))
+                """);
+    }
+
     @Test
     void aNumberWithOneValueLeftIsAdmitted() {
         admits("""

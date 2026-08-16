@@ -1,0 +1,54 @@
+package souther.compiler.check;
+
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.NumericDomain.Rel;
+
+import java.util.Map;
+
+/**
+ * What the rules say, in each of the languages this reading has for saying it.
+ *
+ * <p>Several domains and one state. A clause relates numbers, or settles a predicate that relates to
+ * nothing, and each of those is written where something can be reasoned about it — but what a caller
+ * asks of them together is one question, and it is whether anything at all satisfies what has been
+ * taken in. That is {@link #isBottom}, and it is asked of the whole because a reader that asked one
+ * domain would answer that a value exists whenever the domain it happened to ask had nothing to say.
+ * {@code value == "A"} beside {@code value /= "A"} reaches no number and leaves the predicates
+ * contradictory, and a count taken from the numbers alone called that type inhabited.
+ *
+ * <p>The parts are readable, and only in one direction. A reader wanting the numbers may have them —
+ * an interval is what a bound is read off, and nothing else answers that — but a reader asking
+ * whether a value exists asks here and never assembles the answer out of the parts. A domain added
+ * later is a component of this and an arm of {@link #isBottom}, and every such reader has it without
+ * being touched.
+ */
+record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts) {
+
+    /** Nothing taken in, so nothing ruled out. */
+    static ConstraintState top() {
+        return new ConstraintState(NumericDomain.top(), PredicateFacts.none());
+    }
+
+    /**
+     * Whether nothing satisfies what has been taken in.
+     *
+     * <p>Every domain, because each of them can hold the whole state's contradiction on its own: what
+     * one of them cannot express it leaves alone, so a contradiction found anywhere is a
+     * contradiction, and one found nowhere is only what these readings were able to show.
+     */
+    boolean isBottom() {
+        return numbers.isBottom() || facts.isBottom();
+    }
+
+    /** This, with {@code f rel 0} taken as holding. */
+    ConstraintState taking(LinearForm<Term> f, Rel rel, Map<Term, Granularity> kinds) {
+        return new ConstraintState(numbers.assume(f, rel, kinds), facts);
+    }
+
+    /** This, with the predicate {@code key} taken as holding, or as failing. */
+    ConstraintState taking(Term key, boolean positive) {
+        return new ConstraintState(numbers, facts.assume(key, positive));
+    }
+}

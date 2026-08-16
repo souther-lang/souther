@@ -251,11 +251,15 @@ public final class InvariantChecker {
      * What the invariants reaching a value of {@code data} leave each of its fields able to hold, and
      * the atom each field is named by.
      *
-     * <p>The same seeding a parameter of that type gets ({@link #seedAt}), read for its numbers
-     * instead of for what it discharges. A record's own clause relates its fields; each field's type
-     * bounds that field on its own; and both land in one domain over the same atoms, which is what
-     * lets a bound reach one field through another.
+     * <p>The same seeding a parameter of that type gets ({@link #seedAt}), read for what it says of
+     * the values instead of for what it discharges. A record's own clause relates its fields; each
+     * field's type bounds that field on its own; and both land in one state over the same atoms,
+     * which is what lets a bound reach one field through another.
      *
+     * @param constraints everything the clauses were read as, whichever domain each of them reached.
+     *                    The whole state and not one domain of it: what a caller asks of a
+     *                    declaration is whether any value of it exists, and that is a question about
+     *                    all of them at once ({@link ConstraintState#isBottom})
      * @param atoms the atom each field's own value is, for the fields that are numbers
      * @param held the atom the count of each field is, for the fields whose values are counted by
      *             something. A field is in one of these two or in neither, never in both: what
@@ -265,8 +269,15 @@ public final class InvariantChecker {
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
      */
-    record Seeded(NumericDomain<Term> numbers, Map<String, Term> atoms, Map<String, Term> held,
-                  Reading reading, boolean everyClauseRead) {}
+    record Seeded(ConstraintState constraints, Map<String, Term> atoms, Map<String, Term> held,
+                  Reading reading, boolean everyClauseRead) {
+
+        /** The numbers alone, for the readers that are about intervals. Whether a value exists is
+         * asked of {@link #constraints} and is never read off this. */
+        NumericDomain<Term> numbers() {
+            return constraints.numbers();
+        }
+    }
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
@@ -371,7 +382,7 @@ public final class InvariantChecker {
             }
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
-            return new Seeded(NumericDomain.top(), Map.of(), Map.of(),
+            return new Seeded(ConstraintState.top(), Map.of(), Map.of(),
                     new Reading(List.of(), Map.of()), false);
         }
         Map<String, Term> atoms = new LinkedHashMap<>();
@@ -392,20 +403,20 @@ public final class InvariantChecker {
         // Which of the clauses place an edge, asked once the positions have names to be recognised
         // by.
         Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt);
-        NumericDomain<Term> numbers = k.numbers();
+        ConstraintState constraints = k.constraints();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             Term atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());
             if (atom == null || type == null) {
                 continue;
             }
-            numbers = numbers.assume(
+            constraints = constraints.taking(
                     NumericDomain.LinearForm.atom(atom)
                             .minus(NumericDomain.LinearForm.constant(each.getValue().at())),
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(numbers, atoms, held, reading, read);
+        return new Seeded(constraints, atoms, held, reading, read);
     }
 
     /**
