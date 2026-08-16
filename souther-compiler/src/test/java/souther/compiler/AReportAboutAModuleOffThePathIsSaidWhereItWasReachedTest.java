@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Diagnostic;
@@ -102,7 +103,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """, held());
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
-        assertEquals(new SourceId("0"), said.sourceId(), "a reader can only be sent to a file this compile holds");
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("0")), said.quotedFrom(),
+                "a reader can only be sent to a file this compile holds");
         assertEquals(6, said.line(), "the import line naming the module, not a line of the module");
         assertEquals(1, said.column());
     }
@@ -124,7 +126,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
         Citation.Reached reached = assertInstanceOf(Citation.Reached.class, citation);
         assertEquals("lib.held", reached.provenance().reachedBy());
-        assertNotNull(reached.at().sourceId(),
+        assertInstanceOf(QuotedFrom.ASourceThisCompileHolds.class, reached.at().quotedFrom(),
                 "a citation offering a place offers one in a file this compilation holds");
     }
 
@@ -153,7 +155,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """, and(held, front));
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
-        assertEquals(new SourceId("0"), said.sourceId());
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("0")), said.quotedFrom());
         assertEquals(4, said.line(), "the import of the dependency that led to it");
     }
 

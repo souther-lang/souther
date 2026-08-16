@@ -62,7 +62,7 @@ public record SourcePos(int line, int column, Placement placement) {
     /** The source this is in, or null where the text it is in has no identity in this compilation.
      *  A {@link SourceId} rather than a name, so that what a caller chose to call a module cannot
      *  arrive here instead. */
-    public SourceId sourceId() {
+    SourceId sourceId() {
         return placement.sourceId();
     }
 

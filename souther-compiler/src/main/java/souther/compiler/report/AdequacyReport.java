@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
@@ -917,7 +918,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case Citation.Reached reached -> reached.at();
             case Citation.Unplaced _, Citation.OutOfSight _ -> throw new NoPlaceToWrite(where);
         };
-        at.put("sourceId", sources.written(pos.sourceId()));
+        if (!(pos.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file))) {
+            throw new NoPlaceToWrite(where);
+        }
+        at.put("sourceId", sources.written(file));
         at.put("line", pos.line());
         at.put("column", pos.column());
         ObjectNode writtenAt = at.putObject("writtenAt");

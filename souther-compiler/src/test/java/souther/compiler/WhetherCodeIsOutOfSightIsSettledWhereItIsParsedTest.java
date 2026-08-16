@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -58,7 +59,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         assertFalse(positions.isEmpty(), "the library has bodies to have positions in");
         assertEquals(List.of(), positions.stream().filter(p -> !p.isOutOfSight()).toList(),
                 "a library body is written where no compile that calls it holds a file");
-        assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() != null).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds).toList(),
                 "and there is no file of this compile for it to be in");
     }
 
@@ -102,7 +103,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         assertFalse(positions.isEmpty(), "the clause has positions");
         assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
                 "what was read off a file the reader holds is where the code is");
-        assertEquals(List.of(), positions.stream().filter(p -> !new SourceId("0").equals(p.sourceId())).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> !p.isIn(new SourceId("0"))).toList(),
                 "and it says which file");
     }
 
@@ -128,7 +129,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         assertFalse(positions.isEmpty(), "the clause has positions");
         assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
                 "somebody wrote this text; what is missing is a name for it, not an author");
-        assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() != null).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds).toList(),
                 "and nothing here has named it");
     }
 
@@ -152,7 +153,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
 
         List<SourcePos> copied = positions.stream().filter(SourcePos::isOutOfSight).toList();
         assertFalse(copied.isEmpty(), "the body calls into the library, so some of it was copied");
-        assertEquals(List.of(), copied.stream().filter(p -> p.sourceId() == null).toList(),
+        assertEquals(List.of(), copied.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds)).toList(),
                 "a copy is read against the caller's file and says which file that is");
     }
 

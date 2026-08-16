@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import org.junit.jupiter.api.Test;
 
@@ -93,7 +94,8 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said());
         assertEquals("Yen", quoted(DECLARING, one.region()),
                 "the caret is on the construction, in the file the helper is written in");
-        assertEquals(new SourceId("up.sou"), one.pos().sourceId());
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("up.sou")),
+                one.pos().quotedFrom());
         assertFalse(one.pos().isOutOfSight());
     }
 

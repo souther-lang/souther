@@ -8,6 +8,8 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.InvariantMessage;
+import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -479,8 +481,8 @@ public final class HelperTyping {
      * was read from no source is nowhere and shares a line with nothing.
      */
     private static boolean onOneLine(SourcePos here, SourcePos there) {
-        return here.sourceId() != null && here.sourceId().equals(there.sourceId())
-                && here.line() == there.line();
+        return here.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)
+                && there.isIn(file) && here.line() == there.line();
     }
 
     /**

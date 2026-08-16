@@ -524,7 +524,7 @@ public final class Compilation {
     private Db.Found citable(Db.Found found) {
         Diagnostic said = found.report().diagnostic();
         SourcePos at = said.pos();
-        if (at == null || at.sourceId() != null || found.module() == null
+        if (at == null || found.module() == null
                 || !(Citation.of(at) instanceof Citation.OutOfSight out)) {
             return found;
         }

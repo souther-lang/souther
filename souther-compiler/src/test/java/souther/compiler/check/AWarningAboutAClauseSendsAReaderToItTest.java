@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
@@ -192,10 +193,11 @@ class AWarningAboutAClauseSendsAReaderToItTest {
         assertEquals(1, warnings.size(), warnings.toString());
 
         LabeledRegion one = warnings.get(0).secondary().get(0);
-        assertEquals(new SourceId("1"), warnings.get(0).pos().sourceId(),
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("1")),
+                warnings.get(0).pos().quotedFrom(),
                 "the construction is in the second source");
         assertEquals(new SourceId("0"),
-                ((souther.compiler.diag.DiagnosticPlace.InSource) one.place()).region().start().sourceId(),
+                ((souther.compiler.diag.DiagnosticPlace.InSource) one.place()).source(),
                 "and the clause is in the first, which the label says rather than leaving the"
                         + " renderer to read the declaration's line out of the wrong file");
     }

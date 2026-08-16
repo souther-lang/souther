@@ -191,7 +191,7 @@ public final class ExampleStatements {
             if (!answering.add(fk.target())) {
                 continue;   // a second table for one dependency answers nothing, here as anywhere
             }
-            if (!sourceId.equals(fk.pos().sourceId())) {
+            if (!fk.pos().isIn(sourceId)) {
                 continue;   // written in another source, and built by that source's own reading
             }
             Sig sig = sigs.get(fk.target());

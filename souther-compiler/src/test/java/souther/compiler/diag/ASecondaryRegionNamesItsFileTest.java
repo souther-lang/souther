@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 
 import souther.compiler.diag.msg.NameMessage;

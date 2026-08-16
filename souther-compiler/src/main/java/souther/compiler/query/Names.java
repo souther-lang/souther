@@ -26,6 +26,7 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.Region;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -862,8 +863,22 @@ public final class Names {
      * so has no module to be asked of.
      */
     private static String moduleAt(Db db, SourcePos at) {
-        return at == null || at.sourceId() == null
-                ? null : db.ask(new Front.ModuleOf(at.sourceId())).value();
+        SourceId file = keyedOn(at);
+        return file == null ? null : db.ask(new Front.ModuleOf(file)).value();
+    }
+
+    /**
+     * The source a question about {@code at} is keyed on, or none.
+     *
+     * <p>None for a text this compilation has no name for, and for a position that is inside a module
+     * this compile holds no file of. Neither is a file whose edit could change the answer, which is
+     * what a key's source is for — and neither of them is a statement about whether a reader could be
+     * sent there, which is {@link souther.compiler.diag.DiagnosticPlace}'s to make.
+     */
+    private static SourceId keyedOn(SourcePos at) {
+        return at != null
+                && at.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)
+                ? file : null;
     }
 
     /**
@@ -881,7 +896,7 @@ public final class Names {
     public record DenotedAt(SourcePos at) implements Key<Resolve.TypeUse> {
         @Override
         public SourceId sourceId() {
-            return at == null ? null : at.sourceId();
+            return keyedOn(at);
         }
 
         @Override
@@ -919,7 +934,7 @@ public final class Names {
     public record TypeAt(SourcePos at) implements Key<TypeSymbol> {
         @Override
         public SourceId sourceId() {
-            return at == null ? null : at.sourceId();
+            return keyedOn(at);
         }
 
         @Override
@@ -976,7 +991,7 @@ public final class Names {
     public record ValueDenotedAt(SourcePos at) implements Key<Resolve.ValueUse> {
         @Override
         public SourceId sourceId() {
-            return at == null ? null : at.sourceId();
+            return keyedOn(at);
         }
 
         @Override
@@ -1039,7 +1054,7 @@ public final class Names {
     public record ValueAt(SourcePos at) implements Key<ValueName> {
         @Override
         public SourceId sourceId() {
-            return at == null ? null : at.sourceId();
+            return keyedOn(at);
         }
 
         @Override

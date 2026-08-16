@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import org.junit.jupiter.api.Test;
 
@@ -182,7 +183,8 @@ class ExampleOutcomeTest {
                 .ask(new Output.Examples("example.trip", new SourceId("trip-examples.sou"), Output.CoverageMode.NONE)).value();
         assertNotNull(attached);
         assertEquals(1, attached.rows().size());
-        assertEquals(new SourceId("trip-examples.sou"), attached.rows().get(0).at().sourceId());
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("trip-examples.sou")),
+                attached.rows().get(0).at().quotedFrom());
         assertEquals(Disposition.HELD, attached.rows().get(0).disposition());
 
         Output.Examples.Of own = compilation.db()

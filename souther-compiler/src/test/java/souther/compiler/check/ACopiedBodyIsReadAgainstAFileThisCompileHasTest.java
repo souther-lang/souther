@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import org.junit.jupiter.api.Test;
 
@@ -79,7 +80,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
     void everyPositionInAnExpandedBodyNamesASourceThisCompileHas() {
         List<SourcePos> positions = positionsIn(expanded(OVER_THE_LIBRARY, "kept"));
 
-        List<SourcePos> nowhere = positions.stream().filter(p -> p.sourceId() == null).toList();
+        List<SourcePos> nowhere = positions.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds)).toList();
         assertEquals(List.of(), nowhere,
                 "a copy read against the caller's file carries coordinates of that file");
     }
@@ -102,7 +103,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
                 Map.of("down.sou", IMPORTING, "up.sou", DECLARING), ModulePath.EMPTY,
                 "down", "twice"));
 
-        assertTrue(positions.stream().anyMatch(p -> new SourceId("up.sou").equals(p.sourceId())),
+        assertTrue(positions.stream().anyMatch(p -> p.isIn(new SourceId("up.sou"))),
                 "the imported body was spliced in, keeping the file it was written in");
         assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
                 "a place this compile can show is not a place anything stands in for");
@@ -120,7 +121,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
         List<SourcePos> positions = positionsIn(coreOf(Map.of("down.sou", IMPORTING),
                 published(DECLARING), "down", "twice"));
 
-        assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() == null).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds)).toList(),
                 "every coordinate the backend is built from names a source this compile has");
         Placement spliced = Placement.aFileOfThisCompile(new SourceId("down.sou"))
                 .standingInFor(Placement.whatAModulePublished(

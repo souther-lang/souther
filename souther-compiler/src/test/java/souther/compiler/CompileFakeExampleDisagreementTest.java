@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
@@ -93,7 +94,7 @@ class CompileFakeExampleDisagreementTest {
         assertEquals(22, one.pos().line(), "anchored at the recorded row");
         assertEquals(1, one.secondary().size(), one.secondary().toString());
         assertEquals(25, ((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).region().start().line(), "pointing at the fake row");
-        assertEquals(one.pos().sourceId(), ((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).region().start().sourceId(),
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(((souther.compiler.diag.DiagnosticPlace.InSource) one.secondary().get(0).place()).source()), one.pos().quotedFrom(),
                 "both are in this source, and the second region says so rather than leaving a"
                         + " reader to work it out from where the diagnostic was filed");
     }
@@ -823,7 +824,7 @@ class CompileFakeExampleDisagreementTest {
         assertEquals(1, one.secondary().size(), one.secondary().toString());
         souther.compiler.source.SourceId primary = found.get(0).primarySourceId();
         souther.compiler.source.SourceId other = ((souther.compiler.diag.DiagnosticPlace.InSource)
-                one.secondary().get(0).place()).region().start().sourceId();
+                one.secondary().get(0).place()).source();
         assertNotNull(other, why + ": the second region names the file it is in");
         assertNotEquals(primary, other, why + ": the two statements are in different sources");
         assertEquals(java.util.Set.of(new SourceId("0"), new SourceId("1")), java.util.Set.of(primary, other),
