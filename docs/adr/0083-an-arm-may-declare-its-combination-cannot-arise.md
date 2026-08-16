@@ -50,6 +50,14 @@ longer be in the code.
 What the form does is put the premise where it is relied on and make its failure an abort. The
 specification says this in those words, because a name borrowed from Rust invites the other reading.
 
+**The statement is checked where the model's own rules can answer it.** Not proven — held against
+what the declarations already say. An arm of the first `match` a body reaches, on one of the
+behavior's own input positions, is the end where they can answer: nothing stands between that fork
+and the caller, so what may arrive there is what the rules reaching the position leave. A case they
+leave standing is one a caller can supply, and the arm is refused where it is written (E1326). A
+case behind a second `match`, behind a `guard`, or at a position whose rules this compiler could not
+read is one nothing settles; the arm stands, and what could not be settled is said.
+
 ## Consequences
 
 The distinction the model could not previously make, it now makes: "the prescribed days for this pair
@@ -72,15 +80,27 @@ states one and no sibling branch supplies it at the join, there is none to take,
 This is the rule `[]` already follows: an expression with no type of its own, written where the
 position states none, is reported rather than defaulted.
 
-The misuse this admits cannot be checked. `| InsufficientFunds -> unreachable "the caller checked"` is
-the same shape as the blank cell whose reason is the caller's order of checks, and the compiler has no
-way to tell one from the other — which is the same reason it cannot prove either. The specification
-states the rule and leaves it to the author: where the combination is one the model admits, the arm
-answers a value, or the input types change.
+The misuse this admits is checked at one end and left to the author at the other, and the two ends
+are different shapes rather than the same one. `| InsufficientFunds -> unreachable "the caller
+checked"` matches a case of the type a parameter is declared as, at the first fork: the declarations
+leave the case standing, so the arm is refused. The blank cell is not that shape — it is behind a
+second `match`, where what the outer arm fixed is exactly what no declaration states — so nothing
+about it can be decided, and both cells of the matrix above stay as they are.
+
+That the claim was *acted on* is what made not checking it cost something. `souther examples` took
+the arm at its word and removed the case from what the rows were held to, so the one row that would
+have shown the model wrong — the row at that case, which reaching the `unreachable` makes E1911 —
+was the row nothing asked for (souther#778). What a row is owed at is read from the declarations
+now, and the claim is held against that reading rather than read into it: a case the rules refuse is
+already out, a case they admit is E1326, and a case nothing settles keeps what it was owed while the
+report says the claim was not proven.
 
 ## References
 
-- Specification: `[#unreachable]`, `[#algebraic-types]`, `[#invariant-expressions]`, `[#e1911]`
-- Issue: souther#239 (finding F30 of souther-examples)
+- Specification: `[#unreachable]`, `[#algebraic-types]`, `[#invariant-expressions]`, `[#e1911]`,
+  `[#e1326]`
+- Issues: souther#239 (finding F30 of souther-examples), souther#426 (an arm answering
+  `unreachable` is reported as an arm no row reaches), souther#778 (a case declared unreachable is
+  taken out of the measure without the claim being checked)
 - ADR-0003 (invariant violations abort in the domain), ADR-0029 (platform failures are exceptions,
   not cases)

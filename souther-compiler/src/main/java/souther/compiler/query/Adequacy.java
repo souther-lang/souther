@@ -192,7 +192,16 @@ public final class Adequacy {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
+            Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
+            if (!prepared.present() || !scope.present() || !sigs.present() || !settled.present()) {
+                return Answer.absent();
+            }
+            // A module holding a type nothing could be worked out for is one this says nothing
+            // about. The hole was reported where the name is, and what a case can arrive at cannot
+            // be read through one — asked anyway, the reading meets a shape no position can have
+            // and says so about this compiler, which is true and is not what the author of a
+            // mistyped model needs.
+            if (souther.compiler.check.TypeOps.holdsAnErroneousType(settled.value())) {
                 return Answer.absent();
             }
             Map<String, InputDomain> out = new LinkedHashMap<>();

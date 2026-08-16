@@ -1128,20 +1128,19 @@ public final class Bodies {
      */
     private static List<Report> contradicted(Db db, String module, Hir.Module settled,
                                              Map<String, Core> bodies) {
-        Answer<Map<String, Sig>> declared = db.ask(new Signatures(module));
         Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
-        if (!declared.present() || !scope.present()) {
+        Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
+                db.ask(new souther.compiler.query.Adequacy.Inputs(module));
+        if (!scope.present() || !inputs.present()) {
             return List.of();
         }
         List<Report> out = new ArrayList<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
-            Sig sig = declared.value().get(behavior.name());
+            souther.compiler.inputs.InputDomain read = inputs.value().get(behavior.name());
             Core body = bodies.get(behavior.name());
-            if (!(behavior instanceof Hir.SpecBehavior spec) || sig == null || body == null) {
+            if (!(behavior instanceof Hir.SpecBehavior spec) || read == null || body == null) {
                 continue;
             }
-            souther.compiler.inputs.InputDomain read =
-                    souther.compiler.inputs.InputDomain.of(spec, sig, scope.value());
             for (Diagnostic refused : souther.compiler.claims.ClaimDiagnostics.refusals(
                     souther.compiler.claims.Claims.of(
                             souther.compiler.claims.UnreachableClaims.of(body,
