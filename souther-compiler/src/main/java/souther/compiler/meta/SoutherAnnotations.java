@@ -6,6 +6,8 @@ import java.lang.classfile.AnnotationValue;
 import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassFile;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -37,6 +39,9 @@ final class SoutherAnnotations {
     private static final String DATA = "Lsouther/runtime/meta/SoutherData;";
     private static final String BEHAVIOR = "Lsouther/runtime/meta/SoutherBehavior;";
 
+    /** Every annotation this compiler writes, named once. What a class may carry one of. */
+    private static final List<String> OURS = List.of(MODULE, DATA, BEHAVIOR);
+
     /**
      * What one class was annotated with.
      *
@@ -48,22 +53,39 @@ final class SoutherAnnotations {
      *         declaration whose text is empty, and the reading went on to answer with a module.
      */
     static PublishedClasses.Declarations in(byte[] bytes) {
-        PublishedClasses.SoutherModuleView module = null;
-        String data = null;
-        String signature = null;
-        Boolean injected = null;
+        Map<String, Annotation> ours = gathered(bytes);
+        Annotation module = ours.get(MODULE);
+        Annotation data = ours.get(DATA);
+        Annotation behavior = ours.get(BEHAVIOR);
+        return new PublishedClasses.Declarations(
+                module == null ? null : moduleView(module),
+                data == null ? null : required(data, "value"),
+                behavior == null ? null : required(behavior, "signature"),
+                behavior == null ? null : requiredFlag(behavior, "injected"));
+    }
+
+    /**
+     * The annotations of ours the class carries, at most one of each.
+     *
+     * <p>Gathering is where that holds, rather than each reading below remembering it. A class file
+     * carries its annotations as a list and nothing in the format makes one of a type unique — the
+     * rule is this schema's, and none of these is declared repeatable — so two of one are two
+     * answers to a question that has one. Read in a loop that assigns as it goes, the second quietly
+     * won: a class carrying two {@code SoutherData} published whichever declaration came last, and
+     * nothing anywhere said the other was there.
+     *
+     * <p>An annotation that is not ours is not counted or looked at, however many there are of it.
+     * What somebody else puts on a class this compiler generated is theirs.
+     */
+    private static Map<String, Annotation> gathered(byte[] bytes) {
+        Map<String, Annotation> ours = new LinkedHashMap<>();
         for (Annotation a : annotations(bytes)) {
-            switch (a.className().stringValue()) {
-                case MODULE -> module = moduleView(a);
-                case DATA -> data = required(a, "value");
-                case BEHAVIOR -> {
-                    signature = required(a, "signature");
-                    injected = requiredFlag(a, "injected");
-                }
-                default -> { }
+            String type = a.className().stringValue();
+            if (OURS.contains(type) && ours.putIfAbsent(type, a) != null) {
+                throw notOurs(type);
             }
         }
-        return new PublishedClasses.Declarations(module, data, signature, injected);
+        return ours;
     }
 
     private static List<Annotation> annotations(byte[] bytes) {
@@ -97,12 +119,20 @@ final class SoutherAnnotations {
      * no default to fall back to, and the annotation is not one of ours.
      */
     private static AnnotationValue member(Annotation a, String name) {
+        AnnotationValue found = null;
         for (AnnotationElement e : a.elements()) {
             if (e.name().stringValue().equals(name)) {
-                return e.value();
+                // Written twice is two answers where the schema has one, the same way two of an
+                // annotation are. An annotation carries its members as a list and nothing in the
+                // format makes a name unique in it, so the first one taken and the rest ignored was
+                // a value chosen by the order they happened to be written in.
+                if (found != null) {
+                    throw notOurs(name);
+                }
+                found = e.value();
             }
         }
-        return null;
+        return found;
     }
 
     /** A string member the schema declares with no default: absent or otherwise is unreadable. */

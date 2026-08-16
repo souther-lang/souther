@@ -144,6 +144,69 @@ class MetadataOfThisCompilersNameIsHeldToItsShapeTest {
     }
 
     /**
+     * Two of one annotation are two answers to a question the schema gives one.
+     *
+     * <p>A class file carries its annotations as a list, and nothing in the format makes one of a
+     * type unique — none of these is declared repeatable, so the rule is this schema's and the
+     * reading is what holds an artifact to it. Read in a loop that assigns as it goes, the second
+     * quietly won: a class carrying two declarations published whichever came last, and nothing
+     * anywhere said the other was there.
+     */
+    @Test
+    void twoOfOneAnnotation() {
+        PublishedClasses classes = withMetadata("shared.money.Amount", _ -> List.of(
+                Annotation.of(DATA, AnnotationElement.ofString("value", "data Amount = Int")),
+                Annotation.of(DATA, AnnotationElement.ofString("value", "data Amount = String"))));
+
+        assertInstanceOf(PublishedClasses.Carried.UnreadableMetadata.class,
+                classes.of("shared.money.Amount"),
+                "neither of them is the declaration, and the later one is not more so");
+    }
+
+    /** The same, of the annotation a module's declarations are stamped on. */
+    @Test
+    void twoOfTheModuleAnnotation() {
+        PublishedClasses classes = withMetadata("shared.money.$Module",
+                had -> List.of(had.get(0), had.get(0)));
+
+        assertInstanceOf(PublishedClasses.Carried.UnreadableMetadata.class,
+                classes.of("shared.money.$Module"));
+    }
+
+    /** And one member written twice inside one annotation. */
+    @Test
+    void oneMemberWrittenTwice() {
+        PublishedClasses classes = withMetadata("shared.money.Amount",
+                _ -> List.of(Annotation.of(DATA,
+                        AnnotationElement.ofString("value", "data Amount = Int"),
+                        AnnotationElement.ofString("value", "data Amount = String"))));
+
+        assertInstanceOf(PublishedClasses.Carried.UnreadableMetadata.class,
+                classes.of("shared.money.Amount"),
+                "which one is read was the order they happened to be written in");
+    }
+
+    /**
+     * An annotation that is not ours may be there as often as it likes.
+     *
+     * <p>The control. What is refused is two answers to a question this schema asks, and a class
+     * this compiler generated carrying somebody else's annotation twice asks it nothing.
+     */
+    @Test
+    void twoOfSomebodyElsesAnnotation() {
+        PublishedClasses classes = withMetadata("shared.money.Amount", had -> {
+            List<Annotation> all = new ArrayList<>(had);
+            all.add(Annotation.of(ClassDesc.of("elsewhere.Marker")));
+            all.add(Annotation.of(ClassDesc.of("elsewhere.Marker")));
+            return all;
+        });
+
+        PublishedClasses.Carried.Declared read = assertInstanceOf(
+                PublishedClasses.Carried.Declared.class, classes.of("shared.money.Amount"));
+        org.junit.jupiter.api.Assertions.assertNotNull(read.declarations().data());
+    }
+
+    /**
      * One place reads a class file, and it is not the one that decides what a lookup answers.
      *
      * <p>Whether a malformed artifact ends the compilation comes down to whether every read of it

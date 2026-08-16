@@ -62,7 +62,8 @@ public interface PublishedClasses {
         return declarations == null ? new Carried.NoSuchClass() : new Carried.Declared(declarations);
     }
 
-    /** What one class was annotated with. A class carries at most one of each. */
+    /** What one class was annotated with. A class carries at most one of each, which the reading
+     *  holds it to rather than taking whichever it met last. */
     record Declarations(SoutherModuleView module, String data, String behaviorSignature,
                         Boolean behaviorInjected) {}
 
