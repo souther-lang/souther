@@ -506,14 +506,13 @@ public final class Compilation {
     private record Repeat(String module, SourceId sourceId, Diagnostic.Identity problem) {}
 
     /**
-     * {@code found} where a reader can be sent to it — itself, for the reports whose coordinate was
-     * read from a source this compile holds.
+     * {@code found} where a reader can be sent to it — itself, for the reports already pointing at a
+     * source this compile holds.
      *
-     * <p>Two questions, asked separately. Whether a reader can be sent here is whether this compile
-     * holds a file to quote, which is what naming a source is. What the place stands in for is the
-     * coordinate's own ({@link souther.compiler.diag.WrittenAt}), read off it rather than rebuilt
-     * from the module this walk was about — the module is what a route to the code is looked up by,
-     * and provenance has one authority.
+     * <p>Which of them those are is the citation's answer, asked once, rather than a source test
+     * here and a provenance test after it. Where the code came from is looked up by the module this
+     * walk was about: a report with nowhere to point has nothing to read it off, and one that has
+     * agrees with it, so both are moved on the same terms.
      *
      * <p>What a raised report carried as the text its pass threw it with is dropped with the move
      * ({@link Report#legacyMessage}). That text was rendered with the old coordinate written into

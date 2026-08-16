@@ -7,6 +7,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.QuotedFrom;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Region;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -72,6 +73,20 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
 
                 data Page = { held: Held }
                 """), published()::get);
+        compilation.answerEverything();
+        return compilation;
+    }
+
+    /**
+     * A compile that calls the standard library and gets it wrong, so what it reports is about code
+     * written where no compile that calls it holds a file.
+     */
+    private static Compilation overTheLibrary() {
+        Compilation compilation = Compilation.ofSource("""
+                module app.counts
+
+                let counted (ns: List<Int>): Int = List.length(List.filter(n -> n, ns))
+                """, "Main");
         compilation.answerEverything();
         return compilation;
     }
@@ -161,20 +176,40 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
                 "and that place is one of this compilation's own sources");
     }
 
-    /** A citation with nothing to point at says where the code came from and offers no place, so it
-     *  never reaches the check above with a file it does not have. */
+    /**
+     * Every citation a report delivers either sends a reader to a file this compilation holds, or
+     * says where the code came from.
+     *
+     * <p>The disjunction rather than one arm of it. A test naming a single arm is green whenever the
+     * fixture stops producing that arm — which is how a walk comes to check nothing — and what is
+     * actually being claimed spans them: a reader is never left with a report that points nowhere
+     * and says nothing about why.
+     *
+     * <p>Over two compiles, because the two halves come from different places: one reaching a module
+     * off the path, one reaching the standard library, which every compile reaches and none holds a
+     * file for.
+     */
     @Test
-    void aCitationWithNothingToPointAtIsNotOfferedAsAPlace() {
-        Compilation compilation = reaching();
+    void everyCitationDeliveredEitherPointsSomewhereHeldOrSaysWhereTheCodeIs() {
+        for (Compilation compilation : List.of(reaching(), overTheLibrary())) {
+            Set<SourceId> held = new LinkedHashSet<>(compilation.sourceIds());
+            List<Citation> delivered = citations(compilation);
 
-        for (Citation citation : citations(compilation)) {
-            switch (citation) {
-                case Citation.OutOfSight out -> assertFalse(out.provenance().reachedBy().isEmpty(),
-                        "what a reader is told instead of being pointed somewhere");
-                case Citation.Written _, Citation.Unplaced _, Citation.Reached _,
-                     Citation.UnplacedElsewhere _ -> { }
-            }
+            assertFalse(delivered.isEmpty(), "the fixture reports something, or this checks nothing");
+            assertEquals(List.of(), delivered.stream().filter(citation -> switch (citation) {
+                case Citation.Written w -> !isHeld(w.at(), held);
+                case Citation.Reached r -> !isHeld(r.at(), held);
+                case Citation.Unplaced _ -> true;
+                case Citation.UnplacedElsewhere u -> u.provenance().reachedBy().isEmpty();
+                case Citation.OutOfSight out -> out.provenance().reachedBy().isEmpty();
+            }).toList(), "a reader is sent to a file this compilation holds, or told where the code"
+                    + " is written");
         }
+    }
+
+    private static boolean isHeld(SourcePos at, Set<SourceId> held) {
+        return at.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)
+                && held.contains(file);
     }
 
     /** The document a build reads says the same. Every place in it is written under a source the

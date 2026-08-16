@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * takes them apart again — the file to quote from, the numbers to quote at — so a pair that
  * disagrees is a marker put in one file with its line read from another.
  *
- * <p>The rule is written on {@link WrittenAt}: <em>a source location has exactly one authority for
+ * <p>The rule is written on {@link Placement}: <em>a source location has exactly one authority for
  * its provenance</em>. A rule a reviewer has to notice is a rule that gets noticed four times and
  * missed the fifth, so it is checked here as well.
  *
