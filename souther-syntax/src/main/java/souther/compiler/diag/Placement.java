@@ -5,39 +5,52 @@ import souther.compiler.source.SourceId;
 import java.util.Objects;
 
 /**
- * Which text a position is in, and what this compilation knows about that text.
+ * Where a position is: which text it is in, and whose code it carries.
  *
- * <p>Two questions, and this is their product. Whether this compilation can show a reader the text —
- * whether it holds a file and can name it — and whether the code the position names is written at
- * the position or somewhere this compilation has no file for. Neither is read off the other. A body
- * copied out of a published module is the witness: it is written out of sight and it is in a source
- * of this compile at once, because the splice gave it the caller's place to be read against.
+ * <p>Two questions, and this is their product. They look like one question and are not, which is
+ * what the first attempt at this got wrong. A text put back together out of what a module published
+ * has real positions — its line 4 is where that module's author wrote that code — and no reader
+ * holds a file those numbers are of. Being unable to show a text and carrying somebody else's code
+ * are different facts, and a value answering both with one boolean has to pick, so a splice into a
+ * text nobody named had nowhere to land and rewrote which text it was in.
  *
  * <blockquote>
  * <table>
- *   <caption>The states, as the quadrants of those two questions</caption>
- *   <tr><td></td><td>the code is written here</td><td>the code is written elsewhere</td></tr>
- *   <tr><td>named by this compile</td>
- *       <td>{@link #aFileOfThisCompile}</td><td>a splice, or a report moved to an import line</td></tr>
- *   <tr><td>not named</td>
- *       <td>{@link #aTextWithNoIdentity}</td><td>{@link #whatAModulePublished}</td></tr>
+ *   <caption>What each question answers</caption>
+ *   <tr><td><b>which text</b></td>
+ *       <td>a source this compilation holds | a text it cannot name | what a module published</td></tr>
+ *   <tr><td><b>whose code</b></td>
+ *       <td>this position's own | copied here from somewhere else</td></tr>
  * </table>
  * </blockquote>
  *
- * <p>Four arms because the two questions have two answers each, and not because four kinds of text
- * were counted. The difference matters the day a fifth arm is proposed: either it fills a quadrant
- * one of these already fills, in which case it is one of these written wrongly, or it cannot answer
- * one of the two questions, in which case whoever proposes it has found a third question and owes an
- * account of it. {@code TheStatesOfAPlacementAreTheQuadrantsOfTwoQuestionsTest} holds the arms to
- * that, so the derivation is a check rather than a paragraph somebody has to notice.
+ * <p>Six states, all of them reached, each explained in a sentence:
  *
- * <p>Held as one value because the pair is what is legal and the components are not. This was two
- * fields on {@link SourcePos} — a source identity that could be null and a separate answer about
- * where the code was written — which is nine combinations for four states, and every reader worked
- * the classification out again from whichever component it had: a null source read as "out of
- * sight" by one, as "the diagnostic's own file" by another, as "drop this" by two more. The rule
- * that only four pairs are legal already existed and was already written down, on the class that
- * made positions out of a parse; it just was not what a position held.
+ * <ul>
+ *   <li>a file this compile holds, code written at that position — every ordinary position.
+ *   <li>a file this compile holds, code copied in from elsewhere — a spliced body, a report moved to
+ *       an import line.
+ *   <li>a text with no name here, code written at that position — a buffer an editor is holding, a
+ *       snippet somebody parsed, and the position a pass mints to mean nowhere.
+ *   <li>a text with no name here, code copied in — a body spliced into such a text: the caller can
+ *       still point at the position and nobody else can.
+ *   <li>a module's published text, code written at that position — where that module's author wrote
+ *       it, in a text this compile has no file for.
+ *   <li>a module's published text, code copied in from a third module — a body spliced in while the
+ *       module was being read back.
+ * </ul>
+ *
+ * <p>Held as a pair because every pair is legal. Which is the same rule that put the two halves of a
+ * position together in the first place: hold the pair where the pair is what is legal, and split it
+ * where it is not. The nine combinations of a nullable source and a boolean were not all legal;
+ * these six are.
+ *
+ * <p>A splice keeps the text and replaces the code. That is the whole of what it does, and it is why
+ * {@link #standingInFor} cannot change which text a position is in.
+ *
+ * <p>Where the code is written follows from both: code copied here is written where it was copied
+ * from, and code of its own is written wherever this text is — which is a module, for a published
+ * one, and is nothing to state for a text a reader has in front of them.
  *
  * <p>Two rules hold over this and over everything that carries one.
  *
@@ -48,213 +61,302 @@ import java.util.Objects;
  * exist.
  * </blockquote>
  *
- * <p>The first is why this is minted where a text is turned into positions and nowhere else: a pass
- * that worked provenance out downstream would be a second authority, and the two disagree the day
- * one of them learns something the other does not. It is what {@code HelperInliner} used to do, by
- * comparing the declaring module with its own, and what a reader of finished reports cannot do at
- * all.
+ * <p>The first is why a placement is minted where a text is turned into positions and nowhere else:
+ * a pass that worked provenance out downstream would be a second authority, and the two disagree the
+ * day one of them learns something the other does not.
  *
- * <p>The second is why the two questions above stay two questions. A shortcut in either direction —
- * a text with no name taken to mean the code is elsewhere, a copied body taken to be in the file it
- * came from — puts them back under one answer, which is the shape this exists to close.
+ * <p>The second is what the two questions are. A shortcut in either direction — a text with no name
+ * taken to mean the code is elsewhere, a copied body taken to be in the file it came from — puts
+ * them back under one answer.
  *
- * <h2>What this publishes, and what it does not</h2>
+ * <h2>What this publishes</h2>
  *
- * <p>Outside this package this is opaque: three ways to make one, a way to make a position out of
- * one, and a value to hand back to {@link SourcePos#standingInFor}. It answers no question. That is
- * deliberate — every question a reader has about a place is answered by exactly one projection, and
- * each of those lives here:
+ * <p>Outside this package: three ways to make one, a way to make a position out of one, and nothing
+ * else. It answers no question. Every question a reader has about a place is answered by exactly one
+ * projection, and each lives here — {@link Citation#of} for what a report may say,
+ * {@link DiagnosticPlace#of} for where a reader may be sent, {@link SourcePos#quotedFrom()} for
+ * which file this is read from, {@link SourcePos#wasCopiedHere()} for whether the position is this
+ * node's own.
  *
- * <ul>
- *   <li>{@link Citation#of} — what a report may say about where the code is written.
- *   <li>{@link DiagnosticPlace#of} — where a reader may be sent.
- *   <li>{@link SourcePos#isOutOfSight()} — whether the position is where the code is, which is the
- *       second question on its own and is what sizes an underline.
- * </ul>
- *
- * <p>A pass that reads the arms would be a fourth answer to whichever of those questions it was
- * really asking, arrived at privately, and that is the defect this whole family is. So the two
- * questions are package-private methods rather than published predicates: something that answered
- * {@code namedByThisCompile()} to the world would be {@code sourceId() != null} again, under a name
- * that reads like an improvement.
- *
- * <p>A class rather than an interface for that reason. An interface's methods are public, so the
- * two questions could not be closed and the arms would have to carry public accessors for what they
- * hold.
+ * <p>A pass reading the components would be a further answer to whichever of those it was really
+ * asking, arrived at privately, and that is the defect this family is. So both questions are
+ * package-private: something publishing "is this named" would be the nullable source identity again
+ * under a name that reads like an improvement.
  *
  * <p>Value equality, because {@link SourcePos} is compared by every pass that rebuilds a node, by the
  * incremental engine deciding whether an answer changed, and by the store deciding whether two
- * diagnostics are one problem. Two positions that differ here are read differently by every surface,
- * so an answer that changed only here has changed.
+ * diagnostics are one problem.
  *
- * <p>The provenance is in the equality and is not published. A caller may ask whether this is the
+ * <p>Provenance is in the equality and is not published. A caller may ask whether this is the
  * placement it already holds and may not ask what it is: reading the declaration off a position and
- * writing a place of one's own is how the same position came to be presented as where code is
- * written by three surfaces and qualified by one.
+ * writing a place of one's own is how one position came to be presented as where code is written by
+ * three surfaces and qualified by one.
  */
-public sealed abstract class Placement
-        permits InAFileOfThisCompile, InAnUnnamedText, StandingInFor, InWhatAModulePublished {
+public final class Placement {
 
-    Placement() {
+    /**
+     * Which text a position is in.
+     *
+     * <p>What can be shown, and under what name. Not what is written in it — a text is the same text
+     * whether the code at line 4 was written there or copied in.
+     */
+    sealed interface Text permits ASourceOfThisCompile, AnUnnamedText, WhatAModulePublished {
+
+        /** What this compilation files the text under, or none where it names none. */
+        SourceId sourceId();
+
+        /** Where the code of this text is written, for a text that is not one a reader holds — or
+         *  null where being in this text says nothing about where code came from. */
+        SourceProvenance ofItsOwn();
+    }
+
+    /** A file this compile holds, under the identity it holds it by. */
+    record ASourceOfThisCompile(SourceId source) implements Text {
+
+        ASourceOfThisCompile {
+            Objects.requireNonNull(source, "a file of this compile is named");
+        }
+
+        @Override
+        public SourceId sourceId() {
+            return source;
+        }
+
+        @Override
+        public SourceProvenance ofItsOwn() {
+            return null;   // the reader has the file; there is no elsewhere to name
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(source);
+        }
     }
 
     /**
-     * Whether this compilation holds a file for the text, under an identity it can name.
+     * A text this compile is reading and has no name for.
      *
-     * <p>The first of the two questions. Package-private, and it stays so: this is what a reader
-     * needs to be sent anywhere, and a reader that could ask it would answer "may I quote this" and
-     * "where is the code written" out of one boolean, which is what having it as a nullable source
-     * identity did.
-     */
-    abstract boolean namedByThisCompile();
-
-    /**
-     * Whether the code this position names is written at the position.
+     * <p>Two things live here today and nothing distinguishes them: a text somebody handed over
+     * without a name — an editor's unsaved buffer, a snippet parsed to look at the tree — and a
+     * position a pass minted to mean nowhere. Inside a compile it is only the second: the two
+     * {@code NOWHERE} constants, whose whole use is that two of them are the same position. Telling
+     * a text apart from a position nobody placed is the question about whether such a position is a
+     * place at all, and is not answered here.
      *
-     * <p>The second of the two questions. False for a text put back together out of what a module
-     * published, whose line 4 is a real line that no reader holds, and for a copy of such a body
-     * that was given the caller's place to be read against.
+     * <p>One instance for that reason. It holds nothing to tell two of them apart by, and what holds
+     * it is compared by the incremental engine.
      */
-    abstract boolean codeIsWrittenHere();
+    record AnUnnamedText() implements Text {
 
-    /** The source this compilation files the text under, or null where it names none. Read by the
-     *  projections in this package, and by nothing else: outside them its absence is not an answer
-     *  to any question anybody has. */
-    abstract SourceId sourceId();
+        static final AnUnnamedText IT = new AnUnnamedText();
 
-    /** Which source of this compilation this text is, as a finished answer a caller can act on.
-     *  The one way to ask which file a position is in. */
-    abstract QuotedFrom quotedFrom();
+        @Override
+        public SourceId sourceId() {
+            return null;
+        }
 
-    /**
-     * Whether this is the same text as {@code other} — the same file, or neither of them a file this
-     * compilation has named.
-     *
-     * <p>Said of the text and not of what is written in it. A body spliced into a file is in that
-     * file, so a walk asking whether two places are the one line a reader is looking at gets the same
-     * answer for a copied node as for the node beside it.
-     */
-    final boolean isTheSameTextAs(Placement other) {
-        return Objects.equals(sourceId(), other.sourceId());
+        @Override
+        public SourceProvenance ofItsOwn() {
+            return null;   // a text with no name says nothing about where its code came from
+        }
+
+        @Override
+        public String toString() {
+            return "an unnamed text";
+        }
     }
 
     /**
-     * Where the code is written, for an arm that says it is written elsewhere.
+     * A text put back together out of what {@code module} published, which this compile has no file
+     * for.
      *
-     * @throws NotWrittenElsewhere where the code is written at the position. There is nothing to
-     *         say about where such code came from, and a caller that got here was branching on
-     *         something other than the question
+     * <p>Its positions are real positions in that text and are not where a reader can be sent. Code
+     * of its own is code that module's author wrote, which is what {@link #ofItsOwn()} says.
      */
-    abstract SourceProvenance codeIsWrittenIn();
+    record WhatAModulePublished(SourceProvenance module) implements Text {
+
+        WhatAModulePublished {
+            Objects.requireNonNull(module, "a published text is a module's");
+        }
+
+        @Override
+        public SourceId sourceId() {
+            return null;
+        }
+
+        @Override
+        public SourceProvenance ofItsOwn() {
+            return module;
+        }
+
+        @Override
+        public String toString() {
+            return "what " + module + " published";
+        }
+    }
+
+    /** Whose code a position carries: the code written at it, or code copied here from elsewhere. */
+    sealed interface CodeOrigin permits Native, CopiedFrom {
+    }
+
+    /** The position is this node's own — nothing moved it here. */
+    record Native() implements CodeOrigin {
+
+        static final Native IT = new Native();
+
+        @Override
+        public String toString() {
+            return "native";
+        }
+    }
 
     /**
-     * The same text, with the code in it written in {@code provenance} instead.
+     * The position was borrowed from the site this code was copied into, and the code itself is
+     * written in {@code from}.
      *
-     * <p>The first question is kept and the second is replaced. What a splice does to the place it
-     * splices into: the caller still holds the file, or still does not, and what is now written
-     * there is the body that was copied in.
-     *
-     * <p>Takes the provenance and not a placement, so that whatever this one already said about
-     * where its code came from cannot be composed with it. That is not an omission. A position
-     * already standing in for a body is standing in for the copy this one is nested inside, and the
-     * body a position belongs to is the innermost one it was copied out of — so the outer answer is
-     * about something else and replacing it is the whole of what is meant.
+     * <p>What a splice writes and what moving a report's caret writes. Replaced rather than composed
+     * when it happens twice: a position already carrying copied code is carrying the copy this one is
+     * nested inside, and the body a position belongs to is the innermost one it came out of.
      */
-    abstract Placement withCodeWrittenIn(SourceProvenance provenance);
+    record CopiedFrom(SourceProvenance from) implements CodeOrigin {
+
+        CopiedFrom {
+            Objects.requireNonNull(from, "code copied here was written somewhere");
+        }
+
+        @Override
+        public String toString() {
+            return "copied from " + from;
+        }
+    }
+
+    private final Text text;
+    private final CodeOrigin code;
+
+    private Placement(Text text, CodeOrigin code) {
+        this.text = text;
+        this.code = code;
+    }
+
+    /** Which text this is in. */
+    Text text() {
+        return text;
+    }
+
+    /** Whose code this position carries. */
+    CodeOrigin code() {
+        return code;
+    }
+
+    /**
+     * Where the code this position names is written, or null where it is written at the position in
+     * a text a reader has in front of them.
+     *
+     * <p>Read off both. Code copied here is written where it came from; code of its own is written
+     * wherever this text is, which is a module for a published text and is nothing to state for one
+     * a reader holds.
+     */
+    SourceProvenance codeIsWrittenIn() {
+        return code instanceof CopiedFrom(SourceProvenance from) ? from : text.ofItsOwn();
+    }
+
+    /** Which source of this compilation this text is, as a finished answer. Off the text alone. */
+    QuotedFrom quotedFrom() {
+        return switch (text) {
+            case ASourceOfThisCompile(SourceId source) ->
+                    new QuotedFrom.ASourceThisCompileHolds(source);
+            case AnUnnamedText _ -> new QuotedFrom.TextItCannotName();
+            case WhatAModulePublished(SourceProvenance module) ->
+                    new QuotedFrom.TextItCannotShow(module);
+        };
+    }
+
+    /** Whether this and {@code other} are in the same text, whatever is written in either. */
+    boolean isTheSameTextAs(Placement other) {
+        return text.equals(other.text);
+    }
 
     /** This placement as something a report may say about {@code at}. The one way what a position
-     *  stands in for reaches a reader, and package-private so that it stays the one way. */
-    abstract Citation cite(SourcePos at);
-
-    /**
-     * This text, standing in for code written where {@code declaring} says.
-     *
-     * <p>What an expansion gives a copy it cannot give its own positions, and what moving a report's
-     * caret gives the place it moved to. Not where a stand-in is first decided: that is settled where
-     * a text becomes positions, by the caller that knows what the text was. What this does is carry
-     * an answer already given to a text somewhere else.
-     *
-     * <p>Total over the four arms, because a body is spliced into whatever calls it and a call is in
-     * whatever text its caller is in — including a text this compile cannot name, and including a
-     * body already copied out of somewhere else. Both are reached today, and a splice that refused
-     * either would be refusing an ordinary compile.
-     *
-     * @throws NotWrittenElsewhere where {@code declaring} says its code is written at it. Standing in
-     *         for code written where the reader already is is not a thing to say
-     */
-    public final Placement standingInFor(Placement declaring) {
-        return withCodeWrittenIn(declaring.codeIsWrittenIn());
+     *  carries reaches a reader, and package-private so that it stays the one way. */
+    Citation cite(SourcePos at) {
+        SourceProvenance written = codeIsWrittenIn();
+        return switch (text) {
+            case ASourceOfThisCompile _ -> written == null
+                    ? new WrittenCitation(at) : new ReachedCitation(written, at);
+            case AnUnnamedText _ -> written == null
+                    ? new UnplacedCitation(at) : new UnplacedElsewhereCitation(written, at);
+            // A text nobody holds always says where its code came from, so there is no arm here for
+            // a citation with nowhere to point and nothing to say instead.
+            case WhatAModulePublished _ -> new OutOfSightCitation(written);
+        };
     }
 
     /**
-     * The same placement, the code in it reached by {@code name} — what a splice writes when it
-     * learns the name the call reaches, a parse of a published module having known only the module.
+     * This text, carrying code copied here from where {@code declaring} says.
      *
-     * <p>A refinement of one authority's answer and not a second answer: what kind of thing this
-     * compile is without is kept, and only the name a reader here writes for it is replaced.
+     * <p>What an expansion gives a copy it cannot give its own positions, and what moving a report's
+     * caret gives the place it moved to. Total over every state, because a body is spliced into
+     * whatever calls it and a call is in whatever text its caller is in — including one this compile
+     * cannot name, and including a body already copied out of somewhere else.
      *
-     * @throws NotWrittenElsewhere where the code is written at the position
+     * <p>The text is kept. A splice moves code, not files: a copy read against a caller's file is in
+     * that file, and one read against a text nobody named is in that text. Rewriting the text here is
+     * what the first version of this did, and it turned a snippet into a module's published text.
      */
-    final Placement reachedBy(String name) {
-        return withCodeWrittenIn(codeIsWrittenIn().reachedBy(name));
+    Placement standingInFor(DeclaringCode declaring) {
+        return new Placement(text, new CopiedFrom(declaring.provenance()));
     }
 
     /** The position of {@code line} and {@code column} in this text. */
-    public final SourcePos at(int line, int column) {
+    public SourcePos at(int line, int column) {
         return new SourcePos(line, column, this);
     }
 
     /** A file this compile holds, under the identity it holds it by. Its positions are where the
      *  code is, and they say which file they are in. */
     public static Placement aFileOfThisCompile(SourceId sourceId) {
-        return new InAFileOfThisCompile(
-                Objects.requireNonNull(sourceId, "a file of this compile is named"));
+        return new Placement(new ASourceOfThisCompile(sourceId), Native.IT);
     }
 
     /**
      * A text nobody has named — a buffer an editor is holding and has not saved, a snippet a caller
-     * parsed to look at the tree, a document being read before the compile knows what to call it.
+     * parsed to look at the tree.
      *
      * <p>Its positions are where the code is: what was read is what somebody wrote. What they do not
      * say is which file, so nothing built from them reaches a reader on its own, and a report made
      * against one is a report the caller has to place.
      */
     public static Placement aTextWithNoIdentity() {
-        return InAnUnnamedText.IT;
+        return new Placement(AnUnnamedText.IT, Native.IT);
     }
 
     /**
      * A text put back together out of what a module published, which this compile has no file for.
      *
      * <p>The positions are real positions in that text and are not where a reader can be sent, so
-     * they say so from the moment they are made. Everything downstream — a body spliced into a
-     * caller, a clause a construction is judged against, a guard that drew a line — reads the answer
-     * rather than working it out from the source being absent.
+     * they say so from the moment they are made. What they carry is that module's own code, which is
+     * where a report about them points a reader instead.
      *
      * <p>There is deliberately no way to say "reassembled, and here is its source id": a text put
      * back together out of what a module published is in no file, and a caller with a file for it is
      * reading a file.
      */
     public static Placement whatAModulePublished(SourceProvenance provenance) {
-        return new InWhatAModulePublished(
-                Objects.requireNonNull(provenance, "code out of sight came from somewhere"));
+        return new Placement(new WhatAModulePublished(provenance), Native.IT);
     }
 
-    /**
-     * A placement asked where its code came from when its code is written at it.
-     *
-     * <p>Marked, for the reason {@code DiagnosticPlace.NotAPlace} is: a caller that got here was
-     * branching on something other than the question, and an analysis that falls open would swallow
-     * an unmarked one and report a subject as having nothing wrong with it.
-     */
-    static final class NotWrittenElsewhere extends IllegalStateException
-            implements TheCompilerDisagreesWithItself {
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof Placement that && text.equals(that.text) && code.equals(that.code);
+    }
 
-        private static final long serialVersionUID = 1L;
+    @Override
+    public int hashCode() {
+        return Objects.hash(text, code);
+    }
 
-        NotWrittenElsewhere(Placement of) {
-            super("the code this names is written at it, so there is nothing to say about where it"
-                    + " came from: " + of);
-        }
+    @Override
+    public String toString() {
+        return "In[" + text + ", " + code + "]";
     }
 }

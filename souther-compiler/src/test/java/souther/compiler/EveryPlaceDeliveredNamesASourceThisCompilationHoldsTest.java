@@ -171,7 +171,8 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
             switch (citation) {
                 case Citation.OutOfSight out -> assertFalse(out.provenance().reachedBy().isEmpty(),
                         "what a reader is told instead of being pointed somewhere");
-                case Citation.Written _, Citation.Unplaced _, Citation.Reached _ -> { }
+                case Citation.Written _, Citation.Unplaced _, Citation.Reached _,
+                     Citation.UnplacedElsewhere _ -> { }
             }
         }
     }

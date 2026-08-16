@@ -93,7 +93,7 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * <p>What the two arms under this agree about, and the whole of it. Whether there is anywhere to
      * send a reader is the other question and is what tells them apart.
      */
-    sealed interface Elsewhere extends Citation permits Reached, OutOfSight {
+    sealed interface Elsewhere extends Citation permits Reached, UnplacedElsewhere, OutOfSight {
 
         /** Where that code came from, and the name a reader here reaches it by:
          *  {@code List.filter}. */
@@ -109,6 +109,19 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * only reached from one that had a name.
      */
     sealed interface Reached extends Elsewhere permits ReachedCitation {
+        SourcePos at();
+    }
+
+    /**
+     * The code is out of sight and {@link #at()} is a position in a text this compilation cannot
+     * name — a buffer the caller handed over, with a body from elsewhere spliced into it.
+     *
+     * <p>The caller can point at it and nobody else can, which is what tells this from
+     * {@link Reached}. What tells it from {@link Unplaced} is that there is a declaration to name,
+     * so a report still says where the code is written even though it cannot say which file the
+     * reader is looking at.
+     */
+    sealed interface UnplacedElsewhere extends Elsewhere permits UnplacedElsewhereCitation {
         SourcePos at();
     }
 
@@ -195,6 +208,7 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
             case Unplaced unplaced -> place(unplaced.at(), names, sectionSource);
             case Reached reached -> "`" + reached.provenance().reachedBy() + "`, reached at "
                     + place(reached.at(), names, sectionSource);
+            case UnplacedElsewhere out -> "`" + out.provenance().reachedBy() + "`";
             case OutOfSight out -> "`" + out.provenance().reachedBy() + "`";
         };
     }

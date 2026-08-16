@@ -95,7 +95,10 @@ public sealed interface DiagnosticPlace {
         return switch (Citation.of(region.start())) {
             case Citation.Written _, Citation.Reached _ -> new InSource(region);
             case Citation.OutOfSight out -> new Unavailable(out.provenance());
-            case Citation.Unplaced _ -> throw new NotAPlace(
+            // A position in a text the caller handed over is not one this compilation can send a
+            // reader to, whether or not it has a declaration to name. What is said instead is the
+            // label's to decide, and it has the citation.
+            case Citation.Unplaced _, Citation.UnplacedElsewhere _ -> throw new NotAPlace(
                     "a region naming no source is a place nobody settled, and a report may not"
                             + " settle it from where it happens to be shown: " + region);
         };

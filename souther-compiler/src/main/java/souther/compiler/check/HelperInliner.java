@@ -16,7 +16,8 @@ import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.Placement;
+import souther.compiler.diag.DeclaringCode;
+import souther.compiler.diag.QuotedFrom;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -1128,7 +1129,7 @@ public final class HelperInliner {
         // from inside it points at the user's call rather than at a line nobody holds — and the
         // stamp says that is what it is doing, so nothing downstream reads the call as the place the
         // code is written.
-        Placement declaring = whereTheBodyIs(call, helper);
+        DeclaringCode declaring = whereTheBodyIs(call, helper);
         Renaming renaming = new Renaming(arguments.subst(), new Copy(helper.writtenBody(), ours),
                 declaring == null ? null : call.pos().standingInFor(declaring),
                 declaring == null ? null : standingIn(call.region(), declaring));
@@ -1843,12 +1844,11 @@ public final class HelperInliner {
     }
 
     /**
-     * Where the body this call expands is written, as far as this compile can show it: {@link
-     * WrittenAt#HERE} when the copy may keep the positions it was written at, and what it stands in
-     * for when it may not.
+     * Where the body this call expands is written, or null when the copy may keep the positions it
+     * was written at — which is what both call sites branch on.
      *
-     * <p>Read off the body's own position rather than worked out here. Whether the code is out of
-     * sight was settled where the text it was parsed from was turned into positions, by the caller
+     * <p>Read off the body's own position rather than worked out here. Which text the body was
+     * parsed from was settled where that text was turned into positions, by the caller
      * that knew what that text was, and a second answer here would be a second authority — which is
      * what this was: it asked whether this compile could quote the place, and before that which
      * module declared the body. Both happened to agree while the only body from elsewhere was the
@@ -1865,15 +1865,16 @@ public final class HelperInliner {
      * when that body was copied. Either way its positions are the ones already decided for the body
      * holding it, and asking again would answer about the wrong thing.
      *
-     * <p>Nor is a declaration with no position of its own — one the compiler minted rather than read.
-     * It carries no provenance to read, so there is nothing to say about where its body came from,
-     * and a copy of it keeps whatever positions it has.
+     * <p>Nor is a declaration this compile can show. A body read from a file the reader holds keeps
+     * the positions it was written at, and so does one read from a text the caller handed over — the
+     * caller can put those numbers in front of somebody. Only a text this compile cannot show has a
+     * declaration to name instead, which is the question asked here.
      */
-    private Placement whereTheBodyIs(Hir.Apply call, Hir.FnDef helper) {
+    private DeclaringCode whereTheBodyIs(Hir.Apply call, Hir.FnDef helper) {
         if (call.answered() == null
                 || call.answered().denotes() instanceof ValueName.Local
                 || helper.pos() == null
-                || !helper.pos().isOutOfSight()) {
+                || !(helper.pos().quotedFrom() instanceof QuotedFrom.TextItCannotShow)) {
             return null;
         }
         // Reached rather than declared: `List.map` is what a reader here writes and what a report
@@ -1885,7 +1886,7 @@ public final class HelperInliner {
     /** {@code call}'s own place, said to stand in for a body written out of sight — what a copy that
      *  may not keep its own positions is given, ends and all, so no part of it claims to be written
      *  where the rest of it only stands. */
-    private static Region standingIn(Region call, Placement declaring) {
+    private static Region standingIn(Region call, DeclaringCode declaring) {
         if (call == null || call.start() == null || call.end() == null) {
             return call;
         }

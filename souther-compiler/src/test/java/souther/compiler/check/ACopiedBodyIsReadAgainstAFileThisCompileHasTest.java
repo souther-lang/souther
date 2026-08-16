@@ -10,6 +10,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.DeclaringCode;
 import souther.compiler.diag.Placement;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
@@ -91,7 +92,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
     void andSomeOfThemWereCopiedFromOutOfSight() {
         List<SourcePos> positions = positionsIn(expanded(OVER_THE_LIBRARY, "kept"));
 
-        assertFalse(positions.stream().noneMatch(SourcePos::isOutOfSight),
+        assertFalse(positions.stream().noneMatch(SourcePos::wasCopiedHere),
                 "the fixture expands a library body, so some of what was walked came from one");
     }
 
@@ -105,7 +106,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
 
         assertTrue(positions.stream().anyMatch(p -> p.isIn(new SourceId("up.sou"))),
                 "the imported body was spliced in, keeping the file it was written in");
-        assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
+        assertEquals(List.of(), positions.stream().filter(SourcePos::wasCopiedHere).toList(),
                 "a place this compile can show is not a place anything stands in for");
     }
 
@@ -123,10 +124,10 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
 
         assertEquals(List.of(), positions.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds)).toList(),
                 "every coordinate the backend is built from names a source this compile has");
-        Placement spliced = Placement.aFileOfThisCompile(new SourceId("down.sou"))
-                .standingInFor(Placement.whatAModulePublished(
+        SourcePos spliced = Placement.aFileOfThisCompile(new SourceId("down.sou")).at(1, 1)
+                .standingInFor(new DeclaringCode(
                         new SourceProvenance.APublishedModule("up", "up.doubled")));
-        assertTrue(positions.stream().anyMatch(p -> spliced.equals(p.placement())),
+        assertTrue(positions.stream().anyMatch(p -> spliced.placement().equals(p.placement())),
                 "the body came from a module read off the path, and the lowering did not forget");
     }
 

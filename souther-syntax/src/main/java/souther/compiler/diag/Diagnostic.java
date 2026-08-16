@@ -153,7 +153,7 @@ public final class Diagnostic {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
-        Placement declaring = Placement.whatAModulePublished(provenance);
+        DeclaringCode declaring = new DeclaringCode(provenance);
         List<LabeledRegion> also = new ArrayList<>(secondary);
         for (SourcePos other : where.subList(1, where.size())) {
             also.add(new LabeledRegion(Region.point(other.standingInFor(declaring)), alsoHere));
@@ -253,9 +253,11 @@ public final class Diagnostic {
          * The place, over the {@code width} units of text it is about — and over none of them where
          * the place only stands in for code written out of sight.
          *
-         * <p>The width is measured on the text the report is about, and where that text is out of
-         * sight the coordinate is somewhere else: a call in the caller's file, whose own text is
-         * whatever length it happens to be. Underlining a construction's width from there covers
+         * <p>The width is measured on the text the report is about, and where the code was copied
+         * here the position is somewhere else: a call in the caller's file, whose own text is
+         * whatever length it happens to be. A position in a published module's own text is not that
+         * — the numbers are that text's, and its width is the code's — so what this asks is whether
+         * the position was borrowed, not whether a reader can be sent to it. Underlining a construction's width from there covers
          * however many characters of the call the two numbers happen to agree on — three columns
          * sized for {@code Yen} landing on {@code atL}. A point claims what is true, which is that
          * this is where the code was reached from.
@@ -264,7 +266,7 @@ public final class Diagnostic {
             if (pos == null) {
                 this.region = null;
             } else {
-                this.region = pos.isOutOfSight() ? Region.point(pos) : Region.ofWidth(pos, width);
+                this.region = pos.wasCopiedHere() ? Region.point(pos) : Region.ofWidth(pos, width);
             }
             return this;
         }

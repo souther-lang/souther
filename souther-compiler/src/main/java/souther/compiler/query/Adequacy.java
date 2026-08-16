@@ -1747,18 +1747,18 @@ public final class Adequacy {
                             case souther.compiler.diag.Citation.Written w ->
                                     built.secondary(souther.compiler.diag.Region.point(w.at()),
                                             new ExampleMessage.TheGuardThatDrawsTheLine());
-                            case souther.compiler.diag.Citation.Unplaced u ->
-                                    built.secondary(souther.compiler.diag.Region.point(u.at()),
-                                            new ExampleMessage.TheGuardThatDrawsTheLine());
                             case souther.compiler.diag.Citation.Reached r ->
                                     built.secondary(souther.compiler.diag.Region.point(r.at()),
                                             new ExampleMessage.TheGuardThatDrawsTheLine());
-                            // The guard is inside the module's own text, which this compile has no
-                            // file for, so there is nothing to put a marker under and the label says
-                            // where the code came from instead.
-                            case souther.compiler.diag.Citation.OutOfSight o ->
-                                    built.secondaryOutOfSight(o.provenance(),
+                            // Nowhere this compilation can put a marker. Where the guard is written
+                            // out of sight the label says so instead; where it is in a text the
+                            // caller handed over there is no declaration to name and nothing to say,
+                            // so there is no label. A marker over such a region is not an option:
+                            // a place a reader is sent to names its source, and this one cannot.
+                            case souther.compiler.diag.Citation.Elsewhere e ->
+                                    built.secondaryOutOfSight(e.provenance(),
                                             new ExampleMessage.TheGuardThatDrawsTheLine());
+                            case souther.compiler.diag.Citation.Unplaced _ -> { }
                         }
                     });
                 }
@@ -1782,9 +1782,10 @@ public final class Adequacy {
                 case Citation.Written written -> written.at();
                 case Citation.Unplaced unplaced -> unplaced.at();
                 case Citation.Reached reached -> reached.at();
-                // Nowhere. The finding is about code inside a module's own text, and a warning with
-                // no caret is what a report says when there is nothing to point at — the sentence
-                // still names the behavior and the rule, which is what it is about.
+                case Citation.UnplacedElsewhere out -> out.at();
+                // Nowhere: the finding is about code inside a module's own text. The warning is
+                // filed against the module all the same, and the reading that puts a report where a
+                // reader can be sent moves it to the import line that reached it.
                 case Citation.OutOfSight _ -> null;
             };
         }

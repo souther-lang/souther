@@ -111,7 +111,7 @@ class EverySchemaWordIsAccountedForTest {
     private static Set<String> writtenAtWords() {
         SourcePos here = new SourcePos(1, 1, new SourceId("s"));
         return java.util.stream.Stream
-                .of(here, here.standingInFor(Placement.whatAModulePublished(
+                .of(here, here.standingInFor(new souther.compiler.diag.DeclaringCode(
                         new SourceProvenance.TheStandardLibrary("List.filter"))))
                 .map(pos -> Citation.of(pos).writtenAtFields().get("kind"))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));

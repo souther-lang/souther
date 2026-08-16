@@ -13,8 +13,8 @@ import java.util.Objects;
  * is written for everything a source was read for and is not for a copy that could not keep its own
  * positions. So this answers where to send a reader and never, on its own, where the code is
  * written. What answers that is a {@link Citation}, which a report holds instead of a position; a
- * pass that wants only to know whether the place is a stand-in asks {@link #isOutOfSight()}. Neither
- * is inferred from the line: inferring it is what {@code BottomInfer} did, by comparing an
+ * pass that wants only to know whether the position was borrowed asks {@link #wasCopiedHere()}.
+ * Neither is inferred from the line: inferring it is what {@code BottomInfer} did, by comparing an
  * argument's position with its call's, and what {@code HelperInliner} did, by comparing the
  * declaring module with its own.
  *
@@ -31,11 +31,11 @@ import java.util.Objects;
  * editor asking what is under a cursor — it compares the numbers, which is what {@code Names.spans}
  * does.
  *
- * <p>One component and not two. Which file this is in and whether the code is written here are two
- * questions, and only four of their nine combinations are places this compiler makes: the pair is
- * what is legal, so the pair is what is held. Kept apart, every reader worked the classification out
- * again from whichever half it had, and a null source meant "out of sight" to one of them, "the
- * diagnostic's own file" to another and "drop this" to two more.
+ * <p>One component and not two. This used to be a source identity that could be null beside a
+ * separate answer about the code, which is nine combinations for the places this compiler makes, and
+ * every reader worked the classification out again from whichever half it had: a null source meant
+ * "out of sight" to one of them, "the diagnostic's own file" to another and "drop this" to two more.
+ * What a {@link Placement} holds is which text and whose code, and every pair of those is legal.
  *
  * @param line the 1-based line this node is placed at
  * @param column the 1-based column this node is placed at, in UTF-16 code units
@@ -62,10 +62,6 @@ public record SourcePos(int line, int column, Placement placement) {
     /** The source this is in, or null where the text it is in has no identity in this compilation.
      *  A {@link SourceId} rather than a name, so that what a caller chose to call a module cannot
      *  arrive here instead. */
-    SourceId sourceId() {
-        return placement.sourceId();
-    }
-
     /**
      * Which source of this compilation this is read from, and what to say where it is none.
      *
@@ -80,14 +76,22 @@ public record SourcePos(int line, int column, Placement placement) {
 
     /** Whether this is a position in {@code source}. */
     public boolean isIn(SourceId source) {
-        return source.equals(placement.sourceId());
+        return placement.quotedFrom()
+                instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file)
+                && file.equals(source);
     }
 
-    /** Whether this and {@code other} are in the same text — the same file, or neither of them a
-     *  file this compilation has named. Said of the text and not of what is written in it: a body
+    /** Whether this and {@code other} are in the same text, whatever is written in either: a body
      *  spliced into a file is in that file. */
     public boolean isInTheSameTextAs(SourcePos other) {
         return placement.isTheSameTextAs(other.placement);
+    }
+
+    /** Whether the code at this position was copied here rather than written at it — what sizes an
+     *  underline, and what tells an empty literal the author wrote from one that arrived inside a
+     *  copied body. Not whether a reader can be sent here, which is {@link DiagnosticPlace}'s. */
+    public boolean wasCopiedHere() {
+        return placement.code() instanceof Placement.CopiedFrom;
     }
 
     /**
@@ -105,35 +109,49 @@ public record SourcePos(int line, int column, Placement placement) {
      * <p>What it keeps is which text this is in, and what it replaces is what the code in it is. The
      * two are the two questions a {@link Placement} answers, and a splice moves exactly one of them.
      *
-     * @throws Placement.NotWrittenElsewhere where {@code declaring} says its code is written at it.
-     *         Standing in for code written at this very position is not a thing to say, and a caller
-     *         that reached here was branching on something other than the question
      */
-    public SourcePos standingInFor(Placement declaring) {
+    public SourcePos standingInFor(DeclaringCode declaring) {
         return new SourcePos(line, column, placement.standingInFor(declaring));
     }
 
     /**
-     * What this says about where its code is written, reached by {@code name} instead — what a
-     * splice writes when it learns the name the call reaches, a parse of a published module having
-     * known only the module.
+     * Where the code this position names is written, reached by {@code name} — what a splice is
+     * told, when it has learned the name the call reaches.
      *
-     * @throws Placement.NotWrittenElsewhere where the code this names is written at it
+     * @throws NotWrittenElsewhere where the code this names is written at it in a text a reader
+     *         holds. There is no declaration to name for code the reader is already looking at, and
+     *         a caller that got here was branching on something other than the question
      */
-    public Placement reachedBy(String name) {
-        return placement.reachedBy(name);
+    public DeclaringCode reachedBy(String name) {
+        SourceProvenance written = placement.codeIsWrittenIn();
+        if (written == null) {
+            throw new NotWrittenElsewhere(this);
+        }
+        return new DeclaringCode(written.reachedBy(name));
+    }
+
+    /**
+     * A position asked where its code came from when its code is written at it.
+     *
+     * <p>Marked, for the reason {@code DiagnosticPlace.NotAPlace} is: a caller that got here was
+     * branching on something other than the question, and an analysis that falls open would swallow
+     * an unmarked one and report a subject as having nothing wrong with it.
+     */
+    public static final class NotWrittenElsewhere extends IllegalStateException
+            implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        NotWrittenElsewhere(SourcePos of) {
+            super("the code this names is written at it, so there is nothing to say about where it"
+                    + " came from: " + of);
+        }
     }
 
     /** The same place, {@code units} along the same line — the other end of a region of that width.
      *  It stands in for whatever this stands in for: the two ends are one place. */
     public SourcePos along(int units) {
         return new SourcePos(line, column + units, placement);
-    }
-
-    /** Whether the code this names is written somewhere this compile cannot show, this position
-     *  being where it was reached from instead. */
-    public boolean isOutOfSight() {
-        return !placement.codeIsWrittenHere();
     }
 
     @Override

@@ -916,7 +916,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         SourcePos pos = switch (where) {
             case Citation.Written written -> written.at();
             case Citation.Reached reached -> reached.at();
-            case Citation.Unplaced _, Citation.OutOfSight _ -> throw new NoPlaceToWrite(where);
+            case Citation.Unplaced _, Citation.UnplacedElsewhere _, Citation.OutOfSight _ ->
+                    throw new NoPlaceToWrite(where);
         };
         if (!(pos.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file))) {
             throw new NoPlaceToWrite(where);

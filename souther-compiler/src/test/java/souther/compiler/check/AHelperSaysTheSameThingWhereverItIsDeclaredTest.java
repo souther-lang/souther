@@ -13,6 +13,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.DeclaringCode;
 import souther.compiler.diag.Placement;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.WrittenAtMessage;
@@ -78,7 +79,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said());
         assertEquals("Yen", quoted(ONE_MODULE, one.region()),
                 "the caret is on the construction, which is what the rule is about");
-        assertFalse(one.pos().isOutOfSight(),
+        assertFalse(one.pos().wasCopiedHere(),
                 "the construction is in a file this compile has, so the caret is at the code");
     }
 
@@ -96,7 +97,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
                 "the caret is on the construction, in the file the helper is written in");
         assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("up.sou")),
                 one.pos().quotedFrom());
-        assertFalse(one.pos().isOutOfSight());
+        assertFalse(one.pos().wasCopiedHere());
     }
 
     /**
@@ -154,9 +155,10 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said(),
                 "the rule broken is the same rule");
-        assertEquals(Placement.aFileOfThisCompile(new SourceId("down.sou"))
-                        .standingInFor(Placement.whatAModulePublished(
-                                new SourceProvenance.APublishedModule("up", "up.atLeastZero"))),
+        assertEquals(Placement.aFileOfThisCompile(new SourceId("down.sou")).at(1, 1)
+                        .standingInFor(new DeclaringCode(
+                                new SourceProvenance.APublishedModule("up", "up.atLeastZero")))
+                        .placement(),
                 one.pos().placement(),
                 "the caret is in the file the reader is compiling, since there is no other, and it"
                         + " says the code it names is written where that file cannot show");

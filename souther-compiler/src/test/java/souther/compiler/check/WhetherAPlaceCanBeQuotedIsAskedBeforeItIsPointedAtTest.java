@@ -6,6 +6,7 @@ import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.DeclaringCode;
 import souther.compiler.diag.Placement;
 
 import org.junit.jupiter.api.Test;
@@ -106,7 +107,7 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
                         new SourcePos(3, 20, new SourceId("model.sou")).standingInFor(
-                                Placement.whatAModulePublished(
+                                new DeclaringCode(
                                         new SourceProvenance.APublishedModule("lib.a"))))));
     }
 

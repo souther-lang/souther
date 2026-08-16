@@ -168,8 +168,7 @@ class ASecondaryRegionNamesItsFileTest {
 
         assertEquals(List.of(new SourceId("rows")), view.others().stream().map(Spot::sourceId).toList());
         assertEquals(new SourceId("rows"), ((DiagnosticPlace.InSource)
-                        withSecondary("rows").secondary().get(0).place()).region()
-                        .start().sourceId());
+                        withSecondary("rows").secondary().get(0).place()).source());
     }
 
     @Test

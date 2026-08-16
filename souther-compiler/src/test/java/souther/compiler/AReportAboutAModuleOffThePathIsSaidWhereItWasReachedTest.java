@@ -347,10 +347,10 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
         Set<String> saidAbout = new LinkedHashSet<>();
         for (Db.Found found : compilation.reports()) {
             SourcePos at = found.report().diagnostic().pos();
-            if (at == null || !at.isOutOfSight()) {
+            if (at == null || !(Citation.of(at) instanceof Citation.Elsewhere elsewhere)) {
                 continue;
             }
-            String stands = ((Citation.Elsewhere) Citation.of(at)).provenance().reachedBy();
+            String stands = elsewhere.provenance().reachedBy();
             saidAbout.add(stands);
             // Every file it is said in, and not only the one the caret is in: a second place is
             // said as a labelled region, and claiming a file that never reaches this module is

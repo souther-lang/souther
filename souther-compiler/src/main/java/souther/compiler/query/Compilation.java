@@ -524,8 +524,7 @@ public final class Compilation {
     private Db.Found citable(Db.Found found) {
         Diagnostic said = found.report().diagnostic();
         SourcePos at = said.pos();
-        if (at == null || found.module() == null
-                || !(Citation.of(at) instanceof Citation.OutOfSight out)) {
+        if (found.module() == null || !needsAPlace(at)) {
             return found;
         }
         Front.FromPath.OnThePath onThePath = Front.onThePath(db, found.module());
@@ -533,8 +532,25 @@ public final class Compilation {
             return found;
         }
         return new Db.Found(found.module(), found.sourceId(), Report.of(
-                said.reachedFrom(onThePath.reachedFrom(), out.provenance(),
+                said.reachedFrom(onThePath.reachedFrom(),
+                        souther.compiler.meta.ModuleReadback.provenanceOf(found.module()),
                         new ModuleMessage.ItIsReachedFromHereToo())));
+    }
+
+    /**
+     * Whether a report pointing at {@code at} has nowhere a reader can be sent.
+     *
+     * <p>Two ways to have nowhere, and both are moved. A report inside a module's own published text
+     * points at a line nobody holds. A report with no region at all points at nothing — which is what
+     * a finding about such a text comes out as once the place it could not offer is no longer
+     * fabricated, and leaving it there would be trading one silence for another.
+     *
+     * <p>What it is moved to comes from the module this walk was about rather than from whatever the
+     * report happened to carry, so a report with nothing to read it off is moved on the same terms as
+     * one that had a position.
+     */
+    private static boolean needsAPlace(SourcePos at) {
+        return at == null || Citation.of(at) instanceof Citation.OutOfSight;
     }
 
     /** The one failure these sources have, or null when they have none. */
