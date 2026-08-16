@@ -55,6 +55,11 @@ final class StandingInFor extends Placement {
     }
 
     @Override
+    QuotedFrom quotedFrom() {
+        return new QuotedFrom.ASourceThisCompileHolds(sourceId);
+    }
+
+    @Override
     Citation cite(SourcePos at) {
         return new ReachedCitation(provenance, at);
     }

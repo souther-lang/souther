@@ -37,6 +37,11 @@ final class InAFileOfThisCompile extends Placement {
     }
 
     @Override
+    QuotedFrom quotedFrom() {
+        return new QuotedFrom.ASourceThisCompileHolds(sourceId);
+    }
+
+    @Override
     Citation cite(SourcePos at) {
         return new WrittenCitation(at);
     }

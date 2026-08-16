@@ -47,6 +47,11 @@ final class InWhatAModulePublished extends Placement {
     }
 
     @Override
+    QuotedFrom quotedFrom() {
+        return new QuotedFrom.TextItCannotShow(provenance);
+    }
+
+    @Override
     Citation cite(SourcePos at) {
         return new OutOfSightCitation(provenance);
     }

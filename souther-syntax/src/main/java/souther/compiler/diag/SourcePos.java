@@ -67,6 +67,30 @@ public record SourcePos(int line, int column, Placement placement) {
     }
 
     /**
+     * Which source of this compilation this is read from, and what to say where it is none.
+     *
+     * <p>The one way to ask which file a position is in. What used to be asked of a source identity
+     * that could be null, by five consumers that each read the absence as an answer to a question of
+     * their own — {@link QuotedFrom} says why there is no file, and leaves what to do about it where
+     * it belongs.
+     */
+    public QuotedFrom quotedFrom() {
+        return placement.quotedFrom();
+    }
+
+    /** Whether this is a position in {@code source}. */
+    public boolean isIn(SourceId source) {
+        return source.equals(placement.sourceId());
+    }
+
+    /** Whether this and {@code other} are in the same text — the same file, or neither of them a
+     *  file this compilation has named. Said of the text and not of what is written in it: a body
+     *  spliced into a file is in that file. */
+    public boolean isInTheSameTextAs(SourcePos other) {
+        return placement.isTheSameTextAs(other.placement);
+    }
+
+    /**
      * This position, standing in for code written where {@code declaring} says — what an expansion
      * gives a copy it cannot give its own positions, and what moving a report's caret gives the
      * place it moved to.

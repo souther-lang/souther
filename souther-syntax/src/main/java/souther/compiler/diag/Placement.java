@@ -117,10 +117,26 @@ public sealed abstract class Placement
      */
     abstract boolean codeIsWrittenHere();
 
-    /** The source this compilation files the text under, or null where it names none. Read by
-     *  {@link SourcePos} and by the projections in this package, and by nothing else: outside them
-     *  its absence is not an answer to any question anybody has. */
+    /** The source this compilation files the text under, or null where it names none. Read by the
+     *  projections in this package, and by nothing else: outside them its absence is not an answer
+     *  to any question anybody has. */
     abstract SourceId sourceId();
+
+    /** Which source of this compilation this text is, as a finished answer a caller can act on.
+     *  The one way to ask which file a position is in. */
+    abstract QuotedFrom quotedFrom();
+
+    /**
+     * Whether this is the same text as {@code other} — the same file, or neither of them a file this
+     * compilation has named.
+     *
+     * <p>Said of the text and not of what is written in it. A body spliced into a file is in that
+     * file, so a walk asking whether two places are the one line a reader is looking at gets the same
+     * answer for a copied node as for the node beside it.
+     */
+    final boolean isTheSameTextAs(Placement other) {
+        return Objects.equals(sourceId(), other.sourceId());
+    }
 
     /**
      * Where the code is written, for an arm that says it is written elsewhere.

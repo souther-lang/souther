@@ -47,6 +47,11 @@ final class InAnUnnamedText extends Placement {
     }
 
     @Override
+    QuotedFrom quotedFrom() {
+        return new QuotedFrom.TextItCannotName();
+    }
+
+    @Override
     Citation cite(SourcePos at) {
         return new UnplacedCitation(at);
     }
