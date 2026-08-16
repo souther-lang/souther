@@ -493,7 +493,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 List.of(), java.util.Set.of(), java.util.Set.of(),
                 MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY));
         assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
-                "a", "a", List.of(), java.util.Set.of(), List.of(), 0,
+                "a", "a", List.of(), java.util.Set.of(), List.of(), List.of(), 0,
                 MeasurementStatus.NOT_MEASURED, null));
 
         // The kinds are held against each other and not only for presence. A measure carrying a

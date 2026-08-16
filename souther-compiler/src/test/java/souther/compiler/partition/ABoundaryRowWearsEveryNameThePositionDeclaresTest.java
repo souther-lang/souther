@@ -95,7 +95,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         GuardThresholds.Guards guards = GuardThresholds.of(spec.name(), body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols, Exclusions.NONE),
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols),
                 guards.thresholds(), symbols);
 
         List<String> names = new ArrayList<>();

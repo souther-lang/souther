@@ -166,7 +166,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         GuardThresholds.Guards guards = GuardThresholds.of("f", body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("f"), symbols), symbols, Exclusions.NONE),
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("f"), symbols), symbols),
                 guards.thresholds(), symbols, List.of(), guards.singled());
 
         List<String> classes = new ArrayList<>();

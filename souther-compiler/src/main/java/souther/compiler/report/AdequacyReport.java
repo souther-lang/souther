@@ -530,8 +530,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * reasons has no one sentence about it, and picking one would say something the model does not.
      */
     private static String why(PartitionEvidence.ExcludedClass ruled) {
-        return ruled.reasons().size() == 1 ? ": " + ruled.reasons().get(0)
-                : ruled.reasons().isEmpty() ? "" : " on every path";
+        return because(ruled.reasons());
+    }
+
+    /** The model's own words for a claim, where there is one to print. */
+    private static String because(List<String> reasons) {
+        return reasons.size() == 1 ? ": " + reasons.get(0)
+                : reasons.isEmpty() ? "" : " on every path";
+    }
+
+    /** What a reader is told about a claim nothing settled, in this report's own words. */
+    private static String unproven(PartitionEvidence.UnprovenClaim.Why why) {
+        return switch (why) {
+            case A_RULE_WENT_UNREAD -> "a rule about this position went unread";
+            case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
+                    "the rules leave this position no value at all";
+            case NOTHING_WAS_READ_ABOUT_THE_CASE -> "nothing was read about this case";
+        };
     }
 
     /**
@@ -580,6 +595,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 for (PartitionEvidence.ExcludedClass ruled : axis.excluded()) {
                     out.append(String.format("      · `%s` is declared unreachable%s%n",
                             ruled.classId(), why(ruled)));
+                }
+                // Owed a row and said all the same. The case is counted — nothing proved it cannot
+                // arrive — and the model already says a row at it aborts, so a reader is told both
+                // rather than left to find out by writing one.
+                for (PartitionEvidence.UnprovenClaim claim : axis.unproven()) {
+                    out.append(String.format(
+                            "      · `%s` is declared unreachable%s, and nothing here proves it: %s%n",
+                            claim.classId(), because(claim.reasons()), unproven(claim.why())));
                 }
             }
         }
@@ -787,7 +810,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private static String whyUnresolved(souther.compiler.partition.Generator.UnresolvedCombination why) {
         String at = why.subject();
         return switch (why.reason()) {
-            case NO_CLASS_OPEN_AT_POSITION -> "the body leaves no class open at " + at;
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
             case SEARCH_LIMIT -> "the search stopped before reaching " + at;
@@ -1011,6 +1033,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 ObjectNode e = excluded.addObject();
                 e.put("class", ruled.classId());
                 ruled.reasons().forEach(e.putArray("reasons")::add);
+            }
+            ArrayNode unproven = a.putArray("unprovenClaims");
+            for (PartitionEvidence.UnprovenClaim claim : axis.unproven()) {
+                ObjectNode u = unproven.addObject();
+                u.put("class", claim.classId());
+                claim.reasons().forEach(u.putArray("reasons")::add);
+                u.put("why", word(claim.why()));
             }
             a.put("unclassifiedRows", axis.unclassifiedRows());
             measured(a, axis.status(), axis.reason());

@@ -122,6 +122,6 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
-        return new Read(Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols, Exclusions.NONE), symbols);
+        return new Read(Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols), symbols);
     }
 }

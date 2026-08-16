@@ -65,27 +65,33 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 | "on" : (Active(On)) -> Answer(1)
             """;
 
-    /** A body that declares a case cannot arrive where the type says it can. What the measures do
-     * with the claim is what the axis assertions below are about. */
-    private static final String MODEL = """
+    /**
+     * A claim nothing settles.
+     *
+     * <p>{@code f /= g} refuses pairs and no value of {@code f} on its own, and it is a rule this
+     * compiler does not take into what a position may hold — so nothing here says whether an
+     * {@code Off} arrives, and the case keeps what it was owed.
+     */
+    private static final String UNPROVEN = """
             module example.probe
 
             data On
             data Off
             data Pending
             data Flag = On | Off | Pending
+            data T = { f: Flag, g: Flag } invariant f /= g
             data Answer = Int
 
-            behavior pick : (f: Flag) -> Answer
+            behavior pick : (t: T) -> Answer
                 constructs Answer
 
-            let pick (f) = match f with
+            let pick (t) = match t.f with
                 | On      -> Answer(1)
                 | Pending -> Answer(0)
                 | Off     -> unreachable "the probe never passes Off"
 
             example pick
-                | "on" : (On) -> Answer(1)
+                | "on" : (T { f = On, g = Off }) -> Answer(1)
             """;
 
     private static Compilation measured(String source) {
@@ -198,7 +204,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
 
     @Test
     void thePositionIsDividedIntoWhatARowCanBeWrittenAt() {
-        PartitionEvidence.AxisCoverage axis = axis(MODEL);
+        PartitionEvidence.AxisCoverage axis = axis(RULED_OUT);
 
         assertEquals(List.of("On", "Pending"), axis.classes());
         assertEquals(List.of("Pending"), axis.uncovered());
@@ -210,8 +216,60 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      * it took out, and why. */
     @Test
     void whyItIsRuledOutIsTheReasonTheModelWrote() {
-        assertEquals(List.of("the probe never passes Off"),
-                axis(MODEL).excluded().get(0).reasons());
+        assertEquals(List.of("an Active is never Off"),
+                axis(RULED_OUT).excluded().get(0).reasons());
+    }
+
+    /**
+     * A claim nothing settled leaves the case owed, and says that it did not settle it.
+     *
+     * <p>Both halves. What removes an obligation is a proof, so the case is counted; and what an
+     * author needs beside the gap is that the model already declares the row cannot be written, and
+     * that nothing here could tell whether that is so — an exclusion that is both unproven and
+     * silent is the one an author cannot act on.
+     */
+    @Test
+    void aClaimNothingSettledIsCountedAndSaid() {
+        PartitionEvidence.AxisCoverage axis = axis(UNPROVEN, "t.f");
+
+        assertEquals(List.of("On", "Off", "Pending"), axis.classes());
+        assertEquals(List.of(), axis.excluded());
+        assertEquals(List.of("Off"),
+                axis.unproven().stream().map(PartitionEvidence.UnprovenClaim::classId).toList());
+        assertEquals(List.of("the probe never passes Off"), axis.unproven().get(0).reasons());
+        assertEquals(PartitionEvidence.UnprovenClaim.Why.A_RULE_WENT_UNREAD,
+                axis.unproven().get(0).why());
+    }
+
+    /**
+     * A claim the model's own rules contradict is refused where it is written.
+     *
+     * <p>The one answer that is not a measure's. Nothing stands between the fork and the caller, so
+     * `B` arrives whenever a caller passes one — and the arm says the model aborts there. What the
+     * diagnostic names is the case, the position it arrives at, and the declaration that admits it.
+     */
+    @Test
+    void aClaimTheRulesContradictIsRefused() {
+        CompileException refused = org.junit.jupiter.api.Assertions.assertThrows(
+                CompileException.class, () -> Compiler.compile("""
+                        module example.probe
+
+                        data A
+                        data B
+                        data Kind = A | B
+                        data Answer = Int
+
+                        behavior pick : (k: Kind) -> Answer
+                            constructs Answer
+
+                        let pick (k) = match k with
+                            | A -> Answer(1)
+                            | B -> unreachable "B never arrives"
+                        """));
+
+        assertEquals("E1326", refused.diagnostics().get(0).code(), refused.getMessage());
+        assertTrue(refused.getMessage().contains("`B` can arrive at `k`"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("case of `Kind`"), refused.getMessage());
     }
 
     /**
@@ -232,20 +290,21 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 data On
                 data Off
                 data Flag = On | Off
+                data Active = Flag invariant value /= Off
                 data Answer = Int
                 data Boxed = { a: Answer, b: Answer }
 
-                behavior pick : (f: Flag) -> Answer
+                behavior pick : (f: Active) -> Answer
                     constructs Answer, Boxed
 
-                let pick (f) = match f with
+                let pick (f) = match f.value with
                     | On  -> Answer(1)
                     | Off -> Boxed { b = unreachable "written first and evaluated second"
                                    , a = unreachable "declared first, so this is where it stops"
                                    }.a
 
                 example pick
-                    | "on" : (On) -> Answer(1)
+                    | "on" : (Active(On)) -> Answer(1)
                 """;
 
         assertEquals(List.of("declared first, so this is where it stops"),
@@ -257,22 +316,23 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 data On
                 data Off
                 data Flag = On | Off
+                data Active = Flag invariant value /= Off
                 data Yes
                 data No
                 data Mark = Yes | No
                 data Answer = Int
 
-                behavior pick : (f: Flag, m: Mark) -> Answer
+                behavior pick : (f: Active, m: Mark) -> Answer
                     constructs Answer
 
-                let pick (f, m) = match f with
+                let pick (f, m) = match f.value with
                     | On  -> Answer(1)
                     | Off -> match m with
                                  | Yes -> unreachable "not a marked Off"
                                  | No  -> unreachable "nor an unmarked one"
 
                 example pick
-                    | "on" : (On, Yes) -> Answer(1)
+                    | "on" : (Active(On), Yes) -> Answer(1)
                 """;
 
         assertEquals(List.of("not a marked Off", "nor an unmarked one"),
@@ -333,13 +393,13 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      */
     @Test
     void everyRowTheGeneratorOffersCompiles() {
-        String offered = GeneratedRows.of(measured(MODEL), "example.probe", "pick", false,
+        String offered = GeneratedRows.of(measured(RULED_OUT), "example.probe", "pick", false,
                 SourceNameResolver.identity());
 
         assertTrue(offered.contains("(Pending)"), offered);
         assertFalse(offered.contains("(Off)"), offered);
 
-        String answered = MODEL + "\n" + uncommented(offered).replace("<?>", "Answer(0)");
+        String answered = RULED_OUT + "\n" + uncommented(offered).replace("<?>", "Answer(0)");
         Compilation amended = Compilation.ofSource(answered, "Main");
         amended.answerEverything();
         assertEquals(List.of(), amended.db().allReports().stream()
@@ -415,20 +475,21 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 data On
                 data Off
                 data Flag = On | Off
+                data Active = Flag invariant value /= Off
                 data Answer = Int
 
-                behavior pick : (f: Flag) -> Answer
+                behavior pick : (f: Active) -> Answer
                     constructs Answer
 
                 let pick (f) = {
                     let one = 1
-                    match f with
+                    match f.value with
                         | On  -> Answer(one)
                         | Off -> unreachable "the probe never passes Off"
                 }
 
                 example pick
-                    | "on" : (On) -> Answer(1)
+                    | "on" : (Active(On)) -> Answer(1)
                 """;
 
         assertEquals(List.of("Off"),
@@ -512,10 +573,8 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     @Test
     void theArmUnderTheForkIsStillNotAnArm() {
         CompileException refused = org.junit.jupiter.api.Assertions.assertThrows(
-                CompileException.class, () -> Compiler.compile(MODEL + """
-
-                        example pick
-                            | "off" : (Off) -> Answer(0)
+                CompileException.class, () -> Compiler.compile(UNPROVEN + """
+                            | "off" : (T { f = Off, g = On }) -> Answer(0)
                         """));
 
         assertEquals("E1911", refused.diagnostics().get(0).code(), refused.getMessage());

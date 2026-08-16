@@ -214,7 +214,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");
         Partitions.Partitioning p =
-                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols, Exclusions.NONE);
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.obligationsOf(axis, symbols,
                         p.domains().get(axis.term())).stream())

@@ -15,8 +15,10 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.claims.ClaimVerdict;
+import souther.compiler.claims.Claims;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.partition.Exclusions;
+import souther.compiler.inputs.Unsettlement;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.partition.OriginRef;
@@ -49,15 +51,13 @@ final class Coverages {
      */
     static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
                                                   Sig sig, Symbols symbols,
-                                                  Core body, CoverageSites.Plan plan,
-                                                  Exclusions excluded) {
+                                                  Core body, CoverageSites.Plan plan) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
-        Partitions.Partitioning partitioning =
-                Partitions.of(behavior.name(), inputs, symbols, excluded);
+        Partitions.Partitioning partitioning = Partitions.of(behavior.name(), inputs, symbols);
         if (body == null) {
             return partitioning;
         }
@@ -77,7 +77,7 @@ final class Coverages {
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
                                 Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
-                                List<BoundaryAssessment> boundaries, Exclusions excluded) {
+                                List<BoundaryAssessment> boundaries, Claims claims) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
@@ -85,7 +85,7 @@ final class Coverages {
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, body, plan, excluded);
+                partitioningOf(behavior, inputs, sig, symbols, body, plan);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
@@ -97,7 +97,7 @@ final class Coverages {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, readings, excluded));
+                axes.add(coverageOf(axis, readings, claims));
                 divided.add(axis);
             }
         }
@@ -212,7 +212,7 @@ final class Coverages {
         long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
-                total += (long) axes.get(i).eligible().size() * axes.get(j).eligible().size();
+                total += (long) axes.get(i).classes().size() * axes.get(j).classes().size();
             }
         }
         if (total == 0) {
@@ -250,31 +250,59 @@ final class Coverages {
     }
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
-                                                             Exclusions excluded) {
-        List<String> classes = axis.eligible().stream().map(PartitionClass::id).toList();
-        // The model's own words for why, carried through so a report can say what it took out of the
-        // denominator rather than showing a position with fewer classes than its type has. Said
-        // whether or not a row was written: what the body rules out is a fact about the body.
-        List<PartitionEvidence.ExcludedClass> ruled = excluded.at(axis.path()).stream()
-                .filter(each -> axis.excluded().contains(each.name()))
-                .map(each -> new PartitionEvidence.ExcludedClass(each.name(),
-                        excluded.reasonsFor(axis.path(), each)))
-                .toList();
+                                                             Claims claims) {
+        List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
+        // What the rules took out, in the model's own words. The case is not a class of this axis —
+        // the reading these classes come from is what removed it — so a report saying what it took
+        // out of the denominator says it from the claim that named it rather than from a class that
+        // is no longer here.
+        List<PartitionEvidence.ExcludedClass> ruled = new ArrayList<>();
+        List<PartitionEvidence.UnprovenClaim> unproven = new ArrayList<>();
+        for (Claims.Judged judged : claims.all()) {
+            if (!judged.claim().at().equals(axis.path())) {
+                continue;
+            }
+            String named = judged.claim().named().name();
+            switch (judged.verdict()) {
+                case ClaimVerdict.Confirmed _ -> ruled.add(
+                        new PartitionEvidence.ExcludedClass(named, judged.claim().reasons()));
+                case ClaimVerdict.Unproven un -> unproven.add(
+                        new PartitionEvidence.UnprovenClaim(named, judged.claim().reasons(),
+                                said(un.why())));
+                // Refused where it is written, so a report of this model is a report of one that
+                // did not compile.
+                case ClaimVerdict.Contradicted _ -> { }
+            }
+        }
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.unavailable(axis.id().toString(),
-                    axis.term().toString(), classes, ruled,
+                    axis.term().toString(), classes, ruled, unproven,
                     PartitionEvidence.AxisCoverage.Reason.NO_ROWS);
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
             String in = Readings.classIn(where, axis);
-            if (in != null && !axis.excluded().contains(in)) {
+            if (in != null) {
                 covered.add(in);
             }
         }
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
-                classes, covered, ruled, readings.couldNotSay(axis),
+                classes, covered, ruled, unproven, readings.couldNotSay(axis),
                 readings.status(List.of(axis)), null);
+    }
+
+    /** What a reader is told about a claim nothing settled. One projection, so that a distinction
+     *  this compiler learns to make later is a word the report chooses to add rather than one it
+     *  gains by accident. */
+    private static PartitionEvidence.UnprovenClaim.Why said(Unsettlement why) {
+        return switch (why) {
+            case Unsettlement.ReadingStopped _ ->
+                    PartitionEvidence.UnprovenClaim.Why.A_RULE_WENT_UNREAD;
+            case Unsettlement.RulesLeaveNothing _ ->
+                    PartitionEvidence.UnprovenClaim.Why.THE_RULES_LEAVE_THE_POSITION_NOTHING;
+            case Unsettlement.NoSuchDistinction _ ->
+                    PartitionEvidence.UnprovenClaim.Why.NOTHING_WAS_READ_ABOUT_THE_CASE;
+        };
     }
 
     /**

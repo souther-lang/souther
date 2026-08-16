@@ -3027,7 +3027,9 @@ An input position carries the same three, with *executed* in place of *observed*
 
 *What counts as a case to cover.* A position that is a sum — a union, or a named `+data S = A | B+` — has cases to cover, folded to their leaves. A position typed as one data has one, and covering it is not a question any row can fail, so it is not counted. This is narrower than what a row's expected arm is held against (<<e1904>>), which uses the single name to catch a row that wrote the wrong one.
 
-[[a-case-the-body-rules-out-is-not-covered-or-uncovered]]*A case the body says it does not answer for is neither covered nor uncovered.* It is *excluded*: a third answer beside the two, reported and not counted against the model. A row naming such a case reaches an `+unreachable+` and is <<e1911>>, so asking for one is asking for work the compiler refuses, and a model that states where its combinations cannot arise would report a coverage it can never reach. The case stays *declared* — the type has it, and that is part of what the model says — and leaves what the rows are held to, so what a report counts is `+declared - excluded+`. Which cases those are is read from the body and is stated below (<<what-is-read-off-a-body>>); a behavior with no body has none.
+[[a-case-the-rules-refuse-is-not-covered-or-uncovered]]*A case the model's own rules refuse is neither covered nor uncovered.* It is *excluded*: a third answer beside the two, reported and not counted against the model. Nothing can be constructed at such a case (<<e1903>>), so asking for a row at one is asking for work the compiler refuses, and a model whose rules narrow an input would report a coverage it can never reach. The case stays *declared* — the type has it, and that is part of what the model says — and leaves what the rows are held to, so what a report counts is `+declared - excluded+`. Which cases those are is what the declarations reaching the position leave (<<what-a-position-admits>>), read once and read the same way by every measure; a case nothing refuses is counted whatever any body says about it.
+
+[[a-case-a-claim-is-made-about-is-counted-until-the-rules-refuse-it]]*An arm declaring that a case cannot arrive is a claim, and it is held against those rules rather than read into them.* It has three answers and no fourth. Where the rules refuse the case, the claim says what they say: the case is already out of every denominator, and what the claim adds is the author's own words, which the report prints beside it. Where the rules leave the case standing at a position nothing stands between and the caller, the claim is refused where it is written (<<e1326>>). Where nothing settles it — a case behind another fork, or one at a position whose rules could not be read — the case keeps whatever it was owed and the report says the claim was not proven. What removes an obligation is a proof; the absence of one is not, and an exclusion that is both unproven and silent is what leaves an author unable to tell a gap they can fill from one they cannot.
 
 *A measurement says how much of itself it could make.* A row whose case cannot be read from its text — a helper's answer, which names no case (<<example-expected>>) — is counted as unclassified rather than dropped. While there is one, a case with no rows is *undecided* rather than missing, because one of those rows may be covering it. A behavior with no rows at all is not measured: an absence of evidence is not a set of gaps.
 
@@ -3094,9 +3096,9 @@ An invariant's bound is a boundary and not a partition. Everything outside it is
 
 A rule that drew a line is kept per line. The same value can be a boundary of an invariant and of two separate `+guard+`s, and reaching it through one says nothing about the others, so one value can be several obligations. A rule that took a line in is not a second line: the bound and the record that narrowed it are one boundary, named by both, because neither of them wants a row of its own.
 
-[[what-is-read-off-a-body]]A class the body says it does not answer for is *excluded*, as a case of the signature is (<<a-case-the-body-rules-out-is-not-covered-or-uncovered>>), and leaves the classes a row can be written at — at this position, in the combinations this position takes part in, and in the rows a tool offers to fill what nothing covers. One universe, so that the three cannot come to disagree about what there was to cover.
+[[what-is-read-off-a-body]]A class the rules refuse is *excluded*, as a case of the signature is (<<a-case-the-rules-refuse-is-not-covered-or-uncovered>>), and it is one reading that says so — for this position, for the combinations this position takes part in, and for the rows a tool offers to fill what nothing covers. One universe, so that the three cannot come to disagree about what there was to cover.
 
-Only what the body states without anything having to be decided is read:
+What a body declares cannot arrive is read beside that reading and never into it (<<a-case-a-claim-is-made-about-is-counted-until-the-rules-refuse-it>>). Only what the body states without anything having to be decided is read:
 
 * the body is followed to the first fork through what a `+let+` binds;
 * a function written where a call takes one is not entered. Evaluating that position makes the function, and what it matches on when the call applies it is about its own parameters rather than about this behavior's inputs;
@@ -3104,7 +3106,7 @@ Only what the body states without anything having to be decided is read:
 * nothing below a fork is read. An arm of one `+match+` holding a `+match+` on a second input says what that input cannot be *given the first one*, which is not a fact about the second input and is not something a class of it can carry;
 * nothing is read off a condition. Which values satisfy `+somePredicate(f)+` is a question with a solver behind it, and an answer taken on faith here removes a case the author should have been asked for.
 
-So exclusions that hold are missed, and that is the direction to miss in: a class left in is a class the report asks for a row at, which tells the author something true about their model. A class wrongly taken out tells them nothing at all.
+So claims that could be read are missed, and that is the direction to miss in: a claim nothing read leaves the class in, and a class left in is one the report asks for a row at, which tells the author something true about their model. It is safe here because a claim takes nothing away on its own — read as a reason to drop a class, the same miss would be a class taken out with nothing having asked whether it can arrive, and that tells the author nothing at all.
 
 [#example-branch-coverage]
 === Which arms of the body the rows go through
@@ -3365,7 +3367,11 @@ The rules it obeys:
 * Reaching it *aborts*, as an invariant violation does (<<invariant-abort>>) and for the same reason: what failed is the model, not the business. It is not catchable, and a boundary maps it to a 500, apart from a business failure's 400.
 * It is not written in an `+invariant+` (<<invariant-expressions>>): an invariant answers whether the value being built holds, on every path through it.
 
-What it is not for is a case the model can produce. `+| InsufficientFunds -> unreachable "the caller checked the balance"+` states an assumption no type carries, and if the caller ever does not check, the rule aborts where it should have answered. Where the combination is one the model admits as input, the arm answers a value or the input types change; `+unreachable+` is for what the model rules out.
+[[unreachable-is-for-what-the-model-rules-out]]What it is not for is a case the model can produce. `+| InsufficientFunds -> unreachable "the caller checked the balance"+` states an assumption no type carries, and if the caller ever does not check, the rule aborts where it should have answered. Where the combination is one the model admits as input, the arm answers a value or the input types change; `+unreachable+` is for what the model rules out.
+
+*Where that can be read, it is checked, and a case the model admits is <<e1326>>.* An arm of the first `+match+` a behavior's body reaches, on one of its own input positions, is the end where it can: nothing stands between the fork and the caller, so what may arrive there is what the declarations reaching that position leave (<<what-a-position-admits>>). A case they leave is a case a caller can supply, and an arm declaring it cannot arrive is a premise the model's own signature denies.
+
+Nothing further is proven and nothing further is refused. A case behind a second `+match+`, behind a `+guard+`, or at a position whose rules this compiler could not read is one nothing here settles — a table indexed by two sums says what it says about *pairs*, and neither axis states anything about the other — so the arm stands and what is not settled is said rather than decided (<<a-case-a-claim-is-made-about-is-counted-until-the-rules-refuse-it>>).
 
 [#guard]
 === guard
@@ -4932,6 +4938,21 @@ Reported at the operator (<<newtype-arithmetic-follows-the-units>>). Which rule 
 
 Reported at the parameter, or at the behavior for its output (<<a-boundary-carries-the-models-own-vocabulary>>). `+DivisionByZero+` and `+NotANumber+` say what `+Int.divide+` and `+String.toInt+` can answer, `+RoundingMode+` says what `+Decimal.round+` takes, and `+Raw+` is reserved; each is the language's account of one of its own operations. A behavior that has the same thing to report declares the case — `+data Undivided+`, answered as `+-> Int | Undivided+` — so that what the behavior publishes stays its own even when the language's account of itself changes. Reported wherever the name stands in what crosses, at any depth and as a member of an output union.
 
+[#e1326]
+=== An `unreachable` at a case the model admits
+
+[,text]
+----
+`Off` can arrive at `f`, so this point is reachable.
+Hint: `Off` is a case of `Flag`, and no rule refuses it here.
+----
+
+Reported at an `+unreachable+` in an arm of the first `+match+` a body reaches, on one of the behavior's own input positions, whose case the declarations reaching that position leave standing (<<unreachable-is-for-what-the-model-rules-out>>). Nothing stands between that fork and the caller, so the case is one a caller can supply and the point is one a row reaches — which is <<e1911>> for whoever writes it and an abort for whoever runs the model.
+
+The diagnostic names three things, because acting on it takes all three: where the claim is written, which case at which position it is about, and the declaration that says the case can arrive. The answer is the one the rule above states — the arm answers a value, or that declaration changes.
+
+Read from the body as it is emitted, so a claim written in a `+let+` this body called is judged here as well: what the claim says about this behavior's input is what it says wherever it was written.
+
 [#e1401-removed]
 === (retired)
 
@@ -5607,7 +5628,7 @@ No row applies `submit` to a `Overseas`, so input #1 has a case nothing was trie
 
 The same warning for an input position that is a sum. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
 
-Not warned about for a case the body says it does not answer for (<<a-case-the-body-rules-out-is-not-covered-or-uncovered>>): the row it asks for would reach an `+unreachable+` and be <<e1911>>, so an author told to write one has been handed work their compiler refuses.
+Not warned about for a case the model's own rules refuse (<<a-case-the-rules-refuse-is-not-covered-or-uncovered>>): the row it asks for could not be built (<<e1903>>), so an author told to write one has been handed work their compiler refuses.
 
 [#e1916]
 === No row is at a boundary

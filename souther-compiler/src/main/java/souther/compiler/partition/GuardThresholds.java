@@ -5,6 +5,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputPath;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
@@ -173,7 +174,7 @@ public final class GuardThresholds {
     private static void mentioned(Core e, List<String> parameters, Symbols symbols,
                                   List<TermPath> out) {
         if (!(e instanceof Core.PreservedCall)) {
-            TermPath here = pathOf(e, parameters, symbols);
+            TermPath here = InputPath.of(e, parameters, symbols);
             if (here != null) {
                 if (!out.contains(here)) {
                     out.add(here);
@@ -536,18 +537,6 @@ public final class GuardThresholds {
     }
 
     /**
-     * The input position a comparison names, spelled the way a parameter's own path is spelled.
-     *
-     * <p>Which fields are steps is {@link Location}'s rule, asked here rather than restated: a
-     * newtype's {@code value} is not one, so {@code request.cost} and {@code request.cost.value} are
-     * one position, and if the two spellings disagreed the same position would become two axes, one
-     * of which no row would ever cover.
-     *
-     * <p>The root is not that rule's. A partition is derived from what a behavior declares, and a
-     * declared parameter is not a binding — a behavior with no implementation has axes all the same —
-     * so this path is rooted at the parameter and {@link Location} at the binding a body gave it.
-     */
-    /**
      * The number a comparison names, which is a location's content or something taken of it.
      *
      * <p>Which of the standard library's calls count is asked of {@link NumericMeasures} rather than
@@ -559,31 +548,13 @@ public final class GuardThresholds {
         if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
                 && reached.name() instanceof ReachName.OfLibrary library
                 && NumericMeasures.isMeasure(library.target()) && call.args().size() == 1) {
-            TermPath of = pathOf(call.args().get(0), parameters, symbols);
+            TermPath of = InputPath.of(call.args().get(0), parameters, symbols);
             return of == null ? null : new NumericTerm.SizeOf(library.target(), of);
         }
-        TermPath path = pathOf(e, parameters, symbols);
+        TermPath path = InputPath.of(e, parameters, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
     }
 
-    static TermPath pathOf(Core e, List<String> parameters, Symbols symbols) {
-        return switch (e) {
-            case Core.Read r -> parameters.contains(r.name()) ? TermPath.of(r.name()) : null;
-            case Core.FieldAccess fa -> {
-                TermPath base = pathOf(fa.target(), parameters, symbols);
-                if (base == null) {
-                    yield null;
-                }
-                yield Location.isStep(fa.target().type(), fa.field(), symbols)
-                        ? base.then(fa.field()) : base;
-            }
-            // A call kept standing names no location, and its presence says this walk was handed a
-            // representation it does not read. Said rather than answered with "no path", which would
-            // be the same answer a number gives.
-            case Core.PreservedCall p -> throw p.unexpectedIn("guard thresholds");
-            case null, default -> null;
-        };
-    }
 
     /**
      * The count a comparison is against, or null where the other side is not a value on

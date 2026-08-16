@@ -1,12 +1,10 @@
-package souther.compiler.partition;
+package souther.compiler.claims;
 
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Why an expression answers nothing, in the words the model wrote.
@@ -30,20 +28,35 @@ import java.util.Set;
  */
 public final class UnreachableReasons {
 
+    /** One {@code unreachable} an expression reaches: what it says, and where it says it. */
+    public record Said(String reason, souther.compiler.diag.SourcePos at) {}
+
     /** Every reason reached along the paths that answer nothing, in the order they are evaluated and
      * without repeats. Empty where the expression answers a value. */
     public static List<String> of(Core e) {
-        Set<String> found = new LinkedHashSet<>();
+        return said(e).stream().map(Said::reason).distinct().toList();
+    }
+
+    /**
+     * The same, each with where it is written.
+     *
+     * <p>Both come off one walk, since they are one reading: a reader wanting the words and a reader
+     * wanting the place would otherwise walk the arm twice and could come to disagree about which
+     * paths answer nothing. Repeats are kept here and dropped by {@link #of}, so that two arms
+     * aborting with the same words still have two places between them.
+     */
+    public static List<Said> said(Core e) {
+        List<Said> found = new java.util.ArrayList<>();
         collect(e, found);
         return List.copyOf(found);
     }
 
-    private static void collect(Core e, Set<String> into) {
+    private static void collect(Core e, List<Said> into) {
         if (NormalReturn.of(e)) {
             return;
         }
         switch (e) {
-            case Core.Unreachable u -> into.add(u.reason());
+            case Core.Unreachable u -> into.add(new Said(u.reason(), u.pos()));
             case Core.LetIn li -> collect(
                     NormalReturn.of(li.value()) ? li.body() : li.value(), into);
             case Core.If iff -> {

@@ -38,5 +38,5 @@ package souther.compiler.diag.msg;
 public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage,
         CodecMessage, DataMessage, DeclarationMessage, ExampleMessage, HelperMessage, ImportMessage,
         InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage, NameMessage, ParseMessage,
-        TypeMessage, WrittenAtMessage {
+        TypeMessage, UnreachableMessage, WrittenAtMessage {
 }

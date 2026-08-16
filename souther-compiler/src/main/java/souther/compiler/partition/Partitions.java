@@ -130,8 +130,7 @@ public final class Partitions {
      *
      * @param behavior what the axes are named after, which is the behavior the reading was made for
      */
-    public static Partitioning of(String behavior, InputDomain inputs, Symbols symbols,
-                                  Exclusions excluded) {
+    public static Partitioning of(String behavior, InputDomain inputs, Symbols symbols) {
         List<Axis> found = new ArrayList<>();
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
@@ -139,8 +138,6 @@ public final class Partitions {
         for (Position position : inputs.positions()) {
             axisOf(behavior, position, symbols, found, domains, uncertain, unread);
         }
-        found.replaceAll(axis -> axis.excluding(
-                excluded.at(axis.path()).stream().map(TypeSymbol::name).toList()));
         List<Axis> kept = new ArrayList<>();
         List<OmittedAxis> omitted = new ArrayList<>();
         int counted = 0;
@@ -659,8 +656,7 @@ public final class Partitions {
                     uncertain.add(term);
                 }
                 out.add(new Axis(id, term, position.type(), divided.classes(),
-                        divided.cuts().cuts(), java.util.Set.of(), divided.completeness(),
-                        null, null));
+                        divided.cuts().cuts(), divided.completeness(), null, null));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:

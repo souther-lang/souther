@@ -60,7 +60,7 @@ class ThresholdNormalizationTest {
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
         List<Threshold> thresholds = guards.thresholds();
-        Partitions.Partitioning base = Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols, Exclusions.NONE);
+        Partitions.Partitioning base = Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols);
         return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds, symbols);
     }
 

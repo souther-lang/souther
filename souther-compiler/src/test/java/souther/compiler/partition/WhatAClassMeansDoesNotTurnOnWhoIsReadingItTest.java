@@ -75,7 +75,7 @@ class WhatAClassMeansDoesNotTurnOnWhoIsReadingItTest {
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols, Exclusions.NONE).axes().stream()
+        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols).axes().stream()
                 .filter(each -> each.path().toString().equals(path))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path))

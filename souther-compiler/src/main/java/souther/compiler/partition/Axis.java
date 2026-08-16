@@ -24,9 +24,7 @@ import java.util.Set;
  * @param classes  exclusive and exhaustive over the term's values, or empty where the model does
  *                 not divide them
  * @param cuts     the values the classes meet at, each carrying every rule that drew it there
- * @param excluded the ids of the classes the body says it does not answer for. Still classes — the
- *                 position's values are still divided this way, and a report says so — and not ones a
- *                 row can be written at, since reaching one is E1911
+ * @param read     how much of what the rules say about this position's values was read
  * @param pending  where nothing has answered for this position yet, what the structural reading
  *                 found — and so what this position is left with if nothing else answers. Null on
  *                 an axis that already has evidence, which needs no fallback.
@@ -39,7 +37,7 @@ import java.util.Set;
  * @param read     how much of what the rules say about this position's values was read. Carried
  *                 because it qualifies the classes and nothing else says it: a class off a set
  *                 arrived at from part of the rules is a value the model singled out, and a rule
- *                 that went unread may yet refuse it — so {@link #eligible} is the denominator the
+ *                 that went unread may yet refuse it — so {@link #classes} is the denominator the
  *                 model states and not one every class of which is known to be inhabited
  * @param unread   a rule about this position's own values that the local reading did not take in,
  *                 or null where it read them all. Carried for the same reason {@link #pending} is,
@@ -48,13 +46,12 @@ import java.util.Set;
  *                 a rule about what is inside describes that same stop from the other end
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, Set<String> excluded, AdmissibleSet.Completeness read,
+                   List<Cut> cuts, AdmissibleSet.Completeness read,
                    StructuralInspection.Pending pending, BlockReason unread) {
 
     public Axis {
         classes = List.copyOf(classes);
         cuts = List.copyOf(cuts);
-        excluded = Set.copyOf(excluded);
         if (read == null) {
             throw new IllegalArgumentException(
                     "a position with no account of what was read about its values");
@@ -62,13 +59,8 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     }
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                List<Cut> cuts, Set<String> excluded) {
-        this(id, term, type, classes, cuts, excluded, AdmissibleSet.READ_IN_FULL, null, null);
-    }
-
-    public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                 List<Cut> cuts) {
-        this(id, term, type, classes, cuts, Set.of(), AdmissibleSet.READ_IN_FULL, null, null);
+        this(id, term, type, classes, cuts, AdmissibleSet.READ_IN_FULL, null, null);
     }
 
     /**
@@ -81,7 +73,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
                                  AdmissibleSet.Completeness read,
                                  StructuralInspection.Pending found, BlockReason unread) {
-        return new Axis(id, term, type, List.of(), List.of(), Set.of(), read, found, unread);
+        return new Axis(id, term, type, List.of(), List.of(), read, found, unread);
     }
 
     /**
@@ -95,12 +87,12 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * as one the model divides no way.
      */
     public Axis measuredAt(AxisId id, NumericTerm term) {
-        return new Axis(id, term, type, classes, cuts, excluded, read, pending, unread);
+        return new Axis(id, term, type, classes, cuts, read, pending, unread);
     }
 
     /** The same position, with what a body's rules divided it into and the lines they drew. */
     public Axis carrying(List<PartitionClass> classes, List<Cut> cuts) {
-        return new Axis(id, term, type, classes, cuts, excluded, read, pending, unread);
+        return new Axis(id, term, type, classes, cuts, read, pending, unread);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
@@ -110,30 +102,19 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
         return term.path();
     }
 
-    /** The same position, with what the body rules out marked.
-     *
-     * <p>An id this axis has no class for is dropped rather than kept: what a behavior's body says
-     * about one position cannot make a class appear at another, and an exclusion is matched within
-     * the axis it belongs to because a class id is unique there and nowhere wider. */
-    public Axis excluding(Collection<String> ids) {
-        Set<String> here = ids.stream().filter(id -> classOf(id) != null)
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        return here.isEmpty() ? this
-                : new Axis(id, term, type, classes, cuts, here, read, pending, unread);
-    }
-
     /**
      * The classes a row can be written at.
      *
-     * <p>The one denominator. What a report counts, what a pair space is the product of, and what the
-     * generator offers rows for all come from here — three derivations of the same universe are three
-     * chances to disagree about it, which is how a class nothing can reach came to be asked for by
-     * three measures at once.
+     * <p>The one denominator. What a report counts, what a pair space is the product of, and what
+     * the generator offers rows for all come from here — three derivations of the same universe are
+     * three chances to disagree about it, which is how a class nothing can reach came to be asked
+     * for by three measures at once.
+     *
+     * <p>Nothing a body writes narrows this. A case an arm declares cannot arrive is a claim about
+     * the same position, and what became of the claim is said beside the report rather than taken
+     * out of the count here — a claim the rules bear out has already left, because the reading these
+     * classes come from is what took it out.
      */
-    public List<PartitionClass> eligible() {
-        return classes.stream().filter(each -> !excluded.contains(each.id())).toList();
-    }
-
     /** Whether the model divides this position into classes to cover. */
     public boolean derivable() {
         return !classes.isEmpty();

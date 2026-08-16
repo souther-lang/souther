@@ -1115,6 +1115,47 @@ public final class Bodies {
     }
 
     /**
+     * Every claim a module's bodies make that the model's own rules contradict.
+     *
+     * <p>Where a premise that cannot hold belongs: a claim the rules refute is a model whose own
+     * signature admits an input it aborts on, and that is a mistake in the model rather than a note
+     * about how well it is covered. Read from the bodies as they are emitted, which is what every
+     * measure reads, so that a claim is judged in the shape it is acted on — a claim written in a
+     * helper this body calls is judged against the input the call gave it.
+     *
+     * <p>Nothing is said where the signature is not in hand: a behavior whose signature did not work
+     * out has been reported on for that.
+     */
+    private static List<Report> contradicted(Db db, String module, Hir.Module settled,
+                                             Map<String, Core> bodies) {
+        Answer<Map<String, Sig>> declared = db.ask(new Signatures(module));
+        Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
+        if (!declared.present() || !scope.present()) {
+            return List.of();
+        }
+        List<Report> out = new ArrayList<>();
+        for (Hir.BehaviorDef behavior : settled.behaviors()) {
+            Sig sig = declared.value().get(behavior.name());
+            Core body = bodies.get(behavior.name());
+            if (!(behavior instanceof Hir.SpecBehavior spec) || sig == null || body == null) {
+                continue;
+            }
+            souther.compiler.inputs.InputDomain read =
+                    souther.compiler.inputs.InputDomain.of(spec, sig, scope.value());
+            for (Diagnostic refused : souther.compiler.claims.ClaimDiagnostics.refusals(
+                    souther.compiler.claims.Claims.of(
+                            souther.compiler.claims.UnreachableClaims.of(body,
+                                    spec.params().stream().map(Hir.Param::name).toList(),
+                                    scope.value()),
+                            read),
+                    read)) {
+                out.add(Report.of(refused));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
      * What a module's own check found: its declarations, its helpers, its {@code exposing} line, its
      * compositions — everything that is not one behavior's body.
      *
@@ -1295,9 +1336,19 @@ public final class Bodies {
                     && bodiesCheck
                     && module.value().sound()
                     && !TypeOps.holdsAnErroneousType(settled.value());
-            return sound
-                    ? Answer.of(new Elaborated(bodies, module.value().emittedHelpers()))
-                    : Answer.absent();
+            if (!sound) {
+                return Answer.absent();
+            }
+            // What each body declares cannot arrive, held against what its input's own declarations
+            // leave. Asked here rather than beside each body: it reads the signature, which is the
+            // module's, and a body's own answer must not move when the one beside it is edited.
+            //
+            // Only of a module that came out whole. A model with a hole in it has been reported on
+            // where the hole is, and what a case can arrive at cannot be read through one — asked
+            // anyway, the reading meets a shape no position can have and says so about this
+            // compiler, which is true and is not what the author of a mistyped model needs.
+            return Answer.of(new Elaborated(bodies, module.value().emittedHelpers()),
+                    contradicted(db, name, settled.value(), bodies));
         }
     }
 }

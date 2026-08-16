@@ -48,7 +48,7 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols),
-                symbols, Exclusions.NONE);
+                symbols);
     }
 
     private static Axis only(Partitions.Partitioning partitioning) {
