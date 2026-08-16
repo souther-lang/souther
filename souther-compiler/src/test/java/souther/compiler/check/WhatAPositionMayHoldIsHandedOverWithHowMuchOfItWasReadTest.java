@@ -267,6 +267,27 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         asFarAsRead(ValueSet.ANY, read, "right");
     }
 
+    /**
+     * And a clause nothing could type inside a field's own type leaves that field the same way.
+     *
+     * <p>A rule reaches a position from wherever it is written — the record the position is a field
+     * of, and the declarations under that record it sits inside — so a clause lost anywhere on that
+     * descent is a clause no reading here saw. Which position it was about is exactly what is not
+     * known, so the field it was lost under is one this cannot speak for.
+     */
+    @Test
+    void aClauseNothingCouldTypeInsideAFieldsTypeLeavesThatFieldSpokenForByNothing() {
+        FieldDomains read = ofRefused("""
+                module demo
+
+                data Inner = String
+                    invariant no = value == 1
+
+                data Outer = { inner: Inner }
+                """, "Outer");
+        asFarAsRead(ValueSet.ANY, read, "inner");
+    }
+
     /** And the rules of one field say nothing about another. */
     @Test
     void whatOneFieldMayHoldIsNotWhatTheFieldBesideItMayHold() {

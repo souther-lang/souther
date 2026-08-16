@@ -131,15 +131,37 @@ final class Clauses {
      * it owes where one is being built are the same clauses read the same way, and they differ only
      * in what the fields are given — a read of each field, or the value each is being handed.
      */
-    List<Stated> statedAt(TypeSymbol named, Hir.Data data, Map<BindingId, Core> given) {
+    StatedClauses statedAt(TypeSymbol named, Hir.Data data, Map<BindingId, Core> given) {
         List<Stated> stated = new ArrayList<>();
+        int declared = 0;
         for (TypeOps.Declared inv : declared(named, data)) {
+            declared++;
             Core one = statedAt(inv.clause().expr(), named, data, given);
             if (one != null) {
                 stated.add(new Stated(clauseOf(inv), one));
             }
         }
-        return stated;
+        return new StatedClauses(List.copyOf(stated), stated.size() == declared);
+    }
+
+    /**
+     * The clauses of one declaration as they read here, and whether they are all of them.
+     *
+     * <p>The second because leaving one out is not visible in the first. A clause that states
+     * nothing this can read is dropped, and a caller handed the rest has no way to tell a
+     * declaration whose every clause was read from one whose clauses it is holding some of — the
+     * two are the same list with different things missing from it. Said here, where the dropping
+     * happens, rather than counted again by whoever needs to know.
+     *
+     * @param everyClauseStated whether every clause the declaration writes is in {@code clauses}.
+     *                          A caller that asked for none of them was not asked to lose any and
+     *                          is told so
+     */
+    record StatedClauses(List<Stated> clauses, boolean everyClauseStated) {
+
+        /** What a reading told to leave a declaration's clauses out gets: none of them, and nothing
+         * lost. */
+        static final StatedClauses NONE_ASKED_FOR = new StatedClauses(List.of(), true);
     }
 
     /** What a diagnostic can say about the clause {@code inv} is, and what tells it apart from the

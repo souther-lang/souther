@@ -373,8 +373,20 @@ public final class InvariantChecker {
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
         // of them can spoil a position for it. That is a fact about what was handed over rather
         // than about any one reading, and it is recorded here where the handing over happens.
-        boolean gathered = true;
+        boolean[] gathered = {true};
         List<Written> written = new ArrayList<>();
+        Gathering gathering = new Gathering() {
+
+            @Override
+            public void gathered(TypeSymbol from, Core clause) {
+                written.add(new Written(from, clause));
+            }
+
+            @Override
+            public void missed(TypeSymbol from) {
+                gathered[0] = false;
+            }
+        };
         try {
             for (Hir.InvariantClause clause :
                     reach.withoutClauses().test(named) || reach.stopAt().test(named)
@@ -382,7 +394,7 @@ public final class InvariantChecker {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
                 if (stated == null) {
                     read = false;
-                    gathered = false;
+                    gathered[0] = false;
                     continue;
                 }
                 written.add(new Written(named, stated));
@@ -399,8 +411,7 @@ public final class InvariantChecker {
                     // No depth limit here: this is the reading a boundary is derived from, and a
                     // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            k, at, 1, Integer.MAX_VALUE, new HashSet<>(),
-                            (from, clause) -> written.add(new Written(from, clause)), reach);
+                            k, at, 1, Integer.MAX_VALUE, new HashSet<>(), gathering, reach);
                 }
             }
         } catch (RuntimeException why) {
@@ -443,7 +454,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(constraints, atoms, keys, held, reading, read, gathered);
+        return new Seeded(constraints, atoms, keys, held, reading, read, gathered[0]);
     }
 
     /**
@@ -558,6 +569,24 @@ public final class InvariantChecker {
     /** One clause reaching a value, rebased onto the positions of that value, and the declaration it
      * is written on. */
     private record Written(TypeSymbol from, Core clause) {}
+
+    /**
+     * Told what a walk over a value gathers, as it gathers it.
+     *
+     * <p>What it found and what it lost, because the second is not visible in the first. A clause
+     * that states nothing the check can read is dropped before any reading sees it, and which
+     * position it governed is what is not known about it — so a collector told only of the clauses
+     * that arrived would take them for every clause there is, and answer for a declaration on the
+     * strength of rules it never saw.
+     */
+    interface Gathering {
+
+        /** A clause of {@code from}, rebased onto the positions of the value being read. */
+        void gathered(TypeSymbol from, Core clause);
+
+        /** A clause of {@code from} that could not be stated here, and so reached no reading. */
+        void missed(TypeSymbol from);
+    }
 
     /** A coordinate a clause reaching this value could be about. */
     private record Coordinate(String path, boolean measured, Carrier carrier) {}
@@ -1148,7 +1177,10 @@ public final class InvariantChecker {
         // A newtype construction from a value written out is the constant check's to report: it names
         // the clause that failed. It reads the construction as written, so a name given the value is
         // not one it sees, and this check says it instead — which is what `decidesFalse` carries.
-        for (Clauses.Stated stated : clauses.statedAt(named, type, given)) {
+        // The clauses that state something here, and not whether they are all of them: a clause
+        // stating nothing readable at this construction is one the run-time check stands for, which
+        // is what `unreadable` below already carries for the ones that were read.
+        for (Clauses.Stated stated : clauses.statedAt(named, type, given).clauses()) {
             Predicates.Owed o = predicates.obligations(stated.expr(), k, at, unnamed, decidesFalse);
             unreadable |= o.unreadable();
             for (Predicates.Clause one : o.clauses()) {
@@ -2016,16 +2048,15 @@ public final class InvariantChecker {
      * own kind stops rather than descending for ever. Kept per path and not for the whole walk: two
      * fields of one type are two positions and both are seeded.
      *
-     * @param onClause told each clause as it is reached, with the declaration it is written on, or
-     *                 null where nobody is collecting. A clause governs a position from wherever it
-     *                 is written — the record the position is a field of, and the declarations under
-     *                 that record it sits inside — and this walk is where it is rebased onto the
-     *                 position it governs. A reader wanting that list has to be told here or walk the
-     *                 same descent again and rebase it a second way.
+     * @param gathering told what this walk gathers, or null where nobody is collecting. A clause
+     *                  governs a position from wherever it is written — the record the position is a
+     *                  field of, and the declarations under that record it sits inside — and this
+     *                  walk is where it is rebased onto the position it governs. A reader wanting
+     *                  that list has to be told here or walk the same descent again and rebase it a
+     *                  second way.
      */
     private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
-                         Set<TypeSymbol> onPath,
-                         java.util.function.BiConsumer<TypeSymbol, Core> onClause, Reach reach) {
+                         Set<TypeSymbol> onPath, Gathering gathering, Reach reach) {
         // Read before the path is entered, so that the one name and the other stay paired: a stop
         // taken after entering would leave the name on the path with nothing to take it off, and the
         // next field of the same type would be passed over as one already read. Supposed to hold
@@ -2049,13 +2080,21 @@ public final class InvariantChecker {
         });
         Known out = k;
         List<Quantified> quantified = new ArrayList<>();
-        for (Clauses.Stated stated : reach.withoutClauses().test(ref.name())
-                ? List.<Clauses.Stated>of() : clauses.statedAt(ref.name(), data, given)) {
-            if (onClause != null) {
-                onClause.accept(ref.name(), stated.expr());
+        Clauses.StatedClauses stated = reach.withoutClauses().test(ref.name())
+                ? Clauses.StatedClauses.NONE_ASKED_FOR : clauses.statedAt(ref.name(), data, given);
+        // A clause of a declaration under here that states nothing this can read is gone before any
+        // reading sees it, and which position it was about goes with it. Said as it happens: a
+        // reader collecting the clauses would otherwise take the ones it was handed for every
+        // clause there is, and answer for a rule it never saw.
+        if (gathering != null && !stated.everyClauseStated()) {
+            gathering.missed(ref.name());
+        }
+        for (Clauses.Stated one : stated.clauses()) {
+            if (gathering != null) {
+                gathering.gathered(ref.name(), one.expr());
             }
-            predicates.quantifiedBy(stated.expr(), at, true, quantified);
-            out = predicates.assume(predicates.obligations(stated.expr(), out, at, false), out,
+            predicates.quantifiedBy(one.expr(), at, true, quantified);
+            out = predicates.assume(predicates.obligations(one.expr(), out, at, false), out,
                     Known.Held.OF_THE_VALUE);
         }
         out = out.and(quantified);
@@ -2064,10 +2103,10 @@ public final class InvariantChecker {
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
             Core value = given.get(bindings.get("value"));
             out = value == null ? out
-                    : seedAt(value, out, at, depth + 1, limit, onPath, onClause, reach);
+                    : seedAt(value, out, at, depth + 1, limit, onPath, gathering, reach);
         } else {
             for (Core value : given.values()) {
-                out = seedAt(value, out, at, depth + 1, limit, onPath, onClause, reach);
+                out = seedAt(value, out, at, depth + 1, limit, onPath, gathering, reach);
             }
         }
         onPath.remove(ref.name());
