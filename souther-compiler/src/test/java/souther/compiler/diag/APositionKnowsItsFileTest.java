@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -51,7 +53,8 @@ class APositionKnowsItsFileTest {
     void aPositionParsedFromASourceNamesThatSource() {
         Ast.Module m = parsedAs("m.sou", SOURCE);
 
-        assertEquals(new SourceId("m.sou"), m.defs().get(0).pos().sourceId(),
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(new SourceId("m.sou")),
+                m.defs().get(0).pos().quotedFrom(),
                 "the `data` was read from m.sou, so that is what its position says");
     }
 
@@ -59,14 +62,14 @@ class APositionKnowsItsFileTest {
     void everyPositionOfAParsedModuleNamesIt() {
         Ast.Module m = parsedAs("m.sou", SOURCE);
 
-        assertEquals(new SourceId("m.sou"), m.pos().sourceId());
-        assertTrue(m.defs().stream().allMatch(d -> new SourceId("m.sou").equals(d.pos().sourceId())),
+        assertTrue(m.pos().isIn(new SourceId("m.sou")));
+        assertTrue(m.defs().stream().allMatch(d -> d.pos().isIn(new SourceId("m.sou"))),
                 "one index made every position, so there is no part of the module it missed");
     }
 
     @Test
     void aPositionBuiltByHandNamesNoSource() {
-        assertNull(new SourcePos(4, 7).sourceId(),
+        assertInstanceOf(QuotedFrom.TextItCannotName.class, new SourcePos(4, 7).quotedFrom(),
                 "a caller with no source to name says so by naming none");
     }
 
@@ -74,7 +77,7 @@ class APositionKnowsItsFileTest {
     void aRegionsEndIsInTheSameFileAsItsStart() {
         Region r = Region.ofWidth(new SourcePos(4, 7, new SourceId("m.sou")), 5);
 
-        assertEquals(new SourceId("m.sou"), r.end().sourceId(), "a region does not leave the source it began in");
+        assertTrue(r.end().isIn(new SourceId("m.sou")), "a region does not leave the source it began in");
     }
 
     /**
@@ -106,7 +109,7 @@ class APositionKnowsItsFileTest {
     void aModuleReadOffThePathCarriesNoFileOfThisCompiles() {
         Hir.FnDef helper = Prelude.helpers().values().iterator().next();
 
-        assertNull(helper.pos().sourceId(),
+        assertInstanceOf(QuotedFrom.TextItCannotShow.class, helper.pos().quotedFrom(),
                 "the prelude is in no source of the compile that reads it");
     }
 

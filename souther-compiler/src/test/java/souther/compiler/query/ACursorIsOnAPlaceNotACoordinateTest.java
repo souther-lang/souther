@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Resolve;
@@ -86,7 +87,7 @@ class ACursorIsOnAPlaceNotACoordinateTest {
         Resolve.ValueUse use = under(MODEL_ID);
 
         assertEquals("もと", use.written().canonical());
-        assertEquals(MODEL_ID, use.pos().sourceId());
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(MODEL_ID), use.pos().quotedFrom());
     }
 
     @Test
@@ -94,7 +95,7 @@ class ACursorIsOnAPlaceNotACoordinateTest {
         Resolve.ValueUse use = under(ATTACHED_ID);
 
         assertEquals("べつ", use.written().canonical());
-        assertEquals(ATTACHED_ID, use.pos().sourceId());
+        assertEquals(new QuotedFrom.ASourceThisCompileHolds(ATTACHED_ID), use.pos().quotedFrom());
     }
 
     @Test

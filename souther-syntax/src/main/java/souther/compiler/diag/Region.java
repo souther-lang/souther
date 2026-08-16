@@ -39,7 +39,7 @@ public record Region(SourcePos start, SourcePos end) {
         if (outer == null || inner == null) {
             return true;
         }
-        if (!java.util.Objects.equals(outer.start.sourceId(), inner.start.sourceId())) {
+        if (!outer.start.isInTheSameTextAs(inner.start)) {
             return false;
         }
         return !before(inner.start, outer.start) && !before(outer.end, inner.end);

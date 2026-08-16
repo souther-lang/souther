@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -56,9 +57,9 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         Prelude.helpers().values().forEach(fn -> collect(fn.writtenBody(), positions));
 
         assertFalse(positions.isEmpty(), "the library has bodies to have positions in");
-        assertEquals(List.of(), positions.stream().filter(p -> !p.isOutOfSight()).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.TextItCannotShow)).toList(),
                 "a library body is written where no compile that calls it holds a file");
-        assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() != null).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds).toList(),
                 "and there is no file of this compile for it to be in");
     }
 
@@ -83,7 +84,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         clausesOf(read.module(), positions);
 
         assertFalse(positions.isEmpty(), "the published module has a clause to have positions in");
-        assertEquals(List.of(), positions.stream().filter(p -> !p.isOutOfSight()).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.TextItCannotShow)).toList(),
                 "a clause read back is written where this compile has no file");
     }
 
@@ -100,9 +101,9 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         clausesOf(module, positions);
 
         assertFalse(positions.isEmpty(), "the clause has positions");
-        assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
+        assertEquals(List.of(), positions.stream().filter(SourcePos::wasCopiedHere).toList(),
                 "what was read off a file the reader holds is where the code is");
-        assertEquals(List.of(), positions.stream().filter(p -> !new SourceId("0").equals(p.sourceId())).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> !p.isIn(new SourceId("0"))).toList(),
                 "and it says which file");
     }
 
@@ -126,9 +127,9 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
         clausesOf(module, positions);
 
         assertFalse(positions.isEmpty(), "the clause has positions");
-        assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
+        assertEquals(List.of(), positions.stream().filter(SourcePos::wasCopiedHere).toList(),
                 "somebody wrote this text; what is missing is a name for it, not an author");
-        assertEquals(List.of(), positions.stream().filter(p -> p.sourceId() != null).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds).toList(),
                 "and nothing here has named it");
     }
 
@@ -150,9 +151,9 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
                 let sized (n: Int): Int = Int.abs(n)
                 """, "sized"), positions);
 
-        List<SourcePos> copied = positions.stream().filter(SourcePos::isOutOfSight).toList();
+        List<SourcePos> copied = positions.stream().filter(SourcePos::wasCopiedHere).toList();
         assertFalse(copied.isEmpty(), "the body calls into the library, so some of it was copied");
-        assertEquals(List.of(), copied.stream().filter(p -> p.sourceId() == null).toList(),
+        assertEquals(List.of(), copied.stream().filter(p -> !(p.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds)).toList(),
                 "a copy is read against the caller's file and says which file that is");
     }
 
@@ -173,8 +174,8 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
                 let sized (n: Int): Int = Int.abs(n)
                 """, "sized"), positions);
 
-        List<String> said = positions.stream().filter(SourcePos::isOutOfSight)
-                .map(p -> p.writtenAt().toString()).distinct().toList();
+        List<String> said = positions.stream().filter(SourcePos::wasCopiedHere)
+                .map(p -> p.placement().toString()).distinct().toList();
         assertTrue(said.stream().allMatch(s -> s.contains("TheStandardLibrary")),
                 () -> "the library is still what the copy came from: " + said);
         assertTrue(said.stream().allMatch(s -> s.contains("Int.abs")),

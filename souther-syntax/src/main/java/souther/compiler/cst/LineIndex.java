@@ -3,7 +3,7 @@ package souther.compiler.cst;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.TextRead;
+import souther.compiler.diag.Placement;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,23 +27,23 @@ public final class LineIndex {
     /** What this is an index of, so that every position it makes says which source it is in and
      * whether that is where the code is. Both come from here because this is the one place a
      * position is made from a text, and neither is worked out again downstream. */
-    private final TextRead read;
+    private final Placement read;
     /** {@code lineStart[i]} is the offset at which line {@code i} (0-based) begins. */
     private final int[] lineStart;
 
     /** An index of a text this caller has no name for — a reader that only wants offsets
      *  converted. Its positions name no source. */
     public LineIndex(String source) {
-        this(source, TextRead.aTextWithNoIdentity());
+        this(source, Placement.aTextWithNoIdentity());
     }
 
     /** An index of a file this compile holds, or of no named file when {@code sourceId} is null. */
     public LineIndex(String source, SourceId sourceId) {
-        this(source, sourceId == null ? TextRead.aTextWithNoIdentity()
-                : TextRead.aFileOfThisCompile(sourceId));
+        this(source, sourceId == null ? Placement.aTextWithNoIdentity()
+                : Placement.aFileOfThisCompile(sourceId));
     }
 
-    public LineIndex(String source, TextRead read) {
+    public LineIndex(String source, Placement read) {
         this.source = source;
         this.read = read;
         List<Integer> starts = new ArrayList<>();

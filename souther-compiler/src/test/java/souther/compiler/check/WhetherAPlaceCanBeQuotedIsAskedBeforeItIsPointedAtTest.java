@@ -6,7 +6,8 @@ import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
-import souther.compiler.diag.WrittenAt;
+import souther.compiler.diag.DeclaringCode;
+import souther.compiler.diag.Placement;
 
 import org.junit.jupiter.api.Test;
 
@@ -37,9 +38,9 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
 
     /** A region read from a text put back together out of what a module published. */
     private static Region outOfSight() {
-        WrittenAt out = WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.rule"));
-        return new Region(new SourcePos(3, 5).standingInFor(out),
-                new SourcePos(3, 20).standingInFor(out));
+        Placement lib = Placement.whatAModulePublished(
+                new SourceProvenance.APublishedModule("lib.rule"));
+        return new Region(lib.at(3, 5), lib.at(3, 20));
     }
 
     @Test
@@ -96,17 +97,17 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
      */
     @Test
     void aRegionWhoseEndsCameFromTwoModulesIsNotOnePlaceEither() {
-        SourcePos fromA = new SourcePos(3, 5).standingInFor(
-                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.a")));
-        SourcePos fromB = new SourcePos(3, 20).standingInFor(
-                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.b")));
+        SourcePos fromA = Placement.whatAModulePublished(
+                new SourceProvenance.APublishedModule("lib.a")).at(3, 5);
+        SourcePos fromB = Placement.whatAModulePublished(
+                new SourceProvenance.APublishedModule("lib.b")).at(3, 20);
 
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(fromA, fromB)));
         assertThrows(DiagnosticPlace.NotOnePlace.class,
                 () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5, new SourceId("model.sou")),
                         new SourcePos(3, 20, new SourceId("model.sou")).standingInFor(
-                                WrittenAt.outOfSight(
+                                new DeclaringCode(
                                         new SourceProvenance.APublishedModule("lib.a"))))));
     }
 

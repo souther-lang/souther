@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
@@ -914,13 +915,49 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ObjectNode at = into.putObject("at");
         SourcePos pos = switch (where) {
             case Citation.Written written -> written.at();
-            case Citation.OutOfSight out -> out.reachedFrom();
+            case Citation.Reached reached -> reached.at();
+            case Citation.Unplaced _, Citation.UnplacedElsewhere _, Citation.OutOfSight _ ->
+                    throw new NoPlaceToWrite(where);
         };
-        at.put("sourceId", sources.written(pos.sourceId()));
+        if (!(pos.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file))) {
+            throw new NoPlaceToWrite(where);
+        }
+        at.put("sourceId", sources.written(file));
         at.put("line", pos.line());
         at.put("column", pos.column());
         ObjectNode writtenAt = at.putObject("writtenAt");
         where.writtenAtFields().forEach(writtenAt::put);
+    }
+
+    /**
+     * A place this document was asked to write that names no file.
+     *
+     * <p>The shipped schema says a place has a source, a line and a column, and there are two ways
+     * to arrive here without one. A position in a text this compilation cannot name, in a document
+     * about a compile whose every source is named, is a position a pass minted rather than read — the
+     * open question about whether such a position is a place at all. And a position inside a module's
+     * own published text is a real place in a text no reader holds, which the contract has no shape
+     * for: not a source, a line and a column, and not nothing either, since what a reader is owed
+     * there is which module the code is in.
+     *
+     * <p>A refusal rather than a document with the fields left out or filled in from whatever file
+     * was to hand. Both of those are documents the shipped schema forbids, written silently and read
+     * by a build that trusted the version on them. Widening what a consumer must handle is a
+     * decision about the contract, and it is not one to take by writing a field.
+     *
+     * <p>So what this says is that the decision has not been taken. It is loud on purpose: over this
+     * compiler's own suite the places written here are eight, all of them in files it holds, which
+     * is far too few to read as "this cannot happen".
+     */
+    static final class NoPlaceToWrite extends IllegalArgumentException
+            implements souther.compiler.diag.TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        NoPlaceToWrite(Citation where) {
+            super("an adequacy document writes places in files this compile holds, and was given "
+                    + where);
+        }
     }
 
     private static void signature(ObjectNode behavior, Adequacy.SignatureEvidence signature) {

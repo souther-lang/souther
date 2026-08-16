@@ -25,7 +25,7 @@ import java.util.Objects;
  * different futures — a published module may one day be linked to and the library never will.
  *
  * <p>What this does <em>not</em> say is which source a line and a column are read in. That is a
- * separate question with a separate answer ({@link SourcePos#sourceId()}), and reading one off the
+ * separate question with a separate answer ({@link SourcePos#quotedFrom()}), and reading one off the
  * other is what this exists to stop: a body copied from out of sight is read against the caller's
  * file, so it is out of sight and in a source of this compile at once.
  */

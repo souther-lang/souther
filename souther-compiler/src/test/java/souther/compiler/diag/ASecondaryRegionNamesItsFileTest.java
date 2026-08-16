@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.diag.QuotedFrom;
 
 
 import souther.compiler.diag.msg.NameMessage;
@@ -167,8 +168,7 @@ class ASecondaryRegionNamesItsFileTest {
 
         assertEquals(List.of(new SourceId("rows")), view.others().stream().map(Spot::sourceId).toList());
         assertEquals(new SourceId("rows"), ((DiagnosticPlace.InSource)
-                        withSecondary("rows").secondary().get(0).place()).region()
-                        .start().sourceId());
+                        withSecondary("rows").secondary().get(0).place()).source());
     }
 
     @Test
@@ -269,8 +269,8 @@ class ASecondaryRegionNamesItsFileTest {
      */
     @Test
     void aRegionOutOfSightBecomesALabelWithNothingToPointAt() {
-        SourcePos there = new SourcePos(3, 3).standingInFor(
-                WrittenAt.outOfSight(new SourceProvenance.APublishedModule("lib.rule")));
+        SourcePos there = Placement.whatAModulePublished(
+                new SourceProvenance.APublishedModule("lib.rule")).at(3, 3);
         LabeledRegion label = new LabeledRegion(Region.ofWidth(there, 4),
                 new NameMessage.WriteItOnItsOwn("x"));
 
