@@ -158,6 +158,18 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
         }
         assertEquals(List.of("ModuleUniverse.java"), minting,
                 "a leave is written where publication is settled, and nowhere else");
+        List<String> asking = new ArrayList<>();
+        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            if (source.getFileName().toString().equals("ModuleUniverse.java")) {
+                continue;   // where the question is answered
+            }
+            if (read(source).contains(".publishedHelper(")) {
+                asking.add(source.getFileName().toString());
+            }
+        }
+        assertEquals(List.of("Scoping.java"), asking,
+                "what a module offers is asked where claims are made; what an importer was left"
+                        + " with is a different question and is asked of the settled answer");
     }
 
     /**

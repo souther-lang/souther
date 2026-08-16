@@ -213,7 +213,7 @@ public final class PublishedUniverse {
         // being scoped is read from.
         ReadableModule readable = this.read.get(module);
         Scoping.Scoped scoped = Scoping.of(universe, new Scoping.Subject(readable.module(),
-                declaredBy(readable), readable.libraryNames()));
+                declaredBy(readable), readable.libraryClaims()));
         if (!scoped.refused().isEmpty()) {
             return null;
         }

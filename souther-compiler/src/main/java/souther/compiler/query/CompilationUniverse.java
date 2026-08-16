@@ -57,7 +57,7 @@ public record CompilationUniverse(Db db) implements ModuleUniverse {
         if (declared == null) {
             return null;
         }
-        List<Scoping.Claim> library = db.ask(new Front.LibraryNames(name)).value();
+        List<Scoping.Claim> library = db.ask(new Front.LibraryClaims(name)).value();
         // The three are one reading. A module whose table this compilation cannot answer is not one
         // a scope can be assembled for: answered emptily instead, every bare name its import lines
         // brought in would denote nothing.

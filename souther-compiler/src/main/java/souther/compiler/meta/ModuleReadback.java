@@ -225,14 +225,14 @@ public final class ModuleReadback {
      */
     record AsRead(Ast.Module module, Map<String, Ast.Def> declarations,
                   Set<String> injectedBehaviors,
-                  java.util.List<Scoping.Claim> libraryNames) implements ReadableModule {
+                  java.util.List<Scoping.Claim> libraryClaims) implements ReadableModule {
 
         /** Copied, because this is an answer a compilation remembers and an answer it remembers is
          *  a value. */
         AsRead {
             declarations = Collections.unmodifiableMap(new LinkedHashMap<>(declarations));
             injectedBehaviors = Collections.unmodifiableSet(new LinkedHashSet<>(injectedBehaviors));
-            libraryNames = List.copyOf(libraryNames);
+            libraryClaims = List.copyOf(libraryClaims);
         }
     }
 

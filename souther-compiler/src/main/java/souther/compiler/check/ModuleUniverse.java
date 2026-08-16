@@ -162,8 +162,15 @@ public interface ModuleUniverse {
              * <p>The answer is the leave and not a {@code boolean}, because what follows a yes is
              * another module's body being read. {@link PublishedHelper} is what a reader shows for
              * it, and a reader that only holds the other module's tree has nothing to show.
+             *
+             * <p>Asked where claims are made, and nowhere else. What this module offers and what
+             * an importer was left with are two things: a line may be refused, or lose a spelling
+             * to another line or to a declaration written here, and the offer stands all the same.
+             * A pass that could ask this would be asking the first question with the second one's
+             * answer in mind, which is how a definition came to be published to one reader and not
+             * to another. What survived the contest is {@code ResolvedImports.leaves()}.
              */
-            public java.util.Optional<PublishedHelper> publishedHelper(String name) {
+            java.util.Optional<PublishedHelper> publishedHelper(String name) {
                 return publishedHelpers.contains(name)
                         ? java.util.Optional.of(new PublishedHelper(module, name))
                         : java.util.Optional.empty();

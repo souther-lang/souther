@@ -104,6 +104,8 @@ public final class Resolve {
     private final Map<String, Set<String>> borrowed = new LinkedHashMap<>();
     /** Where each of those was first named — the position the synthesized import stands at. */
     private final Map<String, SourcePos> borrowedAt = new LinkedHashMap<>();
+    /** Every behavior a qualified reference reached, as this pass answered it. */
+    private final List<QualifiedUse> qualified = new ArrayList<>();
 
     private Resolve(SyntaxSymbols symbols, Values values) {
         this.symbols = symbols;
@@ -468,7 +470,23 @@ public final class Resolve {
      */
     public record Resolution(Hir.Module module, ResolutionIndex index,
                              List<CompileException> unresolved,
-                             Map<String, OfDeclaration> declarations) {}
+                             Map<String, OfDeclaration> declarations,
+                             List<QualifiedUse> qualified) {}
+
+    /**
+     * One behavior a qualified reference reached, and where the reference is written.
+     *
+     * <p>What this pass answered, handed on as what it answered. A reader wanting these used to
+     * find them among the module's imports, because an import is synthesized for each module one
+     * reaches — but an import records a dependency, and a dependency the module already has is not
+     * recorded twice. So a behavior named through its module was invisible to that reader whenever
+     * a line happened to name the same module and name, which is exactly when the bare spelling had
+     * been refused and the qualified reference was the only way the behavior was reached at all.
+     *
+     * <p>The occurrence and not the module. An import stands where the first reference to that
+     * module is, so a second one elsewhere was reported at the first one's line.
+     */
+    public record QualifiedUse(ValueName.Behavior named, SourcePos at) {}
 
     /**
      * What resolving one declaration came to.
@@ -594,7 +612,8 @@ public final class Resolve {
                         m.exampleFileTarget(), m.pos()),
                 new ResolutionIndex(List.copyOf(r.denotations), List.copyOf(r.values0),
                         Map.copyOf(r.binders)),
-                List.copyOf(r.unresolved), Map.copyOf(declarations));
+                List.copyOf(r.unresolved), Map.copyOf(declarations),
+                List.copyOf(r.qualified));
     }
 
     /**
@@ -741,6 +760,7 @@ public final class Resolve {
         // author wrote one: the borrowed signature and the injected field are found by it.
         borrowed.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
         borrowedAt.putIfAbsent(target, ref.pos());
+        qualified.add(new QualifiedUse(named, ref.pos()));
         return behaviorReached(ref, named);
     }
 

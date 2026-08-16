@@ -16,6 +16,7 @@ import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ModuleUniverse.InSight.Read.PublishedHelper;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -205,43 +206,29 @@ public final class Bodies {
         // And the ones a qualified reference reaches, which claim no bare spelling and so were
         // settled by no contest. They are borrowed all the same: naming a behavior through its
         // module reaches it, and the signature and the injected field come with it.
-        for (Reached each : reachedByAQualifier(db, module)) {
-            out.putIfAbsent(each.name(), each.module());
+        for (Resolve.QualifiedUse each : reachedByAQualifier(db, module)) {
+            out.putIfAbsent(each.named().name(), each.named().module());
         }
         return out;
     }
 
-    /** One behavior a qualified reference reached, as resolution answered it. */
-    private record Reached(String module, String name, SourcePos at) {}
-
     /**
      * The behaviors a qualified reference reaches, as resolution answered them.
      *
-     * <p>Read off what resolution settled and not off the import lines. Which module a qualifier
-     * names is decided against the aliases a scope was assembled with, where an alias already
-     * answered to is refused and the first line keeps it; walked again over the raw lines, the last
-     * one wins instead — so {@code import app.a as X} followed by a refused {@code import app.b as
-     * X} left {@code X.f} meaning {@code app.a.f} to everything that reads a name and
-     * {@code app.b.f} to everything that collects a signature.
+     * <p>Read as the answer rather than found among the module's imports. An import is synthesized
+     * for each module a reference reaches, to record the dependency — and a dependency the module
+     * already has is not recorded twice, so a behavior named through its module was invisible here
+     * whenever a line happened to name the same module and name. Which is exactly when the bare
+     * spelling had been refused and the qualified reference was the only way the behavior was
+     * reached at all.
      *
-     * <p>Kept as the pairs and not folded by the bare name, because two of them under one spelling
-     * is what the rule below is about. Resolution stands each synthesized import where the
-     * reference that asked for it is written, so the place comes with it.
+     * <p>Each occurrence, and not one per module. An import stands where the first reference to
+     * that module is written, so a second one elsewhere was reported at the first one's line.
      */
-    private static List<Reached> reachedByAQualifier(Db db, String module) {
-        List<Reached> out = new ArrayList<>();
-        Answer<Hir.Module> resolved = db.ask(new Names.Resolved(module));
-        if (!resolved.present()) {
-            return out;
-        }
-        for (Hir.Import imp : resolved.value().imports()) {
-            for (Hir.ImportedName each : imp.importedNames()) {
-                if (each.pos() == null) {
-                    out.add(new Reached(imp.module(), each.text(), imp.pos()));
-                }
-            }
-        }
-        return out;
+    private static List<Resolve.QualifiedUse> reachedByAQualifier(Db db, String module) {
+        Answer<List<Resolve.QualifiedUse>> reached =
+                db.ask(new Names.QualifiedBehaviors(module));
+        return reached.present() ? reached.value() : List.of();
     }
 
     /** The leave each definition this module imported carries, by the bare name it writes for
@@ -332,11 +319,11 @@ public final class Bodies {
                 scoped.value().imports().behaviors()
                         .forEach((each, named) -> from.put(each, named.module()));
             }
-            for (Reached each : reachedByAQualifier(db, name)) {
-                String earlier = from.put(each.name(), each.module());
-                if (earlier != null && !earlier.equals(each.module())) {
-                    return Answer.absent(
-                            collision(each.name(), earlier, each.module(), each.at()));
+            for (Resolve.QualifiedUse each : reachedByAQualifier(db, name)) {
+                String earlier = from.put(each.named().name(), each.named().module());
+                if (earlier != null && !earlier.equals(each.named().module())) {
+                    return Answer.absent(collision(each.named().name(), earlier,
+                            each.named().module(), each.at()));
                 }
             }
             Map<String, Sig> result = new LinkedHashMap<>();
