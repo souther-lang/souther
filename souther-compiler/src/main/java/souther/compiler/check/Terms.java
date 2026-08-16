@@ -1063,20 +1063,43 @@ final class Terms {
                         : new Hir.Binary(b.op(), left, right, b.origin(), b.pos(), null);
             }
             case Core.PreservedCall call -> {
-                List<Hir.Expr> args = new ArrayList<>();
-                for (Core arg : call.args()) {
-                    Hir.Expr written = asWrittenValue(arg);
-                    if (written == null) {
-                        yield null;
-                    }
-                    args.add(written);
-                }
-                yield new Hir.Apply(call.operation().name(), call.operation(),
-                        reachOf(call.operation()), args, ConstructionOrigin.own(), call.pos(),
-                        null);
+                List<Hir.Expr> args = written(call.args());
+                yield args == null ? null
+                        : new Hir.Apply(call.operation().name(), call.operation(),
+                                reachOf(call.operation()), args, ConstructionOrigin.own(),
+                                call.pos(), null);
             }
+            // A temporal is written as a literal with its text spelled out (spec
+            // §a-temporal-value-is-written-as-a-literal), and what the analysis representation keeps
+            // of one is a call to the operation that builds it. Rendered here for the same reason
+            // every other written form is: it is a value the author wrote, and a reader handed
+            // nothing for it reads the rule around it as a rule about something unknown.
+            case Core.Call call when call.fn() instanceof Core.Reached reached -> {
+                List<Hir.Expr> args = written(call.args());
+                yield args == null ? null
+                        : new Hir.Apply(reached.denotes().name(), reached.denotes(), reached.name(),
+                                args, ConstructionOrigin.own(), call.pos(), null);
+            }
+            // A case of an enumeration is written by naming it, so the value is the name.
+            case Core.UnitValue unit -> Hir.Var.respelled(unit.data().name(),
+                    new ValueName.OfType(unit.data().name(), unit.data(),
+                            ConstructionOrigin.own()),
+                    new ReachName.Bare(unit.data().name()), unit.pos(), null);
             case null, default -> null;
         };
+    }
+
+    /** Every argument as it was written, or null where any of them was computed. */
+    private static List<Hir.Expr> written(List<Core> args) {
+        List<Hir.Expr> out = new ArrayList<>();
+        for (Core arg : args) {
+            Hir.Expr each = asWrittenValue(arg);
+            if (each == null) {
+                return null;
+            }
+            out.add(each);
+        }
+        return out;
     }
 
     // --- helpers -------------------------------------------------------------------------------
