@@ -29,22 +29,43 @@ import java.util.function.Supplier;
  */
 final class LastAnswered<T> {
 
-    private final Map<String, T> byDocument = new LinkedHashMap<>();
+    /** An answer, and what it was an answer about. */
+    private record Answered<V>(String subject, V value) {}
+
+    private final Map<String, Answered<T>> byDocument = new LinkedHashMap<>();
 
     /**
      * What {@code ask} answers about {@code uri}, or what it last answered where it answers nothing
-     * now.
+     * now and was answering about the same thing.
      *
-     * <p>Null where it has never answered about this document: there is nothing to fall back to, and
-     * a reader with nothing to say says nothing rather than something it did not read.
+     * <p>{@code subject} is what the answer is about — the module a document belongs to — and null
+     * where that is not known either. A document is edited while it is a document of one module, and
+     * what is kept is an answer about that module; a document that has become another module's has
+     * no last answer, since the one being kept was never about what is being asked. Falling back
+     * without asking would be handing over a declaration of a module this file no longer has
+     * anything to do with.
+     *
+     * <p>An unknown subject falls back. Which module a document belongs to is itself the compile's
+     * answer and goes absent with everything else, so refusing there would refuse in exactly the
+     * case this is for.
+     *
+     * <p>Null where nothing has been answered about this document that this asking may have: there
+     * is nothing to fall back to, and a reader with nothing to say says nothing rather than
+     * something it did not read.
      */
-    T of(String uri, Supplier<T> ask) {
+    T of(String uri, String subject, Supplier<T> ask) {
         T answered = ask.get();
-        if (answered == null) {
-            return byDocument.get(uri);
+        if (answered != null) {
+            byDocument.put(uri, new Answered<>(subject, answered));
+            return answered;
         }
-        byDocument.put(uri, answered);
-        return answered;
+        Answered<T> kept = byDocument.get(uri);
+        if (kept == null) {
+            return null;
+        }
+        boolean aboutTheSame =
+                subject == null || kept.subject() == null || subject.equals(kept.subject());
+        return aboutTheSame ? kept.value() : null;
     }
 
     /** Forgets every document the workspace no longer holds, so a file that was deleted or renamed

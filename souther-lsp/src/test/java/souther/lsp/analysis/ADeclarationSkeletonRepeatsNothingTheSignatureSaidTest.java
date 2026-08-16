@@ -47,6 +47,31 @@ class ADeclarationSkeletonRepeatsNothingTheSignatureSaidTest {
         assertEquals(List.of("id", "fallback", "body"), holeTextsOf(built));
     }
 
+    /**
+     * A behavior that takes nothing is implemented by a {@code let} written without parentheses.
+     *
+     * <p>The parentheses are what makes a {@code let} a function; one written without them defines a
+     * value, and the language refuses an empty pair (E2301). So a skeleton that wrote them for a
+     * behavior with nothing to take would be a skeleton nothing accepts — and, since a skeleton that
+     * does not parse is dropped rather than offered, a behavior taking nothing would quietly be
+     * offered no implementation at all.
+     */
+    @Test
+    void aBehaviorThatTakesNothingIsWrittenWithoutParentheses() {
+        Skeleton.Built built = Skeleton.of(DeclarationSkeletons.implementing("make", List.of()));
+        assertEquals("let make = body\n", built.text());
+        assertEquals(List.of("body"), holeTextsOf(built));
+    }
+
+    /** A row for one still states its argument list, which is where an empty pair is written. */
+    @Test
+    void aRowForABehaviorThatTakesNothingStatesAnEmptyList() {
+        Skeleton.Built built =
+                Skeleton.of(DeclarationSkeletons.exampleFor("make", List.of(), List.of()));
+        assertEquals("example make\n    | () -> expected\n", built.text());
+        assertEquals(List.of("expected"), holeTextsOf(built));
+    }
+
     /** A row states an argument apiece for what the behavior takes. */
     @Test
     void aRowStatesAnArgumentApiece() {

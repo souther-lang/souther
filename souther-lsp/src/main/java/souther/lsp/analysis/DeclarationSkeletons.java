@@ -43,27 +43,36 @@ final class DeclarationSkeletons {
      * <p>An input is a hole standing in with the behavior's own spelling, which is a suggestion; an
      * injected parameter is written out, because its name is the behavior it injects and any other
      * spelling is refused.
+     *
+     * <p>A behavior with nothing to take is written without parentheses. They are what makes a
+     * {@code let} a function, and one written without them defines a value — an empty pair is
+     * refused (E2301), so writing one would be offering a declaration nothing accepts.
      */
     static List<Skeleton.Part> implementing(String behavior,
                                             List<SpecImplementation.Parameter> parameters) {
         List<Skeleton.Part> parts = new ArrayList<>();
-        parts.add(literal(starterOf(TopLevelForm.FN), name(behavior), spelt(SyntaxKind.LPAREN)));
-        for (int i = 0; i < parameters.size(); i++) {
-            if (i > 0) {
-                parts.add(literal(spelt(SyntaxKind.COMMA)));
+        parts.add(literal(starterOf(TopLevelForm.FN), name(behavior)));
+        if (!parameters.isEmpty()) {
+            parts.add(literal(spelt(SyntaxKind.LPAREN)));
+            for (int i = 0; i < parameters.size(); i++) {
+                if (i > 0) {
+                    parts.add(literal(spelt(SyntaxKind.COMMA)));
+                }
+                switch (parameters.get(i)) {
+                    case SpecImplementation.Parameter.Input input ->
+                            parts.add(hole(Skeleton.Category.IDENTIFIER, input.nameSuggestion()));
+                    case SpecImplementation.Parameter.Injected injected ->
+                            parts.add(literal(name(injected.name())));
+                    // A dependency naming nothing settles no parameter to write. Nothing is offered
+                    // for a behavior holding one, so this is unreachable through what offers a
+                    // skeleton.
+                    case SpecImplementation.Parameter.Unanswered _ ->
+                            parts.add(hole(Skeleton.Category.IDENTIFIER, A_PARAMETER));
+                }
             }
-            switch (parameters.get(i)) {
-                case SpecImplementation.Parameter.Input input ->
-                        parts.add(hole(Skeleton.Category.IDENTIFIER, input.nameSuggestion()));
-                case SpecImplementation.Parameter.Injected injected ->
-                        parts.add(literal(name(injected.name())));
-                // A dependency naming nothing settles no parameter to write. Nothing is offered for
-                // a behavior holding one, so this is unreachable through what offers a skeleton.
-                case SpecImplementation.Parameter.Unanswered _ ->
-                        parts.add(hole(Skeleton.Category.IDENTIFIER, A_PARAMETER));
-            }
+            parts.add(literal(spelt(SyntaxKind.RPAREN)));
         }
-        parts.add(literal(spelt(SyntaxKind.RPAREN), spelt(SyntaxKind.ASSIGN)));
+        parts.add(literal(spelt(SyntaxKind.ASSIGN)));
         parts.add(hole(Skeleton.Category.EXPRESSION, A_BODY));
         return List.copyOf(parts);
     }

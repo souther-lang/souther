@@ -56,7 +56,7 @@ final class NamesFromElsewhere {
     List<CompletionItem> of(Compilation compilation, String uri, String module,
                             Set<String> declaredHere) {
         List<CompletionItem> answered =
-                byDocument.of(uri, () -> ask(compilation, module, declaredHere));
+                byDocument.of(uri, module, () -> ask(compilation, module, declaredHere));
         return answered == null ? List.of() : answered;
     }
 

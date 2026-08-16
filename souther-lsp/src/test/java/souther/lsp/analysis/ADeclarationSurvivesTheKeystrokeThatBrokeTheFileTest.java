@@ -125,6 +125,30 @@ class ADeclarationSurvivesTheKeystrokeThatBrokeTheFileTest {
     /** A composition that reaches itself: what this module requires has no answer while it stands. */
     private static final String CYCLE = "\nbehavior loop = loop >-> place\n";
 
+    /**
+     * What was kept is about a module, and a document that has become another module's is not owed
+     * it.
+     *
+     * <p>Keeping an answer is for a document being edited while the compiler cannot say what it
+     * declares. It is not for a document that now says it belongs somewhere else: the behaviors of
+     * the module it used to be are not what may be written here, and offering them is offering a
+     * declaration of something this file has nothing to do with. The compiler has not said nothing
+     * about this module — it has never been asked about it.
+     */
+    @Test
+    void aDocumentThatBecameAnotherModulesIsNotOfferedTheOnesItWas() {
+        Analyzer analyzer = new Analyzer();
+        assertNotNull(offered(analyzer, DEPENDING).get("example place"),
+                "nothing was offered while the compiler could answer");
+
+        String elsewhere = DEPENDING.replace("module m", "module n") + CYCLE;
+        Map<String, CompletionItem> items = offered(analyzer, elsewhere);
+        assertNull(items.get("example place"),
+                "a row was offered for a module this document is no longer part of");
+        assertNotNull(items.get("let").writes(),
+                "the forms themselves stopped being offered, which is not what changed");
+    }
+
     private static Map<String, CompletionItem> offered(Analyzer analyzer, String source) {
         Map<String, String> sources = new LinkedHashMap<>();
         sources.put(URI, source);

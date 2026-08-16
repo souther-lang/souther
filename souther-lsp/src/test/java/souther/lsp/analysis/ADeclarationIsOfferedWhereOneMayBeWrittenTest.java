@@ -171,6 +171,8 @@ class ADeclarationIsOfferedWhereOneMayBeWrittenTest {
 
                 import up ( A )
 
+                behavior findMember : (id: A) -> A
+
                 data B = { v: Int }
                 """;
         List<String> lines = withImports.lines().toList();
@@ -178,6 +180,12 @@ class ADeclarationIsOfferedWhereOneMayBeWrittenTest {
                 at(withImports, lines.indexOf("import up ( A )"), 0);
         assertNull(aboveTheImport.get("data").writes(),
                 "a definition was offered above an import, where the imports would follow it");
+        // The same gate, for a declaration written from a signature: knowing which one it is does
+        // not make it writable where a declaration is not.
+        assertFalse(aboveTheImport.containsKey("let findMember"),
+                "an implementation was offered above an import");
+        assertFalse(aboveTheImport.containsKey("example findMember"),
+                "a row was offered above an import");
         assertNotNull(aboveTheImport.get("import").writes(),
                 "an import was not offered beside the imports");
 
@@ -237,6 +245,36 @@ class ADeclarationIsOfferedWhereOneMayBeWrittenTest {
                 "the row does not supply what the stages depend on: " + row.writes().text());
         assertFalse(items.containsKey("let both"),
                 "a composition was offered an implementation, which it already is");
+    }
+
+    /**
+     * A behavior that takes nothing is offered both, and both are accepted where they are offered.
+     *
+     * <p>A skeleton that does not parse is dropped rather than offered, so a form the language
+     * writes differently is not a candidate that comes out wrong — it is a candidate that quietly
+     * stops being there. Asking for it by name is what tells the two apart.
+     */
+    @Test
+    void aBehaviorThatTakesNothingIsOfferedBoth() {
+        String nothingToTake = """
+                module m
+
+                data A = { v: Int }
+
+                behavior make : () -> A
+                    constructs A
+                """;
+        Map<String, CompletionItem> items =
+                at(nothingToTake, (int) nothingToTake.lines().count(), 0);
+
+        CompletionItem implementation = items.get("let make");
+        assertNotNull(implementation,
+                "a behavior taking nothing was offered no implementation: " + items.keySet());
+        assertEquals("let make = body\n", implementation.writes().text());
+
+        CompletionItem row = items.get("example make");
+        assertNotNull(row, "a behavior taking nothing was offered no row");
+        assertEquals("example make\n    | () -> expected\n", row.writes().text());
     }
 
     private static Map<String, CompletionItem> atEndOfFile() {

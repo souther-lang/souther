@@ -1271,7 +1271,11 @@ public final class Analyzer {
                         DeclarationSkeletons.fixed(form)).ifPresent(out::add);
             }
         }
-        out.addAll(behaviorsToWrite(uri, compilation, module));
+        // Through the same gate. A declaration written from a signature stands where a declaration
+        // stands, and knowing which one it is does not make it writable anywhere else.
+        if (here.contains(TopLevelForm.Region.BODY)) {
+            out.addAll(behaviorsToWrite(uri, compilation, module));
+        }
         return List.copyOf(out);
     }
 
@@ -1287,7 +1291,7 @@ public final class Analyzer {
     private List<CompletionItem> behaviorsToWrite(String uri, Compilation compilation,
                                                   String module) {
         List<CompletionItem> answered =
-                behaviorsOwed.of(uri, () -> askBehaviorsToWrite(compilation, module));
+                behaviorsOwed.of(uri, module, () -> askBehaviorsToWrite(compilation, module));
         return answered == null ? List.of() : answered;
     }
 
@@ -1343,8 +1347,11 @@ public final class Analyzer {
      * {@link Bodies.Requirements} carries a composition's stages' requirements as its own, so a row
      * for one supplies what the stages want.
      *
-     * <p>A behavior that is itself injected requires nothing and is not a key there, which is
-     * absence meaning what it says rather than the question going unanswered.
+     * <p>A behavior that is itself injected requires nothing and is not a key there — the one place
+     * a name being missing says something rather than being something missing. Which of the two it
+     * is, is asked of the behavior rather than read off the absence: a name that is not there for
+     * any other reason is an answer that does not hold together, and a row written as though it
+     * required nothing would state no stand-in for what it depends on.
      */
     private static Optional<CompletionItem> rowToWrite(
             Prepared prepared, Hir.BehaviorDef declared, Map<String, Sig> signatures,
@@ -1353,9 +1360,15 @@ public final class Analyzer {
         if (sig == null) {
             return Optional.empty();
         }
+        List<BehaviorRequirement> required = List.of();
+        if (!prepared.injected(declared)) {
+            required = requirements.get(declared.name());
+            if (required == null) {
+                return Optional.empty();
+            }
+        }
         List<String> unsupplied = ExampleProvisioning.unsupplied(List.of(),
-                Requirements.names(requirements.getOrDefault(declared.name(), List.of())),
-                prepared.forExamples());
+                Requirements.names(required), prepared.forExamples());
         return built(TopLevelForm.EXAMPLE.starter() + " " + declared.name(),
                 CompletionItem.SNIPPET, module,
                 DeclarationSkeletons.exampleFor(declared.name(), argumentsOf(declared, sig),
