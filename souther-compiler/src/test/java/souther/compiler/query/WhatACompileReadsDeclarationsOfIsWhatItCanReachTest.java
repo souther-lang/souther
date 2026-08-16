@@ -6,7 +6,8 @@ import souther.compiler.Compiler;
 import souther.compiler.meta.Agreement;
 import souther.compiler.meta.DeclarationAgreement;
 import souther.compiler.meta.PublishedClasses;
-import souther.compiler.meta.PublishedModule;
+import souther.compiler.meta.ModuleReadback;
+import souther.compiler.meta.Readback;
 
 import java.util.List;
 import java.util.Map;
@@ -50,9 +51,9 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
     void aModuleOnThePathIsAmongWhatThisCompileReadsDeclarationsOf() {
         PublishedClasses reads = declarationsOf(ROOT, Compiler.compile(SHARED));
 
-        assertNotNull(PublishedModule.read("example.root", reads),
+        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.root", reads),
                 "the module being compiled here");
-        assertNotNull(PublishedModule.read("example.shared", reads),
+        assertInstanceOf(Readback.Ready.class, ModuleReadback.read("example.shared", reads),
                 "and the one it imports, which arrived compiled");
     }
 

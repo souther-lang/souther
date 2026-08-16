@@ -1,23 +1,23 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Exposing;
 import souther.compiler.codegen.Backend;
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.SourceProvenance;
+import souther.compiler.frontend.CstFrontend;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.SourceProvenance;
-import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.frontend.CstFrontend;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
- * A module read back from what {@link ModuleMetadata} wrote into its classes: the declarations
+ * Reading a module back from what {@link ModuleMetadata} wrote into its classes: the declarations
  * another project needs in order to {@code import} it, without its {@code .sou}.
  *
  * <p>The declarations are put back together as one source and handed to the parser, so what an
@@ -31,21 +31,41 @@ import java.util.Set;
  * arrives with no types written and is settled again here — including one that names what a value is
  * and leaves what it holds open, which is why no type variable has to be written for it to cross.
  *
- * <p>{@code injected} does not survive as source. A behavior is an injection target when its module
- * writes no {@code let} for it, and no {@code let} came back for any of them, so the flag that was
- * published is carried here beside the module rather than inferred from it.
+ * <p>Reading the import lines is part of reading the module and not a step after it. A module comes
+ * out of here with its library names already answered ({@link ReadableModule}), because the lines
+ * that carried them are dropped once read and nothing else says what its bare names mean. Split in
+ * two, a caller did the first and not the second, and an invariant that called a name its module
+ * imported bare then resolved against nothing in every project but the one that wrote it.
+ *
+ * <p>Nothing here raises for an artifact this compiler will not read. Every such failure is a
+ * {@link Readback.Failure}, named where it is found by the code that knows its shape, so what
+ * converts is stated rather than decided by how wide a caller's catch happened to be. The one catch
+ * left is around the parse, and it is around the parse alone.
  */
-public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) {
+public final class ModuleReadback {
+
+    private ModuleReadback() {}
 
     /**
-     * The module named {@code moduleName}, or null when {@code classes} has no {@code $Module} for
-     * it — the name is not a compiled Souther module, or is one from before modules carried their
-     * declarations.
+     * Where the code of {@code module} is written, as anything reading it back says so.
+     *
+     * <p>One function, because there is one answer and two callers. This is what stamps the parse,
+     * and a report about a module that never got as far as being parsed — an artifact at a boundary
+     * revision this compiler does not agree with, one whose declaration class is missing — has no
+     * position to read a provenance off and its name is all there is. Written out at both, the two
+     * agree only for as long as provenance is a module name and nothing else; the day it carries
+     * where the published source is, this is the one place that learns it.
      */
-    public static PublishedModule read(String moduleName, PublishedClasses classes) {
-        PublishedClasses.Declarations found = classes.of(SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(moduleName)).binaryName());
+    public static SourceProvenance provenanceOf(String module) {
+        return new SourceProvenance.APublishedModule(module);
+    }
+
+    /** What {@code classes} carry for {@code moduleName}. */
+    public static Readback read(String moduleName, PublishedClasses classes) {
+        PublishedClasses.Declarations found = classes.of(
+                SoutherJvmAbi.nameOf(new GeneratedClass.ModuleDeclarations(moduleName)).binaryName());
         if (found == null || found.module() == null) {
-            return null;
+            return new Readback.SaysNothing();
         }
         PublishedClasses.SoutherModuleView m = found.module();
         // A member this compiler asks for and the writer did not write reads as its default. The
@@ -53,20 +73,27 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         // module that carries none was written by something this compiler does not agree with,
         // whatever its number says.
         if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
-            throw incompatible(m);
+            return unreadable(moduleName, new Readback.Failure.Incompatible(m.compiler()));
         }
         StringBuilder declarations = new StringBuilder();
         Set<String> injected = new LinkedHashSet<>();
         for (String type : m.types()) {
-            declarations.append('\n').append(declaration(classes, m, type, moduleName + "." + type,
-                    PublishedClasses.Declarations::data)).append('\n');
+            String text = declared(classes, moduleName + "." + type,
+                    PublishedClasses.Declarations::data);
+            if (text == null) {
+                return unreadable(moduleName, new Readback.Failure.DeclarationMissing(type));
+            }
+            declarations.append('\n').append(text).append('\n');
         }
         for (String behavior : m.behaviors()) {
-            String binaryName = SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorInterface(moduleName, behavior)).binaryName();
-            declarations.append('\n')
-                    .append(declaration(classes, m, behavior, binaryName,
-                            PublishedClasses.Declarations::behaviorSignature))
-                    .append('\n');
+            String binaryName = SoutherJvmAbi.nameOf(
+                    new GeneratedClass.BehaviorInterface(moduleName, behavior)).binaryName();
+            String text = declared(classes, binaryName,
+                    PublishedClasses.Declarations::behaviorSignature);
+            if (text == null) {
+                return unreadable(moduleName, new Readback.Failure.DeclarationMissing(behavior));
+            }
+            declarations.append('\n').append(text).append('\n');
             if (Boolean.TRUE.equals(classes.of(binaryName).behaviorInjected())) {
                 injected.add(behavior);
             }
@@ -79,15 +106,32 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
             source.append(line).append('\n');
         }
         source.append(declarations);
-        // Read back, not read: the text was put together here out of what the module carries, so
-        // its lines are lines of nothing anybody holds. Every position it makes says so from the
-        // start, and a reader here reaches the module by its name.
-        Ast.Module module = CstFrontend.parseWhatAModulePublished(source.toString(),
-                new SourceProvenance.APublishedModule(moduleName));
+        Ast.Module parsed;
+        try {
+            // Read back, not read: the text was put together here out of what the module carries, so
+            // its lines are lines of nothing anybody holds. Every position it makes says so from the
+            // start, and a reader here reaches the module by its name.
+            parsed = CstFrontend.parseWhatAModulePublished(source.toString(),
+                    provenanceOf(moduleName));
+        } catch (CompileException _) {
+            // Around the parse and nothing else. A pass raises, so this is the one place a raise has
+            // to be turned into a failure — and wrapping any more than the call would let something
+            // else's raise arrive as a statement about this artifact.
+            return unreadable(moduleName, new Readback.Failure.InvalidPublishedSyntax());
+        }
         // Which imports are needed is asked of the header and the declarations — everything that was
         // published except the import lines themselves.
-        return new PublishedModule(
-                withNeededImports(module, m.header() + "\n" + declarations), injected);
+        Exposing.Checked checked =
+                Exposing.check(withNeededImports(parsed, m.header() + "\n" + declarations));
+        if (!checked.refused().isEmpty()) {
+            return unreadable(moduleName, new Readback.Failure.InvalidExposure(checked.refused()));
+        }
+        return new Readback.Ready(
+                new ReadableModule(checked.module(), injected, checked.exposed()));
+    }
+
+    private static Readback unreadable(String module, Readback.Failure why) {
+        return new Readback.Unreadable(module, why);
     }
 
     /**
@@ -170,22 +214,11 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         return word.substring(from, to);
     }
 
-    private static String declaration(PublishedClasses classes, PublishedClasses.SoutherModuleView m, String name,
-                                      String binaryName,
-                                      java.util.function.Function<PublishedClasses.Declarations, String> member) {
+    /** The text {@code member} reads off {@code binaryName}'s class, or null where these classes do
+     *  not carry it. */
+    private static String declared(PublishedClasses classes, String binaryName,
+                                   Function<PublishedClasses.Declarations, String> member) {
         PublishedClasses.Declarations found = classes.of(binaryName);
-        String text = found == null ? null : member.apply(found);
-        if (text == null) {
-            throw CompileException.of(Diagnostic.say(new ModuleMessage.TheClassCarryingTheDeclarationIsNotOnThePath(name, m.name()))
-                            .hint(new ModuleMessage.TheJarItCameFromIsIncomplete(m.name()))
-                            .build());
-        }
-        return text;
-    }
-
-    private static CompileException incompatible(PublishedClasses.SoutherModuleView m) {
-        return CompileException.of(Diagnostic.say(new ModuleMessage.TheModuleWasCompiledByAnotherSouther(m.name(), m.compiler()))
-                        
-                        .hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(m.name())).build());
+        return found == null ? null : member.apply(found);
     }
 }

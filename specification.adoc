@@ -207,7 +207,7 @@ Three things hold of a module before anything in it is read:
 
 * [[a-module-is-declared-in-one-place]]a module is declared once. Two files declaring one name, or a file declaring a module that is also on the path, leave two answers to what that name means;
 * [[a-core-name-is-not-taken]]a module MUST NOT take a name the core has — the reserved `+souther+` namespace, or a standard-library qualifier such as `+List+` (<<reserved-namespace>>). A data MUST NOT take a qualifier's name either: the qualifier is the only spelling that reaches the library, so a declaration of that name hides it;
-* [[every-module-reached-is-on-the-path]]every module a compile reaches — imported, named in a qualified reference, or needed by one that is — MUST be among the modules being compiled or on the path, and what it says it declares MUST be there to read.
+* [[every-module-reached-is-on-the-path]]every module a compile reaches — imported, named in a qualified reference, or needed by one that is — MUST be among the modules being compiled or on the path.
 
 [,souther]
 ----
@@ -351,6 +351,10 @@ A declaration is not a binding in force and does not shadow an import. Importing
 === Importing a module another project compiled
 
 [[a-published-module-agrees-with-this-compiler]]A module read from compiled output MUST have been compiled by a Souther that agrees with this one about what an importing module may reach. What it published is read back as declarations, so a disagreement about the surface is a disagreement about the text of this compile.
+
+[[a-published-module-carries-what-it-says-it-declares]]A published module MUST carry every declaration it says it publishes. What it publishes is read back as declarations, and a declaration with no class behind it is not one.
+
+[[a-published-module-can-be-read-back]]A module used from compiled output MUST be readable back into the published surface this compiler understands. This is the boundary condition an importing project depends on, and the rules above are among the ways an artifact fails to meet it — a boundary revision that does not agree, a declaration whose class is absent, published text this compiler does not parse, an `+import+` line whose meaning it cannot reconstruct. An artifact that fails any of them is reported as one that cannot be read (<<e1509>>), with the reason said under that report; the rules themselves belong to the project that published it, and are not obligations of the project reading it.
 
 A module MAY be imported from the compiled output of another project, with no `+.sou+` of it in this
 one. A compiled module carries what it declares — its `+data+` definitions, its behavior
@@ -4963,18 +4967,12 @@ Reported when two sources declare one module, or a compiled source declares one 
 Module `example.travel` needs `example.employee`, which is not on the path either.
 ----
 
-Reported where a module a compile reaches is neither compiled here nor on the path (<<every-module-reached-is-on-the-path>>) — imported, written qualified, or needed by a module that is. It also covers a module on the path that says it declares something the classpath does not carry: what it publishes is read back as declarations, and a declaration with no class behind it is not one.
+Reported where a module a compile reaches is neither compiled here nor on the path (<<every-module-reached-is-on-the-path>>) — imported, written qualified, or needed by a module that is. A module the path does carry and this compiler cannot read is not this: it is on the path, this compile has heard of it, and what is wrong is the artifact (<<e1509>>).
 
-[#e1505]
+[#e1505-removed]
 === A module on the path was compiled by another Souther
 
-[,text]
-----
-Module `example.employee` was compiled by Souther 0.4.0, which does not agree with this compiler
-about what an importing module may reach.
-----
-
-Reported when reading a published module whose compiler does not agree with this one about the surface (<<a-published-module-agrees-with-this-compiler>>). Not a warning: what an importing module may reach decides what this compile's text means, so a disagreement is about the source being compiled and not about the artifact.
+A module read from compiled output still has to have been built by a Souther that agrees with this one (<<a-published-module-agrees-with-this-compiler>>), and it is still refused where it was not. What changed is where the refusal is said. It is one of the ways an artifact cannot be read back, so it is reported as <<e1509>> with the disagreement said under it — a rule the publishing project broke, rather than the rule the importing author is shown as theirs.
 
 [#e1506]
 === A name reached across a boundary is not declared there
@@ -5005,6 +5003,23 @@ Reported where the name exists and the module keeps it (<<a-reached-name-is-expo
 ----
 
 Reported where a name an `+import+` brings in has more than one answer here (<<an-imported-name-denotes-one-thing>>): exposed by two modules, colliding with this module's own declaration, or an alias already in use. Reaching one of them qualified is what says which, and is why the answer is not to pick one for the author.
+
+[#e1509]
+=== A module on the path cannot be read back
+
+[,text]
+----
+Module `example.employee` is on the class path, and this compiler cannot read what it published.
+  It was built by Souther 0.4.0, which does not agree with this compiler about what an importing
+  module may reach.
+  Rebuild `example.employee` with this compiler, or compile against the version that built it.
+----
+
+Reported where a module the class path carries cannot be read back into the surface this compiler understands (<<a-published-module-can-be-read-back>>). What went wrong inside the artifact is said under the report: a boundary revision that does not agree (<<a-published-module-agrees-with-this-compiler>>), a declaration whose class is not there (<<a-published-module-carries-what-it-says-it-declares>>), published text this compiler does not parse, an `+import+` line it cannot read.
+
+Said where the module was reached from — the `+import+` line in this project that arrives at it, and every other line that does, since a dependency two files import is reached by both. The artifact's own lines are not this compile's to quote, and a report carrying one sends an author to a place in a file they do not have.
+
+One report and one code, whichever of the four it was, because the author reading it has one thing to do about any of them. The rules broken are the publishing project's; naming one of them as the rule this author is in breach of hands them somebody else's obligation. A module refused here is still a module this compile has heard of, so an importer is not also told there is no such thing.
 
 [#e1601-removed]
 === (retired)
@@ -5722,7 +5737,7 @@ Emitted at an `+example+` whose behavior is answered by an implementation suppli
 
 Said once for the behavior in each source its rows are written in, however many rows those are: one answer and one model disagreeing is one fact, and the rows did not stop for reasons of their own. Not once for the behavior outright, because a diagnostic is said where it can be quoted — a behavior whose rows are written in the module and in an attached `+examples for+` file has rows in two files, and a reader of the second one would otherwise be shown rows that stopped and nothing saying why. Each row is recorded as undecided, with its inputs and its expectation already built and held to their invariants.
 
-Two things are reported under this code, and they are not the same finding. Where both sides were read and one declares something else, the declaration is named and the fix is to build again. Where the declarations could not be read at all — classes carrying none, or declarations written at another boundary revision (<<e1505>>) — nothing has been established about either build, and saying a build was stale would be saying it on evidence nobody has.
+Two things are reported under this code, and they are not the same finding. Where both sides were read and one declares something else, the declaration is named and the fix is to build again. Where the declarations could not be read at all — classes carrying none, or declarations this compiler cannot read back (<<a-published-module-can-be-read-back>>) — nothing has been established about either build, and saying a build was stale would be saying it on evidence nobody has.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

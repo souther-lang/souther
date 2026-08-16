@@ -19,7 +19,9 @@ import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.meta.PublishedClasses;
-import souther.compiler.meta.PublishedModule;
+import souther.compiler.meta.ModuleReadback;
+import souther.compiler.meta.ReadableModule;
+import souther.compiler.meta.Readback;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -364,26 +366,35 @@ public final class Front {
          *        looking clean while the build fails. Empty only where nothing this compile can
          *        quote reached it.
          */
-        public record OnThePath(Ast.Module module, Set<String> injectedBehaviors,
-                                Map<String, ValueName.Stdlib> libraryNames,
-                                List<SourcePos> reachedFrom) {
+        public record OnThePath(ReadableModule read, List<SourcePos> reachedFrom) {
 
-            /** Copied, for the reason {@link Exposing.Checked} is: this is remembered, and what is
+            /** Copied, for the reason {@link ReadableModule} is: this is remembered, and what is
              *  remembered is a value. */
             public OnThePath {
-                injectedBehaviors = Ordered.set(injectedBehaviors);
-                libraryNames = Ordered.map(libraryNames);
                 reachedFrom = List.copyOf(reachedFrom);
+            }
+
+            public Ast.Module module() {
+                return read.module();
+            }
+
+            public Set<String> injectedBehaviors() {
+                return read.injectedBehaviors();
+            }
+
+            public Map<String, ValueName.Stdlib> libraryNames() {
+                return read.libraryNames();
             }
         }
 
         /**
          * @param modules the ones this compilation may read declarations from
          * @param refused the ones it will not, and knows are there all the same — a module that
-         *        took a name no module may take. Which of those two a name is settles two different
-         *        questions, and answering only the first made a module that is on the path and
-         *        refused come back as one nobody has heard of: the author was told both that it took
-         *        a reserved name and that there is no such module.
+         *        took a name no module may take, and one this compiler cannot read what it
+         *        published. Which of those two a name is settles two different questions, and
+         *        answering only the first made a module that is on the path and refused come back as
+         *        one nobody has heard of: the author was told both that it took a reserved name and
+         *        that there is no such module.
          */
         public record Of(Map<String, OnThePath> modules, Set<String> refused) {}
 
@@ -400,16 +411,18 @@ public final class Front {
             // the places it had by then — with two dependencies of a project both reaching a third,
             // which of them was read first decided whether the second's importer was told anything.
             PublishedClasses classes = path.declarations();
-            Map<String, Exposing.Checked> read = new LinkedHashMap<>();
-            Map<String, Set<String>> injected = new LinkedHashMap<>();
+            Map<String, ReadableModule> read = new LinkedHashMap<>();
             List<Report> reports = new ArrayList<>();
             // Where a source of this compile names each module it reaches, and which modules each
             // module off the path reaches in turn.
             Map<String, List<SourcePos>> named = new LinkedHashMap<>();
             Map<String, List<String>> edges = new LinkedHashMap<>();
-            // The ones this compilation will not have, whatever the path holds: a module that took a
-            // name no module may take. On the path and refused, which is not the same as absent.
+            // The ones this compilation will not have, whatever the path holds. On the path and
+            // refused, which is not the same as absent — and two separate reasons, because the name
+            // a module took and what its artifact carries are two questions and an artifact can be
+            // wrong about both.
             Map<String, Diagnostic> refused = new LinkedHashMap<>();
+            Map<String, Readback.Failure> unreadable = new LinkedHashMap<>();
             Deque<String> pending = new ArrayDeque<>();
             for (String declared : layout.idOfModule().keySet()) {
                 Ast.Module m = db.ask(new Exposed(declared)).value();
@@ -428,74 +441,66 @@ public final class Front {
                 if (layout.idOfModule().containsKey(name) || !tried.add(name)) {
                     continue;
                 }
-                PublishedModule published = PublishedModule.read(name, classes);
-                if (published == null) {
+                Readback readback = ModuleReadback.read(name, classes);
+                if (readback instanceof Readback.SaysNothing) {
                     continue;   // absent; which of its importers minds is worked out below
                 }
-                Diagnostic reserved = reservedNamespaceTaken(published.module().name(),
-                        published.module().pos());
+                // Two questions about one artifact, and neither answers the other. Whether the name
+                // is one a module may take is settled by the name; whether what it carries can be
+                // read is settled by what it carries. Asked in sequence, the first to fail decided
+                // what the author heard — so a module that took a reserved name and was built by
+                // another compiler was two things to fix and was told as one, and fixing that one
+                // brought the other out. Both are said.
+                Diagnostic.Builder reserved = reservedNamespaceTaken(name);
                 if (reserved != null) {
-                    // Refused, and said once the graph is known — like anything else found about a
-                    // module off the path, and for the same reason: this is the only producer here
-                    // whose report was left where the module wrote it, which is a file nobody holds.
-                    refused.put(name, reserved);
+                    refused.put(name, reserved.build());
+                }
+                if (readback instanceof Readback.Unreadable(String about, Readback.Failure why)) {
+                    unreadable.put(about, why);
                     continue;
                 }
-                Exposing.Checked checked = Exposing.check(published.module());
-                if (!checked.refused().isEmpty()) {
-                    // The artifact path, still doing what it did while the check raised: a module
-                    // whose import lines this compiler cannot read ends the compilation, over a line
-                    // of a text nobody holds. What it says is now the refusal's own sentence rather
-                    // than whichever one the check happened to raise from.
-                    throw CompileException.of(said(checked.refused().get(0)).diagnostic());
+                if (reserved != null) {
+                    continue;   // readable, and still not a name this compilation will take
                 }
-                read.put(name, checked);
-                injected.put(name, published.injectedBehaviors());
-                List<String> reaches = List.copyOf(reaches(checked.module()).keySet());
+                ReadableModule module = ((Readback.Ready) readback).module();
+                read.put(name, module);
+                List<String> reaches = List.copyOf(reaches(module.module()).keySet());
                 edges.put(name, reaches);
                 pending.addAll(reaches);
             }
             Map<String, List<SourcePos>> reachedFrom = reachedFrom(named, edges);
             Map<String, OnThePath> found = new LinkedHashMap<>();
-            read.forEach((name, checked) -> found.put(name, new OnThePath(checked.module(),
-                    injected.get(name), checked.exposed(),
-                    reachedFrom.getOrDefault(name, List.of()))));
+            read.forEach((name, module) -> found.put(name,
+                    new OnThePath(module, reachedFrom.getOrDefault(name, List.of()))));
+            for (Map.Entry<String, Diagnostic> taken : refused.entrySet()) {
+                reports.add(saidAbout(taken.getKey(), taken.getValue(), reachedFrom));
+            }
+            for (Map.Entry<String, Readback.Failure> beyond : unreadable.entrySet()) {
+                reports.add(saidAbout(beyond.getKey(), cannotBeReadBack(beyond.getKey(),
+                        beyond.getValue()), reachedFrom));
+            }
             // An incomplete path is one module needing another, and not a module being absent. Two
             // dependencies of a project may each need a third that is not there, and those are two
             // things to be told: they are missing from two places, an author reaching one of them
             // has not reached the other, and a report saying the first while pointing at an import
             // that arrives at the second says where the code is and is wrong about it.
-            for (Map.Entry<String, Diagnostic> taken : refused.entrySet()) {
-                List<SourcePos> here = reachedFrom.getOrDefault(taken.getKey(), List.of());
-                reports.add(Report.of(here.isEmpty() ? taken.getValue()
-                        : taken.getValue().reachedFrom(here,
-                                whereItIsWritten(taken.getValue().pos()),
-                                new ModuleMessage.ItIsReachedFromHereToo())));
-            }
             for (Map.Entry<String, List<String>> reaching : edges.entrySet()) {
-                List<SourcePos> here = reachedFrom.getOrDefault(reaching.getKey(), List.of());
                 for (String needed : reaching.getValue()) {
-                    // Refused is not absent: a module that took a name no module may take is on the
-                    // path, and has been told so.
+                    // Refused is not absent: a module that took a name no module may take, or one
+                    // this compiler will not read, is on the path and has been told so.
                     if (read.containsKey(needed) || refused.containsKey(needed)
+                            || unreadable.containsKey(needed)
                             || layout.idOfModule().containsKey(needed)
                             || Prelude.isQualifier(needed)) {
                         continue;
                     }
-                    // Said where the module that needs it was reached from — that being where the
-                    // import nobody here wrote is written. This walk is one question about the whole
-                    // compilation and cannot name the module each of its reports is about the way a
-                    // question about one module does, so it says so itself; a report that said
-                    // neither reached no file at all.
-                    reports.add(Report.of(here.isEmpty()
-                            ? needs(needed, reaching.getKey())
-                            : needs(needed, reaching.getKey()).reachedFrom(here,
-                                    whereItIsWritten(read.get(reaching.getKey()).module().pos()),
-                                    new ModuleMessage.ItIsReachedFromHereToo())));
+                    reports.add(saidAbout(reaching.getKey(), needs(needed, reaching.getKey()),
+                            reachedFrom));
                 }
             }
-            return Answer.of(new Of(Ordered.map(found), Ordered.set(refused.keySet())),
-                    reports);
+            SequencedSet<String> notRead = new LinkedHashSet<>(refused.keySet());
+            notRead.addAll(unreadable.keySet());
+            return Answer.of(new Of(Ordered.map(found), Ordered.set(notRead)), reports);
         }
     }
 
@@ -636,21 +641,61 @@ public final class Front {
     }
 
     /**
-     * Where the code a coordinate names is written, read off the coordinate.
+     * {@code about}, a report concerning code written in {@code module}, said at the nearest place a
+     * source of this compilation reaches it — or left where it is where nothing here reaches it at
+     * all.
      *
-     * <p>Rather than built again from the name this walk filed the module under. The answer was
-     * settled when the module's text became positions ({@code WrittenAt}), by the one caller that
-     * knew what that text was; a second one here is a second authority, and the two agree only for
-     * as long as provenance is a module name and nothing else. The day it carries where the
-     * published source is, the copy made here carries none of it and nothing says so.
+     * <p>One function for every report this walk makes, because the rule is one rule. What is known
+     * about a module off the path is its name; the module is where the code is, and where a reader
+     * can be sent is the import lines that arrive there. Each producer used to spell this out for
+     * itself and take the provenance off whatever position its diagnostic happened to carry, which
+     * meant a producer with nothing to point at could not be written — the reserved-name report
+     * carried a place in the artifact only so that this step could read the module back out of it.
+     *
+     * <p>Every route and not the first: a dependency two files import is reached by both, and a
+     * report about it is one an author editing either has to be told. An editor marking one file
+     * leaves the other looking clean while the build fails.
      */
-    private static SourceProvenance whereItIsWritten(SourcePos at) {
-        if (Citation.of(at) instanceof Citation.OutOfSight out) {
-            return out.provenance();
+    private static Report saidAbout(String module, Diagnostic about,
+                                    Map<String, List<SourcePos>> reachedFrom) {
+        List<SourcePos> here = reachedFrom.getOrDefault(module, List.of());
+        if (here.isEmpty()) {
+            return Report.of(about);
         }
-        throw new IllegalStateException(
-                "a module off the path is written where this compile has no file, and " + at
-                        + " says otherwise");
+        return Report.of(about.reachedFrom(here, ModuleReadback.provenanceOf(module),
+                new ModuleMessage.ItIsReachedFromHereToo()));
+    }
+
+    /**
+     * What the author of an importing project is told about a module the class path carries and this
+     * compiler will not read.
+     *
+     * <p>One sentence naming the module, with why as a note. The failure is the publishing project's
+     * and the reading project's author has one thing to do about any of them, so which rule about
+     * publishing was broken is said under the report rather than as the report — an author shown
+     * "a published module agrees with this compiler" as the rule they are in breach of has been
+     * handed somebody else's obligation.
+     *
+     * <p>A switch over every failure there is, with nothing to fall through to. A readback failure
+     * added later is a failure this has to have something to say about, and one that reached here
+     * with nothing to say would be a module quietly missing from the compile.
+     */
+    private static Diagnostic cannotBeReadBack(String module, Readback.Failure why) {
+        Diagnostic.Builder said = Diagnostic
+                .say(new ModuleMessage.TheModuleCannotBeReadBack(module));
+        Diagnostic.Builder because = switch (why) {
+            case Readback.Failure.Incompatible(String by) ->
+                    said.hint(new ModuleMessage.ItWasBuiltBy(by));
+            case Readback.Failure.DeclarationMissing(String declaration) ->
+                    said.hint(new ModuleMessage.AClassItSaysItDeclaresIsNotOnThePath(declaration));
+            case Readback.Failure.InvalidPublishedSyntax _ ->
+                    said.hint(new ModuleMessage
+                            .WhatItPublishedIsNotSourceThisCompilerParses());
+            case Readback.Failure.InvalidExposure(List<Exposing.Refusal> refusals) ->
+                    said.hint(new ModuleMessage.AnImportLineOfItsCannotBeReadHere(
+                            refusals.get(0).name(), refusals.get(0).imp().module()));
+        };
+        return because.hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(module)).build();
     }
 
     /**
@@ -984,7 +1029,7 @@ public final class Front {
             if (layout == null || path == null || !layout.idOfModule().containsKey(name)) {
                 return Answer.of(Boolean.FALSE);
             }
-            if (PublishedModule.read(name, path.declarations()) == null) {
+            if (ModuleReadback.read(name, path.declarations()) instanceof Readback.SaysNothing) {
                 return Answer.of(Boolean.FALSE);
             }
             return Answer.absent(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath(name))
@@ -1081,30 +1126,29 @@ public final class Front {
     /** A module in the reserved namespace, or one named like a standard-library qualifier — or null
      * when the name is the module's to take. */
     static Report reservedNamespace(String name, SourcePos pos) {
-        Diagnostic said = reservedNamespaceTaken(name, pos);
-        return said == null ? null : Report.raised(said);
+        Diagnostic.Builder said = reservedNamespaceTaken(name);
+        return said == null ? null : Report.raised(said.at(pos).build());
     }
 
     /**
-     * The same, as the diagnostic rather than the report — for a reader that has to say it somewhere
-     * other than where it was found.
+     * Whether {@code name} is a name a module may take, as the diagnostic rather than the report,
+     * and with no place on it.
      *
-     * <p>A module off the class path is written where this compile has no file, so what it is told
-     * about is settled here and where it is said is settled once the graph is known. Read as a
-     * report it would carry the English it would have been thrown with, coordinate and all, which is
-     * the wrong text the moment the caret moves.
+     * <p>Asked of the name and nothing else. Whether a module may be called this is settled by the
+     * spelling, so a caller with a source to point at puts the place on afterwards and a caller
+     * reading an artifact — which has no line anybody holds — has nothing to take off again. It used
+     * to take a coordinate either way, which meant the artifact reader had to have parsed the module
+     * before it could ask a question that never depended on the parse.
      */
-    static Diagnostic reservedNamespaceTaken(String name, SourcePos pos) {
+    static Diagnostic.Builder reservedNamespaceTaken(String name) {
         if (name.equals(RESERVED) || name.startsWith(RESERVED + ".")) {
-            return Diagnostic.say(new ModuleMessage.TheModuleIsInTheReservedNamespace(name))
-                    .at(pos).build();
+            return Diagnostic.say(new ModuleMessage.TheModuleIsInTheReservedNamespace(name));
         }
         // The short qualifiers are how the standard library is reached (`List.map`, `import
         // String`); a user module by one of these names would shadow the library and could not be
         // imported.
         if (Prelude.isQualifier(name)) {
-            return Diagnostic.say(new ModuleMessage.TheModuleTakesTheStandardLibraryQualifier(name))
-                    .at(pos).build();
+            return Diagnostic.say(new ModuleMessage.TheModuleTakesTheStandardLibraryQualifier(name));
         }
         return null;
     }

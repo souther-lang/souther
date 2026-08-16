@@ -2,7 +2,6 @@ package souther.compiler.meta;
 
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
-import souther.compiler.diag.CompileException;
 import souther.compiler.frontend.CstFrontend;
 
 import org.junit.jupiter.api.Test;
@@ -13,8 +12,8 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -22,10 +21,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * to import it: the same declarations, read by the same front end. Its implementation does not come
  * back, and is not needed — only the helpers an invariant calls, which are part of what a type is.
  */
-class PublishedModuleTest {
+class ModuleReadbackTest {
 
-    private static PublishedModule readBack(String moduleName, Map<String, byte[]> classes) {
-        return PublishedModule.read(moduleName, new ClassFileDeclarations(classes::get));
+    private static ReadableModule readBack(String moduleName, Map<String, byte[]> classes) {
+        return assertInstanceOf(Readback.Ready.class,
+                ModuleReadback.read(moduleName, new ClassFileDeclarations(classes::get))).module();
+    }
+
+    /** Why a readback would not answer, as the arm rather than as a message it was raised with. */
+    private static Readback.Failure refusalOf(String moduleName, PublishedClasses classes) {
+        return assertInstanceOf(Readback.Unreadable.class,
+                ModuleReadback.read(moduleName, classes)).why();
     }
 
     @Test
@@ -49,7 +55,7 @@ class PublishedModuleTest {
                 """;
         Ast.Module written = CstFrontend.parse(source, null);
 
-        PublishedModule read = readBack("shared.money", Compiler.compile(source));
+        ReadableModule read = readBack("shared.money", Compiler.compile(source));
 
         Ast.Module back = read.module();
         assertEquals(written.name(), back.name());
@@ -64,7 +70,7 @@ class PublishedModuleTest {
      * analysis reads on the importing side. */
     @Test
     void anImportedTypeArrivesWithItsInvariant() {
-        PublishedModule read = readBack("shared.money", Compiler.compile("""
+        ReadableModule read = readBack("shared.money", Compiler.compile("""
                 module shared.money exposing ( Amount )
                 data Amount = Int
                     invariant value >= 0
@@ -93,7 +99,7 @@ class PublishedModuleTest {
                 let describe (t: Trail) = t
                 """));
 
-        PublishedModule read = readBack("shared.billing", classes);
+        ReadableModule read = readBack("shared.billing", classes);
 
         assertEquals(List.of("shared.money"),
                 read.module().imports().stream().map(Ast.Import::module).toList());
@@ -103,7 +109,7 @@ class PublishedModuleTest {
      * the module; it is carried beside it. */
     @Test
     void whichBehaviorsAreInjectedIsCarried() {
-        PublishedModule read = readBack("shared.ledger", Compiler.compile("""
+        ReadableModule read = readBack("shared.ledger", Compiler.compile("""
                 module shared.ledger exposing ( Entry, record, double )
                 data Entry = { amount: Int }
                 behavior record : (e: Entry) -> Entry
@@ -133,7 +139,7 @@ class PublishedModuleTest {
                 behavior checkout = quote >-> place
                 """));
 
-        PublishedModule read = readBack("shop.checkout", classes);
+        ReadableModule read = readBack("shop.checkout", classes);
 
         Ast.SpecBehavior checkout = (Ast.SpecBehavior) read.module().behaviors().stream()
                 .filter(b -> b.name().equals("checkout")).findFirst().orElseThrow();
@@ -178,7 +184,7 @@ class PublishedModuleTest {
         Map<String, byte[]> classes = Compiler.compileModules(List.of(base, catalog, order));
 
         for (String name : List.of("shop.base", "shop.catalog", "shop.order")) {
-            PublishedModule read = readBack(name, classes);
+            ReadableModule read = readBack(name, classes);
             assertEquals(name, read.module().name(), name + " did not come back");
         }
         assertEquals(names(CstFrontend.parse(order, null).defs()),
@@ -189,7 +195,7 @@ class PublishedModuleTest {
      * way — and the helper is no less needed for being named that way. */
     @Test
     void aHelperAnInvariantHandsToACombinatorComesToo() {
-        PublishedModule read = readBack("shop.basket", Compiler.compile("""
+        ReadableModule read = readBack("shop.basket", Compiler.compile("""
                 module shop.basket exposing ( Basket )
                 import List ( all )
                 data Basket = { items: List<Int> }
@@ -201,9 +207,19 @@ class PublishedModuleTest {
                 read.module().fns().stream().map(Ast.FnDef::name).toList());
     }
 
+    /**
+     * Carrying nothing for a name is its own answer, told apart from carrying something unreadable.
+     *
+     * <p>The two settle different questions. An import of a name these classes say nothing about is
+     * an import of a module nobody has; an import of one they carry and this compiler will not read
+     * reaches a module that is there, and an author told there is no such thing would be told
+     * something false about their own dependency list.
+     */
     @Test
     void aNameThatIsNotACompiledModuleReadsAsNothing() {
-        assertNull(readBack("shared.money", Map.of()));
+        assertInstanceOf(Readback.SaysNothing.class,
+                ModuleReadback.read("shared.money", new ClassFileDeclarations(Map.<String,
+                        byte[]>of()::get)));
     }
 
     /** A module built against a boundary this compiler does not share is refused, rather than read
@@ -227,10 +243,10 @@ class PublishedModuleTest {
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
 
-        CompileException e = assertThrows(CompileException.class,
-                () -> PublishedModule.read("shared.money", stale));
+        Readback.Failure.Incompatible why = assertInstanceOf(
+                Readback.Failure.Incompatible.class, refusalOf("shared.money", stale));
 
-        assertTrue(e.getMessage().contains("0.0.1-old"), e.getMessage());
+        assertEquals("0.0.1-old", why.compiler());
     }
 
     /**
@@ -259,10 +275,10 @@ class PublishedModuleTest {
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
 
-        CompileException e = assertThrows(CompileException.class,
-                () -> PublishedModule.read("shared.money", older));
+        Readback.Failure.Incompatible why = assertInstanceOf(
+                Readback.Failure.Incompatible.class, refusalOf("shared.money", older));
 
-        assertTrue(e.getMessage().contains("0.0.1-older"), e.getMessage());
+        assertEquals("0.0.1-older", why.compiler());
     }
 
     /** A published helper's body travels as source and is compiled by whoever imports it, so what
@@ -292,10 +308,10 @@ class PublishedModuleTest {
                     d.data(), d.behaviorSignature(), d.behaviorInjected());
         };
 
-        CompileException e = assertThrows(CompileException.class,
-                () -> PublishedModule.read("shared.money", stale));
+        Readback.Failure.Incompatible why = assertInstanceOf(
+                Readback.Failure.Incompatible.class, refusalOf("shared.money", stale));
 
-        assertTrue(e.getMessage().contains("0.0.1-old"), e.getMessage());
+        assertEquals("0.0.1-old", why.compiler());
     }
 
     private static List<String> names(List<Ast.Def> defs) {
