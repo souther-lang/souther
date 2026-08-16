@@ -21,7 +21,7 @@ import java.util.SequencedMap;
  * finding, a reason carries this rather than a position, so a surface written later is handed the
  * answer rather than the raw place.
  *
- * <h2>The four arms</h2>
+ * <h2>The five arms</h2>
  *
  * <p>The same two questions a {@link Placement} answers, said in what a report may write. Whether
  * this compilation can show a reader the text the position is in, and whether the code the position
@@ -48,8 +48,8 @@ import java.util.SequencedMap;
  * every caller would write it, the sum would decorate nothing, and the cases with nothing to point
  * at would go unread again.
  *
- * <p>{@link Elsewhere} spans the two arms that say the code is elsewhere, and carries only what they
- * agree about: where that code is. Which is the safe half. A renderer qualifying a sentence with
+ * <p>{@link Elsewhere} spans the three arms that say the code is elsewhere, and carries only what
+ * they agree about: where that code is. Which is the safe half. A renderer qualifying a sentence with
  * "the code is written in {@code List.filter}" says the same thing whether or not there was somewhere
  * to point, and would otherwise ask the question twice.
  *
@@ -90,8 +90,9 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
     /**
      * The code is written where {@link #provenance()} says, which this compile has no file for.
      *
-     * <p>What the two arms under this agree about, and the whole of it. Whether there is anywhere to
-     * send a reader is the other question and is what tells them apart.
+     * <p>What the three arms under this agree about, and the whole of it. Whether there is anywhere
+     * to send a reader — a file the reader holds, a position only whoever handed the text over can
+     * use, or nothing at all — is the other question and is what tells them apart.
      */
     sealed interface Elsewhere extends Citation permits Reached, UnplacedElsewhere, OutOfSight {
 
@@ -162,7 +163,7 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * emitter that wrote it only where the answer was interesting would put "the code is here" and
      * "written before anyone asked" under one silence.
      *
-     * <p>Two words for four arms, and that is the field's question rather than an omission: this says
+     * <p>Two words for five arms, and that is the field's question rather than an omission: this says
      * where the code is written, and the arms that differ about where to send a reader agree about
      * that.
      */

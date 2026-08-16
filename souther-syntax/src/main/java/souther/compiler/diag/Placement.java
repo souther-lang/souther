@@ -172,11 +172,20 @@ public final class Placement {
      *
      * <p>Its positions are real positions in that text and are not where a reader can be sent. Code
      * of its own is code that module's author wrote, which is what {@link #ofItsOwn()} says.
+     *
+     * <p>Identified by the module and not by how anybody reached it. The name a reader here writes
+     * for the code belongs to the reading, and lives on what a position carries rather than on which
+     * text it is in.
      */
     record WhatAModulePublished(SourceProvenance module) implements Text {
 
         WhatAModulePublished {
             Objects.requireNonNull(module, "a published text is a module's");
+            // As the declaration knows it. What a reading reached the code by is a fact about that
+            // reading — two readings of one module reach it by two names as easily as one — so a
+            // text carrying it would be two texts, and the same published module would stop being
+            // the same text depending on which import found it.
+            module = module.asDeclared();
         }
 
         @Override

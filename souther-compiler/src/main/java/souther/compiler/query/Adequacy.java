@@ -1778,6 +1778,10 @@ public final class Adequacy {
          * two cannot come apart.
          */
         private static SourcePos sentTo(Citation cited) {
+            // Null where the finding is about code inside a module's own text, which the one caller
+            // takes: a diagnostic may be about no place, and the reading that puts a report where a
+            // reader can be sent moves this one to the import line that reached it. A caller that
+            // put this somewhere requiring a position would be building a place out of nothing.
             return switch (cited) {
                 case Citation.Written written -> written.at();
                 case Citation.Unplaced unplaced -> unplaced.at();

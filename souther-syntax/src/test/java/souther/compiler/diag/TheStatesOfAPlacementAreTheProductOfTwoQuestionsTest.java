@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the day a seventh was added and left off the copy. What is named is the two questions, and the
  * states are reached the way every caller reaches them.
  */
-class TheStatesOfAPlacementAreTheQuadrantsOfTwoQuestionsTest {
+class TheStatesOfAPlacementAreTheProductOfTwoQuestionsTest {
 
     private static final SourceProvenance LIB =
             new SourceProvenance.APublishedModule("lib.rule", "lib.rule.atLeast");
@@ -128,6 +128,26 @@ class TheStatesOfAPlacementAreTheQuadrantsOfTwoQuestionsTest {
         }
     }
 
+    /**
+     * A published text is the same text however a reading reached it.
+     *
+     * <p>What a reader here writes for the code is a fact about the reading — two imports reach one
+     * module by two names as easily as one — so a text carrying it would be two texts, and the same
+     * module would stop being the same text depending on which import found it. The route lives on
+     * what a position carries, which is the other question.
+     */
+    @Test
+    void aPublishedTextIsTheSameTextHoweverAReadingReachedIt() {
+        assertEquals(Placement.whatAModulePublished(new SourceProvenance.APublishedModule("lib.rule")),
+                Placement.whatAModulePublished(LIB),
+                "the module is which text it is; the name it was reached by is not");
+        assertTrue(Placement.whatAModulePublished(LIB).at(1, 1).isInTheSameTextAs(
+                        Placement.whatAModulePublished(
+                                new SourceProvenance.APublishedModule("lib.rule", "alias.atLeast"))
+                                .at(9, 9)),
+                "and two readings of it are reading the same text");
+    }
+
     /** Which file a position is read from is the text's answer, whatever was copied into it. */
     @Test
     void whichFileThisIsReadFromIsDecidedByTheTextAlone() {
@@ -149,8 +169,9 @@ class TheStatesOfAPlacementAreTheQuadrantsOfTwoQuestionsTest {
     @Test
     void whereTheCodeIsWrittenIsReadOffBoth() {
         Placement published = Placement.whatAModulePublished(LIB);
-        assertEquals(LIB, published.codeIsWrittenIn(),
-                "code in a module's own text is written in that module");
+        assertEquals(LIB.asDeclared(), published.codeIsWrittenIn(),
+                "code in a module's own text is written in that module, as the declaration knows it"
+                        + " rather than as whichever reading found the text wrote it");
         assertEquals(OTHER, published.standingInFor(new DeclaringCode(OTHER)).codeIsWrittenIn(),
                 "and a body spliced into that text is written where it came from");
 

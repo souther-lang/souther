@@ -81,8 +81,20 @@ public record SourcePos(int line, int column, Placement placement) {
                 && file.equals(source);
     }
 
-    /** Whether this and {@code other} are in the same text, whatever is written in either: a body
-     *  spliced into a file is in that file. */
+    /**
+     * Whether this and {@code other} are in the same text, whatever is written in either: a body
+     * spliced into a file is in that file.
+     *
+     * <p>Answered by name, so two positions in texts this compilation has no name for come back the
+     * same. That is not a claim that they are: an unnamed text carries nothing to tell two of them
+     * apart by, because inside a compile the only unnamed positions are the ones a pass mints to
+     * mean nowhere, and what makes those useful is that two of them are equal. Telling a text
+     * somebody handed over from a position nobody placed is the open question about whether such a
+     * position is a place at all, and until it is answered this — and {@link #equals} with it —
+     * says nothing about two separate readings.
+     *
+     * <p>Every caller today compares positions from one reading, where the two agree.
+     */
     public boolean isInTheSameTextAs(SourcePos other) {
         return placement.isTheSameTextAs(other.placement);
     }

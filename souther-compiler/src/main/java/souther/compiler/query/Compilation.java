@@ -12,6 +12,7 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.SourceProvenance;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -531,25 +532,48 @@ public final class Compilation {
             return found;
         }
         return new Db.Found(found.module(), found.sourceId(), Report.of(
-                said.reachedFrom(onThePath.reachedFrom(),
-                        souther.compiler.meta.ModuleReadback.provenanceOf(found.module()),
+                said.reachedFrom(onThePath.reachedFrom(), whereTheCodeIs(at, found.module()),
                         new ModuleMessage.ItIsReachedFromHereToo())));
+    }
+
+    /**
+     * Where the code a moved report is about is written.
+     *
+     * <p>The report's own answer wherever it has one. A position carries which text it is in and
+     * whose code it holds separately, so a report from a body spliced into a module's published text
+     * says the body's module and not the text's — and reading the module this walk was about instead
+     * would put them back together, which is the inference this whole change removes: that code in a
+     * module's text is that module's code.
+     *
+     * <p>The module only for a report with no position at all. There is nothing to read one off, and
+     * the module the report was filed under is what is known about it.
+     */
+    static SourceProvenance whereTheCodeIs(SourcePos at, String module) {
+        if (at != null && Citation.of(at) instanceof Citation.Elsewhere elsewhere) {
+            return elsewhere.provenance();
+        }
+        return souther.compiler.meta.ModuleReadback.provenanceOf(module);
     }
 
     /**
      * Whether a report pointing at {@code at} has nowhere a reader can be sent.
      *
-     * <p>Two ways to have nowhere, and both are moved. A report inside a module's own published text
-     * points at a line nobody holds. A report with no region at all points at nothing — which is what
-     * a finding about such a text comes out as once the place it could not offer is no longer
-     * fabricated, and leaving it there would be trading one silence for another.
+     * <p>Every way of having nowhere, asked of the citation rather than listed. A report with no
+     * region points at nothing. One inside a module's own published text points at a line nobody
+     * holds. One in a text this compilation cannot name points at a place only whoever handed the
+     * text over could use, and this is not being read by them. Naming two of those and leaving the
+     * others is how the third comes to be delivered as a place — so the arms that do offer a place
+     * are the ones named, and anything else is moved.
      *
      * <p>What it is moved to comes from the module this walk was about rather than from whatever the
      * report happened to carry, so a report with nothing to read it off is moved on the same terms as
      * one that had a position.
      */
     private static boolean needsAPlace(SourcePos at) {
-        return at == null || Citation.of(at) instanceof Citation.OutOfSight;
+        return at == null || switch (Citation.of(at)) {
+            case Citation.Written _, Citation.Reached _ -> false;
+            case Citation.Unplaced _, Citation.UnplacedElsewhere _, Citation.OutOfSight _ -> true;
+        };
     }
 
     /** The one failure these sources have, or null when they have none. */
