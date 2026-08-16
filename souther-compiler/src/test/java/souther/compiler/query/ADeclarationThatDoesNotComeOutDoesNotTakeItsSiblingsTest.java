@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
@@ -71,7 +73,7 @@ class ADeclarationThatDoesNotComeOutDoesNotTakeItsSiblingsTest {
     /** The mistake is said once, where it is written. */
     @Test
     void theOneMistakeIsSaidOnce() {
-        List<String> said = Located.diagnosticsOf(compiled().diagnostics()).get("a.sou").stream()
+        List<String> said = Located.diagnosticsOf(compiled().diagnostics()).get(new SourceId("a.sou")).stream()
                 .map(d -> d.code() + " " + d.said()).toList();
 
         assertEquals(1, said.size(), said.toString());

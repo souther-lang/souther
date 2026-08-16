@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.Objects;
 
 /**
@@ -58,7 +60,7 @@ public sealed interface DiagnosticPlace {
         }
 
         /** The source this is in, which is the source the region was read from. */
-        public String source() {
+        public SourceId source() {
             return region.start().sourceId();
         }
     }

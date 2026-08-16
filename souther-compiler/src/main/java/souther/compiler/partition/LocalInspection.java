@@ -9,7 +9,6 @@ import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
-import souther.compiler.diag.SourceRef;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -22,7 +21,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -369,7 +367,7 @@ public sealed interface LocalInspection {
 
     private static void put(Map<String, Cut> into, Carrier carrier, Place at, TypeSymbol type,
                             String clause, List<TypeSymbol> narrowedBy) {
-        OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
+        OriginRef origin = new OriginRef.InvariantOrigin(type, clause);
         if (!narrowedBy.isEmpty()) {
             origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
         }

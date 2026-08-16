@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
@@ -65,9 +67,9 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
     private static final String ATTACHED_HEADER = "examples for example.trip\n";
 
     /** Every diagnostic these sources have, by the source it is filed under. */
-    private static Map<String, List<Diagnostic>> bySource(String... sources) {
+    private static Map<SourceId, List<Diagnostic>> bySource(String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
-        Map<String, List<Diagnostic>> out = new LinkedHashMap<>();
+        Map<SourceId, List<Diagnostic>> out = new LinkedHashMap<>();
         compilation.diagnostics().forEach((id, located) -> out.put(id, Located.diagnosticsOf(located)));
         return out;
     }
@@ -132,12 +134,12 @@ class ARowNameIsUniqueWithinItsBehaviorTest {
                     | "over the ceiling" : (Draft { cost = Amount(300) }) -> Rejected
                 """;
 
-        Map<String, List<Diagnostic>> said = bySource(model, attached);
+        Map<SourceId, List<Diagnostic>> said = bySource(model, attached);
 
-        assertEquals(1, collisions(said.get("0")).size(), "the module's own row is told, on the module");
-        assertEquals(1, collisions(said.get("1")).size(),
+        assertEquals(1, collisions(said.get(new SourceId("0"))).size(), "the module's own row is told, on the module");
+        assertEquals(1, collisions(said.get(new SourceId("1"))).size(),
                 "the attached file's row is told, on the attached file");
-        assertEquals(lineOf(attached, "Amount(300)"), collisions(said.get("1")).get(0).pos().line(),
+        assertEquals(lineOf(attached, "Amount(300)"), collisions(said.get(new SourceId("1"))).get(0).pos().line(),
                 "a position is a line of the file the row is written in");
     }
 

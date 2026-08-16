@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.Objects;
 
 /**
@@ -42,21 +44,19 @@ import java.util.Objects;
  * @param column the 1-based column this node is placed at, in UTF-16 code units
  * @param sourceId the source the coordinate is in, or null for a position that is in none: a node
  *        the compiler synthesized, or a module read off the module path, which is in no source of
- *        the compile that is reading it
+ *        the compile that is reading it. A {@link SourceId} rather than a name, so that what a
+ *        caller chose to call a module cannot arrive here instead
  * @param writtenAt whether the code this names is written at the coordinate, or the coordinate
  *        stands in for code written out of sight ({@link WrittenAt})
  */
-public record SourcePos(int line, int column, String sourceId, WrittenAt writtenAt) {
+public record SourcePos(int line, int column, SourceId sourceId, WrittenAt writtenAt) {
 
     public SourcePos {
-        if (sourceId != null && sourceId.isBlank()) {
-            throw new IllegalArgumentException("a source id names a source or is absent, never blank");
-        }
         Objects.requireNonNull(writtenAt, "a position says whether the code it names is written at it");
     }
 
     /** A place a source was read for, where the code it names is written. */
-    public SourcePos(int line, int column, String sourceId) {
+    public SourcePos(int line, int column, SourceId sourceId) {
         this(line, column, sourceId, WrittenAt.HERE);
     }
 

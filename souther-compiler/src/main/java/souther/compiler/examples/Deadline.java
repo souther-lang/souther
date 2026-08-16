@@ -34,26 +34,21 @@ public interface Deadline {
         /** The behavior this work is about. */
         String target();
 
-        /** The source the writing this is about was written in. */
-        String sourceId();
-
-        /** Where in that source it starts. */
+        /** Where the writing this is about starts, which says which source it is in. */
         SourcePos pos();
 
         /** A row of an {@code example}, evaluated: its fixtures built, the behavior applied, the
          * result compared. {@code identity} is what the row names itself. */
-        record Row(String target, String sourceId, SourcePos pos, RowIdentity identity)
-                implements Work {}
+        record Row(String target, SourcePos pos, RowIdentity identity) implements Work {}
 
         /** The statements a row is read from, with no behavior applied. */
-        record Fixtures(String target, String sourceId, SourcePos pos, RowIdentity identity)
-                implements Work {}
+        record Fixtures(String target, SourcePos pos, RowIdentity identity) implements Work {}
 
         /** A {@code fake} table, built. */
-        record Table(String target, String sourceId, SourcePos pos) implements Work {}
+        record Table(String target, SourcePos pos) implements Work {}
 
         /** A {@code with} written on a row. */
-        record With(String target, String sourceId, SourcePos pos) implements Work {}
+        record With(String target, SourcePos pos) implements Work {}
     }
 
     /** How many milliseconds this allows. What a report about an overrun quotes. */

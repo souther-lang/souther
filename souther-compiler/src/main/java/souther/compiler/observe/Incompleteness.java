@@ -1,9 +1,10 @@
 package souther.compiler.observe;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.SourceRef;
 
 import java.util.List;
 import java.util.Optional;
@@ -141,17 +142,27 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
     }
 
     /** The source this is about, where what it names is one. Empty otherwise. */
-    public Optional<String> sourceIdentity() {
+    public Optional<SourceId> sourceIdentity() {
         return target.sourceIdentity();
     }
 
+    /** What a whole source left unmeasured, taking the identity as one rather than as its
+     *  spelling: the scope follows from the subject, so the two cannot be given disagreeing. */
+    public static Incompleteness ofSource(Code code, SourceId source) {
+        return new Incompleteness(code, new Target.OfSource(source), Optional.empty());
+    }
+
+    /** @throws IllegalArgumentException for a scope whose subject is not a name — a source is
+     *          {@link #ofSource} and a position is {@link #atPosition} */
     public static Incompleteness of(Code code, Scope scope, String subject) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
     }
 
     /** A reason about a place. The coordinate and not a reference over one: a reference holds a
      *  source beside the one the coordinate has, this reads the coordinate's, and a signature that
-     *  still asked for the pair would let a caller write a half nothing reads. */
+     *  still asked for the pair would let a caller write a half nothing reads.
+     *
+     *  @throws IllegalArgumentException for a scope whose subject is not a name, as {@link #of} */
     public static Incompleteness at(Code code, Scope scope, String subject, SourcePos where) {
         return new Incompleteness(code, Target.of(scope, subject),
                 Optional.ofNullable(where).map(Citation::of));

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
@@ -168,7 +170,7 @@ public final class Output {
         static void stamp(Db db, String module, Emissions classes) {
             String name = module;
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            String id = layout == null ? null : layout.idOfModule().get(name);
+            SourceId id = layout == null ? null : layout.idOfModule().get(name);
             if (id == null) {
                 return;
             }
@@ -677,10 +679,7 @@ public final class Output {
             Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
-            List<String> exampleOrigins = db.ask(new Front.ExampleOrigins(name)).value();
-            List<String> fakeOrigins = db.ask(new Front.FakeOrigins(name)).value();
-            if (classes == null || requirements == null
-                    || exampleOrigins == null || fakeOrigins == null) {
+            if (classes == null || requirements == null) {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
@@ -690,8 +689,7 @@ public final class Output {
             return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
                     prepared.value().forExamples(),
                     scope.value(), sigs.value(), classes, evaluationLoader(db),
-                    values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
-                    deadlineOf(db), policyOf(db)));
+                    values == null ? Map.of() : values, deadlineOf(db), policyOf(db)));
         }
     }
 
@@ -737,13 +735,13 @@ public final class Output {
                 return Answer.of(true);
             }
             List<Report> reports = new ArrayList<>();
+            // Each is filed under the source its own caret is in, which is what a report with
+            // nothing beside its place is filed under.
             for (souther.compiler.examples.ExampleStatements.Disagreement d : read.disagreements()) {
-                reports.add(Report.saidAt(said(d),
-                        Report.Delivery.at(d.recorded().sourceId())));
+                reports.add(Report.of(said(d)));
             }
             for (souther.compiler.examples.ExampleStatements.UnreadFake f : read.unread()) {
-                reports.add(Report.saidAt(unread(f),
-                        Report.Delivery.at(f.at().sourceId())));
+                reports.add(Report.of(unread(f)));
             }
             return Answer.of(true, reports);
         }
@@ -753,7 +751,7 @@ public final class Output {
             // Which of the three it was travels into the message, because what to do about them
             // differs — and one of them is not about the model at all.
             souther.compiler.examples.ExampleStatements.Unread why = f.why();
-            Diagnostic.Builder said = Diagnostic.at(f.at().pos(), f.width())
+            Diagnostic.Builder said = Diagnostic.at(f.at(), f.width())
                     .say(why.isDepth()
                             ? new ExampleMessage.NotComparedTheTableReachedItsDepthLimit(
                                     f.target(), why.limitShown())
@@ -806,7 +804,7 @@ public final class Output {
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.
      */
-    public record Examples(String name, String sourceId, CoverageMode coverage)
+    public record Examples(String name, SourceId sourceId, CoverageMode coverage)
             implements Key<Examples.Of> {
 
         /**
@@ -822,7 +820,7 @@ public final class Output {
          * <p>Keyed on what is actually emitted rather than on the adequacy level, because two levels
          * that measure the same thing should not be two compiles.
          */
-        public static Examples asked(Db db, String name, String sourceId) {
+        public static Examples asked(Db db, String name, SourceId sourceId) {
             return new Examples(name, sourceId, Adequacy.coverageAsked(db));
         }
 
@@ -851,7 +849,7 @@ public final class Output {
         }
 
         @Override
-        public String sourceId() {
+        public SourceId sourceId() {
             return sourceId;
         }
 
@@ -891,7 +889,7 @@ public final class Output {
          * written for one dependency answers is a fact about the module, so the reading that knows
          * that is the one that picks what this source's share of them is.
          */
-        private static List<Diagnostic> fakeTables(Db db, String name, String sourceId) {
+        private static List<Diagnostic> fakeTables(Db db, String name, SourceId sourceId) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -907,8 +905,7 @@ public final class Output {
             Map<String, byte[]> classes = artifact == null ? null : artifact.classes();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
-            List<String> fakeOrigins = db.ask(new Front.FakeOrigins(name)).value();
-            if (classes == null || requirements == null || fakeOrigins == null) {
+            if (classes == null || requirements == null) {
                 return List.of();
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
@@ -916,7 +913,7 @@ public final class Output {
             return souther.compiler.examples.ExampleStatements.fakeTables(
                     prepared.value().forExamples(), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
-                    values == null ? Map.of() : values, fakeOrigins, sourceId,
+                    values == null ? Map.of() : values, sourceId,
                     deadlineOf(db), policyOf(db));
         }
 
@@ -928,7 +925,7 @@ public final class Output {
          * become two evaluations. A row that held under one and failed under the other would be a
          * difference in the measurement, not in the model, and the report has no way to tell.
          */
-        static Answer<Of> evaluate(Db db, String name, String sourceId, EvaluationArtifact artifact,
+        static Answer<Of> evaluate(Db db, String name, SourceId sourceId, EvaluationArtifact artifact,
                                    CoverageMode coverage) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
@@ -951,8 +948,7 @@ public final class Output {
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
             souther.compiler.check.Prepared.ExampleExecution rows =
-                    prepared.value().forExamplesWrittenIn(
-                            db.ask(new Front.ExampleOrigins(name)).value(), sourceId);
+                    prepared.value().forExamplesWrittenIn(sourceId);
             if (rows.examples().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
@@ -975,7 +971,7 @@ public final class Output {
                             // it, and every answer this run has is one of those today.
                             () -> declarationsRead(db),
                             requirements, evaluationLoader(db),
-                            values == null ? Map.of() : values, sourceId, deadlineOf(db),
+                            values == null ? Map.of() : values, deadlineOf(db),
                             policyOf(db),
                             // What applies a behavior here is what this compile emitted. A compile has
                             // nothing else to run a row against; something supplied from outside one
@@ -996,14 +992,14 @@ public final class Output {
          * is a line and a column: the module's key can only be quoted against the module's file, and the
          * position is in this one.
          */
-        private static List<Report> alreadyDeclared(Db db, String name, String sourceId) {
+        private static List<Report> alreadyDeclared(Db db, String name, SourceId sourceId) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            if (layout == null || sourceId == null || sourceId.equals(layout.idOfModule().get(name))) {
+            if (layout == null || sourceId.equals(layout.idOfModule().get(name))) {
                 return List.of();   // the module's own source declares what it declares
             }
             Set<String> taken = new LinkedHashSet<>(declaredIn(db, layout.idOfModule().get(name)));
             List<Report> reports = new ArrayList<>();
-            for (String id : layout.exampleFilesOf().getOrDefault(name, List.of())) {
+            for (SourceId id : layout.exampleFilesOf().getOrDefault(name, List.of())) {
                 CstFrontend.Parsed parsed = db.ask(new Front.Parsed(id)).value();
                 if (parsed == null) {
                     continue;
@@ -1024,7 +1020,7 @@ public final class Output {
         }
 
         /** The names the values of one source declare, or none where nothing parsed it. */
-        private static Set<String> declaredIn(Db db, String id) {
+        private static Set<String> declaredIn(Db db, SourceId id) {
             Set<String> names = new LinkedHashSet<>();
             CstFrontend.Parsed parsed = id == null ? null : db.ask(new Front.Parsed(id)).value();
             if (parsed != null) {

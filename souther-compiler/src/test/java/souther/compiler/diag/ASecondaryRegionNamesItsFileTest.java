@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 
 import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
@@ -43,16 +45,16 @@ class ASecondaryRegionNamesItsFileTest {
     }
 
     /** A resolver over named sources, recording what it was asked for. */
-    private record Asked(List<String> ids, SourceContextResolver resolver) {}
+    private record Asked(List<SourceId> ids, SourceContextResolver resolver) {}
 
     private static Asked resolver() {
-        List<String> ids = new ArrayList<>();
+        List<SourceId> ids = new ArrayList<>();
         SourceContextResolver base = id -> {
             ids.add(id);
-            if ("rows".equals(id)) {
+            if ("rows".equals(id.value())) {
                 return rows();
             }
-            return "fakes".equals(id) ? fakes() : null;
+            return "fakes".equals(id.value()) ? fakes() : null;
         };
         return new Asked(ids, SourceContextResolver.memoized(base::sourceOf));
     }
@@ -62,7 +64,7 @@ class ASecondaryRegionNamesItsFileTest {
     private static Diagnostic withSecondary(String secondarySourceId) {
         return Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondary(Region.ofWidth(new SourcePos(3, 3, secondarySourceId), 4),
+                .secondary(Region.ofWidth(new SourcePos(3, 3, new SourceId(secondarySourceId)), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
     }
@@ -73,7 +75,7 @@ class ASecondaryRegionNamesItsFileTest {
     void aSecondaryInTheDiagnosticsOwnFileIsQuotedFromItAndNotNamed() {
         Asked asked = resolver();
         String out = new HumanRenderer(false).render(
-                new Located(withSecondary("rows"), "rows"), asked.resolver(), Locale.ENGLISH);
+                new Located(withSecondary("rows"), new SourceId("rows")), asked.resolver(), Locale.ENGLISH);
 
         assertEquals(2, count(out, "  | \"one\" : (1) -> 2"),
                 "the primary and the secondary both quote the row file: " + out);
@@ -85,7 +87,7 @@ class ASecondaryRegionNamesItsFileTest {
     void aSecondaryInAnotherFileIsQuotedFromThatFileAndNamed() {
         Asked asked = resolver();
         String out = new HumanRenderer(false).render(
-                new Located(withSecondary("fakes"), "rows"), asked.resolver(), Locale.ENGLISH);
+                new Located(withSecondary("fakes"), new SourceId("rows")), asked.resolver(), Locale.ENGLISH);
 
         assertTrue(out.contains("  | \"one\" : (1) -> 2"), "the primary quotes the row: " + out);
         assertTrue(out.contains("  | (1) -> 3"), "the secondary quotes the fake: " + out);
@@ -107,13 +109,13 @@ class ASecondaryRegionNamesItsFileTest {
         Asked asked = resolver();
         Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondary(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
+                .secondary(Region.ofWidth(new SourcePos(3, 3, new SourceId("fakes")), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
-                .secondary(Region.ofWidth(new SourcePos(2, 1, "fakes"), 4),
+                .secondary(Region.ofWidth(new SourcePos(2, 1, new SourceId("fakes")), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
-        new HumanRenderer(false).render(new Located(d, "rows"), asked.resolver(), Locale.ENGLISH);
+        new HumanRenderer(false).render(new Located(d, new SourceId("rows")), asked.resolver(), Locale.ENGLISH);
 
         assertEquals(1, count(asked.ids(), "fakes"),
                 "two regions in one file, one read: " + asked.ids());
@@ -125,7 +127,7 @@ class ASecondaryRegionNamesItsFileTest {
     void jsonNamesNoFileForASecondaryInTheDiagnosticsOwnFile() {
         Asked asked = resolver();
         String out = new JsonRenderer().render(
-                new Located(withSecondary("rows"), "rows"), asked.resolver(), Locale.ENGLISH);
+                new Located(withSecondary("rows"), new SourceId("rows")), asked.resolver(), Locale.ENGLISH);
 
         assertEquals(1, count(out, "\"file\""), "only the top-level file: " + out);
     }
@@ -134,7 +136,7 @@ class ASecondaryRegionNamesItsFileTest {
     void jsonNamesTheFileOfASecondaryWrittenInAnother() {
         Asked asked = resolver();
         String out = new JsonRenderer().render(
-                new Located(withSecondary("fakes"), "rows"), asked.resolver(), Locale.ENGLISH);
+                new Located(withSecondary("fakes"), new SourceId("rows")), asked.resolver(), Locale.ENGLISH);
 
         assertTrue(out.contains("\"file\":\"rows.sou\""), out);
         assertTrue(out.contains("\"file\":\"fakes.sou\""), out);
@@ -146,25 +148,25 @@ class ASecondaryRegionNamesItsFileTest {
     void theFileHoldingTheSecondaryReadsItAsTheAnchorAndThePrimaryAsElsewhere() {
         Diagnostic d = withSecondary("fakes");
 
-        DiagnosticView own = DiagnosticView.of(d, "rows", "rows");
-        assertEquals("rows", own.anchor().sourceId());
+        DiagnosticView own = DiagnosticView.of(d, new SourceId("rows"), new SourceId("rows"));
+        assertEquals(new SourceId("rows"), own.anchor().sourceId());
         assertFalse(own.anchor().labelled(), "the primary region carries no note of its own");
-        assertEquals(List.of("fakes"), own.others().stream().map(Spot::sourceId).toList());
+        assertEquals(List.of(new SourceId("fakes")), own.others().stream().map(Spot::sourceId).toList());
 
-        DiagnosticView other = DiagnosticView.of(d, "rows", "fakes");
-        assertEquals("fakes", other.anchor().sourceId(), "the two change places");
+        DiagnosticView other = DiagnosticView.of(d, new SourceId("rows"), new SourceId("fakes"));
+        assertEquals(new SourceId("fakes"), other.anchor().sourceId(), "the two change places");
         assertTrue(other.anchor().labelled());
-        assertEquals(List.of("rows"), other.others().stream().map(Spot::sourceId).toList());
+        assertEquals(List.of(new SourceId("rows")), other.others().stream().map(Spot::sourceId).toList());
     }
 
     /** A secondary in the diagnostic's own file is one spot among the others, named the same way
      *  every other is — by its region, not by being the one that said nothing. */
     @Test
     void aSecondaryInTheDiagnosticsOwnFileIsNamedLikeAnyOther() {
-        DiagnosticView view = DiagnosticView.of(withSecondary("rows"), "rows", "rows");
+        DiagnosticView view = DiagnosticView.of(withSecondary("rows"), new SourceId("rows"), new SourceId("rows"));
 
-        assertEquals(List.of("rows"), view.others().stream().map(Spot::sourceId).toList());
-        assertEquals("rows", ((DiagnosticPlace.InSource)
+        assertEquals(List.of(new SourceId("rows")), view.others().stream().map(Spot::sourceId).toList());
+        assertEquals(new SourceId("rows"), ((DiagnosticPlace.InSource)
                         withSecondary("rows").secondary().get(0).place()).region()
                         .start().sourceId());
     }
@@ -174,7 +176,7 @@ class ASecondaryRegionNamesItsFileTest {
         Diagnostic d = withSecondary("fakes");
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> DiagnosticView.of(d, "rows", "elsewhere"));
+                () -> DiagnosticView.of(d, new SourceId("rows"), new SourceId("elsewhere")));
 
         assertTrue(refused.getMessage().contains("elsewhere"), refused.getMessage());
     }
@@ -183,13 +185,13 @@ class ASecondaryRegionNamesItsFileTest {
     void whereOneFileHoldsSeveralRegionsTheFirstWrittenIsTheAnchor() {
         Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondary(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
+                .secondary(Region.ofWidth(new SourcePos(3, 3, new SourceId("fakes")), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
-                .secondary(Region.ofWidth(new SourcePos(2, 1, "fakes"), 4),
+                .secondary(Region.ofWidth(new SourcePos(2, 1, new SourceId("fakes")), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
-        DiagnosticView view = DiagnosticView.of(d, "rows", "fakes");
+        DiagnosticView view = DiagnosticView.of(d, new SourceId("rows"), new SourceId("fakes"));
 
         assertEquals(3, view.anchor().region().start().line(),
                 "declaration order, not the earlier line");
@@ -208,12 +210,12 @@ class ASecondaryRegionNamesItsFileTest {
      */
     @Test
     void aLabelIsInTheSourceItsRegionWasReadFrom() {
-        LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4),
+        LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, new SourceId("fakes")), 4),
                 new NameMessage.WriteItOnItsOwn("x"));
 
-        assertEquals(new DiagnosticPlace.InSource(Region.ofWidth(new SourcePos(3, 3, "fakes"), 4)),
+        assertEquals(new DiagnosticPlace.InSource(Region.ofWidth(new SourcePos(3, 3, new SourceId("fakes")), 4)),
                 label.place());
-        assertEquals("fakes",
+        assertEquals(new SourceId("fakes"),
                 assertInstanceOf(DiagnosticPlace.InSource.class, label.place()).source(),
                 "which it reads off the region rather than holding beside it");
     }
@@ -228,8 +230,8 @@ class ASecondaryRegionNamesItsFileTest {
     @Test
     void aPlaceCannotClaimASourceItsRegionWasNotReadFrom() {
         assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> new DiagnosticPlace.InSource(new Region(new SourcePos(3, 3, "rows"),
-                        new SourcePos(3, 7, "fakes"))));
+                () -> new DiagnosticPlace.InSource(new Region(new SourcePos(3, 3, new SourceId("rows")),
+                        new SourcePos(3, 7, new SourceId("fakes")))));
         assertThrows(DiagnosticPlace.NotAPlace.class,
                 () -> new DiagnosticPlace.InSource(Region.ofWidth(new SourcePos(3, 3), 4)));
     }
@@ -240,9 +242,9 @@ class ASecondaryRegionNamesItsFileTest {
     void theSourceALabelNamesReachesTheRenderer() {
         Asked asked = resolver();
         new HumanRenderer(false).render(
-                new Located(withSecondary("fakes"), "rows"), asked.resolver(), Locale.ENGLISH);
+                new Located(withSecondary("fakes"), new SourceId("rows")), asked.resolver(), Locale.ENGLISH);
 
-        assertTrue(asked.ids().contains("fakes"),
+        assertTrue(asked.ids().contains(new SourceId("fakes")),
                 () -> "the label's own source is what was read: " + asked.ids());
     }
 
@@ -287,7 +289,7 @@ class ASecondaryRegionNamesItsFileTest {
         return found;
     }
 
-    private static int count(List<String> asked, String id) {
-        return (int) asked.stream().filter(id::equals).count();
+    private static int count(List<SourceId> asked, String id) {
+        return (int) asked.stream().filter(each -> id.equals(each.value())).count();
     }
 }

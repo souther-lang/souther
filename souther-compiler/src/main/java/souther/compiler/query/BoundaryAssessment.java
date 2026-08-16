@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.SourceNameResolver;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -203,7 +205,7 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
     }
 
     /** The rule that drew the line, as a report about {@code sectionSource} writes it. */
-    public String origin(SourceNameResolver names, String sectionSource) {
+    public String origin(SourceNameResolver names, SourceId sectionSource) {
         return obligation.origin().describe(names, sectionSource);
     }
 

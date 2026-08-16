@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
@@ -42,14 +44,14 @@ class APositionKnowsItsFileTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(id, source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), souther.compiler.meta.ModulePath.EMPTY);
-        return c.db().ask(new Front.Parsed(id)).value().module();
+        return c.db().ask(new Front.Parsed(new SourceId(id))).value().module();
     }
 
     @Test
     void aPositionParsedFromASourceNamesThatSource() {
         Ast.Module m = parsedAs("m.sou", SOURCE);
 
-        assertEquals("m.sou", m.defs().get(0).pos().sourceId(),
+        assertEquals(new SourceId("m.sou"), m.defs().get(0).pos().sourceId(),
                 "the `data` was read from m.sou, so that is what its position says");
     }
 
@@ -57,8 +59,8 @@ class APositionKnowsItsFileTest {
     void everyPositionOfAParsedModuleNamesIt() {
         Ast.Module m = parsedAs("m.sou", SOURCE);
 
-        assertEquals("m.sou", m.pos().sourceId());
-        assertTrue(m.defs().stream().allMatch(d -> "m.sou".equals(d.pos().sourceId())),
+        assertEquals(new SourceId("m.sou"), m.pos().sourceId());
+        assertTrue(m.defs().stream().allMatch(d -> new SourceId("m.sou").equals(d.pos().sourceId())),
                 "one index made every position, so there is no part of the module it missed");
     }
 
@@ -70,9 +72,9 @@ class APositionKnowsItsFileTest {
 
     @Test
     void aRegionsEndIsInTheSameFileAsItsStart() {
-        Region r = Region.ofWidth(new SourcePos(4, 7, "m.sou"), 5);
+        Region r = Region.ofWidth(new SourcePos(4, 7, new SourceId("m.sou")), 5);
 
-        assertEquals("m.sou", r.end().sourceId(), "a region does not leave the source it began in");
+        assertEquals(new SourceId("m.sou"), r.end().sourceId(), "a region does not leave the source it began in");
     }
 
     /**
@@ -83,16 +85,16 @@ class APositionKnowsItsFileTest {
      */
     @Test
     void theSameCoordinateInTwoFilesIsTwoPlaces() {
-        assertNotEquals(new SourcePos(25, 16, "shippingfee.sou"),
-                new SourcePos(25, 16, "shippingfee.examples.sou"));
+        assertNotEquals(new SourcePos(25, 16, new SourceId("shippingfee.sou")),
+                new SourcePos(25, 16, new SourceId("shippingfee.examples.sou")));
     }
 
     @Test
     void theSameCoordinateInOneFileIsOnePlace() {
-        assertEquals(new SourcePos(25, 16, "shippingfee.sou"),
-                new SourcePos(25, 16, "shippingfee.sou"));
-        assertEquals(new SourcePos(25, 16, "shippingfee.sou").hashCode(),
-                new SourcePos(25, 16, "shippingfee.sou").hashCode());
+        assertEquals(new SourcePos(25, 16, new SourceId("shippingfee.sou")),
+                new SourcePos(25, 16, new SourceId("shippingfee.sou")));
+        assertEquals(new SourcePos(25, 16, new SourceId("shippingfee.sou")).hashCode(),
+                new SourcePos(25, 16, new SourceId("shippingfee.sou")).hashCode());
     }
 
     /**
@@ -112,7 +114,7 @@ class APositionKnowsItsFileTest {
      *  can be quoted from that nonetheless reads as an answer. */
     @Test
     void aBlankSourceIdIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, ""));
-        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, "  "));
+        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, new SourceId("")));
+        assertThrows(IllegalArgumentException.class, () -> new SourcePos(1, 1, new SourceId("  ")));
     }
 }

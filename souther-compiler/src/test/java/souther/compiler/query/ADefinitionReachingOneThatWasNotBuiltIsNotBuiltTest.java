@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
@@ -87,7 +89,7 @@ class ADefinitionReachingOneThatWasNotBuiltIsNotBuiltTest {
                 data Order = { total: Nowhere }
                 data Line = { order: Order }
                 """);
-        List<String> said = Located.diagnosticsOf(c.diagnostics()).get("a.sou").stream()
+        List<String> said = Located.diagnosticsOf(c.diagnostics()).get(new SourceId("a.sou")).stream()
                 .map(d -> d.code() + " " + d.said()).toList();
 
         assertEquals(1, said.size(), "the unknown name, and nothing about `Line`: " + said);

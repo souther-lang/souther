@@ -1,6 +1,6 @@
 package souther.compiler.observe;
 
-import souther.compiler.diag.SourceRef;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -86,7 +86,7 @@ import java.util.Set;
  *                       not only its application — a fixture applies the helpers it names first, so
  *                       a row that applied nothing can still have spent counted points
  */
-public record RowOutcome(SourceRef at,
+public record RowOutcome(SourcePos at,
                          String target,
                          RowIdentity identity,
                          Stage stage,

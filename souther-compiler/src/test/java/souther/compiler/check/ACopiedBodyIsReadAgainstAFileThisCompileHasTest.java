@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
@@ -100,7 +102,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
                 Map.of("down.sou", IMPORTING, "up.sou", DECLARING), ModulePath.EMPTY,
                 "down", "twice"));
 
-        assertTrue(positions.stream().anyMatch(p -> "up.sou".equals(p.sourceId())),
+        assertTrue(positions.stream().anyMatch(p -> new SourceId("up.sou").equals(p.sourceId())),
                 "the imported body was spliced in, keeping the file it was written in");
         assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
                 "a place this compile can show is not a place anything stands in for");
@@ -129,7 +131,7 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
 
     /** {@code behavior}'s body with every helper call expanded, as a check downstream reads it. */
     private static Hir.Expr expanded(String source, String fn) {
-        var parsed = CstFrontend.parseWithSlices(source, null, "demo.sou");
+        var parsed = CstFrontend.parseWithSlices(source, null, new SourceId("demo.sou"));
         Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module()));
         HelperInliner inliner = HelperInliner.forModule(module);
         Hir.FnDef body = inliner.held().get(fn);

@@ -234,7 +234,6 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 c.db().ask(new Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
-                "Main",
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
                 answerer.asAnswering(classes, parent));

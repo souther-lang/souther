@@ -11,7 +11,6 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Citation;
-import souther.compiler.diag.SourceRef;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 

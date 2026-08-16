@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -239,7 +241,7 @@ public final class Compiler {
                 }
             }
             List<Diagnostic> failures = new ArrayList<>();
-            for (String id : compilation.exampleSourcesOf(module)) {
+            for (SourceId id : compilation.exampleSourcesOf(module)) {
                 // What the rows name themselves, before what they state: a name says which row is
                 // meant, and two rows sharing one leave every later report about either of them
                 // saying it of both.
@@ -451,7 +453,7 @@ public final class Compiler {
         // resolve a cross-module reference — including into a dependency, whose classes come off the
         // same path its declarations were read from.
         List<Diagnostic> exampleFailures = new ArrayList<>();
-        List<String> exampleSources = new ArrayList<>();
+        List<SourceId> exampleSources = new ArrayList<>();
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
                 CompileException bad = compilation.failure();
@@ -460,7 +462,7 @@ public final class Compiler {
                 }
                 continue;
             }
-            for (String id : compilation.exampleSourcesOf(module)) {
+            for (SourceId id : compilation.exampleSourcesOf(module)) {
                 for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
                     exampleFailures.add(failure.diagnostic());
                     // a row from an `examples for` file is positioned in that file, not this one
@@ -490,7 +492,7 @@ public final class Compiler {
      * examples land on that module's id, and an {@code examples for X} file's examples land on that
      * file's id — never on the target module. A source with no problem maps to an empty list.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
         return diagnoseModules(sourcesById, Set.of());
     }
 
@@ -500,8 +502,8 @@ public final class Compiler {
      * errors). Their importers are skipped rather than told the module is unknown — the error belongs
      * to the broken file, which reports it separately, not to the importer.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
-                                                             Set<String> brokenModuleNames) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                               Set<String> brokenModuleNames) {
         return diagnoseModules(sourcesById, brokenModuleNames, ModulePath.EMPTY);
     }
 
@@ -513,9 +515,9 @@ public final class Compiler {
      * <p>A path that is itself wrong — a module missing behind a module — is not reported here. The
      * editor's job is the source in front of the author, and a broken path is the build's to say.
      */
-    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
-                                                             Set<String> brokenModuleNames,
-                                                             ModulePath path) {
+    public static Map<SourceId, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                               Set<String> brokenModuleNames,
+                                                               ModulePath path) {
         return Compilation.ofDocuments(sourcesById, brokenModuleNames, path).diagnostics();
     }
     /**

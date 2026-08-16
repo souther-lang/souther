@@ -1,9 +1,11 @@
 package souther.compiler.report;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.diag.SourceRef;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
 import souther.compiler.observe.Incompleteness;
@@ -72,7 +74,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         UNDETERMINED
     }
 
-    public record ModuleReport(String module, String declaredIn, MeasurementStatus status,
+    public record ModuleReport(String module, SourceId declaredIn, MeasurementStatus status,
                                List<Incompleteness> incompleteness, List<BehaviorReport> behaviors) {
         public ModuleReport {
             incompleteness = List.copyOf(incompleteness);
@@ -156,14 +158,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // under the other — and a report whose counts came from one while its coverage came from the
         // other would say a case is verified and its arm unreached in the same breath. The findings
         // `--strict` exits on come from these same rows, so the exit code and what is printed agree.
-        for (String sourceId : compilation.exampleSourcesOf(name)) {
+        for (SourceId sourceId : compilation.exampleSourcesOf(name)) {
             Output.Examples.Of observed =
                     compilation.db().ask(Output.Examples.asked(compilation.db(), name, sourceId)).value();
             if (observed == null) {
                 // The rows of this source were never evaluated, so nothing here can be counted as
                 // covered or as missing. Which is a fact about the measurement, not about the model.
-                incompleteness.add(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                        Incompleteness.Scope.SOURCE, sourceId));
+                incompleteness.add(Incompleteness.ofSource(
+                        Incompleteness.Code.OBSERVATION_ABSENT, sourceId));
                 continue;
             }
             for (Incompleteness gap : observed.incompleteness()) {
@@ -538,7 +540,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * more than writing the value — the comparison has to have run — and nothing counts that yet.
      */
     private static void partition(StringBuilder out, BehaviorReport behavior,
-                                  String declaredIn, SourceNameResolver names) {
+                                  SourceId declaredIn, SourceNameResolver names) {
         PartitionEvidence partition = behavior.partition();
         if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
                 && partition.notDerivable().isEmpty())) {
@@ -663,7 +665,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * invite an author to stop looking exactly where there is more to find.
      */
     private static void branch(StringBuilder out, BehaviorReport behavior,
-                               String declaredIn, SourceNameResolver names) {
+                               SourceId declaredIn, SourceNameResolver names) {
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null) {
             return;
@@ -910,13 +912,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static void at(ObjectNode into, Citation where, DocumentSources sources) {
         ObjectNode at = into.putObject("at");
-        SourceRef ref = switch (where) {
+        SourcePos pos = switch (where) {
             case Citation.Written written -> written.at();
             case Citation.OutOfSight out -> out.reachedFrom();
         };
-        at.put("sourceId", sources.written(ref.sourceId()));
-        at.put("line", ref.pos().line());
-        at.put("column", ref.pos().column());
+        at.put("sourceId", sources.written(pos.sourceId()));
+        at.put("line", pos.line());
+        at.put("column", pos.column());
         ObjectNode writtenAt = at.putObject("writtenAt");
         where.writtenAtFields().forEach(writtenAt::put);
     }

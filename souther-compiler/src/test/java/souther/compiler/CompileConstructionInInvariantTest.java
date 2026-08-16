@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
@@ -122,7 +124,7 @@ class CompileConstructionInInvariantTest {
                         data Table = List<Int>
                             invariant ok = List.all(x -> atLeastZero(x), value)
                         """);
-        List<Diagnostic> down = Located.diagnosticsOf(Compiler.diagnoseModules(sources)).get("down");
+        List<Diagnostic> down = Located.diagnosticsOf(Compiler.diagnoseModules(sources)).get(new SourceId("down"));
         assertEquals(1, down.size(), () -> "expected one diagnostic, got " + down);
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, down.get(0).said());
     }
@@ -238,7 +240,7 @@ class CompileConstructionInInvariantTest {
      *  answers about — so a declaration with two wrong clauses says so about both. */
     @Test
     void everyWrongClauseIsReported() {
-        Map<String, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", """
+        Map<SourceId, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", """
                 module m
                 data Yen = Int invariant value >= 0
                 let atLeastZero (x: Int): Bool = Yen(0).value <= x
@@ -246,7 +248,7 @@ class CompileConstructionInInvariantTest {
                     invariant low = List.all(x -> atLeastZero(x), value)
                     invariant high = List.all(x -> atLeastZero(x), value)
                 """)));
-        List<String> clauses = found.get("m").stream()
+        List<String> clauses = found.get(new SourceId("m")).stream()
                 .filter(d -> d.said() instanceof InvariantMessage.TheNamedClauseConstructsAData)
                 .map(d -> String.valueOf(d.values().get("clause")))
                 .toList();
@@ -262,7 +264,7 @@ class CompileConstructionInInvariantTest {
                 data Yen = Int invariant value >= 0
                 data Table = List<Int>
                     invariant ok = List.all(x -> Yen(0).value <= x, value) && Yen(1).value >= 0
-                """))).get("m");
+                """))).get(new SourceId("m"));
         assertEquals(1, found.stream()
                 .filter(d -> "E1105".equals(d.code())).count());
     }

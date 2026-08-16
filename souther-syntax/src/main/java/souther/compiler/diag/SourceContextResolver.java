@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -14,8 +16,8 @@ import java.util.function.Function;
  * <p>A secondary is asked about under the source it names, which every one of them does
  * ({@link DiagnosticPlace.InSource}); one with nothing to quote is not asked about at all, because
  * it points at nothing and is said in words instead. A whole diagnostic that names none is asked
- * about as {@link Located#NO_SOURCE}, and what that means is the caller's to say — a compile of one
- * source names none and yet has exactly one file to quote.
+ * about as {@link Located#NO_SOURCE}, and what that means is the caller's to say — a report a
+ * compile could pin on no source still has to be shown somewhere.
  *
  * <p>Answering twice for one id must give the same text, since a caret is drawn under a line quoted
  * from it. {@link #memoized} is how a caller reading files off disk keeps that true, and it also
@@ -26,7 +28,7 @@ import java.util.function.Function;
 public interface SourceContextResolver {
 
     /** The text and display name for {@code sourceId}, or null when there is none to quote. */
-    SourceContext sourceOf(String sourceId);
+    SourceContext sourceOf(SourceId sourceId);
 
     /** Nothing to quote for anything — a caller that has no sources to hand. */
     static SourceContextResolver none() {
@@ -34,8 +36,8 @@ public interface SourceContextResolver {
     }
 
     /** A resolver that asks {@code loader} once per id and keeps the answer, absence included. */
-    static SourceContextResolver memoized(Function<String, SourceContext> loader) {
-        Map<String, SourceContext> known = new HashMap<>();
+    static SourceContextResolver memoized(Function<SourceId, SourceContext> loader) {
+        Map<SourceId, SourceContext> known = new HashMap<>();
         return id -> {
             if (known.containsKey(id)) {
                 return known.get(id);

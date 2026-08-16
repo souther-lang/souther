@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.Message;
 
 import java.util.Objects;
@@ -17,11 +19,19 @@ import java.util.Objects;
  * with its line read from another. That is the defect this whole change is about, and it does not
  * stop being it one layer downstream of where it was closed.
  *
- * <p>A primary is told, and its source is not the region's. What a caller is quoting from is the
- * caller's answer: a compile of one file hides source ids altogether and names none, and a view
- * built on the region's would be about a file that caller never speaks of. Whoever hands this a name
- * is the one holding the files, and what it has to hand over is where the primary region is — which
- * is what {@link Located} carries.
+ * <p>A primary is told, and a secondary is not. Which is not because the two are different kinds of
+ * place: it is because a primary region is not held to being one. A secondary goes through
+ * {@link DiagnosticPlace}, so it names a source by construction; a primary does not, and over one
+ * compile of this suite 53 of 3545 diagnostics carried a primary region that names no source while
+ * saying the code is written at it, with another 22 carrying no region at all. For those, what this
+ * is told is the only answer there is, and it comes from where the report was filed rather than from
+ * the place — so a reader is sent to a file the numbers may not be of.
+ *
+ * <p>So this pairing is not the defect the rest of this package closed, and it is not settled
+ * either. The rule those values keep is that a place answering for a source is not asked twice; here
+ * the place does not always answer. What the field means where it does — the source the region is
+ * in, or the file this report is being read from — is what has to be decided before it can be given
+ * a type, and deciding it means reading what those diagnostics are about.
  *
  * <p>Every spot is somewhere. A label with nothing to quote is not one — it is
  * {@link DiagnosticPlace.Unavailable}, and a reader is told where the code came from rather than
@@ -32,11 +42,11 @@ import java.util.Objects;
  */
 public final class Spot {
 
-    private final String sourceId;
+    private final SourceId sourceId;
     private final Region region;
     private final Message said;
 
-    private Spot(String sourceId, Region region, Message said) {
+    private Spot(SourceId sourceId, Region region, Message said) {
         this.sourceId = sourceId;
         this.region = region;
         this.said = said;
@@ -44,7 +54,7 @@ public final class Spot {
 
     /** The primary region of {@code d}, in {@code sourceId} — which the caller says, holding the
      *  files, and which is none for a compile that names none. */
-    public static Spot primary(Diagnostic d, String sourceId) {
+    public static Spot primary(Diagnostic d, SourceId sourceId) {
         return new Spot(sourceId, d.region(), null);
     }
 
@@ -56,7 +66,7 @@ public final class Spot {
     }
 
     /** The source this is in, or none where a compile of one file named none. */
-    public String sourceId() {
+    public SourceId sourceId() {
         return sourceId;
     }
 

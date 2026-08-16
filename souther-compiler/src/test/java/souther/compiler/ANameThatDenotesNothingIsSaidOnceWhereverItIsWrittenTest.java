@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
@@ -102,7 +104,7 @@ class ANameThatDenotesNothingIsSaidOnceWhereverItIsWrittenTest {
         byId.put("up.sou", UP);
         byId.put("demo.sou", source);
         return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()))
-                .getOrDefault("demo.sou", List.of());
+                .getOrDefault(new SourceId("demo.sou"), List.of());
     }
 
     /** Whether the reading stopped at the form, which is an answer about no name at all. */

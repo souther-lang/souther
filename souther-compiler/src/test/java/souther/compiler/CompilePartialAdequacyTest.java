@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.Deadline;
 import org.junit.jupiter.api.Test;
 
@@ -683,9 +685,9 @@ class CompilePartialAdequacyTest {
                         souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
                         souther.compiler.observe.Incompleteness.Scope.BEHAVIOR, "submit");
         souther.compiler.observe.Incompleteness aboutTheSource =
-                souther.compiler.observe.Incompleteness.of(
+                souther.compiler.observe.Incompleteness.ofSource(
                         souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
-                        souther.compiler.observe.Incompleteness.Scope.SOURCE, "3");
+                        new souther.compiler.source.SourceId("3"));
 
         assertTrue(aboutOne.countsAgainst("submit"));
         assertFalse(aboutOne.countsAgainst("cancel"));
@@ -724,7 +726,7 @@ class CompilePartialAdequacyTest {
     @Test
     void theUnfinishedRowIsStillReported() {
         Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
-        String sourceId = compilation.exampleSourcesOf("example.loop").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("example.loop").getFirst();
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
                 .ask(souther.compiler.query.Output.Examples.asked(

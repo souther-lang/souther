@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
@@ -90,7 +92,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said());
         assertEquals("Yen", quoted(DECLARING, one.region()),
                 "the caret is on the construction, in the file the helper is written in");
-        assertEquals("up.sou", one.pos().sourceId());
+        assertEquals(new SourceId("up.sou"), one.pos().sourceId());
         assertEquals(WrittenAt.HERE, one.pos().writtenAt());
     }
 
@@ -122,15 +124,15 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
      */
     @Test
     void bothFilesAreToldAndNeitherIsSilent() {
-        Map<String, List<Located>> byFile = diagnosticsOf(Map.of("up.sou", DECLARING,
+        Map<SourceId, List<Located>> byFile = diagnosticsOf(Map.of("up.sou", DECLARING,
                 "down.sou", CALLING));
 
-        assertEquals(1, byFile.get("up.sou").size(), () -> "" + byFile.get("up.sou"));
-        assertEquals(1, byFile.get("down.sou").size(), () -> "" + byFile.get("down.sou"));
-        assertEquals("up.sou", byFile.get("down.sou").get(0).primarySourceId(),
+        assertEquals(1, byFile.get(new SourceId("up.sou")).size(), () -> "" + byFile.get(new SourceId("up.sou")));
+        assertEquals(1, byFile.get(new SourceId("down.sou")).size(), () -> "" + byFile.get(new SourceId("down.sou")));
+        assertEquals(new SourceId("up.sou"), byFile.get(new SourceId("down.sou")).get(0).primarySourceId(),
                 "the caret is on the construction wherever the report is published");
-        assertEquals(byFile.get("up.sou").get(0).diagnostic().identity(),
-                byFile.get("down.sou").get(0).diagnostic().identity(),
+        assertEquals(byFile.get(new SourceId("up.sou")).get(0).diagnostic().identity(),
+                byFile.get(new SourceId("down.sou")).get(0).diagnostic().identity(),
                 "one problem, said in the two files it is written in");
     }
 
@@ -150,7 +152,7 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         assertInstanceOf(InvariantMessage.TheNamedClauseConstructsAData.class, one.said(),
                 "the rule broken is the same rule");
         assertEquals(WrittenAt.outOfSight(new SourceProvenance.APublishedModule("up", "up.atLeastZero")), one.pos().writtenAt());
-        assertEquals("down.sou", one.pos().sourceId(),
+        assertEquals(new SourceId("down.sou"), one.pos().sourceId(),
                 "the caret is in the file the reader is compiling, since there is no other");
     }
 
@@ -194,11 +196,11 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
 
     // --- the fixtures --------------------------------------------------------------------------
 
-    private static Map<String, List<Located>> diagnosticsOf(Map<String, String> sources) {
+    private static Map<SourceId, List<Located>> diagnosticsOf(Map<String, String> sources) {
         return diagnosticsOf(sources, ModulePath.EMPTY);
     }
 
-    private static Map<String, List<Located>> diagnosticsOf(Map<String, String> sources,
+    private static Map<SourceId, List<Located>> diagnosticsOf(Map<String, String> sources,
                                                             ModulePath path) {
         return Compiler.diagnoseModules(sources, Set.of(), path);
     }
@@ -209,8 +211,8 @@ class AHelperSaysTheSameThingWhereverItIsDeclaredTest {
         return classes::get;
     }
 
-    private static Diagnostic only(Map<String, List<Located>> byFile, String sourceId) {
-        List<Located> here = byFile.get(sourceId);
+    private static Diagnostic only(Map<SourceId, List<Located>> byFile, String sourceId) {
+        List<Located> here = byFile.get(new SourceId(sourceId));
         assertNotNull(here, () -> "no entry for " + sourceId + " in " + byFile.keySet());
         assertEquals(1, here.size(), () -> "expected one diagnostic, got " + here);
         return here.get(0).diagnostic();

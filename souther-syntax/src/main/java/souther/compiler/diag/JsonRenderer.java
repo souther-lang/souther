@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -29,7 +31,7 @@ public final class JsonRenderer implements DiagnosticRenderer {
     @Override
     public String render(Located located, SourceContextResolver sources, Locale locale) {
         Diagnostic d = located.diagnostic();
-        String own = located.primarySourceId();
+        SourceId own = located.primarySourceId();
         DiagnosticView view = DiagnosticView.of(d, own, own);
         SourceContext anchorSource = sources.sourceOf(view.anchor().sourceId());
         Map<String, Object> obj = new LinkedHashMap<>();

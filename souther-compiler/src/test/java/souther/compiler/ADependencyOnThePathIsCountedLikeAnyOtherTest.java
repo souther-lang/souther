@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
@@ -56,7 +58,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
         Compilation compilation = Compilation.ofSources(List.of(source), published());
         compilation.withEvaluationPolicy(policy);
         compilation.answerEverything();
-        String sourceId = compilation.exampleSourcesOf("app.uses").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("app.uses").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("app.uses", sourceId, Output.CoverageMode.NONE))
                 .value().rows();
@@ -158,7 +160,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                         .value().classes().containsKey(Emitted.impl("lib.svc", "spin")),
                 "the body is not regenerated here — it is taken from the jar and counted there");
 
-        String sourceId = compilation.exampleSourcesOf("app.calls").get(0);
+        SourceId sourceId = compilation.exampleSourcesOf("app.calls").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("app.calls", sourceId, Output.CoverageMode.NONE))
                 .value().rows();

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
@@ -184,7 +186,7 @@ class CompileFakeTableWhereWrittenTest {
                         """)));
 
         assertEquals(List.of("E1317"), codesOf(e), e.getMessage());
-        assertEquals("1", e.sourceIdOf(0), "the file that wrote the fake is the file it is said in");
+        assertEquals(new SourceId("1"), e.sourceIdOf(0), "the file that wrote the fake is the file it is said in");
     }
 
     /**

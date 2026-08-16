@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
@@ -95,7 +97,7 @@ class ADeclarationTheModuleDoesNotHaveGetsNoIdentityTest {
     private static List<Diagnostic> diagnostics(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
-        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get(ID);
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get(new SourceId(ID));
     }
 
     /** The copy is not a declaration, so what is resolved is the one the module has — the first. */
@@ -131,8 +133,8 @@ class ADeclarationTheModuleDoesNotHaveGetsNoIdentityTest {
      */
     @Test
     void theResolutionIndexHoldsOnlyWhatTheModulesDeclarationsName() {
-        assertEquals(List.of(new SourcePos(4, 15, ID)), semanticUsesOfAmount(TWICE));
-        assertEquals(List.of(new SourcePos(4, 15, ID)), semanticUsesOfAmount(RESERVED));
+        assertEquals(List.of(new SourcePos(4, 15, new SourceId(ID))), semanticUsesOfAmount(TWICE));
+        assertEquals(List.of(new SourcePos(4, 15, new SourceId(ID))), semanticUsesOfAmount(RESERVED));
     }
 
     /**

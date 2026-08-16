@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
@@ -48,15 +50,15 @@ class ARuleAConstructionIsJudgedAgainstIsNotWhereTheReportIsSaidTest {
             let of (d) = Money(d)
             """;
 
-    private static Map<String, List<Located>> compiled(String app) {
+    private static Map<SourceId, List<Located>> compiled(String app) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("lib.sou", LIBRARY);
         byId.put("app.sou", app);
         return Compiler.diagnoseModules(byId);
     }
 
-    private static List<String> codesOn(Map<String, List<Located>> found, String file) {
-        return found.get(file).stream().map(l -> l.diagnostic().code()).toList();
+    private static List<String> codesOn(Map<SourceId, List<Located>> found, String file) {
+        return found.get(new SourceId(file)).stream().map(l -> l.diagnostic().code()).toList();
     }
 
     @Test
@@ -66,7 +68,7 @@ class ARuleAConstructionIsJudgedAgainstIsNotWhereTheReportIsSaidTest {
 
     @Test
     void theLibraryDeclaringTheInvariantIsToldNothingAboutARefutedConstruction() {
-        Map<String, List<Located>> found = compiled(REFUTING);
+        Map<SourceId, List<Located>> found = compiled(REFUTING);
 
         assertEquals(List.of(), codesOn(found, "lib.sou"),
                 "the invariant is what the value was judged against, and it is not in the wrong");
@@ -86,11 +88,11 @@ class ARuleAConstructionIsJudgedAgainstIsNotWhereTheReportIsSaidTest {
      *  and shown there — the two are separate questions. */
     @Test
     void theClauseIsStillPointedAtFromTheFileTheReportIsSaidIn() {
-        Diagnostic said = compiled(REFUTING).get("app.sou").get(0).diagnostic();
+        Diagnostic said = compiled(REFUTING).get(new SourceId("app.sou")).get(0).diagnostic();
 
         assertTrue(said.secondary().stream()
                         .anyMatch(l -> l.place() instanceof souther.compiler.diag.DiagnosticPlace.InSource in
-                                && "lib.sou".equals(in.region().start().sourceId())),
+                                && new SourceId("lib.sou").equals(in.region().start().sourceId())),
                 "the report points at the clause in the library: " + said.secondary());
     }
 }

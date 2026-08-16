@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,13 +17,14 @@ import java.util.Map;
  * holding one for a file other than this is not holding a mistake.
  *
  * @param diagnostic what was found
- * @param primarySourceId the source the primary region is in, or null when it names none — which
- *        covers a single-source compile, where the caller knows the file it handed over
+ * @param primarySourceId the source the primary region is in, or null when nothing says: a
+ *        position the compiler synthesized, and a report a compile could pin on no source of its
+ *        own. A compile of one source is not one of those — it names that source like any other
  */
-public record Located(Diagnostic diagnostic, String primarySourceId) {
+public record Located(Diagnostic diagnostic, SourceId primarySourceId) {
 
     /** The id a diagnostic that names no source carries. */
-    public static final String NO_SOURCE = null;
+    public static final SourceId NO_SOURCE = null;
 
     /** What was found, without where — for a caller reading what a compile says rather than
      * deciding which file to put a marker in. */
@@ -30,8 +33,8 @@ public record Located(Diagnostic diagnostic, String primarySourceId) {
     }
 
     /** Every source's diagnostics, without where each is anchored. */
-    public static Map<String, List<Diagnostic>> diagnosticsOf(Map<String, List<Located>> bySource) {
-        Map<String, List<Diagnostic>> plain = new LinkedHashMap<>();
+    public static Map<SourceId, List<Diagnostic>> diagnosticsOf(Map<SourceId, List<Located>> bySource) {
+        Map<SourceId, List<Diagnostic>> plain = new LinkedHashMap<>();
         bySource.forEach((id, located) -> plain.put(id, diagnosticsOf(located)));
         return plain;
     }

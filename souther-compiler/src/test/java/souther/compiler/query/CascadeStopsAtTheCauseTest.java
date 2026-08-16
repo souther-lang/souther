@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
@@ -27,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CascadeStopsAtTheCauseTest {
 
-    private static Map<String, List<Diagnostic>> diagnose(Map<String, String> byId) {
+    private static Map<SourceId, List<Diagnostic>> diagnose(Map<String, String> byId) {
         return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
     }
 
@@ -49,7 +51,7 @@ class CascadeStopsAtTheCauseTest {
 
                 behavior g : (a: A) -> String
                 let g (a) = "x" ++ a.n
-                """)).get("a.sou");
+                """)).get(new SourceId("a.sou"));
 
         assertEquals(1, found.size(),
                 "the name that denotes nothing, and nothing about adding or appending it: " + found);
@@ -75,11 +77,11 @@ class CascadeStopsAtTheCauseTest {
                 data B = { a: A }
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        Map<String, List<Diagnostic>> found = Located.diagnosticsOf(c.diagnostics());
+        Map<SourceId, List<Diagnostic>> found = Located.diagnosticsOf(c.diagnostics());
 
-        assertEquals(1, found.get("dup.sou").size(), "the duplicate: " + found.get("dup.sou"));
-        assertEquals(List.of(), found.get("a.sou"),
-                "m.a is correct, and is told nothing: " + found.get("a.sou"));
+        assertEquals(1, found.get(new SourceId("dup.sou")).size(), "the duplicate: " + found.get(new SourceId("dup.sou")));
+        assertEquals(List.of(), found.get(new SourceId("a.sou")),
+                "m.a is correct, and is told nothing: " + found.get(new SourceId("a.sou")));
         assertEquals(Map.of(), c.classes(),
                 "m.a is built against declarations nothing will emit, so it is not emitted either");
     }
@@ -100,7 +102,7 @@ class CascadeStopsAtTheCauseTest {
 
                 data B = { x: X }
                 """);
-        List<Diagnostic> found = diagnose(byId).get("a.sou");
+        List<Diagnostic> found = diagnose(byId).get(new SourceId("a.sou"));
 
         assertEquals(1, found.size(),
                 "the import line that names nothing, and no conflict with it: " + found);

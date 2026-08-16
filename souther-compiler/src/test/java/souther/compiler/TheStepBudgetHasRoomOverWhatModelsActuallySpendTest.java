@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Counting;
@@ -84,7 +86,7 @@ class TheStepBudgetHasRoomOverWhatModelsActuallySpendTest {
             throw new IllegalStateException("the census model has to compile: " + wrong.getMessage());
         }
         List<RowOutcome> rows = new ArrayList<>();
-        for (String sourceId : compilation.exampleSourcesOf("example.census")) {
+        for (SourceId sourceId : compilation.exampleSourcesOf("example.census")) {
             Output.Examples.Of observed = compilation.db()
                     .ask(new Output.Examples("example.census", sourceId, Output.CoverageMode.NONE))
                     .value();

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
@@ -100,7 +102,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """, held());
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
-        assertEquals("0", said.sourceId(), "a reader can only be sent to a file this compile holds");
+        assertEquals(new SourceId("0"), said.sourceId(), "a reader can only be sent to a file this compile holds");
         assertEquals(6, said.line(), "the import line naming the module, not a line of the module");
         assertEquals(1, said.column());
     }
@@ -146,7 +148,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """, and(held, front));
 
         SourcePos said = whereTheReportAboutIsSaid(compilation, "lib.held");
-        assertEquals("0", said.sourceId());
+        assertEquals(new SourceId("0"), said.sourceId());
         assertEquals(4, said.line(), "the import of the dependency that led to it");
     }
 
@@ -161,7 +163,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 data Page = { held: Held }
                 """, held());
 
-        List<Located> onTheSource = compilation.diagnostics().get("0");
+        List<Located> onTheSource = compilation.diagnostics().get(new SourceId("0"));
         assertNotNull(onTheSource);
         assertFalse(onTheSource.isEmpty(),
                 "a compile that emitted nothing said nothing about why");
@@ -219,9 +221,9 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """), held()::get);
         compilation.answerEverything();
 
-        Map<String, List<Located>> byId = compilation.diagnostics();
-        assertFalse(byId.get("0").isEmpty(), "the source that was reached first");
-        assertFalse(byId.get("1").isEmpty(), "the one that reaches it just as much");
+        Map<SourceId, List<Located>> byId = compilation.diagnostics();
+        assertFalse(byId.get(new SourceId("0")).isEmpty(), "the source that was reached first");
+        assertFalse(byId.get(new SourceId("1")).isEmpty(), "the one that reaches it just as much");
     }
 
     /**
@@ -262,8 +264,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """), and(shared, between)::get);
         compilation.answerEverything();
 
-        Map<String, List<Located>> byId = compilation.diagnostics();
-        assertEquals(byId.get("0").size(), byId.get("1").size(),
+        Map<SourceId, List<Located>> byId = compilation.diagnostics();
+        assertEquals(byId.get(new SourceId("0")).size(), byId.get(new SourceId("1")).size(),
                 "the file that reaches it the long way round is told the same things");
     }
 
@@ -304,8 +306,8 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """), and(and(meeting, shortWay), and(middle, longWay))::get);
         compilation.answerEverything();
 
-        Map<String, List<Located>> byId = compilation.diagnostics();
-        assertEquals(byId.get("0").size(), byId.get("1").size(),
+        Map<SourceId, List<Located>> byId = compilation.diagnostics();
+        assertEquals(byId.get(new SourceId("0")).size(), byId.get(new SourceId("1")).size(),
                 "the file that reaches the meeting point the long way round is told the same things");
     }
 
@@ -346,7 +348,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
             // Every file it is said in, and not only the one the caret is in: a second place is
             // said as a labelled region, and claiming a file that never reaches this module is
             // exactly what putting both imports on one report would do.
-            assertEquals(List.of("lib.left".equals(stands) ? "0" : "1"),
+            assertEquals(List.of(new SourceId("lib.left".equals(stands) ? "0" : "1")),
                     compilation.publishSourceIdsOf(found),
                     "`" + stands + "` is not reached from the other file at all");
         }
@@ -377,7 +379,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 data A = { x: X }
                 """, core.classes());
 
-        List<Located> onTheSource = compilation.diagnostics().get("0");
+        List<Located> onTheSource = compilation.diagnostics().get(new SourceId("0"));
         assertNotNull(onTheSource);
         // That one, and only that one. A module the path holds and this compilation refuses is
         // still a module it has heard of, so an importer of it is not also told there is no such
@@ -419,7 +421,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
         assertEquals(2, compilation.db().allReports().size(),
                 "two findings, at the two places the module writes the name");
-        assertEquals(1, compilation.diagnostics().get("0").size(),
+        assertEquals(1, compilation.diagnostics().get(new SourceId("0")).size(),
                 "one thing to be told, said once");
     }
 
@@ -436,14 +438,14 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     @Test
     void movingTheCaretKeepsTheLabelsTheReportAlreadyHad() {
         Diagnostic said = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
-                .at(new SourcePos(1, 1, "0"))
-                .secondary(Region.ofWidth(new SourcePos(3, 3, "0"), 4),
+                .at(new SourcePos(1, 1, new SourceId("0")))
+                .secondary(Region.ofWidth(new SourcePos(3, 3, new SourceId("0")), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
         assertEquals(1, said.secondary().size(), "the label is there to begin with");
 
-        Diagnostic moved = said.reachedFrom(List.of(new SourcePos(2, 1, "0")),
+        Diagnostic moved = said.reachedFrom(List.of(new SourcePos(2, 1, new SourceId("0"))),
                 new SourceProvenance.APublishedModule("lib.held"),
                 new ModuleMessage.ItIsReachedFromHereToo());
 
@@ -456,7 +458,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     @Test
     void aLabelOverARegionNamingNoSourceIsRefused() {
         Diagnostic.Builder building = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
-                .at(new SourcePos(1, 1, "0"));
+                .at(new SourcePos(1, 1, new SourceId("0")));
 
         assertThrows(IllegalArgumentException.class,
                 () -> building.secondary(Region.ofWidth(new SourcePos(3, 3), 4),

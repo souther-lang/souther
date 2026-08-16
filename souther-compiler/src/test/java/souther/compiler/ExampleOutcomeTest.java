@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Disposition;
@@ -177,14 +179,14 @@ class ExampleOutcomeTest {
         compilation.answerEverything();
 
         Output.Examples.Of attached = compilation.db()
-                .ask(new Output.Examples("example.trip", "trip-examples.sou", Output.CoverageMode.NONE)).value();
+                .ask(new Output.Examples("example.trip", new SourceId("trip-examples.sou"), Output.CoverageMode.NONE)).value();
         assertNotNull(attached);
         assertEquals(1, attached.rows().size());
-        assertEquals("trip-examples.sou", attached.rows().get(0).at().sourceId());
+        assertEquals(new SourceId("trip-examples.sou"), attached.rows().get(0).at().sourceId());
         assertEquals(Disposition.HELD, attached.rows().get(0).disposition());
 
         Output.Examples.Of own = compilation.db()
-                .ask(new Output.Examples("example.trip", "trip.sou", Output.CoverageMode.NONE)).value();
+                .ask(new Output.Examples("example.trip", new SourceId("trip.sou"), Output.CoverageMode.NONE)).value();
         assertNotNull(own);
         assertEquals(List.of(), own.rows(), "the module's own source wrote no rows");
     }

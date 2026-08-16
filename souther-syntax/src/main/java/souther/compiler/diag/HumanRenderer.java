@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.source.SourceId;
+
 
 import souther.compiler.text.DisplayColumns;
 
@@ -35,7 +37,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
     @Override
     public String render(Located located, SourceContextResolver sources, Locale locale) {
         Diagnostic d = located.diagnostic();
-        String own = located.primarySourceId();
+        SourceId own = located.primarySourceId();
         DiagnosticView view = DiagnosticView.of(d, own, own);
         SourceContext anchorSource = sources.sourceOf(view.anchor().sourceId());
         StringBuilder out = new StringBuilder();

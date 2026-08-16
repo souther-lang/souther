@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Resolve;
@@ -428,7 +430,7 @@ class ResolvedValueNamesTest {
      */
     @Test
     void aFieldAnInvariantReadsIsDeclaredWhereTheFieldIsWritten() {
-        assertEquals(new SourcePos(4, 7, "a.sou"), declaredAt("""
+        assertEquals(new SourcePos(4, 7, new SourceId("a.sou")), declaredAt("""
                 module m.a exposing ( Amount )
 
                 data Amount = {
@@ -459,7 +461,7 @@ class ResolvedValueNamesTest {
                     invariant %s >= 0
                 """.formatted(decomposed, composed), composed);
 
-        assertEquals(new SourcePos(4, 7, "a.sou"), declared.pos(), "the field on line 4");
+        assertEquals(new SourcePos(4, 7, new SourceId("a.sou")), declared.pos(), "the field on line 4");
         assertEquals(decomposed, declared.spelling(), "quoted as the declaration writes it");
         assertEquals(decomposed.length(),
                 declared.region().end().column() - declared.region().start().column(),
@@ -470,7 +472,7 @@ class ResolvedValueNamesTest {
      * declared there and not where it was spread in. */
     @Test
     void aFieldAnIncludeBringsInIsDeclaredWhereItWasWritten() {
-        assertEquals(new SourcePos(4, 7, "a.sou"), declaredAt("""
+        assertEquals(new SourcePos(4, 7, new SourceId("a.sou")), declaredAt("""
                 module m.a exposing ( Priced )
 
                 data Money = {

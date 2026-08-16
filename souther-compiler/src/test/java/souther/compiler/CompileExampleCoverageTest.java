@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.MeasurementStatus;
@@ -254,7 +256,7 @@ class CompileExampleCoverageTest {
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        String sourceId = compilation.exampleSourcesOf(module).get(0);
+        SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
                 .ask(souther.compiler.query.Output.Examples.asked(
                         compilation.db(), module, sourceId)).value().rows();

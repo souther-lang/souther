@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import java.util.ArrayDeque;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
@@ -111,7 +113,7 @@ public final class Db {
      * asked about again is held for nothing. Dropping an answer is always safe: the next question
      * that wants it computes it.
      */
-    public void forget(String sourceId, String moduleName) {
+    public void forget(SourceId sourceId, String moduleName) {
         set(new Front.Text(sourceId), null);
         // Dropping by module name is exact, not approximate. Every question about a module reads its
         // declaring source through the workspace layout, and the layout names one source per module
@@ -238,7 +240,7 @@ public final class Db {
     }
 
     /** One thing the author is told, wherever it was found: a problem, on a file. */
-    private record Told(String module, String sourceId, Diagnostic.Identity problem) {}
+    private record Told(String module, SourceId sourceId, Diagnostic.Identity problem) {}
 
     /** What {@code key} read while it was answered, empty if it has not been asked. */
     public Set<Key<?>> dependenciesOf(Key<?> key) {
@@ -266,31 +268,31 @@ public final class Db {
      * points at ({@link souther.compiler.diag.msg.FindingRegion}) and nothing here knows;
      * {@link Compilation#publishSourceIdsOf(Found)} is what reads the two together.
      */
-    public record Found(String module, String sourceId, Report report) {
+    public record Found(String module, SourceId sourceId, Report report) {
 
         /**
          * The source this report claims, before a compile decides whether it has it: the one the
-         * report named, else the one its primary position was read from, else the one the key asked
-         * about. Null when none of the three says, which leaves the module's own source as the last
-         * word — a fallback only a caller that knows the module layout can apply.
+         * report's primary position was read from, else the one the key asked about. Null when
+         * neither says, which leaves the module's own source as the last word — a fallback only a
+         * caller that knows the module layout can apply.
          *
          * <p>The position comes before the key, and that ordering is the whole of what a reader
          * needs. A key says which input was asked about; a position says where the caret sits, and
          * the line under the caret is quoted out of the file this names. Where the two disagree,
          * answering with the key's shows a reader a line they did not write — which is what a
          * question asked about a module whose rows were written in an attached {@code examples for}
-         * file did. A report anchored somewhere other than where its caret sits says so itself,
-         * which is what {@link Report.Delivery} is for, and that is why it comes first.
+         * file did.
+         *
+         * <p>Nothing a report carries beside its position is read here. A report used to be able to
+         * name its own file, and the two sites that did read that name off a value holding it beside
+         * the place — so the answer was the position's, spelled somewhere else, with nothing keeping
+         * the two the same.
          *
          * <p>Anchored, not owned. What this settles is the file the report is filed under and quoted
          * from; whether the problem is also written in some other file is a question about the
          * regions it points at, and is asked of them.
          */
-        public String claimedSourceId() {
-            String said = report.delivery().primarySourceId();
-            if (said != null) {
-                return said;
-            }
+        public SourceId claimedSourceId() {
             SourcePos at = report.diagnostic().pos();
             if (at != null && at.sourceId() != null) {
                 return at.sourceId();

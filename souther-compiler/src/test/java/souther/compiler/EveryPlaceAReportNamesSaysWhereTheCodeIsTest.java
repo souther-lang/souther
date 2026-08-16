@@ -471,7 +471,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         compilation.answerEverything();
-        SourceNameResolver names = id -> "0".equals(id) ? "up.sou" : "down.sou";
+        SourceNameResolver names = id -> "0".equals(id.value()) ? "up.sou" : "down.sou";
         AdequacyReport report = AdequacyReport.of(compilation);
 
         List<String> lines = report.human(names).lines().map(String::strip)

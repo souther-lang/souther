@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -59,7 +61,7 @@ class AModuleIsNotJudgedForWhatAnotherModulesRowWritesTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(LIB, IMPORTER)));
 
-        assertEquals("1", e.sourceId(),
+        assertEquals(new SourceId("1"), e.sourceId(),
                 "the row that made the claim is in the importer, and so is the report");
     }
 

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import java.util.List;
 
 /**
@@ -41,7 +43,7 @@ public interface Key<T> {
      * {@code examples for} file declares no module of its own, so a problem with it has no module
      * name to be found by. Null otherwise, and the module's own source is used instead.
      */
-    default String sourceId() {
+    default SourceId sourceId() {
         return null;
     }
 

@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
@@ -42,14 +44,14 @@ class DuplicateModuleForgetTest {
         both.put("a.sou", FIRST);
         both.put("b.sou", SECOND);
         Compilation c = Compilation.ofDocuments(both, Set.of(), ModulePath.EMPTY);
-        Map<String, List<souther.compiler.diag.Diagnostic>> first = Located.diagnosticsOf(c.diagnostics());
-        assertEquals(1, first.get("b.sou").size(), "the second claim is the one reported");
+        Map<SourceId, List<souther.compiler.diag.Diagnostic>> first = Located.diagnosticsOf(c.diagnostics());
+        assertEquals(1, first.get(new SourceId("b.sou")).size(), "the second claim is the one reported");
 
         Map<String, String> onlySecond = new LinkedHashMap<>();
         onlySecond.put("b.sou", SECOND);
         c.update(onlySecond, Set.of());
 
-        assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get("b.sou"),
+        assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get(new SourceId("b.sou")),
                 "b.sou is the module now, and there is nothing wrong with it");
         assertTrue(c.classes().containsKey("shop.cart.Extra"),
                 "what is compiled is what b.sou declares, not what a.sou did");

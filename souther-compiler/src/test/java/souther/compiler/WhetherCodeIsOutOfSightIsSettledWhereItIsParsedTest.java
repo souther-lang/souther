@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
@@ -90,13 +92,13 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
 
                 data Code = Int
                     invariant atLeastOne = value >= 1
-                """, null, "0").module();
+                """, null, new SourceId("0")).module();
         clausesOf(module, positions);
 
         assertFalse(positions.isEmpty(), "the clause has positions");
         assertEquals(List.of(), positions.stream().filter(SourcePos::isOutOfSight).toList(),
                 "what was read off a file the reader holds is where the code is");
-        assertEquals(List.of(), positions.stream().filter(p -> !"0".equals(p.sourceId())).toList(),
+        assertEquals(List.of(), positions.stream().filter(p -> !new SourceId("0").equals(p.sourceId())).toList(),
                 "and it says which file");
     }
 
@@ -181,7 +183,7 @@ class WhetherCodeIsOutOfSightIsSettledWhereItIsParsedTest {
 
     /** {@code fn}'s body as a check downstream reads it, with every helper call expanded. */
     private static Hir.Expr bodyOf(String source, String fn) {
-        var parsed = CstFrontend.parseWithSlices(source, null, "demo.sou");
+        var parsed = CstFrontend.parseWithSlices(source, null, new SourceId("demo.sou"));
         Hir.Module module = Resolve.module(parsed.module(), SyntaxSymbols.of(parsed.module()));
         HelperInliner inliner = HelperInliner.forModule(module);
         Hir.FnDef body = inliner.held().get(fn);

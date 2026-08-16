@@ -1,5 +1,7 @@
 package souther.lsp.analysis;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.Compiler;
 import souther.compiler.check.Resolve;
 import souther.compiler.query.Adequacy;
@@ -228,7 +230,7 @@ public final class Analyzer {
             }
         }
 
-        Map<String, List<Located>> byUri;
+        Map<SourceId, List<Located>> byUri;
         try {
             byUri = compileOf(graph, path, compileSet, brokenModules).diagnostics();
         } catch (RuntimeException | StackOverflowError e) {
@@ -249,15 +251,15 @@ public final class Analyzer {
                 return text == null ? null : new LineIndex(text);
             });
         };
-        for (Map.Entry<String, List<Located>> e : byUri.entrySet()) {
-            List<LspDiagnostic> list = out.get(e.getKey());
+        for (Map.Entry<SourceId, List<Located>> e : byUri.entrySet()) {
+            List<LspDiagnostic> list = out.get(e.getKey().value());
             if (list == null) {
                 continue;
             }
             for (Located loc : e.getValue()) {
                 // A workspace names its sources by document URI, so a source id is already the name
                 // the editor opens.
-                list.add(project(loc.diagnostic(), loc.primarySourceId(), e.getKey(),
+                list.add(project(loc.diagnostic(), loc.primarySourceId(), e.getKey().value(),
                         linesOf, uri -> graph.text(uri) == null ? null : uri));
             }
         }
@@ -350,10 +352,16 @@ public final class Analyzer {
         return now;
     }
 
+    /** A source of the compile as the editor names it. A workspace hands its documents over under
+     *  their URIs, so the identity a compile files one under is the URI it opens. */
+    private static String uriOf(SourceId id) {
+        return id == null ? null : id.value();
+    }
+
     /** Where the cursor is, in the terms the compiler answers about: a place in a file, not a line
      * and a column that any file might have. */
     private static SourcePos cursor(String uri, Position pos) {
-        return new SourcePos(pos.line() + 1, pos.character() + 1, uri);
+        return new SourcePos(pos.line() + 1, pos.character() + 1, new SourceId(uri));
     }
 
     /** What the cursor is on, as the compiler answers it: the type a name at {@code pos} denotes,
@@ -394,7 +402,8 @@ public final class Analyzer {
      * module is one file, and nothing checks that it is.
      */
     private String documentOf(SourcePos written, String moduleUri, ModuleGraph graph) {
-        String uri = written != null && written.sourceId() != null ? written.sourceId() : moduleUri;
+        String uri = written != null && written.sourceId() != null
+                ? written.sourceId().value() : moduleUri;
         return uri != null && graph.text(uri) != null ? uri : null;
     }
 
@@ -471,7 +480,7 @@ public final class Analyzer {
      * asked nothing.
      */
     private String moduleOf(Compilation compilation, ModuleGraph graph, String uri) {
-        String known = compilation.moduleOf(uri);
+        String known = compilation.moduleOf(new SourceId(uri));
         if (known != null) {
             return known;
         }
@@ -490,7 +499,7 @@ public final class Analyzer {
                                     Adequacy.Of adequacy) {
         int rows = 0;
         int pending = 0;
-        for (String sourceId : compilation.exampleSourcesOf(module)) {
+        for (SourceId sourceId : compilation.exampleSourcesOf(module)) {
             souther.compiler.query.Output.Examples.Of observed = compilation.db()
                     .ask(souther.compiler.query.Output.Examples.asked(
                             compilation.db(), module, sourceId)).value();
@@ -1006,8 +1015,8 @@ public final class Analyzer {
     private String declaringFile(Compilation compilation, ValueName target, String uri) {
         return switch (target) {
             case ValueName.Local _ -> uri;   // bound in the body the cursor is in
-            case ValueName.Helper h -> compilation.sourceIdOf(h.module());
-            case ValueName.Behavior b -> compilation.sourceIdOf(b.module());
+            case ValueName.Helper h -> uriOf(compilation.sourceIdOf(h.module()));
+            case ValueName.Behavior b -> uriOf(compilation.sourceIdOf(b.module()));
             case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _ -> null;
         };
     }
@@ -1045,7 +1054,7 @@ public final class Analyzer {
      * is half-typed.
      */
     private boolean resolves(Compilation compilation, String uri) {
-        String module = compilation.moduleOf(uri);
+        String module = compilation.moduleOf(new SourceId(uri));
         return module != null && compilation.db().ask(new Names.Facts(module)).present();
     }
 
@@ -1055,7 +1064,7 @@ public final class Analyzer {
         // Which module, which name and where it was written is the compiler's answer — the part a
         // spelling match gets wrong.
         WrittenName at = compilation.db().ask(new Names.DeclaredAt(target)).value();
-        return nameAt(at, compilation.sourceIdOf(target.module()), graph);
+        return nameAt(at, uriOf(compilation.sourceIdOf(target.module())), graph);
     }
 
     /**
@@ -1075,7 +1084,7 @@ public final class Analyzer {
             declarationOf(compilation, target, graph).ifPresent(out::add);
         }
         for (String module : compilation.modules()) {
-            String moduleUri = compilation.sourceIdOf(module);
+            String moduleUri = uriOf(compilation.sourceIdOf(module));
             for (Resolve.TypeUse use
                     : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
@@ -1107,7 +1116,7 @@ public final class Analyzer {
             out.addAll(valueDeclarationsOf(compilation, target, uri, graph));
         }
         for (String module : compilation.modules()) {
-            String moduleUri = compilation.sourceIdOf(module);
+            String moduleUri = uriOf(compilation.sourceIdOf(module));
             for (Resolve.ValueUse use
                     : compilation.db().ask(new Names.ValueUsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
@@ -1468,7 +1477,7 @@ public final class Analyzer {
      * compile's answer, with the headers read only for a module whose file the compile could not
      * read. */
     private String uriOfModule(Compilation compilation, ModuleGraph graph, String moduleName) {
-        String declared = compilation.sourceIdOf(moduleName);
+        String declared = uriOf(compilation.sourceIdOf(moduleName));
         if (declared != null && graph.text(declared) != null) {
             return declared;
         }
@@ -2030,7 +2039,7 @@ public final class Analyzer {
      * @param linesOf the line index of a source, for turning its positions into ranges
      * @param uriOf the editor's name for a source, null when it has none to link to
      */
-    private LspDiagnostic project(Diagnostic d, String primarySourceId, String publishedUri,
+    private LspDiagnostic project(Diagnostic d, SourceId primarySourceId, String publishedUri,
                                   java.util.function.Function<String, LineIndex> linesOf,
                                   java.util.function.Function<String, String> uriOf) {
         String message = DiagnosticRenderer.body(d, EDITOR_LANGUAGE);
@@ -2040,7 +2049,7 @@ public final class Analyzer {
         }
         int severity = d.severity() == souther.compiler.diag.Severity.WARNING
                 ? LspDiagnostic.WARNING : LspDiagnostic.ERROR;
-        DiagnosticView view = DiagnosticView.of(d, primarySourceId, publishedUri);
+        DiagnosticView view = DiagnosticView.of(d, primarySourceId, SourceId.orNone(publishedUri));
         List<LspDiagnostic.Related> related = new ArrayList<>();
         // A label with nothing to point at joins the message. An editor's related information is a
         // location, and there is no location — the clause is in a module this workspace has no file
@@ -2060,8 +2069,9 @@ public final class Analyzer {
             // none, and the file this marker is being put in is that one. What used to reach here
             // as well was a label, which is the defect: a label says where it is and no longer takes
             // its file from where it is shown.
-            String uri = other.sourceId() == null ? publishedUri : uriOf.apply(other.sourceId());
-            LineIndex lines = linesOf.apply(other.sourceId());
+            String uri = other.sourceId() == null
+                    ? publishedUri : uriOf.apply(other.sourceId().value());
+            LineIndex lines = linesOf.apply(uriOf(other.sourceId()));
             if (uri == null || lines == null || other.region() == null) {
                 continue;   // nothing the editor could open, so nothing to link to
             }
@@ -2074,7 +2084,7 @@ public final class Analyzer {
         }
         Range range = view.anchor().region() != null
                 ? rangeOfRegion(view.anchor().region())
-                : rangeOf(linesOf.apply(view.anchor().sourceId()), d);
+                : rangeOf(linesOf.apply(uriOf(view.anchor().sourceId())), d);
         return new LspDiagnostic(range, severity, d.code(), message, tagsOf(d), related);
     }
 

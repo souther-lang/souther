@@ -1,5 +1,7 @@
 package souther.compiler.cst;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.TextRead;
 
@@ -36,7 +38,7 @@ public final class LineIndex {
     }
 
     /** An index of a file this compile holds, or of no named file when {@code sourceId} is null. */
-    public LineIndex(String source, String sourceId) {
+    public LineIndex(String source, SourceId sourceId) {
         this(source, sourceId == null ? TextRead.aTextWithNoIdentity()
                 : TextRead.aFileOfThisCompile(sourceId));
     }

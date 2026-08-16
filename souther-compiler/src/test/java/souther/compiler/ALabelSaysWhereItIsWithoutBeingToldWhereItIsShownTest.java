@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.source.SourceId;
+
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.diag.HumanRenderer;
@@ -150,7 +152,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
     void aRegionNobodyPlacedIsRefusedRatherThanPlacedByTheReport() {
         Diagnostic.Builder building = Diagnostic
                 .say(new souther.compiler.diag.msg.NameMessage.NoValueOfThatNameInScope("x"))
-                .at(new souther.compiler.diag.SourcePos(1, 1, "0"));
+                .at(new souther.compiler.diag.SourcePos(1, 1, new SourceId("0")));
 
         assertThrowsIllegalArgument(() -> building.secondary(
                 souther.compiler.diag.Region.ofWidth(new souther.compiler.diag.SourcePos(3, 3), 4),
@@ -163,7 +165,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
     void aRegionWithNoEndIsRefusedWhereItIsMadeAPlace() {
         org.junit.jupiter.api.Assertions.assertThrows(DiagnosticPlace.NotAPlace.class,
                 () -> DiagnosticPlace.of(new souther.compiler.diag.Region(
-                        new souther.compiler.diag.SourcePos(3, 3, "0"), null)));
+                        new souther.compiler.diag.SourcePos(3, 3, new SourceId("0")), null)));
         org.junit.jupiter.api.Assertions.assertThrows(DiagnosticPlace.NotAPlace.class,
                 () -> DiagnosticPlace.of(null));
     }
@@ -175,7 +177,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
         Compilation c = offThePath();
         for (Db.Found found : c.reports()) {
             if ("E2011".equals(found.report().diagnostic().code())) {
-                assertEquals(List.of("0"), c.publishSourceIdsOf(found));
+                assertEquals(List.of(new SourceId("0")), c.publishSourceIdsOf(found));
             }
         }
     }
@@ -214,7 +216,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
     }
 
     private static String rendered(Compilation c, String source) {
-        return new HumanRenderer(false).render(new Located(theWarning(c), "0"),
+        return new HumanRenderer(false).render(new Located(theWarning(c), new SourceId("0")),
                 id -> new SourceContext("m.sou", source), Locale.ENGLISH);
     }
 
