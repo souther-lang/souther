@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.query.ClaimAnnotations;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
@@ -91,10 +92,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * @param findings  what the measures found and nothing filled, which is what the lines under this
      *                  behavior print and what a build is warned about — one list, read three ways
      */
+    /**
+     * @param claimed what the body declared cannot arrive, beside the measures rather than in them.
+     *                The two are joined where this report is written and nowhere else, which is what
+     *                keeps a claim from reaching a denominator
+     */
     public record BehaviorReport(String name, boolean injected, int rows, int pending,
                                  MeasurementStatus status,
                                  Adequacy.SignatureEvidence signature,
                                  PartitionEvidence partition,
+                                 ClaimAnnotations claimed,
                                  Adequacy.BranchEvidence branch,
                                  List<Adequacy.Finding> findings) {
         public BehaviorReport {
@@ -198,6 +205,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
+        // What each body declared, read where it was judged. Beside the measures and never inside
+        // one: this report is where the two are put together.
+        Map<String, ClaimAnnotations> claims =
+                compilation.db().ask(new souther.compiler.query.Bodies.Claimed(name)).value();
         // The lines this report prints and the warnings a build is given are the same list, asked for
         // once here. A second reading of the evidence would be a second statement of what a gap is.
         Map<String, List<Adequacy.Finding>> findings =
@@ -225,7 +236,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     module.injected(behavior),
                     rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
-                    signature, partition, branch,
+                    signature, partition,
+                    claims == null ? ClaimAnnotations.NONE
+                            : claims.getOrDefault(behavior.name(), ClaimAnnotations.NONE),
+                    branch,
                     findings == null ? List.of()
                             : findings.getOrDefault(behavior.name(), List.of())));
         }
@@ -529,8 +543,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>Several reasons are not printed: a class ruled out by a fork whose paths abort for different
      * reasons has no one sentence about it, and picking one would say something the model does not.
      */
-    private static String why(PartitionEvidence.ExcludedClass ruled) {
-        return because(ruled.reasons());
+    /** The positions this report has an axis for, which is what tells a claim it can print beside
+     *  one from a claim it has to name a position for. */
+    private static List<String> measuredPaths(PartitionEvidence partition) {
+        return partition.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList();
     }
 
     /** The model's own words for a claim, where there is one to print. */
@@ -540,7 +556,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** What a reader is told about a claim nothing settled, in this report's own words. */
-    private static String unproven(PartitionEvidence.UnprovenClaim.Why why) {
+    private static String unproven(ClaimAnnotations.Why why) {
         return switch (why) {
             case A_RULE_WENT_UNREAD -> "a rule about this position went unread";
             case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
@@ -561,7 +577,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                   SourceId declaredIn, SourceNameResolver names) {
         PartitionEvidence partition = behavior.partition();
         if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
-                && partition.notDerivable().isEmpty() && partition.claimsOffAxis().isEmpty())) {
+                && partition.notDerivable().isEmpty() && behavior.claimed().all().isEmpty())) {
             return;
         }
         if (!partition.partitioned().status().counted()) {
@@ -579,7 +595,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     .filter(a -> a.status().counted()).toList();
             int classes = measuredAxes.stream().mapToInt(a -> a.classes().size()).sum();
             int covered = measuredAxes.stream().mapToInt(a -> a.covered().size()).sum();
-            int excluded = partition.axes().stream().mapToInt(a -> a.excluded().size()).sum();
+            int excluded = (int) behavior.claimed().all().stream()
+                    .filter(ClaimAnnotations.Said::settled).count();
             out.append(String.format("    partition   axes %d   single-axis %d/%d%s%s%s%n",
                     partition.axes().size(), covered, classes,
                     excluded == 0 ? "" : "   excluded " + excluded,
@@ -594,17 +611,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Not a finding: nothing is owed here, and what the line says is what the model already
             // decided rather than something the rows left undone.
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-                for (PartitionEvidence.ExcludedClass ruled : axis.excluded()) {
-                    out.append(String.format("      · `%s` is declared unreachable%s%n",
-                            ruled.classId(), why(ruled)));
-                }
-                // Owed a row and said all the same. The case is counted — nothing proved it cannot
-                // arrive — and the model already says a row at it aborts, so a reader is told both
-                // rather than left to find out by writing one.
-                for (PartitionEvidence.UnprovenClaim claim : axis.unproven()) {
-                    out.append(String.format(
-                            "      · `%s` is declared unreachable%s, and nothing here proves it: %s%n",
-                            claim.classId(), because(claim.reasons()), unproven(claim.why())));
+                for (ClaimAnnotations.Said said : behavior.claimed().at(axis.path())) {
+                    // A case out of the denominator says what the author wrote about it; one still
+                    // counted says that too, and that nothing settled it — a reader is told both
+                    // rather than left to find out by writing the row.
+                    out.append(said.settled()
+                            ? String.format("      · `%s` is declared unreachable%s%n",
+                                    said.classId(), because(said.reasons()))
+                            : String.format("      · `%s` is declared unreachable%s, and nothing"
+                                            + " here proves it: %s%n",
+                                    said.classId(), because(said.reasons()), unproven(said.why())));
                 }
             }
         }
@@ -613,14 +629,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // a claim is not a number: a behavior whose positions were all dropped or never read has
         // nothing to count and the same claims to answer for, and printing them only beside a count
         // is how a verdict came to be reached and then not said.
-        for (PartitionEvidence.ClaimOffAxis claim : partition.claimsOffAxis()) {
-            out.append(claim.why() == null
+        for (ClaimAnnotations.Said said : behavior.claimed().notAt(measuredPaths(partition))) {
+            out.append(said.settled()
                     ? String.format("      · `%s` at `%s` is declared unreachable%s%n",
-                            claim.classId(), claim.at(), because(claim.reasons()))
+                            said.classId(), said.at(), because(said.reasons()))
                     : String.format("      · `%s` at `%s` is declared unreachable%s, and nothing"
                                     + " here proves it: %s%n",
-                            claim.classId(), claim.at(), because(claim.reasons()),
-                            unproven(claim.why())));
+                            said.classId(), said.at(), because(said.reasons()),
+                            unproven(said.why())));
         }
         undivided(out, behavior);
         // Counted where both questions have an answer: the line was measured against the rows, and
@@ -922,7 +938,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("pending", behavior.pending());
                 b.put("status", wire(behavior.status()));
                 signature(b, behavior.signature());
-                partition(b, behavior.partition(), sources);
+                partition(b, behavior.partition(), behavior.claimed(), sources);
                 branch(b, behavior.branch(), sources);
             }
         }
@@ -1023,7 +1039,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     private static void partition(ObjectNode behavior, PartitionEvidence partition,
-                                  DocumentSources sources) {
+                                  ClaimAnnotations claimed, DocumentSources sources) {
         if (partition == null) {
             return;
         }
@@ -1045,29 +1061,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             axis.classes().forEach(a.putArray("classes")::add);
             axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
             ArrayNode excluded = a.putArray("excluded");
-            for (PartitionEvidence.ExcludedClass ruled : axis.excluded()) {
-                ObjectNode e = excluded.addObject();
-                e.put("class", ruled.classId());
-                ruled.reasons().forEach(e.putArray("reasons")::add);
-            }
             ArrayNode unproven = a.putArray("unprovenClaims");
-            for (PartitionEvidence.UnprovenClaim claim : axis.unproven()) {
-                ObjectNode u = unproven.addObject();
-                u.put("class", claim.classId());
-                claim.reasons().forEach(u.putArray("reasons")::add);
-                u.put("why", word(claim.why()));
+            for (ClaimAnnotations.Said said : claimed.at(axis.path())) {
+                ObjectNode e = (said.settled() ? excluded : unproven).addObject();
+                e.put("class", said.classId());
+                said.reasons().forEach(e.putArray("reasons")::add);
+                if (!said.settled()) {
+                    e.put("why", word(said.why()));
+                }
             }
             a.put("unclassifiedRows", axis.unclassifiedRows());
             measured(a, axis.status(), axis.reason());
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");
-        for (PartitionEvidence.ClaimOffAxis claim : partition.claimsOffAxis()) {
+        for (ClaimAnnotations.Said said : claimed.notAt(measuredPaths(partition))) {
             ObjectNode c = offAxis.addObject();
-            c.put("at", claim.at());
-            c.put("class", claim.classId());
-            claim.reasons().forEach(c.putArray("reasons")::add);
-            if (claim.why() != null) {
-                c.put("why", word(claim.why()));
+            c.put("at", said.at());
+            c.put("class", said.classId());
+            said.reasons().forEach(c.putArray("reasons")::add);
+            if (!said.settled()) {
+                c.put("why", word(said.why()));
             }
         }
         ArrayNode boundaries = out.putArray("boundaries");

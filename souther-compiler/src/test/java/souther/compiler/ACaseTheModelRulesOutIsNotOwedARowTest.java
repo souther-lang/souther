@@ -311,15 +311,14 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 """;
 
         PartitionEvidence partition = partitionOf(wide);
+        String report = reportOn(wide);
 
         assertTrue(partition.axes().stream().noneMatch(each -> each.path().equals("t.one")),
                 () -> "the position is past the limit: "
                         + partition.axes().stream().map(each -> each.path()).toList());
-        assertEquals(List.of("t.one"),
-                partition.claimsOffAxis().stream().map(each -> each.at()).toList());
-        assertEquals("Off", partition.claimsOffAxis().get(0).classId());
-        assertEquals(List.of("the probe never passes Off"),
-                partition.claimsOffAxis().get(0).reasons());
+        assertTrue(report.contains("`Off` at `t.one` is declared unreachable: "
+                        + "the probe never passes Off"),
+                () -> "the claim is named by its position:\n" + report);
     }
 
     /**
@@ -353,12 +352,65 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                     | "on" : (Outer { middle = Middle { inner = Inner { flag = On } } }) -> Answer(1)
                 """;
 
-        PartitionEvidence partition = partitionOf(deep);
+        String report = reportOn(deep);
 
-        assertEquals(List.of("o.middle.inner.flag"),
-                partition.claimsOffAxis().stream().map(each -> each.at()).toList());
-        assertEquals(PartitionEvidence.UnprovenClaim.Why.NOTHING_WAS_READ_ABOUT_THE_CASE,
-                partition.claimsOffAxis().get(0).why());
+        assertTrue(partitionOf(deep).axes().isEmpty(),
+                "nothing was read this far into the value");
+        assertTrue(report.contains("`Off` at `o.middle.inner.flag` is declared unreachable: "
+                        + "the probe never passes Off, and nothing here proves it: "
+                        + "nothing was read about this case"),
+                () -> "said where no axis carries it:\n" + report);
+    }
+
+    /**
+     * A body says the same thing twice, and one case leaves the denominator once.
+     *
+     * <p>Two {@code match}es on one position, each with an arm for the case the rules refuse. What
+     * left the count is one case however many arms declared it — counted per arm, the report said
+     * {@code excluded 2} of a position with one case out of it — and each arm's words are kept.
+     */
+    @Test
+    void aCaseTwoArmsDeclareLeavesTheDenominatorOnce() {
+        String twice = """
+                module example.probe
+
+                data On
+                data Off
+                data Pending
+                data Flag = On | Off | Pending
+                data Active = Flag invariant value /= Off
+                data Answer = Int
+
+                behavior pick : (f: Active) -> Answer
+                    constructs Answer
+
+                let pick (f) = {
+                    let first = match f.value with
+                        | On      -> 1
+                        | Pending -> 0
+                        | Off     -> unreachable "an Active is never Off"
+                    match f.value with
+                        | On      -> Answer(first)
+                        | Pending -> Answer(0)
+                        | Off     -> unreachable "and it is never Off here either"
+                }
+
+                example pick
+                    | "on" : (Active(On)) -> Answer(1)
+                """;
+
+        String report = reportOn(twice);
+
+        assertTrue(report.contains("excluded 1"),
+                () -> "one case is out of the denominator:\n" + report);
+        assertTrue(report.contains("`Off` is declared unreachable on every path"),
+                () -> "and both arms' words are kept:\n" + report);
+    }
+
+    /** The report a build reads, which is where a claim and a measure are put together. */
+    private static String reportOn(String source) {
+        return souther.compiler.report.AdequacyReport.of(measured(source))
+                .human(SourceNameResolver.identity());
     }
 
     private static PartitionEvidence partitionOf(String source) {
@@ -441,16 +493,18 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
 
         assertEquals(List.of("On", "Pending"), axis.classes());
         assertEquals(List.of("Pending"), axis.uncovered());
-        assertEquals(List.of("Off"),
-                axis.excluded().stream().map(PartitionEvidence.ExcludedClass::classId).toList());
+        assertTrue(reportOn(RULED_OUT).contains("`Off` is declared unreachable"),
+                () -> "and what the body said about the case it took out:\n"
+                        + reportOn(RULED_OUT));
     }
 
     /** The model's own words, kept: what a report takes out of a denominator it has to be able to say
      * it took out, and why. */
     @Test
     void whyItIsRuledOutIsTheReasonTheModelWrote() {
-        assertEquals(List.of("an Active is never Off"),
-                axis(RULED_OUT).excluded().get(0).reasons());
+        assertTrue(reportOn(RULED_OUT)
+                        .contains("`Off` is declared unreachable: an Active is never Off"),
+                () -> reportOn(RULED_OUT));
     }
 
     /**
@@ -464,14 +518,14 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     @Test
     void aClaimNothingSettledIsCountedAndSaid() {
         PartitionEvidence.AxisCoverage axis = axis(UNPROVEN, "t.f");
+        String report = reportOn(UNPROVEN);
 
         assertEquals(List.of("On", "Off", "Pending"), axis.classes());
-        assertEquals(List.of(), axis.excluded());
-        assertEquals(List.of("Off"),
-                axis.unproven().stream().map(PartitionEvidence.UnprovenClaim::classId).toList());
-        assertEquals(List.of("the probe never passes Off"), axis.unproven().get(0).reasons());
-        assertEquals(PartitionEvidence.UnprovenClaim.Why.A_RULE_WENT_UNREAD,
-                axis.unproven().get(0).why());
+        assertFalse(report.contains("excluded"),
+                () -> "nothing left the denominator:\n" + report);
+        assertTrue(report.contains("`Off` is declared unreachable: the probe never passes Off,"
+                        + " and nothing here proves it: a rule about this position went unread"),
+                () -> report);
     }
 
     /**
@@ -503,6 +557,38 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         assertEquals("E1326", refused.diagnostics().get(0).code(), refused.getMessage());
         assertTrue(refused.getMessage().contains("`B` can arrive at `k`"), refused.getMessage());
         assertTrue(refused.getMessage().contains("case of `Kind`"), refused.getMessage());
+    }
+
+    /**
+     * A claim about a case that is written where a `let` binds is a claim at the first fork.
+     *
+     * <p>What a {@code let} binds runs before the body it binds it for, so this is the fork every
+     * caller reaches. Read as a shape rather than as an order, the walk stepped over it to the end
+     * of the spine and called a later fork the first one — and this claim, which the model's own
+     * signature refutes, was never refused.
+     */
+    @Test
+    void aForkWrittenAsABindingsValueIsStillTheFirstOne() {
+        String bound = """
+                module example.probe
+
+                data A
+                data B
+                data Kind = A | B
+                data Answer = Int
+
+                behavior pick : (k: Kind) -> Answer
+                    constructs Answer
+
+                let pick (k) = {
+                    let n = match k with
+                        | A -> 1
+                        | B -> unreachable "B never arrives"
+                    Answer(n)
+                }
+                """;
+
+        assertEquals(List.of("E1326"), errorsIn(bound));
     }
 
     /**
@@ -541,7 +627,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 """;
 
         assertEquals(List.of("declared first, so this is where it stops"),
-                axis(sequential).excluded().get(0).reasons());
+                reasonsSaidAbout(sequential, "Off"));
 
         String forked = """
                 module example.probe
@@ -569,8 +655,18 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 """;
 
         assertEquals(List.of("not a marked Off", "nor an unmarked one"),
-                axis(forked).excluded().get(0).reasons(),
+                reasonsSaidAbout(forked, "Off"),
                 "both arms are ways this arm answers nothing");
+    }
+
+    /** What the body wrote about one case, as the report carries it. */
+    private static List<String> reasonsSaidAbout(String source, String named) {
+        Compilation compilation = measured(source);
+        return compilation.db()
+                .ask(new souther.compiler.query.Bodies.Claimed(compilation.modules().get(0)))
+                .value().get("pick").all().stream()
+                .filter(each -> each.classId().equals(named))
+                .findFirst().orElseThrow().reasons();
     }
 
     /**
@@ -725,9 +821,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                     | "on" : (Active(On)) -> Answer(1)
                 """;
 
-        assertEquals(List.of("Off"),
-                axis(bound).excluded().stream()
-                        .map(PartitionEvidence.ExcludedClass::classId).toList());
+        assertEquals(List.of("the probe never passes Off"), reasonsSaidAbout(bound, "Off"));
     }
 
     /**

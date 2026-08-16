@@ -124,14 +124,6 @@ public final class Generator {
 
         public enum Reason {
             /**
-             * Every class at some other position is one the body says it does not answer for, so no
-             * row reaches this combination whatever is written there.
-             *
-             * <p>About the classes a row may be written at and not about the values of the position:
-             * each of those classes has values, and what refuses them is the body. Read as a
-             * position without values, an author is sent looking for a type that has none.
-             */
-            /**
              * Nothing here knows how to compose a value of the shape asked for.
              *
              * <p>A fact about this compiler rather than about the model — a collection of more

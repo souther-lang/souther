@@ -271,14 +271,14 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                                                Partitions.OmittedAxis... omitted) {
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
                 PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(), List.of(omitted), List.of(), List.of());
+                List.of(), List.of(), List.of(omitted), List.of());
     }
 
     /** What one behavior's partition makes of the whole report, with nothing else asked about. */
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
                 "weigh", false, 1, 0, MeasurementStatus.COMPLETE, null, partition,
-                null, List.of());
+                souther.compiler.query.ClaimAnnotations.NONE, null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
                 MeasurementStatus.COMPLETE,
                 List.of(new AdequacyReport.ModuleReport("example.wide", new SourceId("wide.sou"), MeasurementStatus.COMPLETE,

@@ -107,9 +107,10 @@ class AnInputIsReadInOnePlaceAndNoClaimNarrowsItTest {
                 readers.add(source.getParent().getFileName() + "/" + source.getFileName());
             }
         }
-        assertEquals(List.of("query/Bodies.java", "query/ClaimReport.java"),
+        assertEquals(List.of("query/Bodies.java", "query/ClaimAnnotations.java"),
                 readers.stream().sorted().toList(),
-                "a claim is judged where the bodies are checked and said where a report is decorated");
+                "a claim is judged where the bodies are checked and turned into words for a report,"
+                        + " and nothing else sees one");
     }
 
     private static List<Path> mainSources() throws IOException {

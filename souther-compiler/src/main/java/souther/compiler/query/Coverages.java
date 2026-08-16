@@ -101,7 +101,6 @@ final class Coverages {
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
                 PartitionEvidence.Bounded.of(boundaries), pairsOf(divided, readings),
                 partitioning.undivided(), partitioning.unread(), partitioning.omitted(),
-                List.of(),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }
@@ -203,10 +202,10 @@ final class Coverages {
      * single-position coverage is measured on its own and not derived from this.
      */
     private static PartitionEvidence.PairSpace pairsOf(List<Axis> axes, Readings readings) {
-        // The product of what a row can be written at, not of what the types declare. A class the
-        // body rules out takes a whole slice of the product with it — every combination it takes part
-        // in is one no row can sit in — which is a different thing from a pair whose two classes each
-        // have rows but never together.
+        // The product of what a row can be written at, not of what the types declare. A case the
+        // rules refuse is not a class of its position at all, so the slice of the product it would
+        // have taken part in is not here to be counted — which is a different thing from a pair
+        // whose two classes each have rows but never together.
         long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
@@ -255,7 +254,7 @@ final class Coverages {
         // in reach of the code that counts one.
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.unavailable(axis.id().toString(),
-                    axis.term().toString(), classes, List.of(), List.of(),
+                    axis.term().toString(), classes,
                     PartitionEvidence.AxisCoverage.Reason.NO_ROWS);
         }
         Set<String> covered = new LinkedHashSet<>();
@@ -266,8 +265,7 @@ final class Coverages {
             }
         }
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
-                classes, covered, List.of(), List.of(), readings.couldNotSay(axis),
-                readings.status(List.of(axis)), null);
+                classes, covered, readings.couldNotSay(axis), readings.status(List.of(axis)), null);
     }
 
     /**

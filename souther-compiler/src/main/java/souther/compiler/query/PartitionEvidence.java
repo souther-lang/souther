@@ -35,29 +35,8 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
                                 List<Partitions.OmittedAxis> omitted,
-                                List<ClaimOffAxis> claimsOffAxis,
                                 List<Incompleteness> whyUnclassified) {
 
-    /**
-     * A claim about a position this report has no axis for, and what was said about it.
-     *
-     * <p>Carried here rather than under an axis, because there is no axis to carry it: a position
-     * past the axis limit is dropped, one deeper than the walk goes is never read, and a claim about
-     * either still had a verdict. Left to the axes, those verdicts would be reached and then
-     * dropped — which is an exclusion being both unproven and silent, one level up from where that
-     * was ruled out.
-     *
-     * @param at    the position, spelled the way a rule about it is
-     * @param why   what stopped the answer, or null where the rules refused the case and the claim
-     *              says what they say
-     */
-    public record ClaimOffAxis(String at, String classId, List<String> reasons,
-                               UnprovenClaim.Why why) {
-
-        public ClaimOffAxis {
-            reasons = List.copyOf(reasons);
-        }
-    }
 
     /**
      * No measure of this kind here at all, which is not a measure that came back empty.
@@ -68,14 +47,12 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
-            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
-            List.of());
+            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         unread = List.copyOf(unread);
         omitted = List.copyOf(omitted);
-        claimsOffAxis = List.copyOf(claimsOffAxis);
         whyUnclassified = List.copyOf(whyUnclassified);
     }
 
@@ -239,76 +216,21 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
         }
     }
 
-    /**
-     * One class the body says it does not answer for, and why.
-     *
-     * <p>{@code reasons} is every reason on the paths that abort, and usually one. An arm made of a
-     * {@code match} whose arms abort for different reasons has no single reason, and naming the one
-     * written above the others would describe the class by where the file happens to put it.
-     */
-    public record ExcludedClass(String classId, List<String> reasons) {
 
-        public ExcludedClass {
-            reasons = List.copyOf(reasons);
-        }
-    }
-
-    /**
-     * A case a body declares cannot arrive that nothing settled either way.
-     *
-     * <p>Counted like any other and said all the same. What removes an obligation is a proof, so an
-     * unproven claim leaves the case owed a row; what a reader needs beside the gap is that the
-     * model already says the row cannot be written, and that this compiler could not tell whether
-     * that is so.
-     *
-     * @param why what stopped the reading, in the words a report writes for it
-     */
-    public record UnprovenClaim(String classId, List<String> reasons, Why why) {
-
-        public UnprovenClaim {
-            reasons = List.copyOf(reasons);
-        }
-
-        /**
-         * Why nothing settled the claim, in the words a report writes.
-         *
-         * <p>Deliberately coarser than what this compiler knows, and its own vocabulary rather than
-         * the one an undivided position uses: what a reader is being told is what kind of thing
-         * stopped the answer, and the two questions are not the same question.
-         */
-        public enum Why {
-
-            /** A rule about the position was written and this compiler could not take it in. */
-            A_RULE_WENT_UNREAD,
-
-            /** The rules leave the position no value at all, which this compiler does not yet act
-             *  on (issue #780), so every case of it is counted and none of them is settled. */
-            THE_RULES_LEAVE_THE_POSITION_NOTHING,
-
-            /** Nothing was read about the case: the position is past where the walk goes, or the
-             *  claim names one the reading of the position does not have. */
-            NOTHING_WAS_READ_ABOUT_THE_CASE,
-
-            /** The rules leave the case standing, and the arm is inside another whose own condition
-             *  nothing here reads. */
-            THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED
-        }
-    }
 
     /**
      * How much of one position's partition the rows reach.
      *
-     * @param classes          the classes a row can be written at. What the model divides the position
-     *                         into, less what the body says it does not answer for
-     * @param unproven         the cases a body declares cannot arrive that nothing settled. Still owed
- *                         a row, and said so that an exclusion is never both unproven and silent
- * @param excluded         the classes the rules rule out and a body's claim named, so that a report says what it took
+     * @param classes          the classes a row can be written at, which is what the model divides
+     *                         the position into: a case its rules refuse is not one of them. Nothing
+     *                         a body declares narrows this — what it declared is said beside these
+     *                         numbers ({@link ClaimAnnotations}) and never into them
+     * @param excluded         the classes the rules rule out and a body's claim named, so that a report says what it took
      *                         out rather than showing a position with fewer classes than the type has
      * @param unclassifiedRows rows whose value at this position could not be read. Above zero, an
      *                         unreached class is undecided rather than unreached.
      */
     public record AxisCoverage(String axis, String path, List<String> classes, Set<String> covered,
-                               List<ExcludedClass> excluded, List<UnprovenClaim> unproven,
                                int unclassifiedRows, MeasurementStatus status, Reason reason) {
 
         /** Why a position has no coverage numbers. */
@@ -329,20 +251,16 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
             }
         }
 
-        /** What the body rules out is still said. Which classes there are and which the body answers
-         * for are facts about the model, and no row has to exist for either. */
+        /** Which classes there are is a fact about the model, and no row has to exist for it to be
+         *  so — which is why a position nothing was measured at still names them. */
         public static AxisCoverage unavailable(String axis, String path, List<String> classes,
-                                               List<ExcludedClass> excluded,
-                                               List<UnprovenClaim> unproven, Reason reason) {
-            return new AxisCoverage(axis, path, classes, Set.of(), excluded, unproven, 0,
-                    reason.status(), reason);
+                                               Reason reason) {
+            return new AxisCoverage(axis, path, classes, Set.of(), 0, reason.status(), reason);
         }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
             covered = Set.copyOf(covered);
-            excluded = List.copyOf(excluded);
-            unproven = List.copyOf(unproven);
             Unavailable.check(status, reason);
         }
 

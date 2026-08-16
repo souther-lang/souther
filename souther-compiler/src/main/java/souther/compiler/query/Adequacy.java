@@ -445,15 +445,13 @@ public final class Adequacy {
                     continue;
                 }
                 Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
-                // Counted with nothing a body claims in scope, and decorated with what it claimed
-                // afterwards. The two are separate calls because they are separate answers: one is
-                // what the rows are held to, and the other is what the model said about it.
-                out.put(spec.name(), ClaimReport.decorate(
-                        Coverages.of(spec, domainOf(readInputs, spec), sig, scope.value(),
-                                bodies.get(spec.name()), plan, seen,
-                                boundaries == null ? List.of()
-                                        : boundaries.getOrDefault(spec.name(), List.of())),
-                        checked, spec.name()));
+                // Counted with nothing a body claims in scope. What was claimed travels beside the
+                // numbers rather than into them ({@link Claimed}), and the two meet where a report
+                // is written.
+                out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig,
+                        scope.value(), bodies.get(spec.name()), plan, seen,
+                        boundaries == null ? List.of()
+                                : boundaries.getOrDefault(spec.name(), List.of())));
             }
             return Answer.of(Ordered.map(out));
         }

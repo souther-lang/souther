@@ -1413,6 +1413,33 @@ public final class Bodies {
         }
     }
 
+    /**
+     * What each behavior of one module declared cannot arrive, in the words a report writes.
+     *
+     * <p>A projection of the judging the body check already made, and the only way out of it: what
+     * a report holds is what was said about a case, and not the verdicts a measure could act on.
+     * One entry per case of a position, however many arms declared it.
+     */
+    public record Claimed(String name) implements Key<Map<String, ClaimAnnotations>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, ClaimAnnotations>> compute(Db db) {
+            Elaborated checked = db.ask(new Checked(name)).value();
+            if (checked == null) {
+                return Answer.absent();
+            }
+            Map<String, ClaimAnnotations> out = new LinkedHashMap<>();
+            checked.claims().forEach((behavior, claims) ->
+                    out.put(behavior, ClaimAnnotations.of(claims)));
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
     public record Checked(String name) implements Key<Elaborated> {
         @Override
         public String module() {
