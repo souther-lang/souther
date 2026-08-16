@@ -244,6 +244,32 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     /**
+     * A position compared with itself is related to nothing, and is not said to be.
+     *
+     * <p>Two operands and one position. The reading recognises the comparison and finds a position
+     * on each side, which is not the same as finding two — and the word it would be projected to
+     * says the rule relates this position to another, when the model wrote no other. What is true
+     * of it is that this reading did not take the rule in.
+     */
+    @Test
+    void aPositionComparedWithItselfIsRelatedToNothing() {
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, of("""
+                module demo
+
+                data Code = String
+                    invariant same = value == value
+                """, "Code"), FieldDomains.THE_VALUE);
+
+        FieldDomains fields = of("""
+                module demo
+
+                data Pair = { left: String, right: String }
+                    invariant same = left /= left
+                """, "Pair");
+        asFarAsRead(ValueSet.ANY, UnreadReason.FORM_NOT_READ, fields, "left");
+    }
+
+    /**
      * And a call over two positions is a form this could not read, not a relation between them.
      *
      * <p>What is known of {@code validPair(left, right)} is that two positions appear in something

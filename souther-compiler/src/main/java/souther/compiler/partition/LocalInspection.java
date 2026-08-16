@@ -38,55 +38,41 @@ import java.util.Set;
  * discipline stopping that would be a rule somebody has to remember at each place one is built.
  *
  * <p>So the derivation is one way: a reading is completed, and the answer is derived from it. That
- * is what {@link LocalPartition.Open} means and how it is held — a reading short of the rules
- * cannot be paired with it, and {@code Open} has nothing of its own to contradict.
+ * is what {@link LocalPartition.Open} means and how it is held — {@code Open} has nothing of its
+ * own to contradict a reading with, and there is no way to pair one with a reading that did not run
+ * to the end, because there is no way to make one of these except by deriving it.
  */
-public record LocalInspection(LocalReading reading, LocalPartition partition) {
+public final class LocalInspection {
+
+    private final LocalReading reading;
+    private final LocalPartition partition;
 
     /**
-     * Every arm, against the reading it is paired with.
+     * Reached through {@link #of} and nowhere else.
      *
-     * <p>An open position is a reading that ran to the end. The sentence "the model divides this
-     * position no way" is what a report goes on to write, and it may not be reached from a reading
-     * that could not take in a rule about the position — which is the defect this whole protocol
-     * was rebuilt around (issue #772).
+     * <p>Which is the whole of the claim above. A pair carrying a conclusion its reading does not
+     * support — an open position off a reading short of the rules, classes said to be read in full
+     * off one that was not — is not refused when somebody writes it; there is nowhere to write it.
+     * The derivation reads the position and answers about it in one place, and a fourth thing to
+     * read is a change to that place rather than a caller to be held to a rule.
      *
-     * <p>And the other two for the same reason, since each of them repeats something the reading
-     * already says. A {@code Divided} carries the completeness the classes were derived under, and
-     * a caller pairing it with another would promote a reading short of the rules to one that ran
-     * to the end — the same claim as the first, made one step further along. A {@code Blocked} says
-     * a rule about the position went unread, which the reading is the one to know.
-     *
-     * <p>Checked where the pair is made rather than trusted to the derivation, so that no value of
-     * this exists carrying the contradiction. The derivation is the only producer today; that is a
-     * fact about this month rather than about the type.
+     * <p>The alternative was a public constructor checking that the two agree. It says the same
+     * thing where it fires, and it says it to a caller who has already made the pair — which is the
+     * shape this protocol was rebuilt to stop needing.
      */
-    public LocalInspection {
-        AdmissibleSet admitted = reading.admitted();
-        switch (partition) {
-            case LocalPartition.Open _ -> {
-                if (!admitted.isComplete()) {
-                    throw new IllegalArgumentException(
-                            "a reading short of the rules is not an open position: "
-                                    + admitted.whyPartial());
-                }
-            }
-            case LocalPartition.Divided divided -> {
-                if (!divided.completeness().equals(admitted.completeness())) {
-                    throw new IllegalArgumentException(
-                            "classes said to be read " + divided.completeness()
-                                    + " off a reading that was " + admitted.completeness());
-                }
-            }
-            case LocalPartition.Blocked blocked -> {
-                if (admitted.whyPartial() == null
-                        || !blocked.why().equals(stopped(admitted.whyPartial()))) {
-                    throw new IllegalArgumentException(
-                            "blocked by " + blocked.why() + " on a reading that says "
-                                    + admitted.completeness());
-                }
-            }
-        }
+    private LocalInspection(LocalReading reading, LocalPartition partition) {
+        this.reading = reading;
+        this.partition = partition;
+    }
+
+    /** What the position was read as, which is the same whichever answer follows. */
+    public LocalReading reading() {
+        return reading;
+    }
+
+    /** What that reading came to. */
+    public LocalPartition partition() {
+        return partition;
     }
 
     /**
@@ -291,7 +277,21 @@ public record LocalInspection(LocalReading reading, LocalPartition partition) {
     private static List<PartitionClass> constructibleAt(List<PartitionClass> declared, TypeView view,
                                                         NumericDomain.Bounds within,
                                                         AdmissibleSet admitted, Symbols symbols) {
-        return admits(constructibleWithin(declared, view, within, symbols), admitted);
+        List<PartitionClass> left =
+                admits(constructibleWithin(declared, view, within, symbols), admitted);
+        // Nothing left is not a position with no classes. The classes are exhaustive over the
+        // type's values, so a position that can hold none of them holds no value at all — a
+        // declaration nothing can construct, which is refused where it is written (E1013) and is a
+        // rule this compiler does not yet reach in every domain (issue #780). Read as an empty
+        // partition it comes back as a position the model divides no way, which is the sentence
+        // this reading exists to stop; and it would leave a position whose type states classes
+        // without any, which is the state every reader after this one takes as licence to supply
+        // its own.
+        //
+        // Said once for the whole crossing rather than in either reading. Both narrow the same
+        // classes for the same reason, and a guard in one of them is a rule that holds depending on
+        // which reading happened to refuse the last case.
+        return left.isEmpty() ? declared : left;
     }
 
     /**
@@ -324,15 +324,10 @@ public record LocalInspection(LocalReading reading, LocalPartition partition) {
                         .anyMatch(value -> declared.stream().noneMatch(each -> holds(each, value)))) {
             return declared;   // the two readings are not about the same values
         }
-        List<PartitionClass> left = declared.stream()
+        return declared.stream()
                 .filter(each -> each.leftAnythingBy(admitted.approximation(),
                         value -> holds(each, value)))
                 .toList();
-        // Nothing left is not a position with no classes: it is a position that can hold none of
-        // its own values, which is a value nothing can build and is refused where the declaration
-        // is (E1013). Read as an empty partition it would come back as one the model divides no
-        // way, which is the sentence this reading is here to stop.
-        return left.isEmpty() ? declared : left;
     }
 
     /** Whether a class holds one value, asked of the class. A reading that matched what a class is

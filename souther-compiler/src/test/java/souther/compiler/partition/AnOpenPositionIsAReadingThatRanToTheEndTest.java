@@ -159,49 +159,24 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     }
 
     /**
-     * And a reading short of the rules cannot be paired with an open position.
+     * There is no way to make one of these except by deriving it.
      *
-     * <p>The sentence an absence is built on is "the model divides this position no way", and it
-     * may not be reached from a reading that could not take in a rule about the position. Refused
-     * where the pair is made, so no value carrying the contradiction exists — rather than left to
-     * a condition each place that builds one has to remember.
-     */
-    /**
-     * And neither arm may say something else about the reading it is paired with.
-     *
-     * <p>The same claim as above, made one step further along. A {@code Divided} carries the
-     * completeness its classes were derived under, and a caller pairing it with another would
-     * promote a reading short of the rules to one that ran to the end — which is what the axis goes
-     * on to carry. A {@code Blocked} says a rule went unread, which the reading is the one to know.
+     * <p>What holds the sentence up. A pair carrying a conclusion its reading does not support — an
+     * open position off a reading short of the rules, classes said to be read in full off one that
+     * was not — is not refused when somebody writes it; there is nowhere to write it. Held here
+     * because it is a property of the boundary rather than of any one value: a constructor added
+     * later would put back the discipline this replaced, and nothing else in the suite would
+     * notice.
      */
     @Test
-    void neitherArmMaySayMoreThanTheReadingDoes() {
-        LocalReading partial = read("Email").reading();
-        LocalReading whole = read("Gender").reading();
-
-        assertThrows(IllegalArgumentException.class,
-                () -> new LocalInspection(partial, new LocalPartition.Divided(
-                        List.of(), new CutEvidence.Present(
-                                List.of(Cut.at(souther.compiler.check.Carrier.WHOLE,
-                                        souther.compiler.numeric.Count.ZERO,
-                                        new OriginRef.InvariantOrigin(named("Amount"), "min"))),
-                                false),
-                        AdmissibleSet.READ_IN_FULL)),
-                "classes said to be read in full off a reading that was not");
-        assertThrows(IllegalArgumentException.class,
-                () -> new LocalInspection(whole,
-                        new LocalPartition.Blocked(new BlockReason.UnreadValueRule())),
-                "blocked on a reading that says every rule was read");
-    }
-
-    @Test
-    void aReadingShortOfTheRulesIsNotAnOpenPosition() {
-        LocalReading partial = read("Email").reading();
-
-        assertThrows(IllegalArgumentException.class,
-                () -> new LocalInspection(partial, new LocalPartition.Open()));
-        assertDoesNotThrow(
-                () -> new LocalInspection(read("Plain").reading(), new LocalPartition.Open()));
+    void nothingButTheDerivationMakesOne() {
+        assertEquals(List.of(), java.util.Arrays.stream(LocalInspection.class.getConstructors())
+                .map(java.lang.reflect.Constructor::toString).toList(),
+                "a pair anybody can make is a pair anybody can make disagree with itself");
+        assertEquals(List.of("of"), java.util.Arrays.stream(LocalInspection.class.getMethods())
+                .filter(each -> java.lang.reflect.Modifier.isStatic(each.getModifiers()))
+                .map(java.lang.reflect.Method::getName).sorted().toList(),
+                "one derivation, and it is the one that reads the position");
     }
 
     /** And neither can no lines at all be written as lines. */

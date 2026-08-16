@@ -132,10 +132,21 @@ final class AdmissibleReading {
                 ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
     }
 
-    /** Whether {@code e} is a comparison this reading recognised, of one position against another. */
+    /**
+     * Whether {@code e} is a comparison this reading recognised, of one position against another.
+     *
+     * <p>Another, and not a position on each side. {@code value == value} has two operands and one
+     * position, and the word this is projected to says the rule relates the position to another —
+     * which the model did not write. What is true of such a rule is that this reading did not take
+     * it in, which is what every other unrecognised shape says.
+     */
     private boolean relatesTwoPositions(Core e) {
-        return e instanceof Core.Binary b && COMPARES.contains(b.op())
-                && positionIn(b.left()) != null && positionIn(b.right()) != null;
+        if (!(e instanceof Core.Binary b) || !COMPARES.contains(b.op())) {
+            return false;
+        }
+        Term left = positionIn(b.left());
+        Term right = positionIn(b.right());
+        return left != null && right != null && !left.equals(right);
     }
 
     /** The comparisons a rule relating two positions is written with. Everything else is read as a

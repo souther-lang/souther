@@ -378,6 +378,12 @@ public final class Partitions {
      * holds is divided just as finely and had no such test, so a {@code guard} over it replaced
      * what the model states.
      *
+     * <p>The two agree wherever the old one fired, and they agree by construction rather than by
+     * luck: an enumeration's cases are its classes, and a crossing never leaves a position whose
+     * type states classes without any ({@code LocalInspection}'s {@code constructibleAt}). So there
+     * is no position with an ordered carrier for these to be about, and ranges over the count an
+     * enumeration's cases are ordered by are never rebuilt into a partition of them.
+     *
      * <p>The lines are taken either way. A line is still a line where it divides nothing new, and
      * still owes its rows.
      *

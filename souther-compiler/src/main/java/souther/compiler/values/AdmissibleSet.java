@@ -83,11 +83,6 @@ public record AdmissibleSet(ValueSet approximation, Completeness completeness) {
         return new AdmissibleSet(values, new Completeness.Partial(why));
     }
 
-    /** Whether the set is the whole of what the rules leave, rather than an upper bound on it. */
-    public boolean isComplete() {
-        return completeness instanceof Completeness.Complete;
-    }
-
     /** Why the reading is short of the rules, or null where it is not short of them. */
     public UnreadReason whyPartial() {
         return completeness instanceof Completeness.Partial partial ? partial.why() : null;

@@ -45,9 +45,15 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                         Symbols symbols) {}
 
     private static Read of(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return of(List.of(source), behavior, 0);
+    }
+
+    /** The same, over several modules, reading the behavior out of the {@code nth} of them. */
+    private static Read of(List<String> sources, String behavior, int nth) {
+        Compilation compilation = Compilation.ofSources(sources,
+                souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        String module = compilation.modules().get(0);
+        String module = compilation.modules().get(nth);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
@@ -278,6 +284,48 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 """, "classify", "h.state"));
     }
 
+    /**
+     * And a case another module keeps to itself is refused by the same rule.
+     *
+     * <p>What a class means and whether a row for it can be written down are two answers, and only
+     * the second turns on which module is reading. A case this module cannot name is still one
+     * value, so a rule denying it still refuses the whole class — and the class going missing from
+     * the denominator is the same fact wherever the reader stands.
+     *
+     * <p>Written as one branch, the two came back together: a class built for a case nothing here
+     * can write was built without saying what it holds, so the denial had nothing to prove itself
+     * against and the case stayed in the denominator of every module but the one that declared it.
+     */
+    @Test
+    void aCaseAnotherModuleKeepsToItselfIsRefusedByTheSameRule() {
+        assertEquals(List.of("Present"), declaredAt(List.of("""
+                module lib exposing ( State, Present, AvailableState )
+
+                data Missing
+                data Present = { note: String }
+                data State = Missing | Present
+
+                data AvailableState = State
+                    invariant here = value /= Missing
+                """, """
+                module app exposing ( classify, Accepted )
+
+                import lib ( AvailableState )
+
+                data Accepted = { at: String }
+
+                behavior classify : (s: AvailableState) -> Accepted
+                """), "classify", 1, "s"));
+    }
+
+    /** The classes at {@code path} of a behavior in the {@code nth} module. */
+    private static List<String> declaredAt(List<String> sources, String behavior, int nth,
+                                           String path) {
+        Read read = of(sources, behavior, nth);
+        return classesAt(Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE),
+                path);
+    }
+
     /** A case the rule leaves is still a class, so the crossing takes away only what it must. */
     @Test
     void aRuleThatRefusesNothingLeavesEveryCase() {
@@ -348,6 +396,50 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 read.spec().params().stream().map(Hir.Param::name).toList(), read.symbols());
         return Partitions.withThresholds(base, guards.thresholds(), read.symbols(),
                 guards.unread(), guards.singled(), guards.between());
+    }
+
+    /**
+     * And a line drawn on an enumeration supplies no classes, even where its rules left none.
+     *
+     * <p>Two conditions and two reasons. A position that has classes keeps them, because evidence
+     * arriving later refines. A position whose values are an enumeration's cases takes no classes
+     * from a line either way: the cases divide it whether or not the rules leave any of them
+     * standing, and ranges rebuilt from a cut would be a partition of a position into things that
+     * are not its values.
+     *
+     * <p>Where the two come apart is here. {@code value > Won} refuses every case, so the crossing
+     * leaves the position no classes at all — a declaration nothing can construct, which is a rule
+     * this compiler does not yet refuse (issue #780). Read as "no classes, so a line may supply
+     * some", the report would divide an enumeration into ranges of the count its cases are ordered
+     * by.
+     */
+    @Test
+    void aLineOnAnEnumerationSuppliesNoClassesEvenWhereItsRulesLeftNone() {
+        String refusesEveryCase = """
+                module g
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                data StageI = Stage
+                    invariant past = value > Won
+
+                data Accepted = { at: String }
+                data Refused = { at: String }
+
+                behavior classify : (s: StageI) -> Accepted | Refused
+                    constructs Accepted, Refused, Qualified
+
+                let classify (s) =
+                    if s.value < Qualified then Accepted { at = "x" }
+                    else Refused { at = "y" }
+                """;
+
+        assertEquals(declared(refusesEveryCase, "classify"),
+                withBody(refusesEveryCase, "classify"),
+                "a line supplies no classes to a position these cannot be about");
     }
 
     /**

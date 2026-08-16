@@ -192,6 +192,33 @@ final class PartitionClasses {
 
     private static PartitionClass caseClass(TypeSymbol leaf, List<TypeSymbol> worn,
                                             List<TypeReachName.Written> writes, Symbols symbols) {
+        return holdingWhatItIs(leaf, symbols, writableCase(leaf, worn, writes, symbols));
+    }
+
+    /**
+     * The same class, saying which values it holds.
+     *
+     * <p>Said of the case and not of the class that came back, because what a class means and
+     * whether a row for it can be written down are two answers and only the second turns on which
+     * module is reading. A case holding nothing is one value wherever it is read; a case holding a
+     * record has no end of them and says nothing here.
+     *
+     * <p>Applied after the class is built rather than inside the branch that builds one. Written
+     * there, the two answers came back together: a case another module keeps to itself took the
+     * arm that says nothing can be written for it, and left without saying what it holds — so a
+     * rule denying that case had nothing to prove itself against, and the case stayed in the
+     * denominator of every module but the one that declared it.
+     */
+    private static PartitionClass holdingWhatItIs(TypeSymbol leaf, Symbols symbols,
+                                                  PartitionClass built) {
+        return symbols.declarations().declaration(leaf.key()) instanceof Hir.Data
+                ? built : built.holding(ValueSet.just(Value.of(leaf)));
+    }
+
+    /** The class itself: what it is called, what it recognises, and what can be written for it. */
+    private static PartitionClass writableCase(TypeSymbol leaf, List<TypeSymbol> worn,
+                                               List<TypeReachName.Written> writes,
+                                               Symbols symbols) {
         Classifier is = Classifier.under(worn, Classifier.byShape(v -> switch (v) {
             case ObservedValue.Unit u -> leaf.equals(u.type());
             case ObservedValue.Constructed c -> leaf.equals(c.type());
@@ -204,13 +231,9 @@ final class PartitionClasses {
             return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
         }
         if (!(symbols.declarations().declaration(leaf.key()) instanceof Hir.Data data)) {
-            // A case that holds nothing, so the case is the whole of what the class has: naming it
-            // builds it, and a rule denying it denies every value of this class. A case holding a
-            // record says nothing here, which is why this is written where the two are told apart.
-            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
+            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
-                            RepresentativeSource.of(FixtureTemplate.unitCase(names))))
-                    .holding(ValueSet.just(Value.of(leaf)));
+                            RepresentativeSource.of(FixtureTemplate.unitCase(names))));
         }
         if (data.newtype()) {
             List<FixtureTemplate> inner = Partitions.insideTheNewtype(leaf, symbols);
