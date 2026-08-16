@@ -101,19 +101,28 @@ record StatedByClauses(AdmissibleValues<Term> values, OrderedIntervals<Term> ord
          * unread rules included. Where <em>all</em> of them cannot be taken, no one of them speaks
          * for the rest: taking the first to be found impossible out of the answer would settle the
          * proof by the order the operands were written in, and the same model written two ways would
-         * be refused two ways. So they are kept, and the one place that chooses a proof
-         * ({@link Emptiness#preferred}, and the order the value declares its positions) chooses it.
-         * That is the rule {@link Emptiness.AcrossEveryCase} states for a sum, arrived at here for
-         * the same reason.
+         * be refused two ways.
          *
-         * <p>Kept by meeting them, which is what a state holding nothing may be narrowed to: the
-         * choice admits nothing whichever way round it is read, and every position either
-         * alternative left empty is one the choice leaves empty.
+         * <p>Nor may they be met. A meet is a conjunction and the alternatives were never stated
+         * together: {@code (a < "" && b == 0) || (a < "" && b == 1)} is impossible because of
+         * {@code a}, and met it is a {@code b} bounded at 0 and at 1 — a contradiction neither
+         * alternative contains, at a position the rules are fine with, and one the refusal would
+         * then be written about.
+         *
+         * <p>So each side is taken as leaving nothing ({@link AdmissibleValues#leavingNothing},
+         * {@link OrderedIntervals#leavingNothing}) and the languages are joined as they are for any
+         * other choice. What each of them says the choice leaves empty is what <em>every</em>
+         * alternative leaves empty, and where that is no position, the choice admits nothing with
+         * none of them at fault. That is the rule {@link Emptiness.AcrossEveryCase} states for a
+         * sum — what proves it has none is the whole list — arrived at here for the same reason.
          */
         @Override
         public StatedByClauses either(StatedByClauses one, StatedByClauses other) {
             if (one.holdsNothing() && other.holdsNothing()) {
-                return one.meet(other);
+                return new StatedByClauses(
+                        values.either(one.values.leavingNothing(), other.values.leavingNothing()),
+                        ordered.either(one.ordered.leavingNothing(),
+                                other.ordered.leavingNothing()));
             }
             if (one.holdsNothing()) {
                 return other;

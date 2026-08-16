@@ -134,20 +134,32 @@ class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
     /**
      * And the sentence is the same one whichever way round the alternatives are written.
      *
-     * <p>The proof is chosen where proofs are chosen, and the choice must not have been made already
-     * by whichever alternative the reading gave up on first. Written the other way round, the same
-     * model was told the general sentence with no place in it.
+     * <p>Which sentence a refusal is follows from which proof it carries, and the proof is chosen
+     * where proofs are chosen. It must not have been settled already by whichever alternative the
+     * reading gave up on first.
      */
     @Test
     void aChoiceIsToldTheSameSentenceEitherWayRound() {
-        String said = "NothingIsLeftForThatPositionToHold";
-        assertEquals(List.of(said), saidBy("""
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+                module demo
+
+                data X = { b: Int, a: String }
+                    invariant no = (a < "" && b == 0) || (a < "" && b == 1)
+                """), "a position every alternative leaves nothing at is named");
+        assertEquals(List.of("NothingIsLeftForThatPositionToHold"), saidBy("""
+                module demo
+
+                data X = { b: Int, a: String }
+                    invariant no = (a < "" && b == 1) || (a < "" && b == 0)
+                """), "and the operands the other way round");
+
+        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
                 module demo
 
                 data X = { s: String, b: Bool }
                     invariant no = s < "" || (b == true && b == false)
-                """));
-        assertEquals(List.of(said), saidBy("""
+                """), "and where no position is at fault, the general sentence");
+        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
                 module demo
 
                 data X = { s: String, b: Bool }

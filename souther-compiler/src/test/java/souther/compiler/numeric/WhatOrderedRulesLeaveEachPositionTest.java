@@ -112,23 +112,64 @@ class WhatOrderedRulesLeaveEachPositionTest {
     }
 
     /**
-     * And a choice both sides of which hold nothing holds nothing, and keeps both.
+     * A choice both sides of which hold nothing holds nothing, and names what both leave empty.
      *
      * <p>Where one side can be taken, the other's ranges go with it — nothing satisfies that side,
-     * so what it said narrows nothing. Where neither can be taken, no side speaks for the other, and
-     * answering with either would leave which position is named to the order the two were written
-     * in.
+     * so what it said narrows nothing. Where neither can be taken, no side speaks for the other,
+     * and the two may not be met either: a meet is a conjunction and the alternatives were never
+     * stated together.
      */
     @Test
-    void aChoiceWithNothingOnEitherSideHoldsNothingAndKeepsBoth() {
+    void aChoiceWithNothingOnEitherSideNamesWhatBothLeaveEmpty() {
         OrderedIntervals<String> left = OrderedIntervals.at(A, above(6))
                 .meet(OrderedIntervals.at(A, below(2)));
         OrderedIntervals<String> right = OrderedIntervals.at(B, above(6))
                 .meet(OrderedIntervals.at(B, below(2)));
 
-        assertTrue(left.join(right).isBottom());
-        assertEquals(Set.of(A, B), left.join(right).holdingNothing());
+        assertTrue(left.join(right).isBottom(), "neither side can be taken");
+        assertEquals(Set.of(), left.join(right).holdingNothing(),
+                "and no one position is what the choice leaves empty");
         assertEquals(left.join(right).holdingNothing(), right.join(left).holdingNothing(),
                 "and the same either way round");
+    }
+
+    /** And a position every side leaves empty is one the choice leaves empty. */
+    @Test
+    void aPositionEverySideLeavesEmptyIsOneTheChoiceLeavesEmpty() {
+        OrderedIntervals<String> empty = OrderedIntervals.at(A, above(6))
+                .meet(OrderedIntervals.at(A, below(2)));
+        OrderedIntervals<String> left = empty.meet(OrderedIntervals.at(B, from(0, 0)));
+        OrderedIntervals<String> right = empty.meet(OrderedIntervals.at(B, from(1, 1)));
+
+        assertEquals(Set.of(A), left.join(right).holdingNothing());
+        assertEquals(Set.of(A), right.join(left).holdingNothing(), "and either way round");
+    }
+
+    /**
+     * And a position neither side leaves empty is left alone by the choice.
+     *
+     * <p>The negative control for the two above. Met rather than joined, the two alternatives'
+     * answers about {@code b} — one value each — would be a {@code b} at both and so at neither,
+     * which is a contradiction the model does not contain.
+     */
+    @Test
+    void aPositionNeitherSideLeavesEmptyIsNotMadeEmptyByTheChoice() {
+        OrderedIntervals<String> empty = OrderedIntervals.at(A, above(6))
+                .meet(OrderedIntervals.at(A, below(2)));
+        OrderedIntervals<String> left = empty.meet(OrderedIntervals.at(B, from(0, 0)));
+        OrderedIntervals<String> right = empty.meet(OrderedIntervals.at(B, from(1, 1)));
+
+        assertFalse(left.join(right).holdingNothing().contains(B));
+        assertFalse(right.join(left).holdingNothing().contains(B));
+    }
+
+    /** A side shown impossible by something outside this holds nothing and names no position. */
+    @Test
+    void aSideShownImpossibleFromOutsideNamesNoPosition() {
+        OrderedIntervals<String> outside = OrderedIntervals.at(A, from(5, 9)).leavingNothing();
+
+        assertTrue(outside.isBottom());
+        assertEquals(Set.of(), outside.holdingNothing(),
+                "what is known is about the whole and not about `a`");
     }
 }

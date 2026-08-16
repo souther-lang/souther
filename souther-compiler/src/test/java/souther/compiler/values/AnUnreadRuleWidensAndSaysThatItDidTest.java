@@ -193,4 +193,51 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
 
         assertEquals(UnreadReason.RELATES_TWO_POSITIONS, either.whyUnread(VALUE));
     }
+
+    /**
+     * An alternative that admits no value is one nobody can take, so the choice is the other one.
+     *
+     * <p>Written without this, a choice keeps only what both sides spoke about — and a side that
+     * admits nothing spoke about a position the other one did not, so the whole came out saying
+     * nothing at all. What a value satisfying the possible alternative is under is what that
+     * alternative says.
+     */
+    @Test
+    void anAlternativeAdmittingNothingLeavesTheChoiceToTheOther() {
+        AdmissibleValues<String> impossible = says(VALUE, A).meet(says(VALUE, B));
+        AdmissibleValues<String> possible = says(OTHER, A);
+
+        assertTrue(impossible.isBottom(), "the first alternative admits nothing");
+        assertEquals(ValueSet.just(A), impossible.join(possible).at(OTHER));
+        assertEquals(ValueSet.just(A), possible.join(impossible).at(OTHER),
+                "and either way round");
+    }
+
+    /**
+     * A choice neither alternative of which can be taken admits nothing, and names what both name.
+     *
+     * <p>No side speaks for the other, so answering with either would settle which position is
+     * named by the order the two were written in. Nor may they be met: a meet is a conjunction and
+     * the alternatives were never stated together.
+     */
+    @Test
+    void aChoiceNeitherAlternativeOfWhichCanBeTakenAdmitsNothing() {
+        AdmissibleValues<String> here = says(VALUE, A).meet(says(VALUE, B));
+        AdmissibleValues<String> there = says(OTHER, A).meet(says(OTHER, B));
+
+        assertTrue(here.join(there).isBottom());
+        assertTrue(there.join(here).isBottom(), "and either way round");
+        assertTrue(here.join(there).at(VALUE).isEmpty() == there.join(here).at(VALUE).isEmpty(),
+                "and says the same about each position either way round");
+    }
+
+    /** And a reading shown impossible from outside admits nothing and names no position. */
+    @Test
+    void aReadingShownImpossibleFromOutsideNamesNoPosition() {
+        AdmissibleValues<String> outside = says(VALUE, A).leavingNothing();
+
+        assertTrue(outside.isBottom());
+        assertFalse(outside.at(VALUE).isEmpty(),
+                "what is known is about the whole and not about the position");
+    }
 }

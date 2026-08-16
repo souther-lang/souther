@@ -90,12 +90,15 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
      *                  read first, and moving a clause would move the refusal
      */
     Optional<Emptiness> holdsNothing(SequencedMap<Term, String> positions) {
-        Emptiness why = null;
-        if (numbers.isBottom() || facts.isBottom() || values.isBottom()) {
-            why = new Emptiness.ConflictingRules();
-        }
+        Emptiness why = isBottom() ? new Emptiness.ConflictingRules() : null;
         // A position whose ends cross, which is nearer than the general form: it says not only that
         // the rules contradict but where they leave nothing.
+        //
+        // Only where there is a position to name. A state can hold nothing without any one position
+        // being what holds nothing — a choice every alternative of which is impossible is one, and
+        // the alternatives may fail at different positions — and the particular proof is particular
+        // by naming a place. Written without one, the sentence read off it would name whatever place
+        // the reader happened to be at, which is the declaration's own value.
         Set<Term> empty = ordered.holdingNothing();
         for (Map.Entry<Term, String> each : positions.entrySet()) {
             if (empty.contains(each.getKey())) {
@@ -103,11 +106,6 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
                         new Emptiness.EmptyOrderedInterval()));
                 break;
             }
-        }
-        // Empty at a position this caller has no place for. It still holds nothing, and saying so
-        // without a place is nearer to the truth than saying nothing at all.
-        if (why == null && ordered.isBottom()) {
-            why = new Emptiness.EmptyOrderedInterval();
         }
         return Optional.ofNullable(why);
     }

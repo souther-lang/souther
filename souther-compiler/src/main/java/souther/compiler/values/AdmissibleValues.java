@@ -14,6 +14,12 @@ import java.util.Set;
  * what a conjunction and a disjunction are applied to is this, and the arithmetic at one position
  * is {@link ValueSet}.
  *
+ * <p><b>Bottom is a state and not always a position.</b> The rules leave nothing where some position
+ * is left no value — and also where every alternative of a choice is one nobody can take, which is
+ * not a fact about any one position. The second is {@code nothing}: a choice between two impossible
+ * alternatives that fail at different positions admits nothing, and neither position is one the
+ * choice leaves empty.
+ *
  * <p><b>A position not held here is at {@link ValueSet#ANY}.</b> That is what makes the two
  * connectives what they are below, and it is the one thing to hold on to while reading them.
  *
@@ -51,7 +57,7 @@ import java.util.Set;
  * this reading could not follow the distinction the model draws.
  */
 public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> unread,
-                                  boolean dropped) {
+                                  boolean dropped, boolean nothing) {
 
     /**
      * @param values  what each position admits. A position at {@link ValueSet#ANY} is left out, so
@@ -82,12 +88,24 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
-        return new AdmissibleValues<>(Map.of(), Map.of(), false);
+        return new AdmissibleValues<>(Map.of(), Map.of(), false, false);
+    }
+
+    /**
+     * This where it already admits nothing, and a state admitting nothing where it does not.
+     *
+     * <p>What a caller says when something outside this showed that nothing satisfies the rules —
+     * another domain reading the same clause, say. Nothing is claimed about any position: what is
+     * known is about the whole, and writing it at a position would name one the rules are fine with.
+     */
+    public AdmissibleValues<A> leavingNothing() {
+        return isBottom() ? this
+                : new AdmissibleValues<>(Map.of(), unread, dropped, true);
     }
 
     /** One position said to admit {@code set}, and nothing missed. */
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
-        return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false);
+        return new AdmissibleValues<>(Map.of(atom, set), Map.of(), false, false);
     }
 
     /**
@@ -100,7 +118,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
     public static <A> AdmissibleValues<A> unreadable(Set<A> named, UnreadReason why) {
         Map<A, UnreadReason> spoiled = new LinkedHashMap<>();
         named.forEach(each -> spoiled.put(each, why));
-        return new AdmissibleValues<>(Map.of(), spoiled, true);
+        return new AdmissibleValues<>(Map.of(), spoiled, true, false);
     }
 
     /** What {@code atom} may hold, everything being admitted where nothing was said. */
@@ -121,9 +139,9 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         return unread.get(atom);
     }
 
-    /** Whether some position admits no value, so that nothing satisfies these rules. */
+    /** Whether nothing satisfies these rules, at a position or otherwise. */
     public boolean isBottom() {
-        return values.values().stream().anyMatch(ValueSet::isEmpty);
+        return nothing || values.values().stream().anyMatch(ValueSet::isEmpty);
     }
 
     /** Both readings holding at once. */
@@ -131,7 +149,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         Map<A, ValueSet> out = new LinkedHashMap<>(values);
         other.values.forEach((atom, set) -> out.merge(atom, set, ValueSet::meet));
         return new AdmissibleValues<>(out, union(unread, other.unread),
-                dropped || other.dropped);
+                dropped || other.dropped, nothing || other.nothing);
     }
 
     /**
@@ -143,6 +161,28 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
      * than because of the model.
      */
     public AdmissibleValues<A> join(AdmissibleValues<A> other) {
+        // An alternative nobody can take leaves the answer to the others. Both being that is a
+        // different case: no side speaks for the other, and meeting them would state a conjunction
+        // the alternatives never stood in. What the choice admits nothing at is what every
+        // alternative admits nothing at, and where there is no such position the choice still
+        // admits nothing.
+        if (isBottom() && other.isBottom()) {
+            Map<A, ValueSet> both = new LinkedHashMap<>();
+            values.forEach((atom, set) -> {
+                ValueSet there = other.values.get(atom);
+                if (set.isEmpty() && there != null && there.isEmpty()) {
+                    both.put(atom, set);
+                }
+            });
+            return new AdmissibleValues<>(both, union(unread, other.unread),
+                    dropped || other.dropped, true);
+        }
+        if (isBottom()) {
+            return other;
+        }
+        if (other.isBottom()) {
+            return this;
+        }
         Map<A, ValueSet> out = new LinkedHashMap<>();
         values.forEach((atom, set) -> {
             ValueSet there = other.values.get(atom);
@@ -161,7 +201,7 @@ public record AdmissibleValues<A>(Map<A, ValueSet> values, Map<A, UnreadReason> 
         if (dropped) {
             spoiled = spoiling(spoiled, other.values.keySet());
         }
-        return new AdmissibleValues<>(out, spoiled, dropped || other.dropped);
+        return new AdmissibleValues<>(out, spoiled, dropped || other.dropped, false);
     }
 
     /** The same, with {@code these} left open by an alternative — where nothing has spoiled them

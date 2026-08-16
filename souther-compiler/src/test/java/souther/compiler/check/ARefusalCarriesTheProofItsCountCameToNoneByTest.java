@@ -129,51 +129,73 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
     }
 
     /**
-     * A choice every alternative of which is impossible, shown the same way either way round.
+     * The position a choice names is the one every alternative leaves nothing at.
      *
-     * <p>Two situations were being answered with one rule. An alternative nobody can take leaves the
-     * answer to the others, and its evidence goes with it — but where <em>every</em> alternative is
-     * impossible, no one of them speaks for the rest, and taking the first one that was found to be
-     * impossible out of the answer settles the proof by the order the operands were written in.
+     * <p>Two situations were answered with one rule. An alternative nobody can take leaves the
+     * answer to the others, and its evidence goes with it; where <em>every</em> alternative is
+     * impossible, no one of them speaks for the rest, and taking the first one found impossible out
+     * of the answer settles the proof by the order the operands were written in.
      *
-     * <p>That is the rule {@link Emptiness.AcrossEveryCase} is written for a sum: what proves it has
-     * none is the whole list. Here the alternatives are kept and the one place that chooses a proof
-     * — {@link Emptiness#preferred}, and the order the value declares its positions — chooses it.
+     * <p>Nor may they be met. A meet is a conjunction and the alternatives were never stated
+     * together: both alternatives here are impossible because of {@code a}, and met they are a
+     * {@code b} bounded at 0 and at 1 — a contradiction neither alternative contains, at a position
+     * the rules are fine with. {@code b} is declared first, so the refusal was written about it.
      */
     @Test
-    void aChoiceNoAlternativeOfWhichCanBeTakenIsShownTheSameWayEitherWayRound() {
-        Emptiness expected =
-                new Emptiness.AtAField("s", new Emptiness.EmptyOrderedInterval());
+    void thePositionAChoiceNamesIsTheOneEveryAlternativeLeavesNothingAt() {
+        Emptiness expected = new Emptiness.AtAField("a", new Emptiness.EmptyOrderedInterval());
         assertEquals(expected, only("""
                 module demo
 
-                data X = { s: String, b: Bool }
-                    invariant no = s < "" || (b == true && b == false)
-                """), "the order is the one that can name what it found, whichever side it is on");
+                data X = { b: Int, a: String }
+                    invariant no = (a < "" && b == 0) || (a < "" && b == 1)
+                """));
         assertEquals(expected, only("""
                 module demo
 
-                data X = { s: String, b: Bool }
-                    invariant no = (b == true && b == false) || s < ""
+                data X = { b: Int, a: String }
+                    invariant no = (a < "" && b == 1) || (a < "" && b == 0)
                 """), "and the operands the other way round");
     }
 
-    /** And the place named is the first the value declares, not the first the reading gave up on. */
+    /**
+     * And where the alternatives leave nothing at different positions, none of them is named.
+     *
+     * <p>A choice between {@code a < ""} and {@code b < ""} admits nothing, and neither position is
+     * one the choice leaves empty: each alternative admits every value of the other's. So what can
+     * be said is that the rules cannot all hold, which is the general form and is what a reading
+     * that could show a contradiction and no more leaves.
+     */
     @Test
-    void thePlaceAChoiceNamesIsTheFirstTheValueDeclares() {
-        Emptiness expected =
-                new Emptiness.AtAField("a", new Emptiness.EmptyOrderedInterval());
-        assertEquals(expected, only("""
+    void aChoiceWhoseAlternativesFailAtDifferentPositionsNamesNone() {
+        assertEquals(new Emptiness.ConflictingRules(), only("""
                 module demo
 
                 data X = { a: String, b: String }
                     invariant no = a < "" || b < ""
                 """));
-        assertEquals(expected, only("""
+        assertEquals(new Emptiness.ConflictingRules(), only("""
                 module demo
 
                 data X = { a: String, b: String }
                     invariant no = b < "" || a < ""
+                """), "and the operands the other way round");
+    }
+
+    /** And the same where the two alternatives are shown impossible by different readings. */
+    @Test
+    void aChoiceShownImpossibleByTwoDifferentReadingsNamesNoPosition() {
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = s < "" || (b == true && b == false)
+                """));
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = (b == true && b == false) || s < ""
                 """), "and the operands the other way round");
     }
 
