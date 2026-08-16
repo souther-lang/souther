@@ -1,6 +1,8 @@
 package souther.compiler.meta;
 
+import souther.compiler.ast.DefinitionRole;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.RowPosition;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Prelude;
 import souther.compiler.diag.Region;
@@ -388,8 +390,14 @@ public final class DeclarationAgreement {
         if (ours == null || theirs == null) {
             return ours == theirs;
         }
-        if (ERASED.contains(ours.getClass())) {
-            return ERASED.contains(theirs.getClass());
+        // Erased on both sides, and the same one. Read as "either is erased, so they match", a
+        // `SourcePos` held against a `Region` comes back equal — two different things called one
+        // because neither is compared. What is erased is a part a crossing cannot see, not a slot
+        // anything at all may turn up in.
+        Class<?> weErase = erasedAs(ours.getClass());
+        Class<?> theyErase = erasedAs(theirs.getClass());
+        if (weErase != null || theyErase != null) {
+            return weErase == theyErase;
         }
         // A binding is not what it is called. The front end settled which binding every use is of,
         // so the two sides' identities are held to standing for each other and the uses follow —
@@ -442,11 +450,17 @@ public final class DeclarationAgreement {
         // today and wrong for a form, so a form arriving in one stops the comparison rather than
         // being compared by an equality that does not know what this does.
         if (ours instanceof Set<?> mine && theirs instanceof Set<?> yours) {
+            // Both sides. What is being refused is a comparison by an equality this class does not
+            // control, and that is what happens whichever side the form is on — read on one side
+            // only, a declaration that lost its last entry has an empty set here and whatever their
+            // build put in theirs goes through the guard it was written to meet.
             refuseForms(mine);
+            refuseForms(yours);
             return mine.equals(yours);
         }
         if (ours instanceof Map<?, ?> mine && theirs instanceof Map<?, ?> yours) {
             refuseForms(mine.keySet());
+            refuseForms(yours.keySet());
             return mine.keySet().equals(yours.keySet())
                     && mine.entrySet().stream()
                             .allMatch(e -> sameShape(e.getValue(), yours.get(e.getKey()), bound));
@@ -511,7 +525,94 @@ public final class DeclarationAgreement {
      */
     private static final Set<Class<?>> ERASED = Set.of(
             SourcePos.class, Region.class,
-            ConstructionOrigin.class, CoverageOrigin.class);
+            ConstructionOrigin.class, CoverageOrigin.class,
+            // What a definition was made as, and what an example row's position contributes to
+            // reading what is written at it. Both are this compile's record of how it built its own
+            // tree: a module publishes its declarations and the helpers they are read through, and
+            // neither a row nor the definition a pass mints for one is among them.
+            DefinitionRole.class, RowPosition.class);
+
+    /**
+     * The records this comparison names, and says of each how two of them are held.
+     *
+     * <p>Only the ones that are not forms of the grammar. A form's parts are what a crossing depends
+     * on and are held one by one, which is a decision about forms as such; these are records the
+     * front end puts <em>beside</em> a form to say what it settled, and each is here because
+     * something above says what to do with it rather than because a walk found its components.
+     */
+    private static final Set<Class<?>> NAMED = Set.of(
+            BindingId.class, TypeSymbol.class,
+            ValueName.Local.class, ValueName.Helper.class, ValueName.Behavior.class,
+            ValueName.Stdlib.class, ValueName.OfType.class,
+            // The spelling, where nothing beside it says what it means — which is the rule this
+            // class states about names, and this is the form that carries one on its own. Compared
+            // as the word it is, because that is what it means there.
+            WrittenName.class);
+
+    /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
+     *  see. */
+    static boolean erases(Class<?> type) {
+        return erasedAs(type) != null;
+    }
+
+    /**
+     * Which of the erased kinds {@code type} is, or null where it is not one.
+     *
+     * <p>The kind and not the class. Two of one kind are one thing not compared, so which arm of it
+     * each side has is not compared either; two of different kinds are two things, and answering
+     * that they match because neither is compared would hold a position against a coverage number.
+     */
+    private static Class<?> erasedAs(Class<?> type) {
+        for (Class<?> erased : ERASED) {
+            if (erased.isAssignableFrom(type)) {
+                return erased;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether it is a form of the grammar — something a declaration is written as, whose parts are
+     * held one by one.
+     *
+     * <p>Asked of where the type is declared rather than of a list. A form of the grammar is a
+     * record of {@link Hir}, and a record that is not one arriving in a declaration is something the
+     * compiler put there about itself: reading its components would make a crossing depend on which
+     * pass wrote a node, which is not something a value can be read differently by.
+     */
+    static boolean isAFormOfTheGrammar(Class<?> type) {
+        if (!type.isRecord()) {
+            return false;
+        }
+        // Where it is written, not what it implements. A form of the grammar is declared inside
+        // `Hir`, and several of them stand for a part of one rather than for a form in their own
+        // right, so they are nested there without implementing it.
+        for (Class<?> enclosing = type; enclosing != null;
+                enclosing = enclosing.getEnclosingClass()) {
+            if (enclosing == Hir.class) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the comparison names it and says how two of them are held, without going inside. */
+    static boolean namedByTheComparison(Class<?> type) {
+        return NAMED.contains(type);
+    }
+
+    /**
+     * Whether it is one of the front end's settled answers, whose parts are what a crossing depends
+     * on.
+     *
+     * <p>Where it is declared, again. What the front end settles about a declaration lives in
+     * {@code souther.compiler.types} — what a type is, what a name reaches, how a map key crosses —
+     * and a crossing depends on all of it: a field whose type moved is the plainest disagreement
+     * there is.
+     */
+    static boolean isASettledAnswer(Class<?> type) {
+        return type.isRecord() && type.getPackageName().equals(TypeSymbol.class.getPackageName());
+    }
 
     /**
      * The bindings of one declaration, held to each other across the two builds.

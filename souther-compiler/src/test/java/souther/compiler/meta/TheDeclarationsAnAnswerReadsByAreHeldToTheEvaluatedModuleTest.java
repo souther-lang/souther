@@ -895,6 +895,43 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
         assertEquals("Band", said.declaration());
     }
 
+    /**
+     * Which build is on which side does not change the answer.
+     *
+     * <p>This is a question about two sets of declarations and not about one of them. A declaration
+     * only one side has is a difference whichever side has it, and a rule the walk applies to ours
+     * alone lets whatever their build put there through the guard it was written to meet — a set
+     * holding a form, say, which is compared by an equality that reads what this erases. The
+     * asymmetry does not show up as a wrong answer on the side that is read; it shows up as no
+     * answer at all on the side that is not.
+     *
+     * <p>Reflexive too. A build held against itself agrees, or nothing else measured here means
+     * anything.
+     */
+    @Test
+    void whichSideABuildIsOnDoesNotChangeTheAnswer() {
+        String narrowed = MODEL.replace("invariant length(value) > 0",
+                "invariant length(value) > 3");
+        String withACase = UNION_MODEL.replace("data Outcome = Todo | NotFound",
+                "data Outcome = Todo | NotFound | Archived");
+
+        assertEquals(Agreement.Agree.class, kindOf(MODEL, MODEL, "rename"),
+                "a build held against itself agrees");
+        assertEquals(kindOf(narrowed, MODEL, "rename"), kindOf(MODEL, narrowed, "rename"),
+                "an invariant that moved is a disagreement from either side");
+        assertEquals(Agreement.Disagree.class, kindOf(narrowed, MODEL, "rename"));
+        assertEquals(kindOf(withACase, UNION_MODEL, "find"),
+                kindOf(UNION_MODEL, withACase, "find"),
+                "and so is a case only one of them has");
+        assertEquals(Agreement.Disagree.class, kindOf(withACase, UNION_MODEL, "find"));
+    }
+
+    /** What holding {@code ours} against {@code theirs} for {@code behavior} answers with. */
+    private static Class<?> kindOf(String ours, String theirs, String behavior) {
+        return DeclarationAgreement.of("example.stale", behavior,
+                declarationsOf(ours), declarationsOf(theirs)).getClass();
+    }
+
     /** {@code classes} with {@code absent} not on it, as an incomplete jar has it. */
     private static PublishedModule.Classes missing(String absent, PublishedModule.Classes classes) {
         return binaryName -> binaryName.equals(absent) ? null : classes.of(binaryName);
