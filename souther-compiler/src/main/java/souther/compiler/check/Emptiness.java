@@ -31,9 +31,23 @@ import java.util.List;
  * <p>The bottom a rising starts from is not one of these. A member of a component the rising has not
  * finished with has not been shown to have no value — it has not been shown anything — and a proof
  * made there would say A has none because B has none and B has none because A has none, which proves
- * nothing. {@link TypeCardinality} withholds those readings until the rising stops and then writes
+ * nothing. {@link TypeCardinality} holds those readings back until the rising stops and then writes
  * {@link NoBaseInComponent}, whose proof is that the least fixed point was reached with every one of
  * them still at nothing.
+ *
+ * <p>Which readings those are is settled by reading the proofs, so a proof has to name what it rests
+ * on: <strong>a reading that consulted a child's count and came to none carries that child's proof
+ * inside its own.</strong> {@link AtAField}, {@link NonEmptyCollectionWithNoElement} and
+ * {@link AcrossEveryCase} take a child for that reason, and a proof that takes none — the four
+ * leaves — says the reading consulted none. A reading added later that looked at a child and then
+ * wrote a leaf would say it stands on its own when it does not, and a cycle running through it would
+ * be discharged as something shown.
+ *
+ * <p>Reading the proofs rather than what the reading touched, because touching is not resting on. A
+ * record with a set that cannot be filled beside a field holding a member of its own cycle has been
+ * shown to have no value by the set alone; a reading that took having reached the cycle for having
+ * leaned on it would call that record part of the cycle, and the two declarations that hold it only
+ * through the record along with it.
  */
 public sealed interface Emptiness {
 

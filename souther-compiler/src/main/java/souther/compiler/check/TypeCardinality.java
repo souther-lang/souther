@@ -192,28 +192,16 @@ public final class TypeCardinality {
         while (moved) {
             moved = false;
             for (TypeSymbol each : component) {
-                Cardinality before = answers.cameTo(each);
-                Answers.Reading read = answers.read(() -> round(cuts, CardinalityTransfer.upperOf(
-                        each, declared.get(each), symbols, answers, granted::contains)));
-                // Taken every round, and the rising is over the counts alone. Two readings that come
-                // to none are the same answer to rise through however they were shown, so comparing
-                // the proofs would keep a settled rising moving; and keeping the earlier proof would
-                // leave a declaration carrying what it was shown by before the answers it rests on
-                // were what they are.
-                //
-                // A reading that came to none while reaching something nothing has been shown of is
-                // held back rather than settled. It has an answer and no proof of it: what it rests
-                // on may yet turn out to have values, and while it may not, that is not something
-                // this round has shown. Held back on what the reading reached and not on what it
-                // wrote, so a reading that says nothing about what it rested on is held back all the
-                // same.
-                if (read.count() instanceof Cardinality.None none
-                        && read.restedOnSomethingNotShown()) {
-                    answers.withhold(each, none);
-                } else {
-                    answers.settle(each, read.count());
-                }
-                if (before == null || !sameCount(before, read.count())) {
+                Cardinality before = answers.settledAt(each);
+                Cardinality next = round(cuts, CardinalityTransfer.upperOf(
+                        each, declared.get(each), symbols, answers, granted::contains));
+                // Written every round, and the rising is over the counts alone. Two readings that
+                // come to none are the same answer to rise through however they were shown, so
+                // comparing the proofs would keep a settled rising moving; and taking the earlier
+                // proof would leave a declaration carrying what it was shown by before the answers
+                // it rests on were what they are.
+                answers.settle(each, next);
+                if (before == null || !sameCount(before, next)) {
                     moved = true;
                 }
             }
@@ -232,24 +220,61 @@ public final class TypeCardinality {
     }
 
     /**
-     * The members the rising stopped with nothing shown of, told what shows it now that it has.
+     * The members left with nothing to bottom out, told what showed it once the rising has stopped.
      *
-     * <p>Every round held back the readings that rested on something not yet shown, so what is left
-     * held back at the end rested on something the rising never showed anything of — and the rising
-     * is over, so nothing will. No value of any of them is built in finitely many steps, which is
-     * what a lack with nothing to bottom out is, and reaching the least fixed point is the whole of
-     * the proof.
-     *
-     * <p>Which members those are is read off the rising and not off the proofs they wrote. A reading
-     * that came to none out of an assumption is one whatever it says of itself, so a proof that does
-     * not mention what it rested on cannot pass itself off here as one that was shown.
+     * <p>A member whose proof rests on another member of the same component was, while the rising
+     * ran, resting on an assumption. Which of them were shown something is asked here: a member with
+     * a count is one, and so is a member whose proof reaches outside the component or stops at rules
+     * of its own — and then any member resting only on those, and so on until nothing more is added.
+     * What is left is a set every member of which needs the others, which is a lack no finite
+     * building bottoms out of, and the least fixed point having been reached is the proof of it.
      */
     private static void discharge(List<TypeSymbol> component, Answers answers) {
-        List<TypeSymbol> without = component.stream().filter(answers::withheld).toList();
-        for (TypeSymbol each : without) {
-            answers.settle(each, Cardinality.none(
-                    new Emptiness.NoBaseInComponent(without, answers.withheldProof(each))));
+        Set<TypeSymbol> shown = new HashSet<>();
+        Set<TypeSymbol> within = Set.copyOf(component);
+        boolean added = true;
+        while (added) {
+            added = false;
+            for (TypeSymbol each : component) {
+                if (shown.contains(each)) {
+                    continue;
+                }
+                Cardinality count = answers.settledAt(each);
+                if (!(count instanceof Cardinality.None it) || restsOn(it.why(), within, shown)) {
+                    shown.add(each);
+                    added = true;
+                }
+            }
         }
+        if (shown.size() == component.size()) {
+            return;
+        }
+        List<TypeSymbol> without = component.stream().filter(each -> !shown.contains(each)).toList();
+        for (TypeSymbol each : without) {
+            answers.settle(each, Cardinality.none(new Emptiness.NoBaseInComponent(
+                    without, answers.settledAt(each).why())));
+        }
+    }
+
+    /** Whether every member of {@code within} this proof reaches has been shown something. */
+    private static boolean restsOn(Emptiness why, Set<TypeSymbol> within, Set<TypeSymbol> shown) {
+        return switch (why) {
+            case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
+                 Emptiness.SetRequiresTooManyDistinctValues _,
+                 Emptiness.NoAllowedCollectionSize _ -> true;
+            case Emptiness.TheNameHasNone it ->
+                    !within.contains(it.name()) || shown.contains(it.name());
+            // Not reachable. A proof read here was built from what a name answers, which is the
+            // proof that stops at the name, and this is the only writer of the other one. Answered
+            // the way that keeps a member out of the set that was shown something, which is what it
+            // would mean if it ever were reached.
+            case Emptiness.NoBaseInComponent _ -> false;
+            case Emptiness.AtAField it -> restsOn(it.under(), within, shown);
+            case Emptiness.NonEmptyCollectionWithNoElement it ->
+                    restsOn(it.element(), within, shown);
+            case Emptiness.AcrossEveryCase it ->
+                    it.cases().stream().allMatch(each -> restsOn(each, within, shown));
+        };
     }
 
     /**

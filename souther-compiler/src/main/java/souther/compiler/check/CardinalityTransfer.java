@@ -324,7 +324,12 @@ final class CardinalityTransfer {
                 across = across == null ? here : across.plus(here);
             }
         }
-        return across != null ? across : noSizeLeft(counts, path);
+        // Nothing reaches the second of these. A collection got this far by admitting a size of one
+        // or more and by not admitting one past where the walk stops, so a size it admits lies
+        // inside what was walked and some step finds it — unless one position was asked two ways
+        // round and the answers disagreed, which is not something this decided. Answered the way
+        // every undecided shape is, because refusing a declaration is what a count of none does.
+        return across == null ? Cardinality.UNKNOWN : across;
     }
 
     private static Cardinality ofList(Type element, String path, OccurrenceCounts counts,
@@ -350,7 +355,7 @@ final class CardinalityTransfer {
                 across = across == null ? here : across.plus(here);
             }
         }
-        return across != null ? across : noSizeLeft(counts, path);
+        return across == null ? Cardinality.UNKNOWN : across;   // as in `ofSet`, and as unreachable
     }
 
     private static Cardinality ofMap(Type.MapOf map, String path, OccurrenceCounts counts,

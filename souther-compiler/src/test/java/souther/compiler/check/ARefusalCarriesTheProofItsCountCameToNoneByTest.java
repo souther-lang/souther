@@ -43,6 +43,36 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         return reported.get(0).why();
     }
 
+    /** What every declaration of the model was shown by, before any group is separated out. */
+    private static String shownBy(String source, String name) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        List<souther.compiler.ast.Hir.Def> defs =
+                compilation.module("demo").defs().stream().map(Derived.Def::read).toList();
+        Symbols symbols = compilation.symbols("demo");
+        return shape(TypeCardinality.solve(defs, symbols).of(
+                souther.compiler.types.TypeSymbols.declared(
+                        new souther.compiler.types.TypeKey(symbols.module(), name))).why());
+    }
+
+    /** A proof written out, short enough to read in an assertion. */
+    private static String shape(Emptiness why) {
+        return switch (why) {
+            case null -> "has values";
+            case Emptiness.NoBaseInComponent it -> "no base in " + named(it.members());
+            case Emptiness.AtAField it -> (it.path().isEmpty() ? "value" : it.path())
+                    + " " + shape(it.under());
+            case Emptiness.TheNameHasNone it -> "which is " + it.name().name();
+            case Emptiness.NonEmptyCollectionWithNoElement it -> "cannot be empty, " + shape(it.element());
+            case Emptiness.AcrossEveryCase it ->
+                    "every case " + it.cases().stream().map(each -> shape(each)).toList();
+            case Emptiness.ConflictingRules _ -> "rules contradict";
+            case Emptiness.EmptyNumericInterval _ -> "an empty range";
+            case Emptiness.SetRequiresTooManyDistinctValues it -> "a set over at most " + it.available();
+            case Emptiness.NoAllowedCollectionSize _ -> "no size";
+        };
+    }
+
     private static List<String> named(List<TypeSymbol> these) {
         return these.stream().map(TypeSymbol::name).toList();
     }
@@ -137,6 +167,63 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
             throw new AssertionError("the cycle is left with nothing to bottom out: "
                     + reported.get(1).why());
         }
+    }
+
+    /**
+     * A lack of its own inside a cycle is that member's, and so is what holds it only through them.
+     *
+     * <p>All three are answered in one rising and all three come to none, and what tells them apart
+     * is what each was shown by. The set cannot be filled whatever the rest of the cycle comes to,
+     * so `A` has been shown something on its own; `B` and `C` have been shown nothing but that `A`
+     * has none, and they come right when it does.
+     *
+     * <p>A reading that took having reached the cycle for having leaned on it puts all three in it.
+     * That is why what is read is the proof and not what the reading touched: `A`'s reading does
+     * reach `C`, and reaching is not resting on.
+     */
+    @Test
+    void aLackOfItsOwnInsideACycleIsNotTheCycles() {
+        List<UninhabitableTypes.UninhabitableGroup> reported = reported("""
+                module demo
+
+                data One = Int
+                    invariant only = value >= 1 && value <= 1
+
+                data A = { s: Set<One>, c: C }
+                    invariant two = Set.size(s) >= 2
+                data B = { a: A }
+                data C = { b: B }
+                """);
+        assertEquals(List.of(List.of("A")), reported.stream()
+                        .map(each -> named(each.members())).toList(),
+                "`B` and `C` come right when `A` does, so nothing is said of them");
+        assertEquals(new Emptiness.AtAField("s",
+                new Emptiness.SetRequiresTooManyDistinctValues(1)), reported.get(0).why());
+    }
+
+    /**
+     * And the same read before any group is separated out, which is where it can go wrong.
+     *
+     * <p>Separating the group grants everything outside it, so the reading that establishes a group
+     * reaches nothing unshown and comes out right whichever way the proofs are read. What is asked
+     * here is the answer the rising itself arrived at, with all three still in one another's way.
+     */
+    @Test
+    void andTheSameOfTheRisingsOwnAnswers() {
+        String source = """
+                module demo
+
+                data One = Int
+                    invariant only = value >= 1 && value <= 1
+
+                data A = { s: Set<One>, c: C }
+                    invariant two = Set.size(s) >= 2
+                data B = { a: A }
+                data C = { b: B }
+                """;
+        assertEquals("s a set over at most 1", shownBy(source, "A"));
+        assertEquals("a which is A", shownBy(source, "B"));
+        assertEquals("b which is B", shownBy(source, "C"));
     }
 
     /**
