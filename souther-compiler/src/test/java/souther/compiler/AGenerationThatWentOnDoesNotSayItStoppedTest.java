@@ -7,6 +7,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.Axis;
@@ -74,7 +75,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Sig sig = sigs.get("submit");
         return new Generator.Subject(new souther.compiler.partition.BehaviorInputs(
                 spec.params().stream().map(Hir.Param::name).toList(), sig.inputTypes(), symbols),
-                Partitions.of(spec, sig, symbols, Exclusions.NONE).axes());
+                Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols), symbols, Exclusions.NONE).axes());
     }
 
     private static String written(Generator.GenerationResult result) {

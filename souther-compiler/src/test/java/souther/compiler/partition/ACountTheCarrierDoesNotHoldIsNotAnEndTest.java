@@ -7,6 +7,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.query.Bodies;
@@ -213,7 +214,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");
         Partitions.Partitioning p =
-                Partitions.of(spec, sigs.get(spec.name()), symbols, Exclusions.NONE);
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols, Exclusions.NONE);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.obligationsOf(axis, symbols,
                         p.domains().get(axis.term())).stream())

@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
@@ -87,7 +88,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec, sigs.get("submit"), symbols, Exclusions.NONE),
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("submit"), symbols), symbols, Exclusions.NONE),
                 GuardThresholds.of("submit", body, plan, parameters, symbols).thresholds(), symbols);
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,

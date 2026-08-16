@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -107,7 +108,7 @@ class GeneratorTest {
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols), symbols, Exclusions.NONE);
         return new Model(new Generator.Subject(
                 new BehaviorInputs(parameters, sig.inputTypes(), symbols), partitioning.axes()),
                 symbols);

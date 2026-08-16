@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
@@ -59,7 +60,7 @@ class ThresholdNormalizationTest {
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
                 spec.params().stream().map(Hir.Param::name).toList(), symbols);
         List<Threshold> thresholds = guards.thresholds();
-        Partitions.Partitioning base = Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE);
+        Partitions.Partitioning base = Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols, Exclusions.NONE);
         return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds, symbols);
     }
 

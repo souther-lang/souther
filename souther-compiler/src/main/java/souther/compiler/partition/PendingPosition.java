@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 
 /**

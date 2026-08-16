@@ -14,6 +14,10 @@ import souther.compiler.check.Rules;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Position;
+import souther.compiler.inputs.StructuralInspection;
+import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
@@ -45,11 +49,6 @@ import java.util.Map;
  * that would measure coverage of a rule the model never stated and report a gap for failing to test it.
  */
 public final class Partitions {
-
-    /** How deep a product is taken apart. Two levels reach a field of a record a parameter holds,
-     * which is where domain rules are written; below that a report stops being about anything the
-     * author would recognise as one input. */
-    static final int MAX_DEPTH = 2;
 
     /** How many axes one behavior is measured at. Past this the pairs are more than a person reads. */
     static final int MAX_AXES = 12;
@@ -122,23 +121,23 @@ public final class Partitions {
         }
     }
 
-    /** The axes of one behavior. {@code sig} says the types; {@code behavior} says the parameter names,
-     * which is what a path is written from. */
-    public static Partitioning of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols,
+    /**
+     * The axes of one behavior, derived from the one reading of its input.
+     *
+     * <p>Nothing is read here. Which positions the input has and what can stand at each of them is
+     * {@link InputDomain}'s, asked once and read by every measure; what this adds is which of them
+     * an axis is drawn at, what each class is called and how a row for it is written.
+     *
+     * @param behavior what the axes are named after, which is the behavior the reading was made for
+     */
+    public static Partitioning of(String behavior, InputDomain inputs, Symbols symbols,
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         List<UnreadRule> unread = new ArrayList<>();
-        for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
-            // One reading per parameter, not one per record met on the way down. A clause on the
-            // outer record relates positions at any depth it can name, and rebuilding the reading at
-            // each record is how `interval.startsAt < cap` stopped reaching `interval.startsAt`.
-            Type type = sig.inputTypes().get(i);
-            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
-                    0, symbols, found,
-                    new Placed(readAs(type, symbols), rulesOf(type, symbols)),
-                    domains, uncertain, unread);
+        for (Position position : inputs.positions()) {
+            axisOf(behavior, position, symbols, found, domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeSymbol::name).toList()));
@@ -615,201 +614,77 @@ public final class Partitions {
     }
 
     /**
-     * One position, answered by the phases in the order that decides it.
+     * One position, turned into an axis or given up in favour of what is under it.
      *
-     * <p>The local reading first, whole: the classes the type states and the lines its rules draw
-     * come back as one answer, so what "local evidence ran out" means is a value rather than two
-     * empty lists to be noticed. Only where it ran out is the position asked what it is made of —
-     * a position its own type answered for is not descended into, whatever is under it, and that
-     * precedence is the arm this is written in rather than the order of two {@code if}s.
+     * <p>The local answer first, whole: the classes the position's declarations state and the lines
+     * its rules draw come back as one value, so what "local evidence ran out" means is an answer
+     * rather than two empty lists to be noticed. Only where it ran out does what the position is
+     * made of decide anything — a position its own declarations answered for keeps its axis,
+     * whatever is under it, and that precedence is the arm this is written in rather than the order
+     * of two {@code if}s.
      *
-     * <p>Of the structural answers only {@code Children} takes the position away: the walk goes on
-     * without it, and the classes belong to what is underneath. A leaf and a block both leave the
-     * position standing, pending what a body's rules say later.
+     * <p>Of the structural answers only {@code Children} takes the position away: the fields are
+     * positions of their own and were read as such, and the classes belong to them. A leaf and a
+     * block both leave the position standing, pending what a body's rules say later.
      *
-     * <p><b>A position with local evidence and children is intended and unreachable today.</b> Only
-     * a product has children, and a product carries neither classes — its type states no division —
-     * nor cuts, having no order for a rule to name a value on. So which of the two wins is a
-     * decision about a state the language cannot currently be in. It is written as a decision all
-     * the same: a field-level partition, a guard-derived class on a record, or an invariant over a
-     * whole product would inhabit it, and an implementation that descended because the position is
-     * structural would then lose evidence it had already read.
+     * <p><b>A position with local evidence and children is unreachable today, and is refused rather
+     * than resolved.</b> Only a product has children, and a product states no distinction — its type
+     * declares no division — and carries no cut, having no order for a rule to name a value on. A
+     * language that grew one would have this reader keeping the parent's axis while the reading kept
+     * its fields, and two readers of one input disagreeing about which positions there are is the
+     * thing this arrangement exists to stop.
      */
-    private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
-                             List<Axis> out, Placed placed,
-                             Map<NumericTerm, NumericDomain.Bounds> domains,
-                             java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
-        // Once, and every phase asks of this reading: what the position's own type and rules say,
-        // and what is under it where they say nothing, are two questions put to one reading of it.
-        //
-        // The proof first, and before anything is read off the position. A shape a partition is not
-        // derived from is this compiler disagreeing with itself about what may stand at a position,
-        // and it is refused here — asked after the local phase instead, a position that produced
-        // classes was never checked at all, and the one case the type exists to make loud was the
-        // one that stayed quiet.
-        PartitionInput input = PartitionInput.of(TypeView.of(type, symbols));
-        LocalInspection inspected = LocalInspection.of(input, path, symbols, placed);
-        LocalReading reading = inspected.reading();
-        for (UnreadRule each : reading.unread()) {
+    private static void axisOf(String behavior, Position position, Symbols symbols,
+                               List<Axis> out, Map<NumericTerm, NumericDomain.Bounds> domains,
+                               java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
+        for (UnreadRule each : position.unreadRules()) {
             if (unread.stream().noneMatch(had -> had.equals(each))) {
                 unread.add(each);
             }
         }
-        NumericTerm term = reading.term();
+        NumericTerm term = position.term();
         AxisId id = AxisId.of(behavior, term);
-        if (reading.admissible() != null && !reading.admissible().isEmpty()) {
-            domains.put(term, reading.admissible());
+        if (position.numericDomain() != null && !position.numericDomain().isEmpty()) {
+            domains.put(term, position.numericDomain());
         }
-        switch (inspected.partition()) {
+        switch (LocalInspection.of(position, symbols)) {
             case LocalPartition.Divided divided -> {
+                if (position.structure() instanceof StructuralInspection.Children) {
+                    throw new IllegalStateException(
+                            "`" + position.path() + "` both divides and is made of positions; the"
+                                    + " reading of an input and the axes drawn from it disagree"
+                                    + " about which positions there are");
+                }
                 if (divided.cuts() instanceof CutEvidence.Present drawn && drawn.uncertain()) {
                     uncertain.add(term);
                 }
-                out.add(new Axis(id, term, type, divided.classes(), divided.cuts().cuts(),
-                        java.util.Set.of(), divided.completeness(), null, null));
+                out.add(new Axis(id, term, position.type(), divided.classes(),
+                        divided.cuts().cuts(), java.util.Set.of(), divided.completeness(),
+                        null, null));
             }
-            // Nothing local divides the position, which is what licenses asking what is under it.
+            // Nothing local divides the position, which is what licenses asking what it is made of.
             // Whether the reading got to the end of the rules is carried rather than acted on here:
             // a position made of positions is given up in favour of what is under it either way,
             // and a rule about the whole value that this could not read says nothing about which of
             // its fields it would have divided.
             case LocalPartition.Open _, LocalPartition.Blocked _ -> {
-                switch (StructuralInspection.of(input.shape(), depth < MAX_DEPTH)) {
+                switch (position.structure()) {
                     // The one answer that takes the position away: what is under it is what the
-                    // classes belong to, and this position is not carried further.
-                    case StructuralInspection.Children children -> {
-                        for (Map.Entry<String, Type> field : children.under().entrySet()) {
-                            walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1,
-                                    symbols, out, placed, domains, uncertain, unread);
-                        }
-                    }
+                    // classes belong to, and those positions were read on their own.
+                    case StructuralInspection.Children _ -> { }
                     // A leaf and a block are both positions still to be answered for, and each
                     // carries what it is left with if nothing answers — including a rule about this
                     // position that the local reading could not take in, which is what keeps the
                     // position from completing as one the model divides no way.
                     case StructuralInspection.Pending pending ->
-                            out.add(Axis.pendingAt(id, term, type,
-                                    reading.admitted().completeness(), pending,
-                                    inspected.partition() instanceof LocalPartition.Blocked blocked
-                                            ? blocked.why() : null));
+                            out.add(Axis.pendingAt(id, term, position.type(),
+                                    position.completeness(), pending, position.valuesUnread()));
                 }
             }
         }
     }
 
 
-    /** The value a position is inside: what it is called, and what its rules leave each position of
-     * it able to hold. */
-    record Placed(TypeSymbol value, Rules rules) {
-
-        /** What the rules leave the numbers, ends and narrowings of this value. */
-        FieldDomains bounds() {
-            return rules.bounds();
-        }
-
-        /** What is left for the position at {@code path}, which is read from the value this is of. */
-        NumericDomain.Bounds at(TermPath path) {
-            return path.fields().isEmpty() ? null
-                    : bounds().at(String.join(".", path.fields()));
-        }
-
-        /**
-         * Which values the position at {@code path} may hold, and how much of its rules was read.
-         *
-         * <p>Asked at every path, the value's own included: what a name wraps is at no path of its
-         * own and is the position a reader of a newtype asks about, which is why this is not the
-         * empty answer where {@link #at} is.
-         */
-        AdmissibleSet admits(TermPath path) {
-            return rules.admits(String.join(".", path.fields()));
-        }
-
-        /** The ends the clauses reaching this value place on the coordinates at {@code path}, which
-         * is a different question from what {@link #at} leaves them. */
-        List<FieldDomains.Placed> placedAt(TermPath path) {
-            return path.fields().isEmpty() ? List.of()
-                    : bounds().placedAt(String.join(".", path.fields()));
-        }
-
-        /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
-        List<TypeSymbol> narrowedBy(TermPath path, boolean lower) {
-            return path.fields().isEmpty() ? List.of()
-                    : bounds().narrowedBy(String.join(".", path.fields()), lower);
-        }
-    }
-
-    /** The record a position holds, through the names it is written under: a value of
-     *  {@code data SlotN = Slot} is a {@code Slot}, and the clauses relating its fields are
-     *  {@code Slot}'s. */
-    private static TypeSymbol recordIn(Type type, Symbols symbols) {
-        return TypeView.of(type, symbols).shape() instanceof Shape.Product product
-                ? product.name() : null;
-    }
-
-    /**
-     * What the record a field sits in leaves each of its fields able to hold.
-     *
-     * <p>Of the record, and not of a name written over it. A clause relating two fields is written
-     * on the declaration that has them, so a position of {@code data PairN = Pair} is bounded by
-     * {@code Pair}'s clauses — read off the written name, the walk descended into the fields of a
-     * record whose rules about them it had just dropped.
-     */
-    /**
-     * What the rules reaching a value of {@code type} leave and place, read under the name the
-     * signature wrote.
-     *
-     * <p>The written name and not the record under it. A name wrapped round a record is a place the
-     * same rule can be written — {@code data NonEmptyBag = Bag invariant List.length(value.xs) >= 1}
-     * states what {@code Bag} could have stated about its own field — and reading the record alone
-     * drops every clause of every name round it. What those clauses leave is read at the paths the
-     * record's own positions have, since a name wrapped round a value is not a step of the path.
-     *
-     * <p>One reading and not two. A wrapper's clauses place ends, project ranges onto the record's
-     * fields, and can be ones this could not read, and all three are answers about the same value:
-     * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
-     * wrapper clause nothing could read left every edge under it looking certain.
-     *
-     * <p>Whether there was a declaration to read at all is {@link Rules}' answer and not a default
-     * this fills in. A position with no declaration on it has no rule written about it, and a
-     * reading that said instead "a rule about this may have gone unread" would say it of every
-     * plain {@code String} in every model.
-     */
-    private static Rules rulesOf(Type type, Symbols symbols) {
-        return Rules.of(readAs(type, symbols), symbols);
-    }
-
-    /**
-     * The declaration a value of {@code type} is read under: the name the signature wrote where it
-     * names one, and the record beneath the names where it does not.
-     *
-     * <p>One name for both questions. Which declaration's rules reach the positions, and which
-     * declaration is said to have taken an edge in, are answers about the same value — read apart,
-     * an edge a wrapper narrowed was reported as narrowed by the record under it, which is a
-     * declaration that may have no clause about the pair at all.
-     */
-    private static TypeSymbol readAs(Type type, Symbols symbols) {
-        TypeSymbol written = nameOf(type);
-        return written != null && symbols.declarations().declaration(written.key()) instanceof Hir.Data ? written
-                : heldIn(type, symbols);
-    }
-
-    /**
-     * The declaration whose rules reach the position: the record under the names where there is
-     * one, and the declaration as written where there is not.
-     *
-     * <p>A position that is not a record has no fields for a clause to relate, and its own rules
-     * still say what a reading of them could not turn into a range — which is what keeps an edge it
-     * refuses from being called writable. So the answer falls back to the name the signature wrote
-     * rather than to nothing.
-     */
-    private static TypeSymbol heldIn(Type type, Symbols symbols) {
-        TypeSymbol record = recordIn(type, symbols);
-        return record != null ? record : nameOf(type);
-    }
-
-    private static TypeSymbol nameOf(Type type) {
-        return type instanceof Type.Ref ref ? ref.name() : null;
-    }
 
 
     // --- small helpers ----------------------------------------------------------------------------

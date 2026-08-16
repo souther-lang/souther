@@ -1,12 +1,13 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeView;
 import souther.compiler.frontend.CstFrontend;
-import souther.compiler.inputs.BlockReason;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -47,7 +48,7 @@ class ALeafIsNotAnAbsenceTest {
     }
 
     private StructuralInspection under(Type type) {
-        return StructuralInspection.of(PartitionInput.of(type, symbols).shape(), true);
+        return StructuralInspection.of(ReadablePosition.of(type, symbols).shape(), true);
     }
 
     private Type named(String name) {
@@ -65,7 +66,7 @@ class ALeafIsNotAnAbsenceTest {
     void aSumIsALeafAndASumIsWhatDivides() {
         assertInstanceOf(StructuralInspection.Leaf.class, under(named("Stage")));
 
-        assertFalse(PartitionClasses.of(named("Stage"), symbols).isEmpty(),
+        assertFalse(Distinctions.ofType(TypeView.of(named("Stage"), symbols), symbols).isEmpty(),
                 "the same position divides three ways, which the leaf above did not deny");
     }
 
@@ -94,7 +95,7 @@ class ALeafIsNotAnAbsenceTest {
     @Test
     void aRecordTheWalkMayNotEnterIsBlockedRatherThanALeaf() {
         StructuralInspection stopped = StructuralInspection.of(
-                PartitionInput.of(named("Slot"), symbols).shape(), false);
+                ReadablePosition.of(named("Slot"), symbols).shape(), false);
         assertEquals(new StructuralInspection.Blocked(new BlockReason.DepthLimit()), stopped);
     }
 

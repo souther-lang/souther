@@ -24,6 +24,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
@@ -169,6 +170,56 @@ public final class Adequacy {
     }
 
     /**
+     * What can arrive at each position of each behavior's input, in this module.
+     *
+     * <p>Asked once, here, and read by every measure that needs a denominator. What a signature's
+     * cases are, what a position divides into, what arms a row is owed and what a body's
+     * {@code unreachable} claims are held against are projections of one reading, and deriving that
+     * reading per measure is what let a case the rules refuse stay in one denominator while another
+     * had already taken it out.
+     */
+    public record Inputs(String name) implements Key<Map<String, InputDomain>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, InputDomain>> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            Map<String, InputDomain> out = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
+                    continue;   // a composition's inputs are its first stage's, read there
+                }
+                Sig sig = sigs.value().get(spec.name());
+                if (sig != null) {
+                    out.put(spec.name(), InputDomain.of(spec, sig, scope.value()));
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * One behavior's reading, or an empty one where the module's could not be made.
+     *
+     * <p>An absent reading is not a reading that found nothing: the difference is what the caller
+     * goes on to say, and what it may say about a behavior whose signature is not in hand is
+     * nothing. Written once so that each reader does not decide again what to do without one.
+     */
+    private static InputDomain domainOf(Map<String, InputDomain> read, Hir.SpecBehavior spec) {
+        return read == null ? InputDomain.NONE
+                : read.getOrDefault(spec.name(), InputDomain.NONE);
+    }
+
+    /**
      * What each behavior of one module says it does not answer for.
      *
      * <p>Asked once, here, and read by every measure that needs a denominator. The signature's cases,
@@ -240,6 +291,7 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Symbols symbols = scope.value();
             Map<String, souther.compiler.partition.GuardReachability> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -259,7 +311,8 @@ public final class Adequacy {
                 // is not what says whether that line is reachable.
                 Map<souther.compiler.inputs.NumericTerm,
                         souther.compiler.numeric.NumericDomain.Bounds> admissible =
-                        souther.compiler.partition.Partitions.of(spec, sig, symbols,
+                        souther.compiler.partition.Partitions.of(spec.name(),
+                                domainOf(readInputs, spec), symbols,
                                 excluded == null ? Exclusions.NONE
                                         : excluded.getOrDefault(spec.name(), Exclusions.NONE))
                                 .domains();
@@ -350,6 +403,7 @@ public final class Adequacy {
             }
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What each body can answer with, so that a case only an unreachable arm produces is not
             // counted. Read from the same reachability the arms are counted by.
             souther.compiler.query.Bodies.Elaborated checkedBodies =
@@ -409,6 +463,7 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
             Map<String, List<BoundaryAssessment>> boundaries = db.ask(new Boundaries(name)).value();
@@ -423,8 +478,8 @@ public final class Adequacy {
                     continue;
                 }
                 Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
-                out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
-                        plan, seen,
+                out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig, scope.value(),
+                        bodies.get(spec.name()), plan, seen,
                         boundaries == null ? List.of()
                                 : boundaries.getOrDefault(spec.name(), List.of()),
                         excluded == null ? Exclusions.NONE
@@ -473,6 +528,7 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Symbols symbols = scope.value();
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say.
@@ -492,7 +548,8 @@ public final class Adequacy {
                 out.put(spec.name(), assess(spec, sig, symbols, bodies.get(spec.name()), plan,
                         byTarget.getOrDefault(spec.name(), Observed.NONE), armsAsked, building,
                         excluded == null ? Exclusions.NONE
-                                : excluded.getOrDefault(spec.name(), Exclusions.NONE)));
+                                : excluded.getOrDefault(spec.name(), Exclusions.NONE),
+                        domainOf(readInputs, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -501,13 +558,14 @@ public final class Adequacy {
         private static List<BoundaryAssessment> assess(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                boolean armsAsked, FixtureReader.Construction building, Exclusions excluded) {
+                boolean armsAsked, FixtureReader.Construction building, Exclusions excluded,
+                InputDomain domain) {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
+                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, excluded);
             Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
@@ -1058,6 +1116,7 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Symbols symbols = scope.value();
 
             Map<String, List<BoundaryAssessment>> boundaries =
@@ -1084,7 +1143,8 @@ public final class Adequacy {
                     pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             excluded == null ? Exclusions.NONE
-                                    : excluded.getOrDefault(spec.name(), Exclusions.NONE));
+                                    : excluded.getOrDefault(spec.name(), Exclusions.NONE),
+                            domainOf(readInputs, spec));
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -1313,7 +1373,7 @@ public final class Adequacy {
         private static Generator.GenerationResult pairsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                FixtureReader.Construction building, Exclusions excluded) {
+                FixtureReader.Construction building, Exclusions excluded, InputDomain domain) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -1330,7 +1390,7 @@ public final class Adequacy {
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
+                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, excluded);
             Generator.Subject subject = new Generator.Subject(inputs, partitioning.axes());
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());

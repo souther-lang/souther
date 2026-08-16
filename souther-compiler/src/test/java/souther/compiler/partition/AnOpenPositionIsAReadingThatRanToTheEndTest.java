@@ -5,12 +5,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Resolve;
-import souther.compiler.check.Rules;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeView;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -77,16 +77,15 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
 
     /** As a parameter is read: under the declaration the signature wrote, with what is written
      *  about it. */
-    private LocalInspection read(String type) {
-        Type stands = Type.ref(named(type));
-        return LocalInspection.of(PartitionInput.of(TypeView.of(stands, symbols)),
-                TermPath.of("x"), symbols,
-                new Partitions.Placed(named(type), Rules.of(stands, symbols)));
+    private Position read(String type) {
+        return InputDomain.of(
+                        List.of(new InputDomain.Parameter("x", Type.ref(named(type)))), symbols)
+                .at(TermPath.of("x"));
     }
 
     /** What the reading of {@code type} came to. */
     private LocalPartition partitionOf(String type) {
-        return read(type).partition();
+        return LocalInspection.of(read(type), symbols);
     }
 
     /** A type that states cases divides the position, and no line is drawn through them. */
@@ -145,10 +144,11 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     @Test
     void theReadingIsTheSameValueWhicheverAnswerItIs() {
         for (String type : List.of("Stage", "Amount", "Plain", "Slot", "Gender", "Email")) {
-            LocalReading reading = read(type).reading();
-            assertNotNull(reading.term(), type + " is measured at some term");
-            assertNotNull(reading.admitted(), type + " says which values it may hold");
-            assertNotNull(reading.unread(), type + " says which of its rules went unread");
+            Position position = read(type);
+            assertNotNull(position.term(), type + " is measured at some term");
+            assertNotNull(position.reading(), type + " says which values it may hold");
+            assertNotNull(position.completeness(), type + " says how much of its rules was read");
+            assertNotNull(position.unreadRules(), type + " says which of its rules went unread");
         }
     }
 
@@ -163,22 +163,32 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
     /**
      * There is no way to make one of these except by deriving it.
      *
-     * <p>What holds the sentence up. A pair carrying a conclusion its reading does not support — an
-     * open position off a reading short of the rules, classes said to be read in full off one that
-     * was not — is not refused when somebody writes it; there is nowhere to write it. Held here
-     * because it is a property of the boundary rather than of any one value: a constructor added
-     * later would put back the discipline this replaced, and nothing else in the suite would
-     * notice.
+     * <p>What holds the sentence up. A conclusion its reading does not support — an open position
+     * off a reading short of the rules, classes said to be read in full off one that was not — is
+     * not refused when somebody writes it; there is nowhere to write it. Both halves are asserted,
+     * because the discipline is now split across them: the reading is a value nothing outside the
+     * package that makes it can construct, and the conclusion has one derivation and no other way
+     * in. Held here because it is a property of the boundary rather than of any one value: a
+     * constructor added later would put back the discipline this replaced, and nothing else in the
+     * suite would notice.
      */
     @Test
     void nothingButTheDerivationMakesOne() {
         assertEquals(List.of(), java.util.Arrays.stream(LocalInspection.class.getConstructors())
                 .map(java.lang.reflect.Constructor::toString).toList(),
-                "a pair anybody can make is a pair anybody can make disagree with itself");
-        assertEquals(List.of("of"), java.util.Arrays.stream(LocalInspection.class.getMethods())
-                .filter(each -> java.lang.reflect.Modifier.isStatic(each.getModifiers()))
-                .map(java.lang.reflect.Method::getName).sorted().toList(),
+                "a conclusion anybody can make is one anybody can make disagree with its reading");
+        assertEquals(List.of("of"),
+                java.util.Arrays.stream(LocalInspection.class.getDeclaredMethods())
+                        .filter(each -> !java.lang.reflect.Modifier
+                                .isPrivate(each.getModifiers()))
+                        .map(java.lang.reflect.Method::getName).sorted().toList(),
                 "one derivation, and it is the one that reads the position");
+        assertTrue(Position.class.isSealed(),
+                "a reading anybody can implement is one anybody can answer with");
+        for (Class<?> each : Position.class.getPermittedSubclasses()) {
+            assertEquals(0, each.getConstructors().length,
+                    each.getSimpleName() + " can be written down outside the reading that makes it");
+        }
     }
 
     /** And neither can no lines at all be written as lines. */

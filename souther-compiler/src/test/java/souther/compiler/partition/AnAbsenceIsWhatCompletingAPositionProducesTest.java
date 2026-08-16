@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 

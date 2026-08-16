@@ -15,6 +15,7 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.BoundaryTarget;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.inputs.NumericTerm;
@@ -46,7 +47,8 @@ final class Coverages {
      * covered and what a generator writes a row for have to be the same positions and the same classes,
      * and two derivations of them would be two chances to disagree.
      */
-    static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, Sig sig, Symbols symbols,
+    static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
+                                                  Sig sig, Symbols symbols,
                                                   Core body, CoverageSites.Plan plan,
                                                   Exclusions excluded) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
@@ -54,7 +56,8 @@ final class Coverages {
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
-        Partitions.Partitioning partitioning = Partitions.of(behavior, sig, symbols, excluded);
+        Partitions.Partitioning partitioning =
+                Partitions.of(behavior.name(), inputs, symbols, excluded);
         if (body == null) {
             return partitioning;
         }
@@ -71,7 +74,8 @@ final class Coverages {
      *                   something a coverage count can do on its own and not something that should
      *                   happen twice.
      */
-    static PartitionEvidence of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols, Core body,
+    static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
+                                Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
                                 List<BoundaryAssessment> boundaries, Exclusions excluded) {
         List<RowOutcome> rows = observed.rows();
@@ -81,7 +85,7 @@ final class Coverages {
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, sig, symbols, body, plan, excluded);
+                partitioningOf(behavior, inputs, sig, symbols, body, plan, excluded);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
