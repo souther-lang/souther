@@ -2,102 +2,97 @@ package souther.compiler.diag;
 
 import souther.compiler.source.SourceId;
 
-import souther.compiler.diag.msg.Message;
-
 import java.util.Objects;
+import java.util.Optional;
 
 /**
- * One place a diagnostic points at, in the source it is in. A {@link Diagnostic} says where its
- * primary region is and what its secondaries say, and a reader has to be handed both the region and
- * its file to know what text to quote. A spot is that pairing, made once.
+ * One place a reader can be sent to, with the text to quote it from settled.
  *
- * <p>Made two ways, and there is no constructor that takes a source and a region separately.
+ * <p>Two arms, and the difference is which value answers for the text. {@link InSource} reads it off
+ * the place, which carries it ({@link DiagnosticPlace.InSource#source()}). {@link InTextBeingRead}
+ * is handed it, because its region is in a text this compilation cannot name and the surface showing
+ * the report is the only thing that knows which text that is.
  *
- * <p>A secondary reads its source off its place ({@link DiagnosticPlace.InSource}), which is where
- * that answer already is. What a renderer does with a spot is take the two apart again — the file to
- * quote from, the numbers to quote at — so a pair that could disagree is a marker put in one file
- * with its line read from another. That is the defect this whole change is about, and it does not
- * stop being it one layer downstream of where it was closed.
+ * <p>So a source identity is never held beside something that already answers for one. That pairing
+ * is what this class used to be — a told source and a region, taken apart again by every renderer,
+ * so a pair that disagreed was a marker put in one file with its line quoted from another. It is
+ * gone rather than checked: the arm whose region answers does not carry a second answer, and the arm
+ * that carries one has a region that answers nothing ({@link UnnamedRegion}).
  *
- * <p>A primary is told, and a secondary is not. Which is not because the two are different kinds of
- * place: it is because a primary region is not held to being one. A secondary goes through
- * {@link DiagnosticPlace}, so it names a source by construction; a primary does not, and over one
- * compile of this suite 53 of 3545 diagnostics carried a primary region that names no source while
- * saying the code is written at it, with another 22 carrying no region at all. For those, what this
- * is told is the only answer there is, and it comes from where the report was filed rather than from
- * the place — so a reader is sent to a file the numbers may not be of.
- *
- * <p>So this pairing is not the defect the rest of this package closed, and it is not settled
- * either. The rule those values keep is that a place answering for a source is not asked twice; here
- * the place does not always answer. What the field means where it does — the source the region is
- * in, or the file this report is being read from — is what has to be decided before it can be given
- * a type, and deciding it means reading what those diagnostics are about.
- *
- * <p>Every spot is somewhere. A label with nothing to quote is not one — it is
- * {@link DiagnosticPlace.Unavailable}, and a reader is told where the code came from rather than
- * sent anywhere ({@link DiagnosticView#unquotable()}).
- *
- * <p>{@link #said()} is null for the primary region, which has no note of its own: what it points at
- * is what the message is about.
+ * <p>What a spot says it is about is not here. A place is a place whether the report is about it or
+ * points at it to explain something, and which of those it is belongs to the report
+ * ({@link Shown}). Held here, every reader of a place had to know that a null note meant "this is
+ * the primary".
  */
-public final class Spot {
+public sealed interface Spot {
 
-    private final SourceId sourceId;
-    private final Region region;
-    private final Message said;
+    /** The stretch this points at. Both arms have exactly one, so asking for it skips no case. */
+    Region region();
 
-    private Spot(SourceId sourceId, Region region, Message said) {
-        this.sourceId = sourceId;
-        this.region = region;
-        this.said = said;
+    /** A place in a source this compilation holds. */
+    record InSource(DiagnosticPlace.InSource place) implements Spot {
+
+        public InSource {
+            Objects.requireNonNull(place, "a place in a source names the source");
+        }
+
+        @Override
+        public Region region() {
+            return place.region();
+        }
     }
 
-    /** The primary region of {@code d}, in {@code sourceId} — which the caller says, holding the
-     *  files, and which is none for a compile that names none. */
-    public static Spot primary(Diagnostic d, SourceId sourceId) {
-        return new Spot(sourceId, d.region(), null);
+    /** A place in the text the surface says it is reading. */
+    record InTextBeingRead(TextBeingRead text, UnnamedRegion where) implements Spot {
+
+        public InTextBeingRead {
+            Objects.requireNonNull(text, "a place in a text the caller is reading names that text");
+            Objects.requireNonNull(where, "a place is a stretch of it");
+        }
+
+        @Override
+        public Region region() {
+            return where.region();
+        }
     }
 
-    /** A second place, in the source its own place names. */
-    public static Spot secondary(DiagnosticPlace.InSource place, Message said) {
-        Objects.requireNonNull(place, "a second place a reader is sent to is somewhere");
-        return new Spot(place.source(), place.region(),
-                Objects.requireNonNull(said, "a second place says why it is pointed at"));
+    /**
+     * Whether two spots are known to be in one text.
+     *
+     * <p>Answered from identities, and only where both have one. A surface asks this to decide
+     * whether to write a file name over a place it is about to quote, and "cannot tell" has to come
+     * back as "not known to be one": naming the file of a place that turns out to be the same one
+     * costs a reader a line they did not need, and leaving it off a place in another file leaves
+     * them a line and column with no file to read them in.
+     *
+     * <p>Across the arms as readily as within them. A document an editor publishes by name and a
+     * report parsed out of that same document's unsaved text are one text, and the day
+     * {@link TextBeingRead} carries an identity for a text handed over, more pairs answer yes here
+     * and nowhere else.
+     */
+    static boolean knownToBeOneText(Spot one, Spot other) {
+        Optional<SourceId> here = identityOf(one);
+        Optional<SourceId> there = identityOf(other);
+        return here.isPresent() && here.equals(there);
     }
 
-    /** The source this is in, or none where a compile of one file named none. */
-    public SourceId sourceId() {
-        return sourceId;
+    /** Whether this spot is known to be in the text {@code source} names — the same question,
+     *  asked of a text a caller has an identity for and no spot in. */
+    static boolean knownToBeIn(Spot spot, SourceId source) {
+        return source != null && identityOf(spot).filter(source::equals).isPresent();
     }
 
-    /** The stretch this points at. */
-    public Region region() {
-        return region;
-    }
-
-    /** What this says, or null for the primary region. */
-    public Message said() {
-        return said;
-    }
-
-    /** Whether this spot carries a note — false for the primary region. */
-    public boolean labelled() {
-        return said != null;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        return other instanceof Spot that && Objects.equals(sourceId, that.sourceId)
-                && Objects.equals(region, that.region) && Objects.equals(said, that.said);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(sourceId, region, said);
-    }
-
-    @Override
-    public String toString() {
-        return "Spot[" + sourceId + " " + region + (said == null ? "" : " " + said) + "]";
+    /**
+     * The identity of the text a spot is in, where there is one to compare.
+     *
+     * <p>Private, and the only reader is the comparison above. Published, it would be the accessor
+     * spanning the arms that this package refuses everywhere else: a caller would read it, find an
+     * empty answer for a text handed over, and put the report wherever it was being shown.
+     */
+    private static Optional<SourceId> identityOf(Spot spot) {
+        return switch (spot) {
+            case InSource in -> Optional.of(in.place().source());
+            case InTextBeingRead(TextBeingRead text, UnnamedRegion _) -> text.identity();
+        };
     }
 }

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.ReportContext;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.Diagnostic;
@@ -216,7 +218,7 @@ class ALabelSaysWhereItIsWithoutBeingToldWhereItIsShownTest {
     }
 
     private static String rendered(Compilation c, String source) {
-        return new HumanRenderer(false).render(new Located(theWarning(c), new SourceId("0")),
+        return new HumanRenderer(false).render(new Located(theWarning(c), ReportContext.inFile(new SourceId("0"))),
                 id -> new SourceContext("m.sou", source), Locale.ENGLISH);
     }
 

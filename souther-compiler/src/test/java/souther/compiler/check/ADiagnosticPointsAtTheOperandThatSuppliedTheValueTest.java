@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.Compiler;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,7 +42,7 @@ class ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest {
 
     private static Region regionOf(String source) {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
-        return e.diagnostic().region();
+        return ((Primary.InSource) e.diagnostic().primary()).place().region();
     }
 
     /** The argument is written three lines below the callee, so nothing but the argument's own

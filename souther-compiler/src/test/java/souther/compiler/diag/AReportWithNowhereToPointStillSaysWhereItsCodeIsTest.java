@@ -51,7 +51,7 @@ class AReportWithNowhereToPointStillSaysWhereItsCodeIsTest {
     @Test
     void whatABuildReadsSaysItAsAValue() {
         String json = new JsonRenderer().render(
-                new Located(nowhereToPoint(), new SourceId("app.sou")),
+                new Located(nowhereToPoint(), ReportContext.inFile(new SourceId("app.sou"))),
                 _ -> null, Locale.ENGLISH);
 
         assertTrue(json.contains("\"writtenAt\""),
@@ -133,9 +133,9 @@ class AReportWithNowhereToPointStillSaysWhereItsCodeIsTest {
 
         assertEquals(new WhereCodeIsWritten.Unstated(), said.whereItsCodeIsWritten(),
                 "nothing to point at, and nothing said through it");
-        assertEquals(THE_CODE, ((Citation.Reached) Citation.of(said.reachedFrom(
+        assertEquals(THE_CODE, ((Citation.Reached) Citation.of(((Primary.InSource) said.reachedFrom(
                         java.util.List.of(new SourcePos(2, 1, new SourceId("app.sou"))), THE_CODE,
-                        new ModuleMessage.ItIsReachedFromHereToo()).region().start()))
+                        new ModuleMessage.ItIsReachedFromHereToo()).primary()).place().region().start()))
                         .provenance(),
                 "so the caller says where the code is, and it is taken");
     }
@@ -149,7 +149,7 @@ class AReportWithNowhereToPointStillSaysWhereItsCodeIsTest {
                 new ModuleMessage.ItIsReachedFromHereToo());
 
         Citation.Reached reached =
-                (Citation.Reached) Citation.of(moved.region().start());
+                (Citation.Reached) Citation.of(((Primary.InSource) moved.primary()).place().region().start());
         assertEquals(THE_CODE, reached.provenance(), "the same code");
         assertTrue(reached.at().isIn(new SourceId("app.sou")), "somewhere the reader holds");
     }

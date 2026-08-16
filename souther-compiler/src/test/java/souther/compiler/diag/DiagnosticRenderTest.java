@@ -116,7 +116,7 @@ class DiagnosticRenderTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         Diagnostic d = e.diagnostic();
         assertEquals("E1301", d.code());
-        assertEquals("E1301", d.pos() == null ? null : d.code());
+        assertEquals("E1301", ((Primary.InSource) d.primary()).place().region().start() == null ? null : d.code());
         String json = new JsonRenderer().render(d, null, Locale.JAPANESE);
         assertTrue(json.contains("\"code\":\"E1301\""), json);
     }

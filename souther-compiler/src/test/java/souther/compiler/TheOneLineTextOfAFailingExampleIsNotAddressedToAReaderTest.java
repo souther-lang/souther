@@ -32,7 +32,7 @@ class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
 
     @Test
     void aFailingExampleSaysWhatTheEnglishCatalogSays() {
-        Diagnostic failure = Diagnostic.say(SAID).build();
+        Diagnostic failure = Diagnostic.say(SAID).nowhere().build();
 
         String said = ExampleVerifier.legacySummary(List.of(failure));
 
@@ -45,7 +45,7 @@ class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
      */
     @Test
     void theCatalogWouldHaveSaidSomethingElseInJapanese() {
-        Diagnostic failure = Diagnostic.say(SAID).build();
+        Diagnostic failure = Diagnostic.say(SAID).nowhere().build();
 
         String said = ExampleVerifier.legacySummary(List.of(failure));
 

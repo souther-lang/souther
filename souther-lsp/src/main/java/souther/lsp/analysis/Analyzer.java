@@ -38,6 +38,11 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Spot;
 import souther.compiler.diag.Region;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.UnnamedRegion;
+import souther.compiler.diag.ReportContext;
+import souther.compiler.diag.SourceContext;
+import souther.compiler.diag.Shown;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
@@ -160,10 +165,10 @@ public final class Analyzer {
             // A self-contained module compiles fully here, so its inline `example`s are evaluated
             // on save and a failing one (E1805) surfaces as an editor diagnostic.
             for (Located w : Compiler.compileWithWarnings(text, "Main").locatedWarnings()) {
-                out.add(fromDiagnostic(lines, w.diagnostic()));
+                out.add(fromDiagnostic(text, lines, w.diagnostic()));
             }
         } catch (CompileException e) {
-            out.addAll(fromCompile(lines, e));
+            out.addAll(fromCompile(text, lines, e));
         } catch (RuntimeException | StackOverflowError e) {
             out.add(internalError(lines, e));
         }
@@ -272,7 +277,13 @@ public final class Analyzer {
             for (Located loc : e.getValue()) {
                 // A workspace names its sources by document URI, so a source id is already the name
                 // the editor opens.
-                list.add(project(loc.diagnostic(), loc.primarySourceId(), e.getKey().value(),
+                // The document this marker is going in is what this route is reading, and the
+                // file the report is listed under is what the compile said. Both, because they
+                // are two answers: a problem written in two files is listed under one of them
+                // and read from each in turn.
+                list.add(project(loc.diagnostic(),
+                        ReportContext.of(loc.context().filedUnder().orElse(null),
+                                new SourceId(e.getKey().value())),
                         linesOf, uri -> graph.text(uri) == null ? null : uri));
             }
         }
@@ -618,10 +629,22 @@ public final class Analyzer {
             out.addAll(rowsToWrite(uri, text, requested, graph));
         }
         Diagnostic d = firstSemanticDiagnostic(text);
-        if (d == null || d.suggestion() == null || d.region() == null) {
+        if (d == null || d.suggestion() == null) {
             return out;
         }
-        Range diagRange = rangeOf(new LineIndex(text), d);
+        // The compile behind this read the document's own text and could not name it, so what it
+        // points at is a stretch of the text in front of the author. A report with nothing to point
+        // at has no edit to offer: an action needs a range, and a sentence about a module is not
+        // one.
+        Region diagnosed = switch (d.primary()) {
+            case Primary.InSource(DiagnosticPlace.InSource place) -> place.region();
+            case Primary.InAnUnnamedText(UnnamedRegion where) -> where.region();
+            case Primary.Unavailable _, Primary.Nowhere _ -> null;
+        };
+        if (diagnosed == null) {
+            return out;
+        }
+        Range diagRange = rangeOfRegion(diagnosed);
         if (overlaps(diagRange, requested)) {
             out.add(new CodeAction("Replace with '" + d.suggestion() + "'", uri, diagRange, d.suggestion()));
         }
@@ -2294,15 +2317,15 @@ public final class Analyzer {
     /** Every diagnostic the compile error carries, each as its own editor marker — a compile stops at
      * the first error, but a pass that finds several at once (each failing {@code example} row) is
      * squiggled row by row rather than collapsed onto the first. */
-    private List<LspDiagnostic> fromCompile(LineIndex lines, CompileException e) {
+    private List<LspDiagnostic> fromCompile(String text, LineIndex lines, CompileException e) {
         if (e.diagnostic() != null) {
             List<LspDiagnostic> out = new ArrayList<>();
             for (Diagnostic d : e.diagnostics()) {
-                out.add(fromDiagnostic(lines, d));
+                out.add(fromDiagnostic(text, lines, d));
             }
             return out;
         }
-        return List.of(new LspDiagnostic(rangeOf(lines, null), LspDiagnostic.ERROR, null,
+        return List.of(new LspDiagnostic(theHeadOfTheDocument(), LspDiagnostic.ERROR, null,
                 cleanMessage(e.getMessage())));
     }
 
@@ -2313,8 +2336,12 @@ public final class Analyzer {
      * <p>No linked locations. A link is a URI, and a document compiled from its text alone has none
      * to give — the workspace path is where a marker can point somewhere the editor can open.
      */
-    private LspDiagnostic fromDiagnostic(LineIndex lines, Diagnostic d) {
-        return project(d, null, null, id -> lines, id -> null);
+    private LspDiagnostic fromDiagnostic(String text, LineIndex lines, Diagnostic d) {
+        // The document itself is what this route is reading, and it is the only thing that knows:
+        // the compile behind it read this text without a name for it, so a report from that parse
+        // has real numbers and no file. Left unsaid, the marker fell to the head of the document.
+        return project(d, ReportContext.ofTheTextItself(new SourceContext(null, text)),
+                id -> lines, id -> null);
     }
 
     /**
@@ -2326,12 +2353,13 @@ public final class Analyzer {
      * the two change places rather than the second file getting a marker on a line that has nothing
      * to do with it.
      *
-     * @param primarySourceId the source the primary region is in, null when the compile named none
-     * @param publishedUri the file this marker is being put in, null for a single-document compile
+     * @param context what the editor answers for this report: the file it lists it under, and the
+     *        document it is reading — which is the one thing that knows which text a report parsed
+     *        out of an unsaved buffer is in
      * @param linesOf the line index of a source, for turning its positions into ranges
      * @param uriOf the editor's name for a source, null when it has none to link to
      */
-    private LspDiagnostic project(Diagnostic d, SourceId primarySourceId, String publishedUri,
+    private LspDiagnostic project(Diagnostic d, ReportContext context,
                                   java.util.function.Function<String, LineIndex> linesOf,
                                   java.util.function.Function<String, String> uriOf) {
         String message = DiagnosticRenderer.body(d, EDITOR_LANGUAGE);
@@ -2341,7 +2369,7 @@ public final class Analyzer {
         }
         int severity = d.severity() == souther.compiler.diag.Severity.WARNING
                 ? LspDiagnostic.WARNING : LspDiagnostic.ERROR;
-        DiagnosticView view = DiagnosticView.of(d, primarySourceId, SourceId.orNone(publishedUri));
+        DiagnosticView view = DiagnosticView.of(d, context);
         List<LspDiagnostic.Related> related = new ArrayList<>();
         // A label with nothing to point at joins the message. An editor's related information is a
         // location, and there is no location — the clause is in a module this workspace has no file
@@ -2355,28 +2383,23 @@ public final class Analyzer {
         for (DiagnosticView.Unquotable said : view.unquotable()) {
             message = message + " " + DiagnosticRenderer.saidAbout(said, EDITOR_LANGUAGE);
         }
-        for (Spot other : view.others()) {
-            // A spot naming no source can only be the primary now, and the primary's source is
-            // told rather than read off its region (`Spot.primary`) — a compile of one source names
-            // none, and the file this marker is being put in is that one. What used to reach here
-            // as well was a label, which is the defect: a label says where it is and no longer takes
-            // its file from where it is shown.
-            String uri = other.sourceId() == null
-                    ? publishedUri : uriOf.apply(other.sourceId().value());
-            LineIndex lines = linesOf.apply(uriOf(other.sourceId()));
-            if (uri == null || lines == null || other.region() == null) {
+        for (Shown other : view.others()) {
+            SourceId source = sourceOf(other.spot());
+            String uri = source == null ? null : uriOf.apply(source.value());
+            LineIndex lines = linesOf.apply(uriOf(source));
+            if (uri == null || lines == null) {
                 continue;   // nothing the editor could open, so nothing to link to
             }
-            related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.region()),
-                    other.labelled()
+            related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.spot().region()),
+                    other instanceof Shown.ALabel(Spot _, souther.compiler.diag.msg.Message said)
                             ? DiagnosticRenderer.qualified(
-                                    Messages.render(other.said(), EDITOR_LANGUAGE),
-                                    other.region().start(), EDITOR_LANGUAGE)
+                                    Messages.render(said, EDITOR_LANGUAGE),
+                                    other.spot().region().start(), EDITOR_LANGUAGE)
                             : aboutTheDiagnostic));
         }
-        Range range = view.anchor().region() != null
-                ? rangeOfRegion(view.anchor().region())
-                : rangeOf(linesOf.apply(uriOf(view.anchor().sourceId())), d);
+        Range range = view.anchor()
+                .map(shown -> rangeOfRegion(shown.spot().region()))
+                .orElseGet(Analyzer::theHeadOfTheDocument);
         return new LspDiagnostic(range, severity, d.code(), message, tagsOf(d), related);
     }
 
@@ -2386,19 +2409,22 @@ public final class Analyzer {
         return "E1922".equals(d.code()) ? List.of(LspDiagnostic.UNNECESSARY) : List.of();
     }
 
+    /** The document a spot is in, or none where it is in a text this workspace cannot name. */
+    private static SourceId sourceOf(Spot spot) {
+        return switch (spot) {
+            case Spot.InSource in -> in.place().source();
+            case Spot.InTextBeingRead(souther.compiler.diag.TextBeingRead text, UnnamedRegion _) ->
+                    text.identity().orElse(null);
+        };
+    }
+
     private Range rangeOfRegion(Region r) {
         return new Range(position(r.start()), position(r.end()));
     }
 
-    private Range rangeOf(LineIndex lines, Diagnostic d) {
-        if (d != null && d.region() != null) {
-            Region r = d.region();
-            return new Range(position(r.start()), position(r.end()));
-        }
-        if (d != null && d.pos() != null) {
-            Position p = position(d.pos());
-            return new Range(p, p);
-        }
+    /** Where an editor puts a marker for something with no place of its own: the head of the
+     *  document, which is where a reader looks when nothing points anywhere. */
+    private static Range theHeadOfTheDocument() {
         Position origin = new Position(0, 0);
         return new Range(origin, origin);
     }

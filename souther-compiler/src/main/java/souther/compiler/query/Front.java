@@ -1036,7 +1036,7 @@ public final class Front {
                 return Answer.of(Boolean.FALSE);
             }
             return Answer.absent(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath(name))
-                            .hint(new ModuleMessage.RenameItOrDropTheDependency(name)).build()));
+                            .hint(new ModuleMessage.RenameItOrDropTheDependency(name)).nowhere().build()));
         }
     }
 

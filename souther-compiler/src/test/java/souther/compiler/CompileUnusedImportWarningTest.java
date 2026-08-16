@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.diag.msg.MessageKeys;
 import org.junit.jupiter.api.Test;
 
@@ -59,7 +61,7 @@ class CompileUnusedImportWarningTest {
                 continue;
             }
             assertFalse(report.report().isError(), "an unused import does not stop a build");
-            SourcePos at = d.pos();
+            SourcePos at = ((Primary.InSource) d.primary()).place().region().start();
             found.add(d.values().get("name") + " at " + at.line() + ":" + at.column());
         }
         return found;

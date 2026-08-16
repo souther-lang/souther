@@ -14,6 +14,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.diag.Primary;
+import souther.compiler.diag.WhereCodeIsWritten;
+import souther.compiler.meta.ModuleReadback;
 
 import org.junit.jupiter.api.Test;
 
@@ -347,7 +350,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
 
         Set<String> saidAbout = new LinkedHashSet<>();
         for (Db.Found found : compilation.reports()) {
-            SourcePos at = found.report().diagnostic().pos();
+            SourcePos at = ((Primary.InSource) found.report().diagnostic().primary()).place().region().start();
             if (at == null || !(Citation.of(at) instanceof Citation.Elsewhere elsewhere)) {
                 continue;
             }
@@ -397,40 +400,92 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     }
 
     /**
-     * Two findings that differed only in where they were written are said once.
+     * The same unavailable problem is told once.
      *
-     * <p>Reading a report for where it may be said is what makes them one. Their coordinates are in
-     * a text nobody holds and are what told them apart; said at the place the module was reached
-     * from, they are one sentence at one caret, and an author shown it twice has nothing to tell
-     * them apart by either.
+     * <p>A finding inside a module's published text has nowhere to point ({@link Primary.Unavailable}),
+     * so what told two of them apart was a line of a text nobody holds. Two findings agreeing on the
+     * rule, on the values and on the module are then the same diagnostic, and the store keeps one:
+     * there is nothing left for an author to tell them apart by, at the caret or in the sentence.
+     *
+     * <p>Which is a claim about identity and not about the walk. That both fields were read is a
+     * separate question with a fixture of its own
+     * ({@link #everyFieldOfAPublishedModuleIsRead}), because a walk that stopped at the first field
+     * would leave this one green.
      */
     @Test
-    void twoFindingsInOnePublishedModuleAreSaidOnce() {
-        Map<String, byte[]> withDeep = Compiler.compile("""
-                module lib.deep exposing ( Deep )
-                data Deep = String
-                """);
-        Map<String, byte[]> twice = built("""
-                module lib.twice exposing ( Twice )
-                data Twice = { a: lib.deep.Deep, b: lib.deep.Deep }
-                """, withDeep);
-        // the dependency is rebuilt without the type, so both field types fail to resolve
-        Map<String, byte[]> withoutDeep = Compiler.compile("""
-                module lib.deep exposing ( Other )
-                data Other = String
-                """);
-
+    void theSameUnavailableProblemIsToldOnce() {
         Compilation compilation = reading("""
                 module app.uses
                 import lib.twice ( Twice )
 
                 data Page = { twice: Twice }
-                """, and(withoutDeep, twice));
+                """, twiceNaming("lib.deep.Deep", "lib.deep.Deep"));
 
-        assertEquals(2, compilation.db().allReports().size(),
-                "two findings, at the two places the module writes the name");
+        List<Db.Found> found = compilation.db().allReports();
+        assertEquals(List.of("E1506"),
+                found.stream().map(f -> f.report().diagnostic().code()).toList(),
+                "one problem, however many places the module writes the name");
+
+        Diagnostic asFound = found.get(0).report().diagnostic();
+        assertInstanceOf(Primary.Unavailable.class, asFound.primary(),
+                "found inside the module's own text, so there is nowhere to send a reader");
+        assertEquals(new WhereCodeIsWritten.Elsewhere(ModuleReadback.provenanceOf("lib.twice")),
+                asFound.whereItsCodeIsWritten(),
+                "the code is in the module that was read back, not in the file it is said on");
+
+        Diagnostic said = whereTheReportAboutIsSaidIn(compilation, "lib.twice");
+        Citation.Reached reached = assertInstanceOf(Citation.Reached.class,
+                Citation.of(((Primary.InSource) said.primary()).place().region().start()), "read for where it may be said, the caret is the import");
+        assertEquals(2, reached.at().line(), "the import line naming it");
+
         assertEquals(1, compilation.diagnostics().get(new SourceId("0")).size(),
                 "one thing to be told, said once");
+    }
+
+    /**
+     * Every field of a published module is read, not the first.
+     *
+     * <p>The other half of what {@link #theSameUnavailableProblemIsToldOnce} used to assert, with a
+     * fixture that can carry it: the two fields name two missing types, so the two findings differ
+     * in the values they are about. Nothing downstream may merge them — the store tells reports
+     * apart by what they say — so this stays a claim about the walk however identity is decided.
+     */
+    @Test
+    void everyFieldOfAPublishedModuleIsRead() {
+        Compilation compilation = reading("""
+                module app.uses
+                import lib.twice ( Twice )
+
+                data Page = { twice: Twice }
+                """, twiceNaming("lib.deep.Deep", "lib.deep.Other"));
+
+        assertEquals(List.of("Deep", "Other"),
+                compilation.db().allReports().stream()
+                        .map(f -> String.valueOf(f.report().diagnostic().values().get("name")))
+                        .toList(),
+                "both fields were read, and each says which name it could not find");
+    }
+
+    /**
+     * A published module whose two fields name {@code first} and {@code second}, built against a
+     * dependency that had them and put on the path beside one that no longer does.
+     */
+    private static Map<String, byte[]> twiceNaming(String first, String second) {
+        Map<String, byte[]> withThem = Compiler.compile("""
+                module lib.deep exposing ( Deep, Other )
+                data Deep = String
+                data Other = String
+                """);
+        Map<String, byte[]> twice = built("""
+                module lib.twice exposing ( Twice )
+                data Twice = { a: %s, b: %s }
+                """.formatted(first, second), withThem);
+        // the dependency is rebuilt without either, so both field types fail to resolve
+        Map<String, byte[]> withoutThem = Compiler.compile("""
+                module lib.deep exposing ( Gone )
+                data Gone = String
+                """);
+        return and(withoutThem, twice);
     }
 
     /**
@@ -478,11 +533,21 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
     }
 
     /** Where the report about {@code module} is said. */
+    /** The report about {@code module}, read for where it may be said. */
+    private static Diagnostic whereTheReportAboutIsSaidIn(Compilation compilation, String module) {
+        for (Db.Found found : compilation.reports()) {
+            if (module.equals(found.module())) {
+                return found.report().diagnostic();
+            }
+        }
+        throw new AssertionError("nothing was reported about " + module);
+    }
+
     private static SourcePos whereTheReportAboutIsSaid(Compilation compilation, String module) {
         List<SourcePos> said = new ArrayList<>();
         for (Db.Found found : compilation.reports()) {
-            if (module.equals(found.module()) && found.report().diagnostic().pos() != null) {
-                said.add(found.report().diagnostic().pos());
+            if (module.equals(found.module()) && ((Primary.InSource) found.report().diagnostic().primary()).place().region().start() != null) {
+                said.add(((Primary.InSource) found.report().diagnostic().primary()).place().region().start());
             }
         }
         assertFalse(said.isEmpty(), "nothing was reported about " + module);

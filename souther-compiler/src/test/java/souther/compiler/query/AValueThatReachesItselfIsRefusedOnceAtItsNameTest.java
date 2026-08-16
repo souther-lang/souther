@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.Compiler;
@@ -92,7 +94,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
 
         assertEquals(alone.said(), beside.said());
         assertEquals(List.copyOf(alone.values().values()), List.copyOf(beside.values().values()));
-        assertEquals(alone.region(), beside.region(),
+        assertEquals(((Primary.InSource) alone.primary()).place().region(), ((Primary.InSource) beside.primary()).place().region(),
                 "the refusal is about `step`, and where `step` is written did not move");
     }
 
@@ -123,7 +125,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
      */
     @Test
     void theRefusalUnderlinesTheNameAndNotTheKeywordInFrontOfIt() {
-        Region region = cycleIn(diagnose(CYCLE)).region();
+        Region region = ((Primary.InSource) cycleIn(diagnose(CYCLE)).primary()).place().region();
 
         assertEquals(region.start().line(), region.end().line(), "a name is one line's worth");
         assertEquals("let step = step".indexOf("step") + 1, region.start().column(),

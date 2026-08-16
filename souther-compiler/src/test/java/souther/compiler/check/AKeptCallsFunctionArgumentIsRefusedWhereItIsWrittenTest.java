@@ -1,5 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.source.SourceId;
+
+import souther.compiler.diag.Primary;
+
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
@@ -28,8 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
 
-    private static final SourcePos CALL = new SourcePos(1, 1);
-    private static final SourcePos ARGUMENT = new SourcePos(3, 5);
+    /** Positions of a file this compile holds, as a parse of one makes them: what is being tested
+     *  is which of two lines the caret lands on, and a position naming no source would leave that
+     *  to whichever text the caller said it was reading. */
+    private static final SourceId SOURCE = new SourceId("0");
+    private static final SourcePos CALL = new SourcePos(1, 1, SOURCE);
+    private static final SourcePos ARGUMENT = new SourcePos(3, 5, SOURCE);
 
     /**
      * {@code List.flatMap : (('a) -> List<'b>, List<'a>) -> List<'b>} — the function argument is
@@ -51,7 +59,7 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
                 () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none())
                         .preserving(Preserved.byTheLanguagesOwnOperations())));
 
-        assertEquals(ARGUMENT.line(), e.diagnostic().region().start().line(),
+        assertEquals(ARGUMENT.line(), ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(),
                 "the block is on line " + ARGUMENT.line() + " and the callee on line "
                         + CALL.line());
     }

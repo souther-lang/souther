@@ -4,8 +4,8 @@ import souther.compiler.source.SourceId;
 
 import java.util.ArrayDeque;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.DiagnosticPlace;
+import souther.compiler.diag.Primary;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -294,16 +294,14 @@ public final class Db {
          * regions it points at, and is asked of them.
          */
         public SourceId claimedSourceId() {
-            SourcePos at = report.diagnostic().pos();
-            if (at == null) {
-                return sourceId;
-            }
-            return switch (at.quotedFrom()) {
-                case QuotedFrom.ASourceThisCompileHolds(SourceId named) -> named;
-                // A place with no file of its own is filed under the one this answer was being read
-                // for. Which is a choice this makes and not something the place said: it is the only
-                // file in hand, and a report has to be filed somewhere for anybody to be shown it.
-                case QuotedFrom.TextItCannotShow _, QuotedFrom.TextItCannotName _ -> sourceId;
+            return switch (report.diagnostic().primary()) {
+                case Primary.InSource(DiagnosticPlace.InSource place) -> place.source();
+                // Everything else is filed under the source this answer was being read for. Which is
+                // a choice this makes and not something the report said: a place in a text nobody
+                // named, a report about code out of sight and one about no stretch of text at all
+                // have no file of their own, and a report has to be filed somewhere for anybody to
+                // be shown it.
+                case Primary.InAnUnnamedText _, Primary.Unavailable _, Primary.Nowhere _ -> sourceId;
             };
         }
     }

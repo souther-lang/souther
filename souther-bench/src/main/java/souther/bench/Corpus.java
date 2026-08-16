@@ -86,7 +86,7 @@ public record Corpus(String name, List<String> sources, int lines) {
             for (Diagnostic diagnostic : found.getValue()) {
                 if (diagnostic.severity() == Severity.ERROR) {
                     errors.add(name + " source " + found.getKey() + ": " + diagnostic.code()
-                            + " at " + diagnostic.pos());
+                            + " at " + diagnostic.primary());
                 }
             }
         }

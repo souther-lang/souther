@@ -22,7 +22,7 @@ public interface DiagnosticRenderer {
      * in that file, so there is nothing to resolve and nothing to name.
      */
     default String render(Diagnostic d, SourceContext src, Locale locale) {
-        return render(new Located(d, Located.NO_SOURCE), id -> src, locale);
+        return render(new Located(d, ReportContext.ofTheTextItself(src)), id -> src, locale);
     }
 
     /**
@@ -90,11 +90,18 @@ public interface DiagnosticRenderer {
         // is that there is no position and the code is written somewhere this compile cannot show.
         // Read off the position alone that came back as nothing to say, and a reader was left with a
         // sentence about a place, no place, and no account of why.
-        if (d.primary() instanceof Primary.Unavailable(SourceProvenance from)) {
-            return with(said, new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
-                    from.reachedBy()), locale);
-        }
-        return qualified(said, d.pos(), locale);
+        return switch (d.primary()) {
+            case Primary.Unavailable(SourceProvenance from) ->
+                    with(said, new WrittenAtMessage.TheCodeIsWrittenWhereThisCompileCannotShowIt(
+                            from.reachedBy()), locale);
+            case Primary.InSource(DiagnosticPlace.InSource place) ->
+                    qualified(said, place.region().start(), locale);
+            case Primary.InAnUnnamedText(UnnamedRegion where) ->
+                    qualified(said, where.region().start(), locale);
+            // Nothing pointed at is nothing to qualify: the sentence is about a file or about the
+            // compile, and a clause saying where the code is written would be about nothing.
+            case Primary.Nowhere _ -> said;
+        };
     }
 
     /**

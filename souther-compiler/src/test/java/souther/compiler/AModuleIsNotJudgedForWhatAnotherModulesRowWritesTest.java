@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.Primary;
+
 import souther.compiler.source.SourceId;
 
 import souther.compiler.diag.CompileException;
@@ -72,7 +74,7 @@ class AModuleIsNotJudgedForWhatAnotherModulesRowWritesTest {
 
         assertEquals("E1903", e.diagnostic().code(),
                 "a supply position with no value to supply is the row's own fixture error");
-        assertEquals(8, e.diagnostic().pos().line(), "the row");
+        assertEquals(8, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(), "the row");
     }
 
     @Test
@@ -84,7 +86,7 @@ class AModuleIsNotJudgedForWhatAnotherModulesRowWritesTest {
 
         assertEquals(declared.diagnostic().code(), bare.diagnostic().code());
         assertEquals(declared.sourceId(), bare.sourceId());
-        assertEquals(declared.diagnostic().pos().line(), bare.diagnostic().pos().line());
+        assertEquals(((Primary.InSource) declared.diagnostic().primary()).place().region().start().line(), ((Primary.InSource) bare.diagnostic().primary()).place().region().start().line());
     }
 
     @Test
@@ -105,6 +107,6 @@ class AModuleIsNotJudgedForWhatAnotherModulesRowWritesTest {
                         """)));
 
         assertEquals("E1903", e.diagnostic().code());
-        assertEquals(8, e.diagnostic().pos().line(), "the row, not the helper on line 5");
+        assertEquals(8, ((Primary.InSource) e.diagnostic().primary()).place().region().start().line(), "the row, not the helper on line 5");
     }
 }
