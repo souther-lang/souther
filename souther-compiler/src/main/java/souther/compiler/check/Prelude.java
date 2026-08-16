@@ -368,9 +368,9 @@ public final class Prelude {
             // The standard library is this compiler's own source. A declaration it may not have is
             // nobody's mistake to be told about: it is a resource shipped in the jar being wrong,
             // which is refused where it is loaded like the rest of what is checked here.
-            throw new IllegalStateException("prelude resource " + resource + " declares `"
-                    + indexed.refusals().get(0).refused().name() + "`, which is a declaration no"
-                    + " module may have");
+            throw new IllegalStateException("prelude resource " + resource + " carries a"
+                    + " declaration the indexing refused: `"
+                    + indexed.refusals().get(0).refused().name() + "`");
         }
         Map<String, Ast.Def> declared = indexed.declarations();
         if (declared.isEmpty()) {
@@ -394,8 +394,8 @@ public final class Prelude {
             scope.put(name, new Denotation.Denotes(TypeSymbol.runtime(name)));
         }
         return SyntaxSymbols.of(TypeSymbol.RUNTIME,
-                Registry.ofRead(Map.of(TypeSymbol.RUNTIME, declared),
-                        Map.of(TypeSymbol.RUNTIME, Registry.baseNames(m.exposing()))),
+                Registry.ofRead(Map.of(TypeSymbol.RUNTIME, new Registry.Declared<>(
+                        declared, Registry.baseNames(m.exposing())))),
                 scope, Map.of());
     }
 

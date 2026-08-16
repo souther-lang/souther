@@ -240,19 +240,6 @@ public final class ModuleReadback {
     }
 
     /**
-     * A refusal the check found, as a fact about the artifact it was found in.
-     *
-     * <p>The place goes here and nowhere else. A refusal carries the {@code import} line it was
-     * written on, which is what lets a reader holding that source quote it; this side has no source
-     * to quote and the line is in a text nobody holds, so what crosses is what happened. Left on,
-     * the position this whole type exists to keep out would have arrived as an AST node instead of
-     * as a diagnostic.
-     *
-     * <p>A switch over every refusal there is, with nothing to fall through to: a rule added to the
-     * check is one this boundary has to say something about, and one that reached here with nothing
-     * to say would be an artifact refused for a reason nobody can name.
-     */
-    /**
      * A declaration the indexing refused, as a fact about the artifact it was found in.
      *
      * <p>The declaration goes and the node stays behind, for the reason a refused import line's
@@ -274,6 +261,19 @@ public final class ModuleReadback {
         };
     }
 
+    /**
+     * A refusal the check found, as a fact about the artifact it was found in.
+     *
+     * <p>The place goes here and nowhere else. A refusal carries the {@code import} line it was
+     * written on, which is what lets a reader holding that source quote it; this side has no source
+     * to quote and the line is in a text nobody holds, so what crosses is what happened. Left on,
+     * the position this whole type exists to keep out would have arrived as an AST node instead of
+     * as a diagnostic.
+     *
+     * <p>A switch over every refusal there is, with nothing to fall through to: a rule added to the
+     * check is one this boundary has to say something about, and one that reached here with nothing
+     * to say would be an artifact refused for a reason nobody can name.
+     */
     private static Readback.Exposure asAnArtifactsFailure(Exposing.Refusal refusal) {
         return switch (refusal) {
             case Exposing.Refusal.NoSuchLibraryFunction r ->

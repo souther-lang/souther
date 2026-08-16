@@ -226,7 +226,7 @@ public final class Names {
                 DeclaredNames.Index<Ast.Def> declared = Registry.indexed(mine.value());
                 List<Report> reports = new ArrayList<>();
                 for (DeclaredNames.Refusal<Ast.Def> refused : declared.refusals()) {
-                    reports.add(Report.of(DeclarationRefusals.reported(refused)));
+                    reports.add(Report.of(DeclarationRefusals.reportedAsWritten(refused)));
                 }
                 return Answer.of(declared.declarations(), reports);
             }

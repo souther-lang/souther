@@ -176,13 +176,12 @@ public final class PublishedUniverse {
      * declares and what resolution finds there are one answer rather than two that happen to agree.
      */
     private Registry<Ast.Def> declaredBy() {
-        Map<String, Map<String, Ast.Def>> declared = new LinkedHashMap<>();
-        Map<String, Set<String>> exposed = new LinkedHashMap<>();
+        Map<String, Registry.Declared<Ast.Def>> declared = new LinkedHashMap<>();
         for (Map.Entry<String, ReadableModule> each : read.entrySet()) {
-            declared.put(each.getKey(), each.getValue().declarations());
-            exposed.put(each.getKey(), Registry.baseNames(each.getValue().module().exposing()));
+            declared.put(each.getKey(), new Registry.Declared<>(each.getValue().declarations(),
+                    Registry.baseNames(each.getValue().module().exposing())));
         }
-        return Registry.ofRead(declared, exposed);
+        return Registry.ofRead(declared);
     }
 
     /**

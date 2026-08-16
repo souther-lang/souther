@@ -102,15 +102,14 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
 
     /** What resolution reads other modules by: what each reading of them settled. */
     private static Registry<Ast.Def> declaredBy(Map<String, ModuleUniverse.InSight> readings) {
-        Map<String, Map<String, Ast.Def>> declared = new LinkedHashMap<>();
-        Map<String, java.util.Set<String>> exposed = new LinkedHashMap<>();
+        Map<String, Registry.Declared<Ast.Def>> declared = new LinkedHashMap<>();
         readings.forEach((name, sighted) -> {
             if (sighted instanceof ModuleUniverse.InSight.Read there) {
-                declared.put(name, there.declarations());
-                exposed.put(name, Registry.baseNames(there.module().exposing()));
+                declared.put(name, new Registry.Declared<>(there.declarations(),
+                        Registry.baseNames(there.module().exposing())));
             }
         });
-        return Registry.ofRead(declared, exposed);
+        return Registry.ofRead(declared);
     }
 
     /** {@code module} resolved against {@code universe}, by the one assembly there is. */

@@ -56,7 +56,8 @@ public final class SyntaxSymbols implements NameSense {
     public static SyntaxSymbols of(Ast.Module m) {
         DeclaredNames.Index<Ast.Def> declared = Registry.indexed(m);
         if (!declared.refusals().isEmpty()) {
-            throw CompileException.of(DeclarationRefusals.reported(declared.refusals().get(0)));
+            throw CompileException.of(
+                    DeclarationRefusals.reportedAsWritten(declared.refusals().get(0)));
         }
         Map<String, Denotation> names = new HashMap<>();
         for (Ast.Def def : declared.declarations().values()) {
@@ -64,8 +65,8 @@ public final class SyntaxSymbols implements NameSense {
                     new Denotation.Denotes(TypeSymbols.declared(def.declaredKey())));
         }
         return new SyntaxSymbols(m.name(),
-                Registry.ofRead(Map.of(m.name(), declared.declarations()),
-                        Map.of(m.name(), Registry.baseNames(m.exposing()))),
+                Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
+                        declared.declarations(), Registry.baseNames(m.exposing())))),
                 names, Map.of());
     }
 

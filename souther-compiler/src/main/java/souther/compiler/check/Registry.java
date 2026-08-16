@@ -65,7 +65,29 @@ public interface Registry<D> {
 
     /** Nothing is declared anywhere — for signatures written over primitives and type variables. */
     static <D> Registry<D> empty() {
-        return ofRead(Map.of(), Map.of());
+        return ofRead(Map.of());
+    }
+
+    /**
+     * One module as a registry has it: what it declares, and the base type names it exposes.
+     *
+     * <p>One value, because having a module is one fact and the three questions a registry answers
+     * are answered from it. Handed over as two maps, a caller could fill one and not the other, and
+     * what came back said a declaration was there under a name the registry did not have.
+     *
+     * @param declarations what it declares, by the name written there
+     * @param exposed      the base type names it exposes ({@link #baseNames})
+     */
+    record Declared<D>(Map<String, D> declarations, Set<String> exposed) {
+
+        /** Copied in the order the module wrote them. What a module declares is read out in that
+         *  order — a reader rebuilding a module from what a registry has puts its declarations back
+         *  in the order it finds them, so a copy that does not keep it moves them. */
+        public Declared {
+            declarations =
+                    java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(declarations));
+            exposed = Set.copyOf(exposed);
+        }
     }
 
     /**
@@ -77,18 +99,12 @@ public interface Registry<D> {
      * the compiler ships is a fault in the compiler. Each of those is said where the module is
      * obtained, and what arrives here is what was left standing.
      *
-     * <p>A module that had nothing to give is not among {@code declarations}, and is answered the
-     * way a module nobody has is answered. Which of the two it was is not this registry's to say:
-     * that is what the reader settled, and it says it where it says what it has.
-     *
-     * @param declarations what each module declares, by the name written there
-     * @param exposed      the base type names each module exposes ({@link #baseNames}), whose names
-     *                     are the modules this registry has
+     * <p>A module that had nothing to give is not among {@code modules}, and is answered the way a
+     * module nobody has is answered. Which of the two it was is not this registry's to say: that is
+     * what the reader settled, and it says it where it says what it has.
      */
-    static <D> Registry<D> ofRead(Map<String, Map<String, D>> declarations,
-                                  Map<String, Set<String>> exposed) {
-        Map<String, Map<String, D>> declared = Map.copyOf(declarations);
-        Map<String, Set<String>> exposes = Map.copyOf(exposed);
+    static <D> Registry<D> ofRead(Map<String, Declared<D>> modules) {
+        Map<String, Declared<D>> has = Map.copyOf(modules);
         return new Registry<D>() {
 
             @Override
@@ -98,17 +114,19 @@ public interface Registry<D> {
 
             @Override
             public Map<String, D> declaredIn(String moduleName) {
-                return declared.getOrDefault(moduleName, Map.of());
+                Declared<D> module = has.get(moduleName);
+                return module == null ? Map.of() : module.declarations();
             }
 
             @Override
             public Set<String> exposedBy(String moduleName) {
-                return exposes.getOrDefault(moduleName, Set.of());
+                Declared<D> module = has.get(moduleName);
+                return module == null ? Set.of() : module.exposed();
             }
 
             @Override
             public Set<String> moduleNames() {
-                return exposes.keySet();
+                return has.keySet();
             }
         };
     }
