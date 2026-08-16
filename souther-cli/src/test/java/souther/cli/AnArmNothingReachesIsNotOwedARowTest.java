@@ -85,6 +85,62 @@ class AnArmNothingReachesIsNotOwedARowTest {
         return out.toString(StandardCharsets.UTF_8);
     }
 
+    /**
+     * An arm for a case the position's own rules refuse is not an arm either.
+     *
+     * <p>The other half of the same fact, and the one that was missing: a guard's arm went when its
+     * comparison could not come out that way, and a {@code match} arm stayed however the rules
+     * narrowed what it matched on. The arm answers a value here, so nothing about the body says it
+     * is not an arm — what says so is that no {@code Active} is ever {@code Off}.
+     */
+    private static final String NARROWED = """
+            module example.narrowed
+
+            data On
+            data Off
+            data Pending
+            data Flag = On | Off | Pending
+            data Active = Flag invariant value /= Off
+            data Answer = Int
+
+            behavior pick : (f: Active) -> Answer
+                constructs Answer
+
+            let pick (f) = match f.value with
+                | On      -> Answer(1)
+                | Pending -> Answer(0)
+                | Off     -> Answer(9)
+
+            example pick
+                | "on" : (Active(On)) -> Answer(1)
+            """;
+
+    @Test
+    void anArmForACaseTheRulesRefuseIsNotCounted() throws Exception {
+        String report = reportOn(NARROWED);
+
+        assertTrue(report.contains("branch      1/2"),
+                () -> "the `Off` arm is one no value reaches:\n" + report);
+        assertTrue(report.contains("no row goes through `case Pending`"),
+                () -> "and the arm that is owed a row is still named:\n" + report);
+        assertFalse(report.contains("case Off"),
+                () -> "nothing asks for a row through the arm nothing reaches:\n" + report);
+    }
+
+    /** The control: the same arms with nothing refusing the case. Without this the assertion above
+     *  would pass on a measure that had stopped counting `match` arms at all. */
+    @Test
+    void andIsCountedWhereNothingRefusesTheCase() throws Exception {
+        String report = reportOn(NARROWED
+                .replace("data Active = Flag invariant value /= Off", "data Active = Flag")
+                .replace("(f: Active)", "(f: Active)"));
+
+        assertTrue(report.contains("branch      1/3"),
+                () -> "every arm is owed a row where the rules refuse nothing:\n" + report);
+        assertTrue(report.contains("no row goes through `case Off`"),
+                () -> "including the one for `Off`:\n" + report);
+    }
+
     @Test
     void anArmBeyondTheRecordsCapIsNotCounted() throws Exception {
         String report = reportOn(CAPPED);

@@ -18,6 +18,7 @@ import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.claims.ClaimVerdict;
 import souther.compiler.claims.Claims;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.Unsettlement;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.inputs.NumericTerm;
@@ -92,18 +93,21 @@ final class Coverages {
         List<Axis> divided = new ArrayList<>();
         Readings readings = Readings.of(rows, where, partitioning.axes(),
                 observed.someRowsUnseen());
+        Set<TermPath> spokenFor = new LinkedHashSet<>();
         for (Axis axis : partitioning.axes()) {
             if (!axis.measurable()) {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
                 axes.add(coverageOf(axis, readings, claims));
+                spokenFor.add(axis.path());
                 divided.add(axis);
             }
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
                 PartitionEvidence.Bounded.of(boundaries), pairsOf(divided, readings),
                 partitioning.undivided(), partitioning.unread(), partitioning.omitted(),
+                offAxis(claims, spokenFor),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }
@@ -249,6 +253,35 @@ final class Coverages {
                 (int) total - reached, false, readings.status(axes), null);
     }
 
+    /**
+     * The claims about positions no axis in this report speaks for.
+     *
+     * <p>A position past the axis limit is dropped and one deeper than the walk goes is never read,
+     * and a claim about either was judged all the same. Said here, so that what a report knows about
+     * a claim does not turn on whether the position it is about made it into the numbers.
+     */
+    private static List<PartitionEvidence.ClaimOffAxis> offAxis(Claims claims,
+                                                                Set<TermPath> spokenFor) {
+        List<PartitionEvidence.ClaimOffAxis> out = new ArrayList<>();
+        for (Claims.Judged judged : claims.all()) {
+            if (spokenFor.contains(judged.claim().at())) {
+                continue;
+            }
+            String named = judged.claim().named().name();
+            switch (judged.verdict()) {
+                case ClaimVerdict.Confirmed _ -> out.add(new PartitionEvidence.ClaimOffAxis(
+                        judged.claim().at().toString(), named, judged.claim().reasons(), null));
+                case ClaimVerdict.Unproven un -> out.add(new PartitionEvidence.ClaimOffAxis(
+                        judged.claim().at().toString(), named, judged.claim().reasons(),
+                        said(un.why())));
+                // Refused where it is written, so a report of this model is a report of one that
+                // did not compile.
+                case ClaimVerdict.Contradicted _ -> { }
+            }
+        }
+        return List.copyOf(out);
+    }
+
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
                                                              Claims claims) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
@@ -302,6 +335,8 @@ final class Coverages {
                     PartitionEvidence.UnprovenClaim.Why.THE_RULES_LEAVE_THE_POSITION_NOTHING;
             case Unsettlement.NoSuchDistinction _ ->
                     PartitionEvidence.UnprovenClaim.Why.NOTHING_WAS_READ_ABOUT_THE_CASE;
+            case Unsettlement.ForkNotKnownToBeReached _ ->
+                    PartitionEvidence.UnprovenClaim.Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
         };
     }
 

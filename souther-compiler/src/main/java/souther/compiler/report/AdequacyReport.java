@@ -546,6 +546,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case THE_RULES_LEAVE_THE_POSITION_NOTHING ->
                     "the rules leave this position no value at all";
             case NOTHING_WAS_READ_ABOUT_THE_CASE -> "nothing was read about this case";
+            case THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED ->
+                    "this arm is inside another, and what reaches it is not read here";
         };
     }
 
@@ -604,6 +606,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             "      · `%s` is declared unreachable%s, and nothing here proves it: %s%n",
                             claim.classId(), because(claim.reasons()), unproven(claim.why())));
                 }
+            }
+            // And the claims about positions this report has no axis for. Named by their position,
+            // since there is no axis above them to have said which one it is.
+            for (PartitionEvidence.ClaimOffAxis claim : partition.claimsOffAxis()) {
+                out.append(claim.why() == null
+                        ? String.format("      · `%s` at `%s` is declared unreachable%s%n",
+                                claim.classId(), claim.at(), because(claim.reasons()))
+                        : String.format("      · `%s` at `%s` is declared unreachable%s, and nothing"
+                                        + " here proves it: %s%n",
+                                claim.classId(), claim.at(), because(claim.reasons()),
+                                unproven(claim.why())));
             }
         }
         undivided(out, behavior);
@@ -1043,6 +1056,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
             a.put("unclassifiedRows", axis.unclassifiedRows());
             measured(a, axis.status(), axis.reason());
+        }
+        ArrayNode offAxis = out.putArray("claimsOffAxis");
+        for (PartitionEvidence.ClaimOffAxis claim : partition.claimsOffAxis()) {
+            ObjectNode c = offAxis.addObject();
+            c.put("at", claim.at());
+            c.put("class", claim.classId());
+            claim.reasons().forEach(c.putArray("reasons")::add);
+            if (claim.why() != null) {
+                c.put("why", word(claim.why()));
+            }
         }
         ArrayNode boundaries = out.putArray("boundaries");
         for (BoundaryAssessment boundary : partition.boundaries()) {

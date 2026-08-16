@@ -273,6 +273,102 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                 .toList();
     }
 
+    /**
+     * A claim about a position past the axis limit is still said.
+     *
+     * <p>Twelve positions are as many as a report draws axes at, and a claim about the thirteenth
+     * had a verdict all the same. Left to the axes to print, that verdict is reached and dropped —
+     * an exclusion both unproven and silent, one level up from where that was ruled out.
+     */
+    @Test
+    void aClaimAboutAPositionPastTheAxisLimitIsSaid() {
+        String wide = """
+                module example.probe
+
+                data On
+                data Off
+                data Pending
+                data Flag = On | Off | Pending
+                data Many =
+                    { a: Bool, b: Bool, c: Bool, d: Bool, e: Bool, f: Bool, g: Bool
+                    , h: Bool, i: Bool, j: Bool, k: Bool, l: Bool, m: Bool
+                    }
+                data T = { one: Flag, two: Flag } invariant one /= two
+                data Answer = Int
+
+                behavior pick : (many: Many, t: T) -> Answer
+                    constructs Answer
+
+                let pick (many, t) = match t.one with
+                    | On      -> Answer(1)
+                    | Pending -> Answer(0)
+                    | Off     -> unreachable "the probe never passes Off"
+
+                example pick
+                    | "on" : (Many { a = true, b = true, c = true, d = true, e = true, f = true
+                                   , g = true, h = true, i = true, j = true, k = true, l = true
+                                   , m = true }, T { one = On, two = Off }) -> Answer(1)
+                """;
+
+        PartitionEvidence partition = partitionOf(wide);
+
+        assertTrue(partition.axes().stream().noneMatch(each -> each.path().equals("t.one")),
+                () -> "the position is past the limit: "
+                        + partition.axes().stream().map(each -> each.path()).toList());
+        assertEquals(List.of("t.one"),
+                partition.claimsOffAxis().stream().map(each -> each.at()).toList());
+        assertEquals("Off", partition.claimsOffAxis().get(0).classId());
+        assertEquals(List.of("the probe never passes Off"),
+                partition.claimsOffAxis().get(0).reasons());
+    }
+
+    /**
+     * And so is one about a position deeper than the walk goes.
+     *
+     * <p>Two levels is as deep as a report reads into what a parameter holds. A claim below that is
+     * about a position nothing was read about, which is what the verdict says — and saying it is
+     * the whole difference from a claim quietly acted on.
+     */
+    @Test
+    void aClaimBelowWhereTheWalkStopsIsSaid() {
+        String deep = """
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Inner = { flag: Flag }
+                data Middle = { inner: Inner }
+                data Outer = { middle: Middle }
+                data Answer = Int
+
+                behavior pick : (o: Outer) -> Answer
+                    constructs Answer
+
+                let pick (o) = match o.middle.inner.flag with
+                    | On  -> Answer(1)
+                    | Off -> unreachable "the probe never passes Off"
+
+                example pick
+                    | "on" : (Outer { middle = Middle { inner = Inner { flag = On } } }) -> Answer(1)
+                """;
+
+        PartitionEvidence partition = partitionOf(deep);
+
+        assertEquals(List.of("o.middle.inner.flag"),
+                partition.claimsOffAxis().stream().map(each -> each.at()).toList());
+        assertEquals(PartitionEvidence.UnprovenClaim.Why.NOTHING_WAS_READ_ABOUT_THE_CASE,
+                partition.claimsOffAxis().get(0).why());
+    }
+
+    private static PartitionEvidence partitionOf(String source) {
+        Compilation compilation = measured(source);
+        PartitionEvidence partition = compilation.db()
+                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get("pick");
+        assertNotNull(partition, "the model under test compiles");
+        return partition;
+    }
+
     /** The gap that is real is still reported; the one no row can fill is not. */
     @Test
     void theCaseWithAnAnswerIsStillOwedARow() {

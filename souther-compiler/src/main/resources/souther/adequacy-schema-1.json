@@ -186,7 +186,7 @@
                     },
                     "why": {
                       "description": "What stopped the answer.",
-                      "enum": ["a_rule_went_unread", "the_rules_leave_the_position_nothing", "nothing_was_read_about_the_case"]
+                      "enum": ["a_rule_went_unread", "the_rules_leave_the_position_nothing", "nothing_was_read_about_the_case", "the_fork_is_not_known_to_be_reached"]
                     }
                   }
                 }
@@ -256,6 +256,24 @@
             "enum": ["no_rows"]
           },
           "truncated": { "type": "boolean" }
+          }
+        },
+        "claimsOffAxis": {
+          "type": "array",
+          "description": "Claims about positions this report has no axis for — past the axis limit, or deeper than the walk goes. Named by position, and carrying `why` exactly where nothing settled the claim.",
+          "items": {
+            "type": "object",
+            "required": ["at", "class", "reasons"],
+            "additionalProperties": false,
+            "properties": {
+              "at": { "type": "string" },
+              "class": { "type": "string" },
+              "reasons": { "type": "array", "items": { "type": "string" } },
+              "why": {
+                "description": "What stopped the answer, present exactly where nothing settled the claim.",
+                "enum": ["a_rule_went_unread", "the_rules_leave_the_position_nothing", "nothing_was_read_about_the_case", "the_fork_is_not_known_to_be_reached"]
+              }
+            }
           }
         },
         "notDerivable": {

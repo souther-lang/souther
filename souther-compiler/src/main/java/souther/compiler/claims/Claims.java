@@ -58,7 +58,12 @@ public final class Claims {
         }
         return switch (at.admissionOf(claim.named())) {
             case Admits.Refused _ -> new ClaimVerdict.Confirmed();
-            case Admits.Admitted _ -> new ClaimVerdict.Contradicted();
+            // What an admission comes to turns on what stands above the arm. A case the rules leave
+            // arrives at the position; whether it arrives at a fork inside another arm is a
+            // question about that arm's own condition, and nothing here reads one.
+            case Admits.Admitted _ -> claim.stands() instanceof Claim.Standing.Reached
+                    ? new ClaimVerdict.Contradicted()
+                    : new ClaimVerdict.Unproven(new Unsettlement.ForkNotKnownToBeReached());
             case Admits.Unsettled unsettled -> new ClaimVerdict.Unproven(unsettled.why());
         };
     }

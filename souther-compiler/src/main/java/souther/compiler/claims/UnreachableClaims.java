@@ -18,21 +18,22 @@ import java.util.List;
  * case an author is being told not to write a row at — and what settles whether they should be told
  * that is the model's own rules, not the sentence saying so. Read here, judged in {@link Claims}.
  *
- * <p><b>Only what can be read off the body without deciding anything.</b> The body is followed down
- * its spine — what a {@code let} binds — to the first fork, and what the spine bound on the way is
- * carried, so that a name standing for an argument is read as the argument. Where that fork is a {@code match} on an
- * input position, the cases whose arms answer nothing are the ones claimed. A function written where
- * a call takes one is not entered: evaluating that position makes the function, and what it matches
- * on when the call applies it is about its own parameters. Nothing below a fork is read: an arm of
- * one {@code match} holding a {@code match} on another parameter says what that parameter cannot be
- * <em>given the first one</em>, which is not a fact about the parameter and not something a class of
- * it can carry. Nothing is read off a condition either: telling which values satisfy
- * {@code somePredicate(f)} is what a solver does.
+ * <p><b>Every claim the body makes about a position of its input, and what reaching it takes.</b>
+ * A {@code match} on an input position, wherever it is written, has an arm per case, and an arm
+ * that answers nothing is that case being declared not to arrive. What is read off each is the same;
+ * what differs is what stands above it, and that is carried rather than decided
+ * ({@link Claim.Standing}) — the fork the body reaches first is reached whenever the behavior is
+ * applied, and one inside another arm is reached under a condition nothing here reads.
  *
- * <p>So claims are missed. That direction is the safe one now that a claim no longer moves a
- * denominator: a claim nothing read is a case the report asks for a row at, and an author reading a
- * gap they cannot fill is at least told something true about their model. What is not safe is the
- * other direction, and it is why this is read apart from what is done with it.
+ * <p>Names are resolved through what the {@code let}s in scope bound, so a helper expanded into the
+ * body is read against the position the call handed it. A function written where a call takes one is
+ * entered like anything else: what it matches on is resolved the same way, and a name it binds
+ * itself resolves to no position of this input, which is the answer that arm deserves.
+ *
+ * <p>Nothing is read off a condition: telling which values satisfy {@code somePredicate(f)} is what
+ * a solver does. So claims are missed, and that direction is the safe one now that a claim moves no
+ * denominator — a claim nothing read is a case the report asks for a row at, and an author reading a
+ * gap they cannot fill is at least told something true about their model.
  */
 public final class UnreachableClaims {
 
@@ -52,15 +53,55 @@ public final class UnreachableClaims {
      *             of its positions from a {@code match} on anything else
      */
     public static UnreachableClaims of(Core body, InputDomain read, Symbols symbols) {
-        Spine spine = spine(body, InputReads.of(read));
-        if (!(spine.at() instanceof Core.Match match)) {
-            return NONE;
-        }
-        TermPath path = spine.reads().pathOf(match.scrutinee(), symbols);
-        if (path == null) {
+        if (body == null) {
             return NONE;
         }
         List<Claim> found = new ArrayList<>();
+        // The body's own first fork, found down the spine — what a `let` binds is evaluated on the
+        // way to the answer, so a `match` under one is still the first thing this body does. It is
+        // named by identity and the whole body is walked once, rather than walked twice from two
+        // starting points, which is how a claim came to be collected under both standings.
+        Core first = spine(body, InputReads.of(read)).at();
+        claimedUnder(body, InputReads.of(read), symbols,
+                first instanceof Core.Match match ? match : null, found);
+        return found.isEmpty() ? NONE : new UnreachableClaims(found);
+    }
+
+    /**
+     * Every claim under {@code e}, each standing behind whatever arm it is written in.
+     *
+     * <p>One walk over the body. Which fork is the one nothing stands above is settled before it
+     * starts and asked by identity here, because that is a fact about where the fork sits and not
+     * about what it looks like.
+     */
+    private static void claimedUnder(Core e, InputReads reads, Symbols symbols, Core.Match first,
+                                     List<Claim> found) {
+        if (e == null) {
+            return;
+        }
+        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
+                : reads;
+        if (e instanceof Core.Match match) {
+            claimedIn(match, inside, symbols,
+                    match == first ? new Claim.Standing.Reached()
+                            : new Claim.Standing.Conditional(),
+                    found);
+        }
+        Core.forEachChild(e, child -> claimedUnder(child, inside, symbols, first, found));
+    }
+
+    /**
+     * What one {@code match} declares, and the scrutinee it declares it about.
+     *
+     * <p>Says nothing where the scrutinee names no position of this input: there is nothing to
+     * claim about, and what is under its arms is walked by the caller either way.
+     */
+    private static void claimedIn(Core.Match match, InputReads reads, Symbols symbols,
+                                  Claim.Standing standing, List<Claim> found) {
+        TermPath path = reads.pathOf(match.scrutinee(), symbols);
+        if (path == null) {
+            return;
+        }
         for (Core.Case arm : match.cases()) {
             if (NormalReturn.of(arm.body())) {
                 continue;
@@ -70,9 +111,8 @@ public final class UnreachableClaims {
             // Cases written together on one arm are one run of code, and it declares the same thing
             // about every one of them.
             arm.caseTypes().forEach(each -> found.add(new Claim(path, each, why,
-                    said.isEmpty() ? null : said.get(0).at())));
+                    said.isEmpty() ? null : said.get(0).at(), standing)));
         }
-        return found.isEmpty() ? NONE : new UnreachableClaims(found);
     }
 
     public boolean isEmpty() {

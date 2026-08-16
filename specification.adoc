@@ -3379,7 +3379,7 @@ The rules it obeys:
 
 *Where that can be read, it is checked, and a case the model admits is <<e1326>>.* An arm of the first `+match+` a behavior's body reaches, on one of its own input positions, is the end where it can: nothing stands between the fork and the caller, so what may arrive there is what the declarations reaching that position leave (<<what-a-position-admits>>). A case they leave is a case a caller can supply, and an arm declaring it cannot arrive is a premise the model's own signature denies.
 
-Nothing further is proven and nothing further is refused. A case behind a second `+match+`, behind a `+guard+`, or at a position whose rules this compiler could not read is one nothing here settles — a table indexed by two sums says what it says about *pairs*, and neither axis states anything about the other — so the arm stands and what is not settled is said rather than decided (<<a-case-a-claim-is-made-about-is-counted-until-the-rules-refuse-it>>).
+Nothing further is proven and nothing further is refused. A case behind a second `+match+`, behind a `+guard+`, or at a position whose rules this compiler could not read is one nothing here settles — a table indexed by two sums says what it says about *pairs*, and neither axis states anything about the other — so the arm stands and what is not settled is said rather than decided (<<a-case-a-claim-is-made-about-is-counted-until-the-rules-refuse-it>>). Every such arm is read, wherever in the body it is written; what is not read is an arm of a `+match+` on something that is not an input position at all, which is a claim about a value the model's rules say nothing about.
 
 [#guard]
 === guard

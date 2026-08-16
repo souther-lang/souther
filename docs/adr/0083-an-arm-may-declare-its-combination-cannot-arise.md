@@ -56,7 +56,10 @@ behavior's own input positions, is the end where they can answer: nothing stands
 and the caller, so what may arrive there is what the rules reaching the position leave. A case they
 leave standing is one a caller can supply, and the arm is refused where it is written (E1326). A
 case behind a second `match`, behind a `guard`, or at a position whose rules this compiler could not
-read is one nothing settles; the arm stands, and what could not be settled is said.
+read is one nothing settles; the arm stands, and what could not be settled is said. Every arm of a
+`match` on an input position is read this way, wherever in the body it is written — what is left
+unread is a `match` on something that is not an input position, which is a claim about a value no
+rule of the model speaks about.
 
 ## Consequences
 

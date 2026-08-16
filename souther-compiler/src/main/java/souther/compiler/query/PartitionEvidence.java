@@ -35,7 +35,29 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.UnreadRule> unread,
                                 List<Partitions.OmittedAxis> omitted,
+                                List<ClaimOffAxis> claimsOffAxis,
                                 List<Incompleteness> whyUnclassified) {
+
+    /**
+     * A claim about a position this report has no axis for, and what was said about it.
+     *
+     * <p>Carried here rather than under an axis, because there is no axis to carry it: a position
+     * past the axis limit is dropped, one deeper than the walk goes is never read, and a claim about
+     * either still had a verdict. Left to the axes, those verdicts would be reached and then
+     * dropped — which is an exclusion being both unproven and silent, one level up from where that
+     * was ruled out.
+     *
+     * @param at    the position, spelled the way a rule about it is
+     * @param why   what stopped the answer, or null where the rules refused the case and the claim
+     *              says what they say
+     */
+    public record ClaimOffAxis(String at, String classId, List<String> reasons,
+                               UnprovenClaim.Why why) {
+
+        public ClaimOffAxis {
+            reasons = List.copyOf(reasons);
+        }
+    }
 
     /**
      * No measure of this kind here at all, which is not a measure that came back empty.
@@ -46,12 +68,14 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
-            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of());
+            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of(),
+            List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         unread = List.copyOf(unread);
         omitted = List.copyOf(omitted);
+        claimsOffAxis = List.copyOf(claimsOffAxis);
         whyUnclassified = List.copyOf(whyUnclassified);
     }
 
@@ -263,7 +287,11 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
 
             /** Nothing was read about the case: the position is past where the walk goes, or the
              *  claim names one the reading of the position does not have. */
-            NOTHING_WAS_READ_ABOUT_THE_CASE
+            NOTHING_WAS_READ_ABOUT_THE_CASE,
+
+            /** The rules leave the case standing, and the arm is inside another whose own condition
+             *  nothing here reads. */
+            THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED
         }
     }
 

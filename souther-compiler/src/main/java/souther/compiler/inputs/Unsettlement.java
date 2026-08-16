@@ -41,4 +41,14 @@ public sealed interface Unsettlement {
      * say about one it never read.
      */
     record NoSuchDistinction() implements Unsettlement {}
+
+    /**
+     * The rules leave the case standing at the position, and what reaches this fork is not settled
+     * here.
+     *
+     * <p>A case behind another arm arrives at the position all the same; whether the arm above it
+     * was taken is what nothing here reads. So the claim is neither borne out nor refuted — which
+     * is the whole of what a table indexed by two sums says about its blank cells.
+     */
+    record ForkNotKnownToBeReached() implements Unsettlement {}
 }
