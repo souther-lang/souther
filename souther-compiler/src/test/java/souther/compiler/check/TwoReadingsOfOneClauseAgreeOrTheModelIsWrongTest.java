@@ -33,39 +33,37 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
 
     /**
-     * Associativity, held over the grouping that used to break it.
+     * The three properties, held over readings the model can actually produce.
      *
-     * <p>A reading that can point absorbs one that cannot. So a rule refusing a disagreement between
-     * two unpointable readings finds it or not depending on which pair is merged first, and what
-     * becomes order-dependent is not the answer but whether the compiler notices it contradicts
-     * itself. Held here over the three readings that show it.
+     * <p>Which is what settles them. Nothing here picks between two readings, so there is no rule
+     * whose preference could depend on the order or the grouping — two readings of one clause say
+     * the same thing about it, and a pair that does not is refused whichever way round it is asked.
+     * The version before this preferred the reading that could point somewhere, and was associative
+     * without being commutative, then commutative without being associative.
      */
-    @org.junit.jupiter.api.Test
-    void aGroupingDoesNotDecideWhetherTheReadingsAgree() {
-        Clause known = clause(FIRST, "ordered", at("model.sou", 8));
-        Clause fromA = clause(FIRST, "ordered", new DiagnosticPlace.Unavailable(
-                new SourceProvenance.APublishedModule("lib.a")));
-        Clause fromB = clause(FIRST, "ordered", new DiagnosticPlace.Unavailable(
-                new SourceProvenance.APublishedModule("lib.b")));
+    @Test
+    void mergingIsCommutativeAssociativeAndIdempotent() {
+        Clause one = clause(FIRST, "ordered", at("model.sou", 8));
+        Clause two = clause(FIRST, "ordered", at("model.sou", 8));
+        Clause three = clause(FIRST, "ordered", at("model.sou", 8));
 
-        assertEquals(Clause.merge(Clause.merge(known, fromA), fromB),
-                Clause.merge(known, Clause.merge(fromA, fromB)),
-                "which pair is merged first is not something a reader should be able to see");
-        assertEquals(known, Clause.merge(known, Clause.merge(fromA, fromB)),
-                "and the reading that can point is what survives either way");
+        assertEquals(Clause.merge(one, two), Clause.merge(two, one));
+        assertEquals(Clause.merge(Clause.merge(one, two), three),
+                Clause.merge(one, Clause.merge(two, three)));
+        assertEquals(one, Clause.merge(one, one));
     }
 
     /**
-     * Commutativity, held where the two readings differ only in how each of them got there.
+     * Two readings that reached the clause by two names are one reading.
      *
      * <p>Where the clause is written is a fact about the declaration and the same for every reading;
      * the name a reading reached the code by is a fact about that reading, and two readings of one
      * clause reach it by two names as easily as one. Carried into what a clause holds, the two are
-     * different values and merging them answers differently each way round — a first-wins union
-     * wearing the name of a join. A clause takes the declaration's own form, so there is nothing
+     * different values and the merge has a pair to choose between — which is a first-wins union
+     * whichever rule it chooses by. A clause takes the declaration's own form, so there is nothing
      * left to differ in.
      */
-    @org.junit.jupiter.api.Test
+    @Test
     void twoReadingsThatReachedTheSameClauseByTwoNamesAreOneReading() {
         Clause viaOne = clause(FIRST, "ordered", new DiagnosticPlace.Unavailable(
                 new SourceProvenance.APublishedModule("lib.rule", "A.Code")));
@@ -73,10 +71,9 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
                 new SourceProvenance.APublishedModule("lib.rule", "B.Code")));
 
         assertEquals(viaOne, viaTwo, "a clause holds where it is written, not how it was reached");
-        assertEquals(Clause.merge(viaOne, viaTwo), Clause.merge(viaTwo, viaOne),
-                "so which reading is asked first is not something a reader can see");
+        assertEquals(viaOne, Clause.merge(viaOne, viaTwo));
+        assertEquals(viaOne, Clause.merge(viaTwo, viaOne));
     }
-
 
     private static final TypeSymbol BOUND = TypeSymbols.declared(new TypeKey("demo", "Bound"));
     private static final TypeSymbol OTHER = TypeSymbols.declared(new TypeKey("demo", "Other"));
@@ -99,16 +96,27 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
         return new Clause(id, Optional.ofNullable(name).map(ClauseName::new), at);
     }
 
-    // --- what may differ --------------------------------------------------------------------
+    // --- what may not differ ----------------------------------------------------------------
 
+    /**
+     * A reading that can quote the clause and one that cannot are two answers about where one
+     * clause is written, and one of them is wrong.
+     *
+     * <p>This used to be the tolerance the merge was built around, and it had a reason: a reading
+     * that could not point was an absent value, so which representation a clause was reached
+     * through decided how much a reading knew. It decides nothing now. A clause is quotable or it is
+     * out of sight because of the declaration it is on, and "no place at all" is not something a
+     * reading can produce — so a pair like this is the compiler saying one declaration is in two
+     * places. Measured over the whole suite before it was refused: no compile produces one.
+     */
     @Test
-    void aReadingThatKnowsWhereTheClauseIsTellsTheOneThatDoesNot() {
-        Clause knows = clause(FIRST, "ordered", at("model.sou", 8));
-        Clause doesNot = clause(FIRST, "ordered", outOfSight());
+    void aQuotableReadingAndAnUnquotableOneAreNotTwoReadingsOfOneClause() {
+        Clause quotable = clause(FIRST, "ordered", at("model.sou", 8));
+        Clause outOfSight = clause(FIRST, "ordered", outOfSight());
 
-        assertEquals(knows, Clause.merge(knows, doesNot));
-        assertEquals(knows, Clause.merge(doesNot, knows),
-                "and the same the other way round, or the walk's order decides");
+        assertThrows(Clause.NotOneClause.class, () -> Clause.merge(quotable, outOfSight));
+        assertThrows(Clause.NotOneClause.class, () -> Clause.merge(outOfSight, quotable),
+                "and the same the other way round, or the walk's order decides what is noticed");
     }
 
     @Test
@@ -116,25 +124,6 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
         Clause blind = clause(FIRST, "ordered", outOfSight());
 
         assertEquals(blind, Clause.merge(blind, blind));
-    }
-
-    // --- the algebra ------------------------------------------------------------------------
-
-    @Test
-    void mergingIsCommutativeAssociativeAndIdempotent() {
-        Clause knows = clause(FIRST, "ordered", at("model.sou", 8));
-        Clause blind = clause(FIRST, "ordered", outOfSight());
-        Clause same = clause(FIRST, "ordered", at("model.sou", 8));
-
-        for (List<Clause> order : List.of(List.of(knows, blind, same), List.of(blind, same, knows),
-                List.of(same, knows, blind), List.of(blind, knows, same))) {
-            assertEquals(knows,
-                    Clause.merge(Clause.merge(order.get(0), order.get(1)), order.get(2)),
-                    "left to right: " + order);
-            assertEquals(knows,
-                    Clause.merge(order.get(0), Clause.merge(order.get(1), order.get(2))),
-                    "right to left: " + order);
-        }
     }
 
     // --- what may not differ ----------------------------------------------------------------

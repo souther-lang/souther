@@ -22,9 +22,9 @@ import java.util.Optional;
  * {@link DiagnosticPlace.Unavailable}, which says where the code came from rather than being the
  * absence of an answer. It used to be absent, and absent is what every reader turned into silence.
  *
- * <p>Which reading a clause was reached through can still differ, and that is what {@link #merge}
- * turns on: one representation quotes the clause and another has no file for it, and the reading
- * that can point somewhere is the one to keep.
+ * <p>{@code at} is the same for every reading of one clause, which is what {@link #merge} rests on.
+ * Where a clause is written is settled where its text became positions and follows from the
+ * declaration it is on, so a walk reaching it down two branches finds one answer twice.
  */
 record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
 
@@ -64,13 +64,19 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
      * branches of a conditional read one construction once each, and a first-wins union would let
      * the walk's order decide whether a warning points anywhere.
      *
-     * <p>What may differ between two readings is {@code at} and only {@code at}, because only it is
-     * knowledge this compile has rather than something the declaration says. Everything else
-     * differing is this compiler having called two clauses one clause, or one clause two.
+     * <p>Two readings of one clause say the same thing about it, or the model contradicts itself.
+     * Nothing here picks between them, which is what makes the three properties above hold rather
+     * than being claimed: an operation that preferred one reading to another is a first-wins union
+     * whichever rule it prefers by, and one that refused some disagreements while absorbing others
+     * finds a contradiction or not depending on which pair was merged first.
      *
-     * <p>Where they differ, the reading that can send a reader somewhere wins. The other one is the
-     * same clause reached through a representation this compile has no file for, and there is
-     * nothing it knows that the first does not.
+     * <p>It used to prefer the reading that could point somewhere, and there used to be a reason: a
+     * reading that could not was an absent value, so which representation a clause was reached
+     * through decided how much a reading knew. Where a clause is written is now settled where its
+     * text became positions and is the same for every reading of it — a clause is quotable or it is
+     * out of sight because of the declaration it is on, not because of the path a walk took to it,
+     * and "no place at all" is not a thing a reading can produce. Measured over the whole suite: no
+     * compile produces two readings of one clause that differ.
      */
     static Clause merge(Clause a, Clause b) {
         if (!a.id.equals(b.id)) {
@@ -80,37 +86,11 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
             throw new NotOneClause("clause " + a.id + " is named " + a.name.orElse(null)
                     + " in one reading and " + b.name.orElse(null) + " in another");
         }
-        // What two readings may differ in is whether this compile can point at the clause, and two
-        // that can must point at the same place or the model says one clause is written in two.
-        //
-        // Two that cannot are not compared, and the reason is the associativity above rather than a
-        // tolerance. A reading that can point absorbs one that cannot, taking its evidence with it,
-        // so a rule that refused a disagreement between two unpointable readings would find it or
-        // not depending on which pair the walk merged first: with a pointable K and unpointable A
-        // and B, `merge(merge(K, A), B)` answers K and `merge(K, merge(A, B))` throws. An operation
-        // whose refusals depend on grouping is the order-dependence this exists to remove, said
-        // about a worse thing than the answer.
-        //
-        // Nothing is lost by not asking. Where the clause is written follows from the declaration
-        // the id names, and the ids were held against each other above; what an unpointable reading
-        // carries beyond that is the name that reading reached the code by, which is a fact about
-        // the reading and not about the clause.
-        boolean aPoints = points(a.at);
-        boolean bPoints = points(b.at);
-        if (aPoints && bPoints && !a.at.equals(b.at)) {
+        if (!a.at.equals(b.at)) {
             throw new NotOneClause("clause " + a.id + " is written at " + a.at
                     + " in one reading and at " + b.at + " in another");
         }
-        return aPoints ? a : b;
-    }
-
-    /** Whether this compile can send a reader to the clause. A switch, so an arm added to
-     *  {@link DiagnosticPlace} is a compile error here rather than a silent no. */
-    private static boolean points(DiagnosticPlace at) {
-        return switch (at) {
-            case DiagnosticPlace.InSource _ -> true;
-            case DiagnosticPlace.Unavailable _ -> false;
-        };
+        return a;
     }
 
     /**
