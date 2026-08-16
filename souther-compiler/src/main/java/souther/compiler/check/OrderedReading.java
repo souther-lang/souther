@@ -49,7 +49,7 @@ import java.util.Map;
  * end, and the values a denial leaves are a set rather than a range. Under a denial the two swap
  * places, which is the same rule read once.
  */
-final class OrderedReading {
+final class OrderedReading implements ClauseReading<OrderedIntervals<Term>> {
 
     private final Terms terms;
     private final Denotations at;
@@ -62,13 +62,8 @@ final class OrderedReading {
         this.scales = scales;
     }
 
-    /**
-     * Where {@code clauses} leave each position able to stop, all of them holding at once.
-     *
-     * @param byName the type at each position, keyed by what that position is called
-     */
-    static OrderedIntervals<Term> of(List<Core> clauses, Terms terms, Denotations at,
-                                     Map<Term, Type> byName, Symbols symbols) {
+    /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
+    static OrderedReading of(Terms terms, Denotations at, Map<Term, Type> byName, Symbols symbols) {
         Map<Term, OrderScale> scales = new LinkedHashMap<>();
         byName.forEach((name, type) -> {
             OrderScale scale = OrderScale.ofValue(type, symbols);
@@ -76,43 +71,35 @@ final class OrderedReading {
                 scales.put(name, scale);
             }
         });
-        OrderedReading reading = new OrderedReading(terms, at, scales);
-        OrderedIntervals<Term> out = OrderedIntervals.top();
-        for (Core clause : clauses) {
-            out = out.meet(reading.read(clause, true));
-        }
-        return out;
+        return new OrderedReading(terms, at, scales);
+    }
+
+    @Override
+    public OrderedIntervals<Term> nothingSaid() {
+        return OrderedIntervals.top();
+    }
+
+    @Override
+    public OrderedIntervals<Term> both(OrderedIntervals<Term> one, OrderedIntervals<Term> other) {
+        return one.meet(other);
+    }
+
+    @Override
+    public OrderedIntervals<Term> either(OrderedIntervals<Term> one, OrderedIntervals<Term> other) {
+        return one.join(other);
     }
 
     /**
-     * Where {@code e} leaves each position, stated where {@code positive} and denied where it is not.
+     * A comparison places an end; nothing else here is read.
      *
-     * <p>A denial is carried to the leaves rather than applied to what a branch came to. What a state
-     * says is a range per position, and the denial of that is not one — the values a conjunction
-     * rules out are a choice between the positions it named, which no map of ranges holds. Carried
-     * down, every denial meets a comparison, where it is the comparison the other way round.
+     * <p>A rule of another shape says nothing here, and nothing is what it contributes. It is not
+     * recorded as something that went unread: which positions this reading can speak for is the
+     * value sets' answer, and a second account of it kept here would be a second thing to hold in
+     * step.
      */
-    private OrderedIntervals<Term> read(Core e, boolean positive) {
-        Core under = Predicates.negated(e);
-        if (under != null) {
-            return read(under, !positive);
-        }
-        if (e instanceof Core.Binary bin) {
-            if (bin.op() == Hir.BinOp.AND) {
-                return positive ? read(bin.left(), true).meet(read(bin.right(), true))
-                        : read(bin.left(), false).join(read(bin.right(), false));
-            }
-            if (bin.op() == Hir.BinOp.OR) {
-                return positive ? read(bin.left(), true).join(read(bin.right(), true))
-                        : read(bin.left(), false).meet(read(bin.right(), false));
-            }
-            return comparison(bin, positive);
-        }
-        // A rule of another shape says nothing here, and nothing is what it contributes. It is not
-        // recorded as something that went unread: which positions this reading can speak for is the
-        // value sets' answer, and a second account of it kept here would be a second thing to hold
-        // in step.
-        return OrderedIntervals.top();
+    @Override
+    public OrderedIntervals<Term> leaf(Core e, boolean positive) {
+        return e instanceof Core.Binary bin ? comparison(bin, positive) : OrderedIntervals.top();
     }
 
     /** Where one comparison leaves the position it names, or nothing where it names none. */

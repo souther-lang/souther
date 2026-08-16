@@ -464,13 +464,14 @@ public final class InvariantChecker {
         // makes of a clause is its own, so neither can widen the other's idea of what it was handed.
         List<Core> reaching = written.stream().map(Written::clause).toList();
         Map<Term, Type> positions = positions(atoms, keys, typeAt);
+        // And what the same clauses say about which values each position may hold and where each
+        // position stops, off the same list at the same moment. One reading in two languages and
+        // not two readings: the connectives belong to the clause, so an alternative nothing can
+        // satisfy is dropped by asking the whole of what is known about it.
+        StatedByClauses stated = StatedByClauses.of(reaching, c.terms, at, positions, symbols);
         ConstraintState constraints = k.constraints()
-                .taking(AdmissibleReading.of(reaching, c.terms, at, positions, symbols))
-                // And where the same clauses leave each position stopping, off the same list at the
-                // same moment. A third reading of one list and not a second pass over another's
-                // answer: what an ordering says about where a position stops is not something the
-                // value sets hold, and what a denial leaves is not something a range holds.
-                .taking(OrderedReading.of(reaching, c.terms, at, positions, symbols));
+                .taking(stated.values())
+                .taking(stated.ordered());
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             Term atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());

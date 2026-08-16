@@ -34,7 +34,7 @@ import java.util.Set;
  * the values can be written out ({@link ValueUniverse}) and is kept as a denial where they cannot,
  * so nothing reaches emptiness except through values this had in hand.
  */
-final class AdmissibleReading {
+final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
 
     private final Terms terms;
     private final Denotations at;
@@ -52,51 +52,34 @@ final class AdmissibleReading {
         this.symbols = symbols;
     }
 
-    /**
-     * What {@code clauses} leave each position able to hold, all of them holding at once.
-     *
-     * @param byName the type at each position, keyed by what that position is called
-     */
-    static AdmissibleValues<Term> of(List<Core> clauses, Terms terms, Denotations at,
-                                     Map<Term, Type> byName, Symbols symbols) {
-        AdmissibleReading reading = new AdmissibleReading(terms, at, byName, symbols);
-        AdmissibleValues<Term> out = AdmissibleValues.top();
-        for (Core clause : clauses) {
-            out = out.meet(reading.read(clause, true));
-        }
-        return out;
+    /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
+    static AdmissibleReading of(Terms terms, Denotations at, Map<Term, Type> byName,
+                                Symbols symbols) {
+        return new AdmissibleReading(terms, at, byName, symbols);
     }
 
-    /**
-     * What {@code e} says, stated where {@code positive} and denied where it is not.
-     *
-     * <p>A denial is carried to the leaves rather than applied to what a branch came to. What a
-     * state says is a value per position, and the denial of that is not one — the values a
-     * conjunction rules out are a choice between the positions it named, which no map of positions
-     * holds. Carried down, every denial meets a comparison, where it is one.
-     */
-    private AdmissibleValues<Term> read(Core e, boolean positive) {
-        Core under = Predicates.negated(e);
-        if (under != null) {
-            return read(under, !positive);
-        }
-        if (e instanceof Core.Binary b) {
-            // Stated, a conjunction gives both sides; denied, it gives the choice between their
-            // denials. And the same the other way round, which is the whole of what a denial does
-            // to a connective.
-            if (b.op() == Hir.BinOp.AND) {
-                return positive ? read(b.left(), true).meet(read(b.right(), true))
-                        : read(b.left(), false).join(read(b.right(), false));
-            }
-            if (b.op() == Hir.BinOp.OR) {
-                return positive ? read(b.left(), true).join(read(b.right(), true))
-                        : read(b.left(), false).meet(read(b.right(), false));
-            }
-            if (b.op() == Hir.BinOp.EQ || b.op() == Hir.BinOp.NE) {
-                // Which of the two it states, once the denials above have been counted: `/=` denied
-                // states the equality, and `==` denied denies it.
-                return comparison(b, (b.op() == Hir.BinOp.EQ) == positive);
-            }
+    @Override
+    public AdmissibleValues<Term> nothingSaid() {
+        return AdmissibleValues.top();
+    }
+
+    @Override
+    public AdmissibleValues<Term> both(AdmissibleValues<Term> one, AdmissibleValues<Term> other) {
+        return one.meet(other);
+    }
+
+    @Override
+    public AdmissibleValues<Term> either(AdmissibleValues<Term> one, AdmissibleValues<Term> other) {
+        return one.join(other);
+    }
+
+    /** An equality names a value and a denial leaves the rest; nothing else here is read. */
+    @Override
+    public AdmissibleValues<Term> leaf(Core e, boolean positive) {
+        if (e instanceof Core.Binary b && (b.op() == Hir.BinOp.EQ || b.op() == Hir.BinOp.NE)) {
+            // Which of the two it states, once the denials above have been counted: `/=` denied
+            // states the equality, and `==` denied denies it.
+            return comparison(b, (b.op() == Hir.BinOp.EQ) == positive);
         }
         return unreadable(e);
     }

@@ -107,6 +107,31 @@ class EndsThatCannotBothHoldAreRefusedOnEveryOrderTest {
     }
 
     /**
+     * An alternative is impossible whichever reading of it shows so.
+     *
+     * <p>The connectives are over the clause and not over one language for reading it. Applied
+     * inside each language separately, an alternative is dropped only where the language that could
+     * show it impossible is also the one being joined — so a choice between a branch no order admits
+     * and a branch no set of values admits was a choice both readings called open, each because the
+     * other was holding the answer.
+     */
+    @Test
+    void anAlternativeIsImpossibleWhicheverReadingShowsIt() {
+        refuses("a choice between a branch no order admits and one no values admit", """
+                module demo
+
+                data X = { s: String, b: Bool }
+                    invariant no = s < "" || (b == true && b == false)
+                """);
+        refuses("a choice between two positions, each named two values", """
+                module demo
+
+                data X = { a: Bool, b: Bool }
+                    invariant no = (a == true && a == false) || (b == true && b == false)
+                """);
+    }
+
+    /**
      * And an alternative that does admit something leaves the choice open.
      *
      * <p>The negative control for the one above. Dropping an impossible alternative must leave the
