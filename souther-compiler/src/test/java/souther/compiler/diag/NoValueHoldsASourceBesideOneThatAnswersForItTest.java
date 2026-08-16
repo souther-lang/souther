@@ -54,7 +54,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Through the wrapping, and not only at the top. The field this change removed was
  * {@code Optional<SourceRef>}, so a check that compared erased types would have watched that shape
- * go and said nothing when it came back — green for the very value it was written about.
+ * go and said nothing when it came back — green for the very value it was written about. And by
+ * what a type is rather than which type it is: a value holding the record under a sealed arm
+ * answers for a source exactly as one holding the arm does.
  *
  * <h2>What it does not reach</h2>
  *
@@ -63,11 +65,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class NoValueHoldsASourceBesideOneThatAnswersForItTest {
 
-    /** The types that answer for a source of their own, so holding one beside them is holding two
-     *  answers to one question. */
+    /**
+     * The types that answer for a source of their own, so holding one beside them is holding two
+     * answers to one question.
+     *
+     * <p>Roots, and read by assignability. `Citation` is sealed over two arms and each arm over one
+     * record, so a set that named the classes there are today would go quiet the moment a value held
+     * `WrittenCitation` rather than `Citation` — a list of the enumeration this test exists to stop
+     * being written, one level down from the one it replaced.
+     */
     private static final Set<Class<?>> ANSWERS_FOR_A_SOURCE = Set.of(
-            Region.class, SourcePos.class, DiagnosticPlace.InSource.class,
-            Citation.class, Citation.Written.class, Citation.OutOfSight.class);
+            Region.class, SourcePos.class, DiagnosticPlace.InSource.class, Citation.class);
 
     /**
      * The one value that holds both, and it is an open question rather than a shape this rule does
@@ -189,11 +197,9 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
      * guard that is green for the very value it was written about.
      */
     private static boolean mentions(Type held, Class<?> wanted) {
-        if (held == wanted) {
-            return true;
-        }
         if (held instanceof Class<?> c) {
-            return c.isArray() && mentions(c.getComponentType(), wanted);
+            return wanted.isAssignableFrom(c)
+                    || c.isArray() && mentions(c.getComponentType(), wanted);
         }
         if (held instanceof GenericArrayType array) {
             return mentions(array.getGenericComponentType(), wanted);

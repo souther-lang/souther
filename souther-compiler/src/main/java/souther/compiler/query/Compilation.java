@@ -36,8 +36,6 @@ public final class Compilation {
     private final Db db = new Db();
     /** Which source each id was, for a caller that identifies sources by index. */
     private final Map<SourceId, Integer> indexOfId = new LinkedHashMap<>();
-    /** Whether a diagnostic of this compilation says which source it is in. A compile of one source
-     *  does not: the caller knows the file it handed over. */
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
     private final Set<SourceId> held = new LinkedHashSet<>();
     /** The loader over the classes as they were when it was made, and those classes — held so that
