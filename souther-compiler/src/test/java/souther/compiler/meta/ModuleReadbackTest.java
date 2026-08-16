@@ -25,13 +25,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ModuleReadbackTest {
 
     private static ReadableModule readBack(String moduleName, Map<String, byte[]> classes) {
-        return assertInstanceOf(Readback.Ready.class,
-                ModuleReadback.read(moduleName, new ClassFileDeclarations(classes::get))).module();
+        return assertInstanceOf(ReadableModule.class, assertInstanceOf(Readback.Ready.class,
+                ModuleReadback.read(moduleName, new ClassFileDeclarations(classes::get))).value());
     }
 
     /** Why a readback would not answer, as the arm rather than as a message it was raised with. */
     private static Readback.Failure refusalOf(String moduleName, PublishedClasses classes) {
-        return assertInstanceOf(Readback.Unreadable.class,
+        return assertInstanceOf(Readback.NotReady.Unreadable.class,
                 ModuleReadback.read(moduleName, classes)).why();
     }
 
@@ -218,7 +218,7 @@ class ModuleReadbackTest {
      */
     @Test
     void aNameThatIsNotACompiledModuleReadsAsNothing() {
-        assertInstanceOf(Readback.SaysNothing.class,
+        assertInstanceOf(Readback.NotReady.SaysNothing.class,
                 ModuleReadback.read("shared.money", new ClassFileDeclarations(Map.<String,
                         byte[]>of()::get)));
     }

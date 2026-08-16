@@ -444,8 +444,8 @@ public final class Front {
                 if (layout.idOfModule().containsKey(name) || !tried.add(name)) {
                     continue;
                 }
-                Readback readback = ModuleReadback.read(name, classes);
-                if (readback instanceof Readback.SaysNothing) {
+                Readback<ReadableModule> readback = ModuleReadback.read(name, classes);
+                if (readback instanceof Readback.NotReady.SaysNothing<ReadableModule>) {
                     continue;   // absent; which of its importers minds is worked out below
                 }
                 // Two questions about one artifact, and neither answers the other. Whether the name
@@ -458,14 +458,15 @@ public final class Front {
                 if (reserved != null) {
                     refused.put(name, reserved.build());
                 }
-                if (readback instanceof Readback.Unreadable(String about, Readback.Failure why)) {
+                if (readback instanceof Readback.NotReady.Unreadable<ReadableModule>(
+                        String about, Readback.Failure why)) {
                     unreadable.put(about, why);
                     continue;
                 }
                 if (reserved != null) {
                     continue;   // readable, and still not a name this compilation will take
                 }
-                ReadableModule module = ((Readback.Ready) readback).module();
+                ReadableModule module = ((Readback.Ready<ReadableModule>) readback).value();
                 read.put(name, module);
                 List<String> reaches = List.copyOf(reaches(module.module()).keySet());
                 edges.put(name, reaches);

@@ -2,6 +2,7 @@ package souther.compiler.meta;
 
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * What reading one module back off a set of published classes answers.
@@ -16,26 +17,94 @@ import java.util.List;
  * and not the second held a module whose bare names denoted nothing. One did, in every project but
  * the one that wrote it.
  *
+ * <p>What a reading answers with when it gets to the end is the type argument, because reading a
+ * module is done in more than one stage and the stages end in different things. What one answers
+ * without a universe is a module and its declarations ({@link ReadableModule}); what the next one
+ * answers, with the modules around it in sight, is that module resolved
+ * ({@link PublishedUniverse.Read}). The three states are the same three either way, and that is why
+ * they are written once: a stage whose absences were its own would name some of the reasons and
+ * leave the rest to a null, which is what happened — every refusal that needed a universe to be
+ * found had nowhere to be said, so which reason a reader was given followed from which stage
+ * happened to find it.
+ *
  * <p>Nothing here throws for an artifact this compiler will not read. What is left of a raise is a
  * fault in the compiler, which is what a raise ought to mean, and a reader no longer has to decide
  * how wide to catch in order to tell the two apart.
  */
-public sealed interface Readback {
+public sealed interface Readback<T> {
 
-    /** These classes carry nothing for the name: no class of it, or one this compiler put no
-     *  declarations on. Not the same as carrying something unreadable, and an importer is told
-     *  different things about the two. */
-    record SaysNothing() implements Readback {}
-
-    /** They carry a module this compiler read, with its import lines read as well. */
-    record Ready(ReadableModule module) implements Readback {}
-
-    /** They carry a module this compiler will not read, and why.
+    /**
+     * They carry a module this compiler read, with its import lines read as well.
      *
-     * @param module the module the classes name — the one authority for it, the failure saying only
-     *        what went wrong
+     * <p>The value is there. A reading that got to the end and answered with nothing would be a
+     * fourth state wearing the name of the first — "it was read" and "there is something to read"
+     * would come apart, and every reader switching on the three would take one for the other.
      */
-    record Unreadable(String module, Failure why) implements Readback {}
+    record Ready<T>(T value) implements Readback<T> {
+
+        public Ready {
+            Objects.requireNonNull(value, "a ready reading has a value");
+        }
+    }
+
+    /**
+     * What a reading answers when there is nothing to hand over.
+     *
+     * <p>Told apart from {@link Ready} as a type, so that a reader interested only in the absence —
+     * one holding two readings against each other, which has nothing to say while either of them
+     * can still be read — can be given the absence and not the reading. Handed the whole
+     * {@code Readback}, such a reader could be built around a {@link Ready}, which is a state it
+     * has no meaning for.
+     *
+     * <p>Each says which module it is about. The name is the one thing there is to say when there
+     * is nothing else, so it belongs to the answer rather than to whoever is passing it on: kept
+     * beside one instead, two names would travel together and nothing would say they are one name.
+     */
+    sealed interface NotReady<T> extends Readback<T> {
+
+        /** The module this is about — the one authority for its name. */
+        String module();
+
+        /** These classes carry nothing for the name: no class of it, or one this compiler put no
+         *  declarations on. Not the same as carrying something unreadable, and an importer is told
+         *  different things about the two. */
+        record SaysNothing<T>(String module) implements NotReady<T> {
+
+            public SaysNothing {
+                Objects.requireNonNull(module, "a reading is about a module");
+            }
+        }
+
+        /** They carry a module this compiler will not read, and why.
+         *
+         * @param module the module the classes name
+         * @param why    what went wrong, which is never nothing: an artifact refused for a reason
+         *               nobody can name is what this whole type exists to stop
+         */
+        record Unreadable<T>(String module, Failure why) implements NotReady<T> {
+
+            public Unreadable {
+                Objects.requireNonNull(module, "a reading is about a module");
+                Objects.requireNonNull(why, "a module this compiler will not read has a reason");
+            }
+        }
+
+        /**
+         * The same absence, as the answer of a reading whose success is something else.
+         *
+         * <p>A stage that cannot go on answers with what the stage before it found, and what that
+         * stage would have answered with is not what this one would. Rebuilt rather than cast: the
+         * switch is over every state there is, so a state added later is a compile error here
+         * rather than one carried across by a cast that reads every value alike.
+         */
+        default <U> NotReady<U> asTheAnswerOf() {
+            return switch (this) {
+                case SaysNothing<?> nothing -> new SaysNothing<>(nothing.module());
+                case Unreadable<?> unreadable ->
+                        new Unreadable<>(unreadable.module(), unreadable.why());
+            };
+        }
+    }
 
     /**
      * Why a module this compiler knows the classes carry could not be read.
@@ -164,17 +233,17 @@ public sealed interface Readback {
     /**
      * One import line of an artifact that could not do its job, as a fact about the artifact.
      *
-     * <p>{@link Exposing.Refusal} is the same failure as the check that reads a source finds it, and
-     * carries the {@code import} line it was written on so that a reader with that source can quote
-     * it. Carried across this boundary it would bring a position in a text nobody holds — which is
-     * the defect this whole type exists to close, arriving as an AST node instead of as a
-     * diagnostic. So the refusal is projected here, and what crosses is what happened and not where.
+     * <p>A refusal is the same failure as the check that reads a source finds it, and carries the
+     * {@code import} line it was written on so that a reader with that source can quote it. Carried
+     * across this boundary it would bring a position in a text nobody holds — which is the defect
+     * this whole type exists to close, arriving as an AST node instead of as a diagnostic. So the
+     * refusal is projected here, and what crosses is what happened and not where.
      *
      * <p>Kept apart from the reasons a readback fails, because the two are read at different
      * granularities: an artifact is unreadable or it is not, and its import lines are however many
      * they are.
      */
-    public sealed interface Exposure {
+    sealed interface Exposure {
 
         /** The library module the line names. */
         String from();
@@ -184,7 +253,5 @@ public sealed interface Readback {
 
         /** The standard library publishes no operation of that name in that module. */
         record NoSuchLibraryFunction(String from, String name) implements Exposure {}
-
-
     }
 }

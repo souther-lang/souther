@@ -120,11 +120,13 @@ public final class PublishedUniverse {
             }
             // Which of the two a name is comes off the reading itself. It used to be asked again of
             // the classes afterwards, because a reading that failed answered null however it failed.
-            Readback readback = ModuleReadback.read(name, classes);
-            if (!(readback instanceof Readback.Ready(ReadableModule readable))) {
+            Readback<ReadableModule> readback = ModuleReadback.read(name, classes);
+            if (!(readback instanceof Readback.Ready<ReadableModule>(ReadableModule readable))) {
                 unreadable.add(name);
-                beyondReading.put(name, readback instanceof Readback.Unreadable
-                        ? ModuleUniverse.InSight.UNREADABLE : ModuleUniverse.InSight.UNKNOWN);
+                beyondReading.put(name,
+                        readback instanceof Readback.NotReady.Unreadable<ReadableModule>
+                                ? ModuleUniverse.InSight.UNREADABLE
+                                : ModuleUniverse.InSight.UNKNOWN);
                 continue;
             }
             read.put(name, readable);

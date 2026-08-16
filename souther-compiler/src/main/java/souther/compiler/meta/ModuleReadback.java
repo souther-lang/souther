@@ -97,11 +97,11 @@ public final class ModuleReadback {
     }
 
     /** What {@code classes} carry for {@code moduleName}. */
-    public static Readback read(String moduleName, PublishedClasses classes) {
+    public static Readback<ReadableModule> read(String moduleName, PublishedClasses classes) {
         PublishedClasses.Declarations found;
         switch (classes.of(declarationsClassOf(moduleName))) {
             case PublishedClasses.Carried.NoSuchClass _ -> {
-                return new Readback.SaysNothing();
+                return new Readback.NotReady.SaysNothing<>(moduleName);
             }
             case PublishedClasses.Carried.UnreadableMetadata _ -> {
                 return unreadable(moduleName, new Readback.Failure.UnreadableMetadata());
@@ -110,7 +110,8 @@ public final class ModuleReadback {
                     found = declared;
         }
         if (found.module() == null) {
-            return new Readback.SaysNothing();   // a class this compiler put no declarations on
+            // a class this compiler put no declarations on
+            return new Readback.NotReady.SaysNothing<>(moduleName);
         }
         PublishedClasses.SoutherModuleView m = found.module();
         // A member this compiler asks for and the writer did not write reads as its default. The
@@ -212,7 +213,7 @@ public final class ModuleReadback {
             return unreadable(moduleName, new Readback.Failure.InvalidExposure(
                     crossed.get(0), crossed.subList(1, crossed.size())));
         }
-        return new Readback.Ready(
+        return new Readback.Ready<>(
                 new AsRead(checked.module(), declared.declarations(), injected, checked.claims()));
     }
 
@@ -236,8 +237,8 @@ public final class ModuleReadback {
         }
     }
 
-    private static Readback unreadable(String module, Readback.Failure why) {
-        return new Readback.Unreadable(module, why);
+    private static Readback<ReadableModule> unreadable(String module, Readback.Failure why) {
+        return new Readback.NotReady.Unreadable<>(module, why);
     }
 
     /**
