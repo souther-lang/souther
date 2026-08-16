@@ -105,14 +105,14 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
     /**
      * This, where the conditions on the path cannot all hold, so nothing here is reached.
      *
-     * <p>Said as a contradiction in the numbers, which is how the domain already records that it
-     * holds nothing. The reading that ignores the path is left as it was: it is the guards that
-     * cannot all hold, not the values that fail, and a construction under them is one the program
-     * never builds rather than one it builds wrongly.
+     * <p>Said of the state and not lodged in a domain ({@link ConstraintState#shownToHoldNothing}):
+     * what shows it is a reading of the cases an operation is defined in, and no interval and no
+     * predicate holds that argument. The reading that ignores the path is left as it was — it is the
+     * guards that cannot all hold, not the values that fail, and a construction under them is one
+     * the program never builds rather than one it builds wrongly.
      */
     Known reachingNothing() {
-        return taking(LinearForm.constant(java.math.BigDecimal.ONE), Rel.LE, Held.ON_THE_PATH,
-                Map.of());
+        return new Known(constraints.shownToHoldNothing(), quantified, spoken, unguarded);
     }
 
     /**

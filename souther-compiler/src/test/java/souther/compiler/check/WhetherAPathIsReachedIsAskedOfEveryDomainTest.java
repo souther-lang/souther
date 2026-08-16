@@ -131,11 +131,23 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
         assertTrue(reaching(orderedAtBottom()).reachesNothing());
     }
 
-    /** What the walk says of a path it has been told is not taken, and of the values there. */
+    /**
+     * What the walk says of a path it has been told is not taken, and of the values there.
+     *
+     * <p>The saying reaches the state and no domain of it. Written into the numbers, as
+     * {@code 1 <= 0}, it read as an arithmetic claim the model never made — so a reader asking why
+     * nothing satisfies the state was told the rules about numbers conflict, and a reader asking
+     * whether the path is reached was answered by {@code numbers.isBottom()}, which is the reading
+     * that walked a path the predicates alone ruled out.
+     */
     @Test
-    void aPathSaidNotToBeTakenIsNotTakenAndTheValuesAreLeftAsTheyWere() {
+    void aPathSaidNotToBeTakenIsNotTakenAndNoDomainIsMadeToSaySo() {
         Known nothing = Known.top().reachingNothing();
         assertTrue(nothing.reachesNothing());
+        assertFalse(nothing.numbers().isBottom(), "no domain was made to carry the argument");
+        assertFalse(nothing.facts().isBottom());
+        assertFalse(nothing.constraints().values().isBottom());
+        assertFalse(nothing.constraints().ordered().isBottom());
         assertFalse(nothing.unguarded().constraints().isBottom(),
                 "it is the guards that cannot all hold, not the values that fail");
     }
