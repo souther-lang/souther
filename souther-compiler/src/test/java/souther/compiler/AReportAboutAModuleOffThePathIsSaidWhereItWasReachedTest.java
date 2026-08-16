@@ -9,6 +9,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.Placement;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.query.Compilation;
@@ -444,8 +445,12 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
      */
     @Test
     void movingTheCaretKeepsTheLabelsTheReportAlreadyHad() {
+        // Built the way a report about a module off the path is: pointing into that module's own
+        // text. One pointing into a file the reader holds says its code is there, and moving such a
+        // report is not something to ask for — a caret moving is not the code moving.
         Diagnostic said = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
-                .at(new SourcePos(1, 1, new SourceId("0")))
+                .at(Placement.whatAModulePublished(
+                        new SourceProvenance.APublishedModule("lib.held")).at(1, 1))
                 .secondary(Region.ofWidth(new SourcePos(3, 3, new SourceId("0")), 4),
                         new NameMessage.WriteItOnItsOwn("x"))
                 .build();

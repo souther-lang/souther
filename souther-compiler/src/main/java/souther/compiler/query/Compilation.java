@@ -15,6 +15,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceProvenance;
+import souther.compiler.diag.WhereCodeIsWritten;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -542,10 +543,10 @@ public final class Compilation {
      * Where the code a report is about is written, for a report this reading should move — and null
      * for one it should leave alone.
      *
-     * <p>One question rather than a test for whether to move and a second for what to say with, since
-     * the answer to the first is the answer to the second: a report is moved when this compilation
-     * has nowhere to send a reader, and what it is moved with is what that report already says about
-     * where its code is.
+     * <p>Two questions, and they are not the same one. Whether this compilation can send a reader to
+     * where the report points is about the place; what the report says about where its code is
+     * written is about the code. A report pointing at a call in the reader's file says its code is
+     * elsewhere and needs no moving, so reading one off the other would move it.
      *
      * <p>Its own answer wherever it has one. A position carries which text it is in and whose code it
      * holds separately, so a report from a body spliced into a module's published text says the
@@ -565,12 +566,22 @@ public final class Compilation {
         if (module == null) {
             return null;
         }
-        return switch (said.primary()) {
-            case null -> souther.compiler.meta.ModuleReadback.provenanceOf(module);
-            case Primary.Unavailable _ -> said.whereItsCodeIsWritten();
+        boolean nowhereToSendAReader = switch (said.primary()) {
+            case null -> true;
+            case Primary.Unavailable _ -> true;
             case Primary.AtARegion(Region region) ->
-                    Citation.of(region.start()) instanceof Citation.OutOfSight
-                            ? said.whereItsCodeIsWritten() : null;
+                    Citation.of(region.start()) instanceof Citation.OutOfSight;
+        };
+        if (!nowhereToSendAReader) {
+            return null;
+        }
+        return switch (said.whereItsCodeIsWritten()) {
+            case WhereCodeIsWritten.Elsewhere(SourceProvenance from) -> from;
+            case WhereCodeIsWritten.Unstated _ ->
+                    souther.compiler.meta.ModuleReadback.provenanceOf(module);
+            // A report saying its code is where it points has somewhere to point, so it did not
+            // reach here.
+            case WhereCodeIsWritten.Here _ -> null;
         };
     }
 

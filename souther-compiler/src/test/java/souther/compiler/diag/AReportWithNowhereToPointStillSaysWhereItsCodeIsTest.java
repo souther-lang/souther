@@ -91,7 +91,8 @@ class AReportWithNowhereToPointStillSaysWhereItsCodeIsTest {
                 .say(new ModuleMessage.CannotReadAFieldOnASum("x", "S"))
                 .build();
 
-        assertEquals(THE_CODE.asDeclared(), said.whereItsCodeIsWritten(),
+        assertEquals(new WhereCodeIsWritten.Elsewhere(THE_CODE.asDeclared()),
+                said.whereItsCodeIsWritten(),
                 "it says where its code is, through what it points at");
         assertThrows(Diagnostic.MovedSomewhereElsesCode.class,
                 () -> said.reachedFrom(
@@ -100,17 +101,43 @@ class AReportWithNowhereToPointStillSaysWhereItsCodeIsTest {
                         new ModuleMessage.ItIsReachedFromHereToo()));
     }
 
-    /** A report about code the reader is looking at says nothing to be preferred, and a caller that
-     *  moves it supplies the answer — which is what makes the argument a fallback and not a second
-     *  authority. */
+    /**
+     * A report about code the reader is looking at has already answered, and moving it is refused.
+     *
+     * <p>"There is no elsewhere to name" is an answer — it is <em>here</em> — and it was the same
+     * value as "this report has not said", so a caller could tell such a report its code was in a
+     * module and be believed. A caret moving is not the code moving.
+     */
     @Test
-    void aReportAboutCodeTheReaderIsLookingAtSaysNothingToPrefer() {
+    void aReportAboutCodeTheReaderIsLookingAtSaysItIsHereAndIsNotMoved() {
         Diagnostic said = Diagnostic.at(
                         Placement.aFileOfThisCompile(new SourceId("app.sou")).at(2, 1))
                 .say(new ModuleMessage.CannotReadAFieldOnASum("x", "S"))
                 .build();
 
-        assertNull(said.whereItsCodeIsWritten(), "there is no elsewhere to name");
+        assertEquals(new WhereCodeIsWritten.Here(), said.whereItsCodeIsWritten(),
+                "the code is where it points");
+        assertThrows(Diagnostic.MovedSomewhereElsesCode.class,
+                () -> said.reachedFrom(
+                        java.util.List.of(new SourcePos(2, 1, new SourceId("app.sou"))),
+                        new SourceProvenance.APublishedModule("lib.other"),
+                        new ModuleMessage.ItIsReachedFromHereToo()));
+    }
+
+    /** And one that points at nothing has not answered, so the caller's answer is taken. */
+    @Test
+    void aReportThatPointsAtNothingHasNotAnsweredAndTheCallerMay() {
+        Diagnostic said = Diagnostic.at((SourcePos) null)
+                .say(new ModuleMessage.CannotReadAFieldOnASum("x", "S"))
+                .build();
+
+        assertEquals(new WhereCodeIsWritten.Unstated(), said.whereItsCodeIsWritten(),
+                "nothing to point at, and nothing said through it");
+        assertEquals(THE_CODE, ((Citation.Reached) Citation.of(said.reachedFrom(
+                        java.util.List.of(new SourcePos(2, 1, new SourceId("app.sou"))), THE_CODE,
+                        new ModuleMessage.ItIsReachedFromHereToo()).region().start()))
+                        .provenance(),
+                "so the caller says where the code is, and it is taken");
     }
 
     /** Moved with what it says, it becomes a report a reader can be sent to, still about the same

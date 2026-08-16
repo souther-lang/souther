@@ -97,7 +97,7 @@ public final class Diagnostic {
     }
 
     /**
-     * What this report already says about where its code is written, or null where it says nothing.
+     * What this report already says about where its code is written.
      *
      * <p>Two ways of knowing and one answer. A report with nowhere to point carries it outright; one
      * pointing at a position carries it in what that position says, and a position in a module's
@@ -105,17 +105,19 @@ public final class Diagnostic {
      * questions with the same answer, and whoever was reading only the first had to work the second
      * out again from whatever was to hand — which is the shape this whole change is about.
      *
-     * <p>Null where the report is about code the reader is looking at, and where it points at nothing
-     * at all. Neither of those is an answer to be preferred over a caller's; both are the absence of
-     * one.
+     * <p>Three answers and not two. A report about code the reader is looking at has answered — it
+     * said "here" — and only one that points at nothing has not. Those came back as one absence
+     * once, and a caller moving a report could tell the first that its code was in a module.
      */
-    public SourceProvenance whereItsCodeIsWritten() {
+    public WhereCodeIsWritten whereItsCodeIsWritten() {
         return switch (primary) {
-            case null -> null;
-            case Primary.Unavailable(SourceProvenance from) -> from;
+            case null -> WhereCodeIsWritten.Unstated.IT;
+            case Primary.Unavailable(SourceProvenance from) ->
+                    new WhereCodeIsWritten.Elsewhere(from);
             case Primary.AtARegion(Region region) ->
                     Citation.of(region.start()) instanceof Citation.Elsewhere elsewhere
-                            ? elsewhere.provenance() : null;
+                            ? new WhereCodeIsWritten.Elsewhere(elsewhere.provenance())
+                            : WhereCodeIsWritten.Here.IT;
         };
     }
 
@@ -185,9 +187,16 @@ public final class Diagnostic {
             throw new IllegalArgumentException(
                     "code out of sight is reached from somewhere or the report stays where it is");
         }
-        SourceProvenance known = whereItsCodeIsWritten();
-        if (known != null && !known.equals(provenance)) {
-            throw new MovedSomewhereElsesCode(known, provenance);
+        switch (whereItsCodeIsWritten()) {
+            // Nothing to contradict, so the caller answers. The only state where it may.
+            case WhereCodeIsWritten.Unstated _ -> { }
+            case WhereCodeIsWritten.Elsewhere(SourceProvenance known) -> {
+                if (!known.equals(provenance)) {
+                    throw new MovedSomewhereElsesCode(known, provenance);
+                }
+            }
+            // This report says its code is where it points, and moving a caret is not moving code.
+            case WhereCodeIsWritten.Here _ -> throw new MovedSomewhereElsesCode(provenance);
         }
         DeclaringCode declaring = new DeclaringCode(provenance);
         List<LabeledRegion> also = new ArrayList<>(secondary);
@@ -218,6 +227,11 @@ public final class Diagnostic {
 
         MovedSomewhereElsesCode(SourceProvenance known, SourceProvenance given) {
             super("this report says its code is written in " + known + " and was moved as though it"
+                    + " were written in " + given);
+        }
+
+        MovedSomewhereElsesCode(SourceProvenance given) {
+            super("this report says its code is written where it points, and was moved as though it"
                     + " were written in " + given);
         }
     }
