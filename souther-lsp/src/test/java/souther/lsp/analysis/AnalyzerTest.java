@@ -617,7 +617,8 @@ class AnalyzerTest {
                 + "behavior f : (x: Thing) -> Thing\n"
                 + "let f (x) = x\n";
         // cursor in the body of `let f (x) = x` (line 4, on the trailing `x`)
-        List<CompletionItem> items = analyzer.completions(text, new Position(4, 12));
+        List<CompletionItem> items = analyzer.completions("file:///demo.sou", new Position(4, 12),
+                ModuleGraph.of(java.util.Map.of("file:///demo.sou", text)));
 
         java.util.Set<String> labels = new java.util.HashSet<>();
         for (CompletionItem i : items) {

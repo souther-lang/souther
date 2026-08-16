@@ -88,6 +88,11 @@ public final class Analyzer {
      * set of modules to resolve an import against, so the compile is started again. */
     private souther.compiler.meta.ModulePath compiledAgainst;
 
+    /** What each open document reaches from outside itself, as the last compile that could answer
+     * said. Held across edits so completion has something to offer while the document being typed in
+     * is held out of the compile for its syntax errors. */
+    private final NamesFromElsewhere elsewhere = new NamesFromElsewhere();
+
     /**
      * How much of what the rows cover this editor was told to measure. Off by default.
      *
@@ -1128,47 +1133,90 @@ public final class Analyzer {
     }
 
     /**
-     * Completion candidates at the cursor: the language keywords, the top-level names defined in this
-     * file (types, behaviors, functions), the names its imports bring in, and the params and
-     * {@code let} bindings of the definition the cursor sits in. Deduplicated by label, in that order.
-     * This is name completion, not context-sensitive member completion — a {@code .} field list is
-     * ADR-deferred, so every visible name is offered regardless of the position's expected type.
+     * Completion candidates at the cursor, nearest scope first: the params and {@code let} bindings
+     * of the definition the cursor sits in, the top-level names this document declares, the names
+     * that reach it from elsewhere, and the language keywords. One item per label, the nearest
+     * winning — which is what shadowing means, a binding in force being what its spelling denotes
+     * however many imports also spell it.
+     *
+     * <p>The first two are read off this document's syntax tree every time, so a definition being
+     * written now is offered before it compiles. The third is the compiler's answer about the module
+     * this document belongs to, kept while the compiler cannot answer (see
+     * {@link NamesFromElsewhere}) — a document that does not parse is held out of the compile, and
+     * that is the document being typed in.
+     *
+     * <p>This is name completion, not context-sensitive member completion — a {@code .} field list is
+     * ADR-deferred, so every reachable name is offered regardless of the position's expected type.
+     * One item per label follows from that: which namespace a position is in is not being read, so
+     * two entities of one spelling cannot be told apart by anything but the label, and the nearest is
+     * offered. That is a limit of this list, not a property of the language.
      */
-    public List<CompletionItem> completions(String text, Position pos) {
-        LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
-        for (String keyword : CstLexer.keywords()) {
-            byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD));
+    public List<CompletionItem> completions(String uri, Position pos, ModuleGraph graph) {
+        String text = graph.text(uri);
+        if (text == null) {
+            return List.of();
         }
         SyntaxNode root = CstParser.parse(text).root();
-        for (SyntaxNode def : root.childNodes()) {
-            switch (def.kind()) {
-                case DATA_DEF -> addName(byLabel, def, CompletionItem.CLASS);
-                case BEHAVIOR_DEF -> addName(byLabel, def, CompletionItem.INTERFACE);
-                case FN_DEF -> addName(byLabel, def, CompletionItem.FUNCTION);
-                default -> { /* header, imports, error nodes contribute no completion name */ }
-            }
-        }
-        try {
-            for (Ast.Import imp : CstFrontend.parse(text, "Main").imports()) {
-                for (String name : imp.names()) {
-                    byLabel.putIfAbsent(name, new CompletionItem(name, CompletionItem.FUNCTION));
-                }
-            }
-        } catch (RuntimeException | StackOverflowError _) {
-            // a file that does not parse cleanly exposes no imports; the rest of the list still stands
-        }
-        SyntaxNode enclosing = enclosingDef(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, graph, uri);
+        List<CompletionItem> declared = declaredIn(root, module);
+        elsewhere.forgetAllBut(graph.uris());
+        List<CompletionItem> fromElsewhere =
+                elsewhere.of(compilation, uri, module, labelsOf(declared));
+
+        LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
+        SyntaxNode enclosing =
+                enclosingDef(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
         if (enclosing != null) {
             collectLocalBindings(enclosing, byLabel);
+        }
+        for (CompletionItem item : declared) {
+            byLabel.putIfAbsent(item.label(), item);
+        }
+        for (CompletionItem item : fromElsewhere) {
+            byLabel.putIfAbsent(item.label(), item);
+        }
+        for (String keyword : CstLexer.keywords()) {
+            byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD, null));
         }
         return new ArrayList<>(byLabel.values());
     }
 
-    private void addName(Map<String, CompletionItem> out, SyntaxNode def, int kind) {
-        SyntaxToken name = nameToken(def);
-        if (name != null) {
-            out.putIfAbsent(nameOf(name), new CompletionItem(nameOf(name), kind));
+    /**
+     * The top-level names this document declares, read off its tree.
+     *
+     * <p>Off the tree and not off the compile, because the compile does not have a document that
+     * will not parse and this is the one it is being asked about. A {@code data} written as a sum is
+     * offered as one, so a declaration reads the same here as it does from another document, where
+     * the compiler answers what it is.
+     */
+    private List<CompletionItem> declaredIn(SyntaxNode root, String module) {
+        List<CompletionItem> declared = new ArrayList<>();
+        for (SyntaxNode def : root.childNodes()) {
+            SyntaxToken name = nameToken(def);
+            if (name == null) {
+                continue;
+            }
+            Integer kind = switch (def.kind()) {
+                case DATA_DEF -> def.child(SyntaxKind.SUM_BODY).isPresent()
+                        ? CompletionItem.ENUM : CompletionItem.CLASS;
+                case BEHAVIOR_DEF -> CompletionItem.INTERFACE;
+                case FN_DEF -> CompletionItem.FUNCTION;
+                default -> null;   // header, imports, error nodes declare no completion name
+            };
+            if (kind != null) {
+                declared.add(new CompletionItem(nameOf(name), kind, module));
+            }
         }
+        return declared;
+    }
+
+    private static Set<String> labelsOf(List<CompletionItem> items) {
+        Set<String> labels = new HashSet<>();
+        for (CompletionItem item : items) {
+            labels.add(item.label());
+        }
+        return labels;
     }
 
     /** The top-level definition whose span contains {@code offset}, or {@code null} at the file level. */
@@ -1190,8 +1238,9 @@ public final class Analyzer {
                 if (VALUE_BINDINGS.contains(child.kind())) {
                     SyntaxToken bound = firstIdent(child);
                     if (bound != null) {
+                        // A binding comes from nowhere else, so it has no origin to show.
                         out.putIfAbsent(nameOf(bound),
-                                new CompletionItem(nameOf(bound), CompletionItem.VARIABLE));
+                                new CompletionItem(nameOf(bound), CompletionItem.VARIABLE, null));
                     }
                 }
                 collectLocalBindings(child, out);
