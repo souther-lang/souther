@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.Compiler;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -28,10 +29,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * contradiction.
  *
  * <p>A guard reaches whatever domain has a word for what it says. A comparison reaches the numbers;
- * a predicate about a list reaches the facts and says nothing to them. So the conditions on a path
- * can come to contradict in one domain while every other is untouched, and a reader asking a single
- * domain whether the path is reached walks it whenever it asked the domain that had never heard of
- * the guards. What it then reports is a violation on a path the program never takes.
+ * a predicate about a list reaches the facts and says nothing to the numbers. So the conditions on
+ * a path can come to contradict in one domain while every other is untouched, and a reader asking
+ * a single domain whether the path is reached walks it whenever it asked the domain that had never
+ * heard of the guards. What it then reports is a violation on a path the program never takes.
  *
  * <p>Which domain is not something the author chose, so the programs below are the same program
  * twice with the contradiction moved. What made the difference visible is a clause that only the
@@ -51,9 +52,15 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
             behavior f : (a: List<Int>, b: List<Int>) -> NEL | Bad constructs NEL, Bad
             """;
 
-    private static long warnings(String source) {
+    /** What this compile warns about, as the codes it says it under. The codes and not how many
+     * there are: a path that is walked and a path that is not differ by one warning either way, and
+     * a count would be answered the same by a compile that lost the report and by one that swapped
+     * it for another. */
+    private static List<String> warnedAbout(String source) {
         return Compiler.compileWithWarnings(source).warnings().stream()
-                .filter(d -> d.severity() == Severity.WARNING).count();
+                .filter(d -> d.severity() == Severity.WARNING)
+                .map(Diagnostic::code)
+                .toList();
     }
 
     /**
@@ -65,7 +72,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
      */
     @Test
     void aPathTheNumbersRuleOutIsNotWalked() {
-        assertEquals(0, warnings(NEL + """
+        assertEquals(List.of(), warnedAbout(NEL + """
                 let f (a, b) =
                     if List.length(a) >= 5 then
                         Bad
@@ -78,7 +85,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     /** The same guards as a predicate, which reaches no number at all. */
     @Test
     void aPathThePredicatesRuleOutIsNotWalked() {
-        assertEquals(0, warnings(NEL + """
+        assertEquals(List.of(), warnedAbout(NEL + """
                 let f (a, b) =
                     if List.contains(1, a) then
                         Bad
@@ -97,7 +104,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
      */
     @Test
     void aPathThatIsReachedIsWalkedAndWhatStandsOnItIsReported() {
-        assertEquals(1, warnings(NEL + """
+        assertEquals(List.of("E2011"), warnedAbout(NEL + """
                 let f (a, b) =
                     if List.contains(1, a) then
                         Bad
