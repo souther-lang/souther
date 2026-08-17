@@ -7,6 +7,8 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.MatchMessage;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.CaseSelector;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -23,22 +25,28 @@ public final class MatchElaborator {
 
     private MatchElaborator() {}
 
+    /**
+     * Types a {@code match}. What the subject can be selected as is asked once, of {@link CaseSpace};
+     * what the surface admits is asked here, and the two forms differ in what they admit rather than
+     * in what a case means.
+     *
+     * <p>An optional keeps its own reading. An or-pattern is refused over one, {@code Some(x)} opens
+     * the element rather than a newtype layer of its own, and an arm naming neither carrier is
+     * reported as not a case of an optional rather than as a case of some other sum. Those are rules
+     * about what may be written, so they stay where the text is read; which cases exist and what each
+     * one binds comes from the space either way.
+     */
     static Core elaborateMatch(Hir.Match m, Scope env, CheckContext ctx,
                                        Type expected) {
         Core scrutinee = Elaborator.elaborate(m.scrutinee(), env, ctx);
         Type st = scrutinee.type();
-        if (st instanceof Type.OptionOf oo) {
-            return elaborateOptionMatch(m, scrutinee, oo.element(), env, ctx, expected);
-        }
-        if (st instanceof Type.Union union) {
-            return elaborateCasesMatch(m, scrutinee, union.members(), "union `" + Type.show(union) + "`",
-                    st, env, ctx, expected);
-        }
-        if (!(st instanceof Type.Ref ref) || !(ctx.symbols().declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)) {
+        CaseSpace space = CaseSpace.of(st, ctx.symbols());
+        if (space instanceof CaseSpace.Plain) {
             throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
         }
-        return elaborateCasesMatch(m, scrutinee, new HashSet<>(TypeOps.caseNames(sum)),
-                "data `" + sum.name() + "`", st, env, ctx, expected);
+        return st instanceof Type.OptionOf
+                ? elaborateOptionMatch(m, scrutinee, space, env, ctx, expected)
+                : elaborateCasesMatch(m, scrutinee, space, st, env, ctx, expected);
     }
 
     /**
@@ -78,16 +86,20 @@ public final class MatchElaborator {
      * A single-case case binds that case's type; an or-pattern ({@code A | B}) binds {@code scrutinee}
      * (the sum type), since no one case type fits all its alternatives. Every case must be covered
      * exactly once (E1201; a second cover is an overlap error). */
-    static Core elaborateCasesMatch(Hir.Match m, Core scrutineeCore, Set<TypeSymbol> cases,
-                                        String what, Type scrutinee,
+    static Core elaborateCasesMatch(Hir.Match m, Core scrutineeCore, CaseSpace space,
+                                        Type scrutinee,
                                         Scope env, CheckContext ctx, Type expected) {
+        Set<TypeSymbol> cases = new HashSet<>(space.names());
+        String what = space.described();
         Set<TypeSymbol> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Hir.Case c : m.cases()) {
+            List<CaseSelector> selected = new ArrayList<>();
             for (Hir.Name written : c.caseTypes()) {
                 TypeSymbol caseName = names(written);
-                if (!cases.contains(caseName)) {
+                CaseSelector selector = space.selector(caseName);
+                if (selector == null) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
                 if (!covered.add(caseName)) {
@@ -95,11 +107,15 @@ public final class MatchElaborator {
                             .say(new MatchMessage.MatchedByMoreThanOneCase(written.written()))
                             .build());
                 }
+                selected.add(selector);
             }
-            Type bindType = c.caseTypes().size() == 1
-                    ? caseBindType(names(c.caseTypes().get(0))) : scrutinee;
+            // One case binds what that case refines the value to; an or-pattern binds the subject,
+            // no single case type fitting all of its alternatives.
+            Refinement binding = selected.size() == 1
+                    ? selected.get(0).refinement() : new Refinement.Itself(scrutinee);
+            Type bindType = binding.bound();
             if (c.unwrapAsserts() != null) {
-                if (c.caseTypes().size() != 1) {
+                if (selected.size() != 1) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOrPatternOpensNothing()).build());
                 }
                 checkUnwrapAsserts(c, ctx.symbols());
@@ -107,11 +123,12 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(denoted(c.caseTypes()), c.binding(), body, bindType, c.pos()));
+            arms.add(new Core.Case(new Core.ResolvedPattern(selected, binding), c.binding(), body,
+                    c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
-        for (TypeSymbol caseName : cases) {
+        for (TypeSymbol caseName : space.names()) {
             if (!covered.contains(caseName)) {
                 missing.add(caseName.name());
             }
@@ -128,7 +145,7 @@ public final class MatchElaborator {
 
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
      * {@code None}; both must be present (spec §match). */
-    static Core elaborateOptionMatch(Hir.Match m, Core scrutineeCore, Type element,
+    static Core elaborateOptionMatch(Hir.Match m, Core scrutineeCore, CaseSpace space,
                                           Scope env, CheckContext ctx, Type expected) {
         Set<TypeSymbol> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
@@ -140,19 +157,17 @@ public final class MatchElaborator {
             Hir.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
             TypeSymbol armName = names(arm);
-            Type bind;
-            if (TypeSymbol.SOME.equals(armName)) {
-                bind = element;
-            } else if (TypeSymbol.NONE.equals(armName)) {
-                bind = null;
-            } else {
+            CaseSelector selector = space.selector(armName);
+            if (selector == null) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
+            Type bind = selector.bound();
             if (c.unwrapAsserts() != null) {
-                if (!TypeSymbol.SOME.equals(armName)) {
+                // Only the carrier that holds something has something to open.
+                if (!(selector.refinement() instanceof Refinement.Wrapped wrapped)) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.TheCaseHasNoValueToOpen(caseType)).build());
                 }
-                checkOptionUnwrapAsserts(c, element, ctx.symbols());
+                checkOptionUnwrapAsserts(c, wrapped.bound(), ctx.symbols());
             }
             if (!covered.add(armName)) {
                 throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.MatchedByMoreThanOneCase(caseType)).build());
@@ -160,11 +175,12 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(denoted(c.caseTypes()), c.binding(), body, bind, c.pos()));
+            arms.add(new Core.Case(new Core.ResolvedPattern(List.of(selector), selector.refinement()),
+                    c.binding(), body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
-        for (TypeSymbol caseName : List.of(TypeSymbol.SOME, TypeSymbol.NONE)) {
+        for (TypeSymbol caseName : space.names()) {
             if (!covered.contains(caseName)) {
                 missing.add(caseName.name());
             }
@@ -198,21 +214,6 @@ public final class MatchElaborator {
             throw new Unanswerable(arm.pos());
         }
         return named.type();
-    }
-
-    /** The type a match case binds. A primitive-named case (e.g. {@code Int} in {@code Int |
-     * DivisionByZero}) binds that primitive; a data-named case binds its data type. Option's own
-     * cases bind nothing readable here — an Option match binds the element, which
-     * {@link #elaborateOptionMatch} knows and this does not. */
-    public static Type caseBindType(TypeSymbol caseName) {
-        if (!caseName.isPrimitive()) {
-            return Type.ref(caseName);
-        }
-        // Read back through the one spelling table rather than repeating it here. `Some`/`None` are
-        // primitive-module names too and denote no type, and neither does `Raw`, which no stage
-        // produces — those are the null this answers, as before.
-        Type.Prim prim = caseName.primitiveKind();
-        return prim == null || prim == Type.Prim.RAW ? null : prim;
     }
 
     /** A constructor-destructuring pattern {@code X(Y(s))} opens one newtype per layer: {@code X}

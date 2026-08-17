@@ -21,6 +21,8 @@ import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
 import souther.compiler.jvm.GeneratedClass;
+import souther.compiler.types.CaseSelector;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.ValueName;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
@@ -832,7 +834,6 @@ final class BodyGen {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
-            Type element = st instanceof Type.OptionOf oo ? oo.element() : null;
             Label end = code.newLabel();
             Type want = shapeOf(m, expected);
             for (int i = 0; i < m.cases().size(); i++) {
@@ -841,7 +842,7 @@ final class BodyGen {
                 // A case binding is scoped to its arm: save any outer binding it shadows and restore it
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
 
-                emitCaseGuard(c, sSlot, st, element, nextCase);
+                emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
                 genExpr(c.body(), want);
                 if (c.binding() != null) {
@@ -863,14 +864,13 @@ final class BodyGen {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
-            Type element = st instanceof Type.OptionOf oo ? oo.element() : null;
             for (int i = 0; i < m.cases().size(); i++) {
                 Core.Case c = m.cases().get(i);
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm (see {@link #match}): restore any outer binding it
                 // shadows before the next arm's dispatch.
 
-                emitCaseGuard(c, sSlot, st, element, nextCase);
+                emitCaseGuard(c, sSlot, st, nextCase);
                 probe(m, i);
                 emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
                 if (c.binding() != null) {
@@ -880,54 +880,53 @@ final class BodyGen {
             emitMatchFallthrough();
         }
 
-        /** The {@code instanceof} dispatch and case binding for one {@code match} arm; on no match,
-         * jumps to {@code nextCase}. Shared by value-position {@link #match} and tail-position
-         * {@link #emitTailMatch} so the two stay in step. */
-        private void emitCaseGuard(Core.Case c, int sSlot, Type st, Type element, Label nextCase) {
-            List<TypeSymbol> cases = c.caseTypes();
-            if (element != null) {
-                // Option match: a single Some/None case (or-patterns are rejected by the checker)
-                boolean isSome = cases.get(0).name().equals("Some");
-                code.aload(sSlot);
-                code.instanceOf(isSome ? CD_OptionSome : CD_OptionNone);
-                code.ifeq(nextCase);
-                if (isSome) {
-                    // unwrap Some(v) -> v, bound to the element type
-                    code.aload(sSlot);
-                    code.checkcast(CD_OptionSome);
-                    code.invokevirtual(CD_OptionSome, "value", MTD_Object);
+        /**
+         * The dispatch and case binding for one {@code match} arm; on no match, jumps to
+         * {@code nextCase}. Shared by value-position {@link #match} and tail-position
+         * {@link #emitTailMatch} so the two stay in step.
+         *
+         * <p>What each selector tests and what the arm binds are read off the pattern the checker
+         * resolved. Nothing here asks whether the subject was an optional or what a case name means:
+         * a carrier that is the value, one that wraps it, and one that holds nothing are three arms
+         * of {@link Refinement}, and the emission follows the arm rather than working out which it
+         * would have been.
+         */
+        private void emitCaseGuard(Core.Case c, int sSlot, Type st, Label nextCase) {
+            CaseGen.jumpUnlessAny(code, ctx, c.pattern().selectors(), sSlot, nextCase);
+            bindArm(c, sSlot, st);
+        }
+
+        /** Reads the arm's value out of the carrier and binds it. A wrapping carrier is opened
+         *  whether or not the arm names what it holds, as it always was: opening it is how the value
+         *  under it is reached at all. */
+        private void bindArm(Core.Case c, int sSlot, Type st) {
+            switch (c.pattern().binding()) {
+                case Refinement.Wrapped wrapped -> {
+                    Type element = wrapped.bound();
+                    CaseGen.pushBound(code, wrapped, sSlot);
                     int bslot = slot(element);
                     unbox(code, element, bslot);
                     if (c.binding() != null) {
                         bind(c.binding(), bslot, element);
                     }
                 }
-            } else if (cases.size() == 1) {
-                code.aload(sSlot);
-                code.instanceOf(matchCaseClass(cases.get(0)));
-                code.ifeq(nextCase);
-                if (c.binding() != null) {
+                case Refinement.Itself itself -> {
+                    Type bound = itself.bound();
+                    if (c.binding() == null || bound == null) {
+                        return;
+                    }
+                    if (bound.equals(st)) {
+                        // nothing narrowed it: the value is the subject, where it already is
+                        bind(c.binding(), sSlot, st);
+                        return;
+                    }
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
-                    Type bt = c.bindType();   // what the checker narrowed the scrutinee to here
-                    code.aload(sSlot);
-                    int bslot = slot(bt);
-                    unbox(code, bt, bslot);
-                    bind(c.binding(), bslot, bt);
+                    CaseGen.pushBound(code, itself, sSlot);
+                    int bslot = slot(bound);
+                    unbox(code, bound, bslot);
+                    bind(c.binding(), bslot, bound);
                 }
-            } else {
-                // or-pattern: run the body if the value is any of the cases; the binding (if any)
-                // is the scrutinee's sum type, which every alternative already is
-                Label body = code.newLabel();
-                for (TypeSymbol caseName : cases) {
-                    code.aload(sSlot);
-                    code.instanceOf(matchCaseClass(caseName));
-                    code.ifne(body);
-                }
-                code.goto_(nextCase);
-                code.labelBinding(body);
-                if (c.binding() != null) {
-                    bind(c.binding(), sSlot, st);
-                }
+                case Refinement.Absent ignored -> { }
             }
         }
 

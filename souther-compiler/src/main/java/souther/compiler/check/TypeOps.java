@@ -419,6 +419,21 @@ public final class TypeOps {
         return names;
     }
 
+    /** The type a case holds when a value turns out to be it. A primitive-named case (the
+     * {@code Int} of {@code Int | DivisionByZero}) holds that primitive; a data-named case holds its
+     * data type. Null where the name denotes no type — {@code Some} and {@code None} are
+     * primitive-module names that denote none, and neither does {@code Raw}, which no stage
+     * produces. An optional's carriers are read through {@link CaseSpace} instead, which knows the
+     * element this cannot. */
+    public static Type caseBindType(TypeSymbol caseName) {
+        if (!caseName.isPrimitive()) {
+            return Type.ref(caseName);
+        }
+        // Read back through the one spelling table rather than repeating it here.
+        Type.Prim prim = caseName.primitiveKind();
+        return prim == null || prim == Type.Prim.RAW ? null : prim;
+    }
+
     /**
      * What a sum's encoding adds to this case, or a behavior's answer to this member — read from the
      * declaration the name denotes (spec §encoder-derivation). A braced data lays its fields beside the

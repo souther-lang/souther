@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.MatchElaborator;
+import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -50,7 +50,7 @@ final class ResultBoundary {
             code.instanceOf(ctx.matchCaseClass(member));
             code.ifeq(next);
             ClassDesc bridge = ctx.bridgeCaseClass(member);
-            Type held = MatchElaborator.caseBindType(member);
+            Type held = TypeOps.caseBindType(member);
             code.new_(bridge);
             code.dup();
             code.aload(slot);
@@ -81,7 +81,7 @@ final class ResultBoundary {
             code.ifeq(next);
             code.aload(slot);
             code.checkcast(bridge);
-            Type held = MatchElaborator.caseBindType(member);
+            Type held = TypeOps.caseBindType(member);
             code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
             JvmTypes.box(code, held);
             code.goto_(done);

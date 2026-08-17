@@ -427,7 +427,7 @@ public final class GrowingFold {
                     if (body == null) {
                         return null;
                     }
-                    cases.add(new Core.Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos()));
+                    cases.add(c.answering(body));
                 }
                 return new Core.Match(m.scrutinee(), cases, m.origin(), m.type(), m.pos());
             }
