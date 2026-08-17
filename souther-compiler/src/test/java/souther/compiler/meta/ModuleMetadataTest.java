@@ -101,6 +101,71 @@ class ModuleMetadataTest {
                         "invariantHelpers"));
     }
 
+    /** What a clause reaches is read off the names it resolved to. A parameter is a binding, so a
+     *  helper it happens to be spelled like is not one this declaration needs. */
+    @Test
+    void aParameterSpelledLikeAHelperDoesNotCarryIt() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shadow.helper exposing ( echo )
+
+                let positive (n: Int) = n > 0
+
+                behavior echo : (positive: Int) -> Int
+                    ensures value == positive
+                let echo (positive) = positive
+                """);
+
+        assertEquals(List.of(),
+                strings(annotation(classes, Emitted.declarations("shadow.helper"), "SoutherModule"),
+                        "invariantHelpers"));
+    }
+
+    /**
+     * And a behavior's body never crosses, whatever is spelled like it.
+     *
+     * <p>The strongest form of the same rule: an implementation is not part of what a reader of the
+     * declarations needs, so a parameter sharing a behavior's name must not carry that behavior's
+     * `let` — nor, through it, the helpers only the implementation reaches.
+     */
+    @Test
+    void aParameterSpelledLikeABehaviorDoesNotCarryItsImplementation() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shadow.impl exposing ( echo )
+
+                behavior calculate : (x: Int) -> Int
+                let calculate (x) = implementationOnly(x)
+
+                let implementationOnly (n: Int) = n + 1
+
+                behavior echo : (calculate: Int) -> Int
+                    ensures value == calculate
+                let echo (calculate) = calculate
+                """);
+
+        assertEquals(List.of(),
+                strings(annotation(classes, Emitted.declarations("shadow.impl"), "SoutherModule"),
+                        "invariantHelpers"),
+                "an implementation does not cross the boundary, and neither does what only it reaches");
+    }
+
+    /** A helper a clause really calls is carried, since a reader cannot read the clause without it. */
+    @Test
+    void theHelperAClauseCallsIsCarried() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module carries.helper exposing ( echo )
+
+                let doubled (n: Int) = n * 2
+
+                behavior echo : (x: Int) -> Int
+                    ensures value == doubled(x)
+                let echo (x) = doubled(x)
+                """);
+
+        assertEquals(List.of("let doubled (n: Int) = n * 2"),
+                strings(annotation(classes, Emitted.declarations("carries.helper"), "SoutherModule"),
+                        "invariantHelpers"));
+    }
+
     /** A composition declares stages, not a signature. The importing module reads a signature, so
      * the computed one is written out and the stages stay behind. */
     @Test

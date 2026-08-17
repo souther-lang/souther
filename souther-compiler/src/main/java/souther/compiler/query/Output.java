@@ -182,10 +182,16 @@ public final class Output {
             CstFrontend.Parsed written = db.ask(new Front.Parsed(id)).value();
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Set<String> injected = db.ask(new Bodies.Injected(name)).value();
-            if (written == null || !sigs.present() || injected == null) {
+            // The resolved module beside the written one. What a declaration reaches is read off
+            // the names it resolved to, a clause being written among bindings that may be spelled
+            // like a helper; and it is read before the invariants are settled, since settling
+            // inlines the very calls this is looking for.
+            Answer<souther.compiler.ast.Hir.Module> resolved = db.ask(new Names.Resolved(name));
+            if (written == null || !sigs.present() || injected == null || !resolved.present()) {
                 return;
             }
-            ModuleMetadata.stamp(classes, written.module(), written.slices(), sigs.value(), injected);
+            ModuleMetadata.stamp(classes, written.module(), resolved.value(),
+                    written.slices(), sigs.value(), injected);
         }
 
         /** Maps each imported type name to its declaring module, for cross-package references. */
