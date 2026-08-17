@@ -1,8 +1,9 @@
-package souther.compiler.meta;
+package souther.bench;
 
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeModel;
@@ -16,35 +17,39 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What decides a policy reads the answer; what writes a sentence writes one payload's words; and
- * what makes an answer is the reading that made it.
+ * what makes an answer is the reading that made it — over every module the reactor builds.
  *
  * <p>{@code Reachability} has three arms and each carries something: why nothing arrives, what says
  * something does, why nothing settled it. A reader that took one of those apart would be deciding
- * an obligation, a diagnostic or a claim on a distinction inside the payload — and a distinction
+ * an obligation, a diagnostic or a claim on a distinction inside the payload, and a distinction
  * added there later would silently become a change to that decision.
  *
- * <p><b>Read off the compiled classes.</b> The arms being package-private stops the
- * {@code instanceof} and nothing else: {@code Words} and the factories are public, so a static
- * import or a qualified call reaches them, and a scan over source text answers about spellings
- * rather than about what a class does. What is checked here is what the bytecode says — who calls
- * {@code said}, who implements a {@code Words}, who calls a factory, and whose code runs an
- * answer's constructor — which no way of writing the call can dress up as something else.
+ * <p><b>Every module, because the rule is about the repository and not about one build.</b> The
+ * compiler's own copy of this check reads the classes of the module it runs in, which is quick and
+ * is all it can do: at the time that module's tests run, nothing downstream has been compiled. So
+ * the rule is owned here, where the reactor is finished and every module's classes exist — the same
+ * reason this module already reads them all to hold a generated class's name to one place.
+ *
+ * <p>Read off the compiled classes rather than the sources. The arms being package-private stops an
+ * {@code instanceof} and nothing else: a {@code Words} and the factories are public, so a static
+ * import, a qualified call or a method reference reaches them, and a scan over text answers about
+ * spellings. What the bytecode says — who calls {@code said}, who implements a {@code Words}, who
+ * calls a factory, whose code runs a constructor, and what handle a reference put in a bootstrap
+ * argument — is what a call is.
  *
  * <p>Both directions are asserted. A check that only counts violations passes when it reads nothing
- * at all, so every rule below also names what it expects to find and fails where that is missing.
- *
- * <p><b>This module's classes only, and the repository's are held elsewhere.</b> At the time these
- * tests run nothing downstream has been compiled, so a walk from here cannot cover a module that
- * depends on this one. What it is, is the fast local answer — a violation written in the compiler
- * fails here in seconds. The rule about the repository is the same one, owned in the module the
- * reactor finishes with, where every module's classes exist to be read.
+ * at all, so every rule names what it expects to find and fails where that is missing, and the walk
+ * fails where a module the reactor builds has no classes to read.
  */
 class OnlyARendererTakesAProofApartTest {
 
@@ -53,10 +58,10 @@ class OnlyARendererTakesAProofApartTest {
     /**
      * Who may ask each payload what it says, and write the words it says it in.
      *
-     * <p>Every payload is named, including the one nothing reads: a payload left out of this map
-     * would be one the rules below say nothing about, and adding words to it later would open a
-     * reader that nothing here would notice. {@code Witness} has no words today and the expected
-     * set for it is empty, which is a claim this check makes rather than a case it skips.
+     * <p>Every payload is named, including the one nothing reads: a payload left out would be one
+     * these rules say nothing about, and adding words to it later would open a reader that nothing
+     * here would notice. {@code Witness} has no words today and its expected set is empty, which is
+     * a claim rather than a case skipped.
      */
     private static final Map<String, List<String>> WRITES_THE_WORDS_OF = Map.of(
             REACH + "Proof",
@@ -65,13 +70,8 @@ class OnlyARendererTakesAProofApartTest {
             List.of("souther.compiler.query.ClaimAnnotations$UnsettledWords"),
             REACH + "Witness", List.of());
 
-    /**
-     * Who may make an answer.
-     *
-     * <p>By nest rather than by class: the reading is written as a class with helpers inside it,
-     * and which of them holds a given construction is its own business. What matters is that
-     * nothing outside the reading makes one.
-     */
+    /** Who may make an answer, by nest: which helper of the reading holds a given construction is
+     *  the reading's own business, and what matters is that nothing outside it makes one. */
     private static final String THE_READING = "souther.compiler.check.PathReachability";
 
     /** The answers themselves, whose constructors are as good as a factory to a consumer. */
@@ -123,7 +123,7 @@ class OnlyARendererTakesAProofApartTest {
     @Test
     void andNothingButTheReadingMakesAnAnswer() throws IOException {
         List<String> outside = new ArrayList<>();
-        List<Use> made = new ArrayList<>();
+        boolean sawAFactory = false;
         boolean sawAConstructor = false;
         for (Use use : uses()) {
             // A factory is static; reading a component off an answer already in hand is not one,
@@ -133,24 +133,30 @@ class OnlyARendererTakesAProofApartTest {
             if (!isFactory && !isAnswer) {
                 continue;
             }
+            sawAFactory |= isFactory;
             sawAConstructor |= isAnswer;
-            made.add(use);
             if (!nestOf(use.from()).equals(THE_READING)) {
                 outside.add(use.from() + " -> " + use.owner() + "." + use.member());
             }
         }
-        assertFalse(made.isEmpty(), "nothing makes an answer at all; this check is reading nothing");
-        assertFalse(!sawAConstructor,
+        assertTrue(sawAFactory, "no factory was called at all; this check is reading nothing");
+        assertTrue(sawAConstructor,
                 "no answer's constructor was seen; the check would miss one built directly");
         assertEquals(List.of(), outside, "these make an answer the reading did not make");
+    }
+
+    /** The nest a class belongs to: what is written inside the reading is the reading. */
+    private static String nestOf(String binaryName) {
+        int nested = binaryName.indexOf('$');
+        return nested < 0 ? binaryName : binaryName.substring(0, nested);
     }
 
     /**
      * What a method handle in a bootstrap argument comes to, said the way a call is.
      *
-     * <p>A reference is the call it stands for. Which kind of call it is decides the two things the
-     * rules ask: a static handle is a factory, a constructor handle makes the value, and a virtual
-     * one on a payload is asking it what it says.
+     * <p>A reference is the call it stands for and puts neither an invoke nor a new in the caller's
+     * code. Which kind of handle it is decides the two things these rules ask: static is a factory,
+     * a constructor handle makes the value, a virtual one on a payload asks it what it says.
      */
     private static Use referenced(String from, DirectMethodHandleDesc handle) {
         String owner = handle.owner().descriptorString();
@@ -163,13 +169,7 @@ class OnlyARendererTakesAProofApartTest {
         };
     }
 
-    /** The nest a class belongs to: what is written inside the reading is the reading. */
-    private static String nestOf(String binaryName) {
-        int nested = binaryName.indexOf('$');
-        return nested < 0 ? binaryName : binaryName.substring(0, nested);
-    }
-
-    /** Every call and construction the compiled classes hold, the answers' own aside. */
+    /** Every call and construction the built classes hold, the answers' own aside. */
     private static List<Use> uses() throws IOException {
         List<Use> found = new ArrayList<>();
         for (Path each : classes()) {
@@ -193,10 +193,6 @@ class OnlyARendererTakesAProofApartTest {
                                 made.className().asInternalName().replace('/', '.'), "<init>",
                                 false));
                     } else if (element instanceof InvokeDynamicInstruction lambda) {
-                        // A method or constructor reference is neither of the above. What it names
-                        // is a handle in the bootstrap arguments, and a factory reached that way is
-                        // a factory called — `Proof::conditionsThatCannotAllHold` and
-                        // `Reachability.Unreachable::new` put nothing else in the caller's code.
                         for (var argument : lambda.bootstrapArgs()) {
                             if (argument instanceof DirectMethodHandleDesc handle) {
                                 found.add(referenced(from, handle));
@@ -210,12 +206,46 @@ class OnlyARendererTakesAProofApartTest {
         return found;
     }
 
-    /** The compiled main classes of this module. Read from the build rather than from the sources,
-     *  because what a call is, is what the compiler made of it. */
+    /**
+     * Every module's compiled main classes.
+     *
+     * <p>A module with nothing built is a hole rather than a pass: this rule is about what the
+     * repository ships, and a module the walk could not read is one it says nothing about.
+     */
     private static List<Path> classes() throws IOException {
-        Path root = Path.of("target", "classes").toAbsolutePath();
-        try (Stream<Path> walk = Files.walk(root)) {
-            return walk.filter(each -> each.toString().endsWith(".class")).toList();
+        List<Path> found = new ArrayList<>();
+        for (String module : modules()) {
+            Path root = repoRoot().resolve(module).resolve("target/classes");
+            assertTrue(Files.isDirectory(root),
+                    module + " has no built classes: this check covers what has been built, so a"
+                            + " module that has not been is a hole rather than a pass");
+            try (Stream<Path> walk = Files.walk(root)) {
+                walk.filter(each -> each.toString().endsWith(".class")).forEach(found::add);
+            }
         }
+        return found;
+    }
+
+    /** The modules the reactor builds, read off the root pom so a module added later is covered by
+     *  being added rather than by being remembered here. */
+    private static List<String> modules() {
+        String pom;
+        try {
+            pom = Files.readString(repoRoot().resolve("pom.xml"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        List<String> modules = new ArrayList<>();
+        Matcher m = Pattern.compile("<module>([^<]+)</module>").matcher(pom);
+        while (m.find()) {
+            modules.add(m.group(1));
+        }
+        assertFalse(modules.isEmpty(), "the reactor names no modules");
+        return modules;
+    }
+
+    /** The test runs in its own module directory, so the repository root is its parent. */
+    private static Path repoRoot() {
+        return Path.of("").toAbsolutePath().getParent();
     }
 }
