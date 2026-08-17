@@ -121,23 +121,32 @@ public record ClaimAnnotations(List<Said> all) {
      *  this compiler learns to make later is a word the report chooses to add rather than one it
      *  gains by accident. */
     private static Why said(souther.compiler.reach.WhyUnsettled why) {
-        return switch (why) {
-            // What the position said about its own cases, in the words it said it in.
-            case souther.compiler.reach.WhyUnsettled.ThePositionDidNotSettleIt position ->
-                    said(position.why());
-            // Everything else is about the way to the arm rather than about the case. A reading
-            // that found no contradiction, one that could not take a condition in, one over a tree
-            // that had the operation expanded away, and one that never got there all leave the same
-            // thing unanswered: whether this fork is reached.
-            // A condition this reading has no rule for is its own limit and is said as such;
-            // everything else here leaves the same thing unanswered, which is whether this fork is
-            // reached at all.
-            case souther.compiler.reach.WhyUnsettled.AConditionWasNotRead _ ->
-                    Why.A_RULE_WENT_UNREAD;
-            case souther.compiler.reach.WhyUnsettled.NoWitness _,
-                 souther.compiler.reach.WhyUnsettled.TheWalkDidNotReachIt _ ->
-                    Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
-        };
+        // The one place a reason is turned into a word, and it says one for every arm or does not
+        // compile. A distinction this compiler learns to make later is a word this chooses to add
+        // rather than one it gains by accident.
+        return why.said(new souther.compiler.reach.WhyUnsettled.Words<Why>() {
+
+            @Override
+            public Why noWitness() {
+                return Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
+            }
+
+            @Override
+            public Why aConditionWasNotRead(souther.compiler.diag.SourcePos at) {
+                return Why.A_RULE_WENT_UNREAD;
+            }
+
+            @Override
+            public Why thePositionDidNotSettleIt(Unsettlement position) {
+                // What the position said about its own cases, in the words it said it in.
+                return said(position);
+            }
+
+            @Override
+            public Why theWalkDidNotReachIt() {
+                return Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
+            }
+        });
     }
 
     /** The same, for what a position answers about a case standing at it. */

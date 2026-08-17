@@ -73,9 +73,4 @@ public sealed interface Reachability {
             }
         }
     }
-
-    /** What a reading with nothing to say answers with. */
-    static Reachability notSettled(WhyUnsettled why) {
-        return new Unsettled(why);
-    }
 }

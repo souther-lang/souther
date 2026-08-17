@@ -22,10 +22,6 @@ public sealed interface DeadBranchMessage extends Message {
     record TheConditionsOnTheWayHereCannotAllHold(String conditions) implements DeadBranchMessage,
             Supporting {}
 
-    /** The values it is written for are not values the position can hold. */
-    record ThePositionStopsShortOfIt(String position, String admits) implements DeadBranchMessage,
-            Supporting {}
-
     /** Every case the arm names is one the rules refuse where it is matched on. */
     record EveryCaseItIsWrittenForIsRefused(String position, String cases)
             implements DeadBranchMessage, Supporting {}

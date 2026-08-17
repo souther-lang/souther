@@ -1,0 +1,80 @@
+package souther.compiler.check;
+
+import souther.compiler.diag.SourcePos;
+import souther.compiler.inputs.Unsettlement;
+import souther.compiler.reach.PathDecision;
+import souther.compiler.reach.Proof;
+import souther.compiler.reach.WhyUnsettled;
+import souther.compiler.types.TypeSymbol;
+
+import java.util.List;
+
+/**
+ * What a test reads off a proof or a reason, said the one way there is to say it.
+ *
+ * <p>A test is a reader like any other, and the arms are not types it can name either. So it asks
+ * the same way the renderer does — which is also what keeps a test from asserting on a distinction
+ * nothing writes a sentence about.
+ */
+final class WhatAnAnswerSays {
+
+    private WhatAnAnswerSays() {}
+
+    /** The conditions a proof rests on, or none where it rests on something else. */
+    static List<PathDecision> conditionsIn(Proof proof) {
+        return proof.said(new Proof.Words<List<PathDecision>>() {
+
+            @Override
+            public List<PathDecision> conditionsThatCannotAllHold(List<PathDecision> decisions) {
+                return decisions;
+            }
+
+            @Override
+            public List<PathDecision> everyCaseRefused(String position, List<TypeSymbol> cases) {
+                return List.of();
+            }
+        });
+    }
+
+    /** The cases a proof refuses, or none where it is not that kind of proof. */
+    static List<TypeSymbol> casesRefusedIn(Proof proof) {
+        return proof.said(new Proof.Words<List<TypeSymbol>>() {
+
+            @Override
+            public List<TypeSymbol> conditionsThatCannotAllHold(List<PathDecision> decisions) {
+                return List.of();
+            }
+
+            @Override
+            public List<TypeSymbol> everyCaseRefused(String position, List<TypeSymbol> cases) {
+                return cases;
+            }
+        });
+    }
+
+    /** Whether the reading could not take the condition in. */
+    static boolean isAConditionNotRead(WhyUnsettled why) {
+        return why.said(new WhyUnsettled.Words<Boolean>() {
+
+            @Override
+            public Boolean noWitness() {
+                return false;
+            }
+
+            @Override
+            public Boolean aConditionWasNotRead(SourcePos at) {
+                return true;
+            }
+
+            @Override
+            public Boolean thePositionDidNotSettleIt(Unsettlement position) {
+                return false;
+            }
+
+            @Override
+            public Boolean theWalkDidNotReachIt() {
+                return false;
+            }
+        });
+    }
+}

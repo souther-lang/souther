@@ -326,8 +326,12 @@ public final class Adequacy {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            Answer<Map<String, souther.compiler.check.PathReachability.Answers>> arrives =
-                    db.ask(new PathReached(name));
+            // What arrives once the rows have run, which is what every other consumer reads. A row
+            // that went through an arm this reading had proven nothing reaches settles it: what
+            // happened happened, the proof was wrong rather than the row, and warning about it
+            // would be a false report about a model the rows have already shown is fine.
+            Answer<Map<String, souther.compiler.check.PathReachability.Answers.AsRun>> arrives =
+                    db.ask(new Arrived(name));
             if (!arrives.present()) {
                 return Answer.absent();
             }
@@ -335,7 +339,7 @@ public final class Adequacy {
             // the arm that holds it, so the order it finds things in is a fact about the traversal;
             // where a warning sits in the output should be a fact about the source.
             List<Dead> found = new ArrayList<>();
-            arrives.value().forEach((behavior, answers) -> answers.found()
+            arrives.value().forEach((behavior, asRun) -> asRun.answers().found()
                     .forEach((where, said) -> {
                         // Only the forks this module's own source wrote. A call into another
                         // module splices that module's forks in here, and an argument this call
@@ -377,24 +381,41 @@ public final class Adequacy {
         private static Report warning(
                 souther.compiler.coverage.ControlPointId.ArmOccurrence arm,
                 souther.compiler.reach.Proof proof) {
+            // The one place a proof is turned into words, and it says a word for every arm or
+            // does not compile. Handed over rather than taken apart: the arms are not types this
+            // package can name, so a reader added later cannot decide anything by which one it got.
             souther.compiler.diag.Diagnostic.Builder said = Warnings.pointedAt(arm.at())
                     .say(new DeadBranchMessage.NothingReachesThisBranch());
-            // Exhaustive with no default. A proof added to the reading stops here and is given
-            // words of its own, rather than falling into a sentence written for something else.
-            souther.compiler.diag.Diagnostic.Builder why = switch (proof) {
-                case souther.compiler.reach.Proof.ConflictingPathConditions conflicting ->
-                        said.hint(new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold(
-                                said(conflicting)));
-                case souther.compiler.reach.Proof.OutsideWhatThePositionHolds outside ->
-                        said.hint(new DeadBranchMessage.ThePositionStopsShortOfIt(
-                                outside.position(), outside.admits()));
-                case souther.compiler.reach.Proof.EveryCaseRefused refused ->
-                        said.hint(new DeadBranchMessage.EveryCaseItIsWrittenForIsRefused(
-                                refused.position(),
-                                refused.cases().stream()
-                                        .map(souther.compiler.types.TypeSymbol::name)
-                                        .collect(java.util.stream.Collectors.joining(", "))));
-            };
+            souther.compiler.diag.Diagnostic.Builder why = proof.said(
+                    new souther.compiler.reach.Proof.Words<
+                            souther.compiler.diag.Diagnostic.Builder>() {
+
+                        @Override
+                        public souther.compiler.diag.Diagnostic.Builder
+                                conditionsThatCannotAllHold(
+                                        List<souther.compiler.reach.PathDecision> decisions) {
+                            return said.hint(
+                                    new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold(
+                                            decisions.stream()
+                                                    .map(each -> "line " + each.at().line()
+                                                            + (each.held() ? " holding" : " failing"))
+                                                    .collect(java.util.stream.Collectors
+                                                            .joining(", "))));
+                        }
+
+                        @Override
+                        public souther.compiler.diag.Diagnostic.Builder everyCaseRefused(
+                                String position,
+                                List<souther.compiler.types.TypeSymbol> cases) {
+                            return said.hint(
+                                    new DeadBranchMessage.EveryCaseItIsWrittenForIsRefused(
+                                            position,
+                                            cases.stream()
+                                                    .map(souther.compiler.types.TypeSymbol::name)
+                                                    .collect(java.util.stream.Collectors
+                                                            .joining(", "))));
+                        }
+                    });
             return Report.of(why.hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
                     .build());
         }
@@ -416,13 +437,6 @@ public final class Adequacy {
             };
         }
 
-        /** The conditions on the way, as an author reads them: where each is written and which way
-         *  it went. */
-        private static String said(souther.compiler.reach.Proof.ConflictingPathConditions why) {
-            return why.decisions().stream()
-                    .map(each -> "line " + each.at().line() + (each.held() ? " holding" : " failing"))
-                    .collect(java.util.stream.Collectors.joining(", "));
-        }
     }
 
 

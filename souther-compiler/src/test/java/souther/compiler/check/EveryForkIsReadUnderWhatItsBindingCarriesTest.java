@@ -12,6 +12,7 @@ import souther.compiler.reach.Reachability;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -135,6 +136,63 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
     }
 
     /**
+     * A row that went through an arm this reading had proven nothing reaches is not warned about.
+     *
+     * <p>What happened happened: the proof was wrong rather than the row, and the arm is back in
+     * every denominator before any measure sees it. A diagnostic reading the proof instead would be
+     * the one consumer left telling an author about a branch the rows have already been through.
+     *
+     * <p>The row lands on the arm by way of a fake that answers what no `Amount` could — which is
+     * how a run gets somewhere the rules say nothing arrives.
+     */
+    @Test
+    void aRowThroughAnArmTheProofRuledOutIsNotWarnedAbout() {
+        String model = """
+                module demo
+
+                data Amount = Int invariant value >= 0 && value <= 100
+                data Free
+                data Charged = { yen: Int }
+
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Free, Charged
+
+                let charge (a) = {
+                    guard a.value < 200 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+        Compilation c = Compilation.ofSource(model, "demo");
+        c.measure(Adequacy.Asked.reportOnly());
+        c.answerEverything();
+        List<String> codes = c.reports().stream()
+                .map(each -> each.report().diagnostic().code())
+                .filter("E1327"::equals)
+                .toList();
+        assertEquals(List.of("E1327"), codes,
+                "nothing ran through it, so what the reading proved stands");
+
+        // And the same answers with a run through that arm, which is what the diagnostic reads.
+        // The warning above comes off these; corrected, there is no longer anything to warn about,
+        // which is the whole of the difference between reading the proof and reading what arrived.
+        PathReachability.Answers answers =
+                c.db().ask(new Adequacy.PathReached("demo")).value().get("charge");
+        int probe = answers.found().entrySet().stream()
+                .filter(each -> each.getValue() instanceof Reachability.Unreachable)
+                .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
+                .map(each -> (ControlPointId.ArmOccurrence) each.getKey())
+                .findFirst().orElseThrow().probe().orElseThrow();
+        PathReachability.Answers.AsRun ran = answers.asRunWith(java.util.Set.of(probe));
+        assertEquals(Set.of(probe), ran.provedWrong(),
+                "a row through it is what takes the proof back");
+        assertEquals(List.of(), ran.answers().found().entrySet().stream()
+                        .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
+                        .map(Map.Entry::getValue)
+                        .filter(Reachability.Unreachable.class::isInstance).toList(),
+                "so no arm is left for the diagnostic to be about");
+    }
+
+    /**
      * A condition the reading could not take in is not among the reasons a proof gives.
      *
      * <p>The proof says which conditions leave nothing together. One that narrowed nothing did no
@@ -160,7 +218,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 }
                 """, "demo", "pick");
         assertEquals(1, proven.size(), "the numeric guard departs where an `Amount` cannot go");
-        List<PathDecision> why = ((Proof.ConflictingPathConditions) proven.get(0)).decisions();
+        List<PathDecision> why = WhatAnAnswerSays.conditionsIn(proven.get(0));
         assertEquals(1, why.size(),
                 () -> "only the condition that was read is a reason: " + why);
     }

@@ -69,7 +69,7 @@ public final class PathReachability {
         public Reachability at(ControlPointId where) {
             Reachability answer = found.get(where);
             return answer != null ? answer
-                    : Reachability.notSettled(new WhyUnsettled.TheWalkDidNotReachIt());
+                    : new Reachability.Unsettled(WhyUnsettled.theWalkDidNotReachIt());
         }
 
         /**
@@ -85,7 +85,7 @@ public final class PathReachability {
                     return each.getValue();
                 }
             }
-            return Reachability.notSettled(new WhyUnsettled.TheWalkDidNotReachIt());
+            return new Reachability.Unsettled(WhyUnsettled.theWalkDidNotReachIt());
         }
 
         /**
@@ -111,7 +111,7 @@ public final class PathReachability {
                     provedWrong.add(arm.probe().getAsInt());
                 }
                 out.put(where, new Reachability.Reachable(
-                        new Witness.ARunWentThrough(arm.probe().getAsInt())));
+                        Witness.aRunWentThrough(arm.probe().getAsInt())));
             });
             return new AsRun(new Answers(out), provedWrong);
         }
@@ -331,9 +331,9 @@ public final class PathReachability {
             }
             Predicates.Assumed taken = engine.assuming(cond, k, at, result);
             out.put(where.get(), taken.known().reachesNothing()
-                    ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(
+                    ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(
                             with(decided, taken, cond.pos(), result)))
-                    : Reachability.notSettled(whyNot(taken, cond)));
+                    : new Reachability.Unsettled(whyNot(taken, cond)));
         }
     }
 
@@ -347,8 +347,8 @@ public final class PathReachability {
      * the state it was given — that comparison says whether anything changed, which is neither.
      */
     private static WhyUnsettled whyNot(Predicates.Assumed taken, Core cond) {
-        return taken.read() ? new WhyUnsettled.NoWitness()
-                : new WhyUnsettled.AConditionWasNotRead(cond.pos());
+        return taken.read() ? WhyUnsettled.noWitness()
+                : WhyUnsettled.aConditionWasNotRead(cond.pos());
     }
 
     /**
@@ -384,8 +384,8 @@ public final class PathReachability {
         List<PathDecision> under = with(decided, taken, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
-                    ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(under))
-                    : Reachability.notSettled(whyNot(taken, iff.cond())));
+                    ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(under))
+                    : new Reachability.Unsettled(whyNot(taken, iff.cond())));
         }
         walk(arm, inside, at, reads, under, false);
     }
@@ -419,7 +419,7 @@ public final class PathReachability {
             // walk's. Said in its words so that a claim below the depth is told what it is told
             // everywhere else.
             Reachability said = at == null
-                    ? Reachability.notSettled(new WhyUnsettled.ThePositionDidNotSettleIt(
+                    ? new Reachability.Unsettled(WhyUnsettled.thePositionDidNotSettleIt(
                             new souther.compiler.inputs.Unsettlement.NoSuchDistinction()))
                     : saidOf(at, path, match.cases().get(i), nothingAbove);
             if (said != null) {
@@ -438,12 +438,13 @@ public final class PathReachability {
         if (named.stream().allMatch(each -> at.admissionOf(each) instanceof Admits.Refused)) {
             // Every case it is written for is one the rules refuse, so an arm a row could still
             // take is not among these: an arm goes only where all of them go.
-            return new Reachability.Unreachable(new Proof.EveryCaseRefused(path.toString(), named));
+            return new Reachability.Unreachable(
+                    Proof.everyCaseRefused(path.toString(), named));
         }
         for (TypeSymbol each : named) {
             if (at.admissionOf(each) instanceof Admits.Unsettled unsettled) {
-                return Reachability.notSettled(
-                        new WhyUnsettled.ThePositionDidNotSettleIt(unsettled.why()));
+                return new Reachability.Unsettled(
+                        WhyUnsettled.thePositionDidNotSettleIt(unsettled.why()));
             }
         }
         // Every one of them left standing, so a caller can supply one. Whether it arrives at this
@@ -451,7 +452,7 @@ public final class PathReachability {
         // it: a fork the body reaches first is reached by the behavior being applied at all.
         return nothingAbove
                 ? new Reachability.Reachable(
-                        new Witness.EveryRuleReadAndNothingAbove(path.toString()))
-                : Reachability.notSettled(new WhyUnsettled.NoWitness());
+                        Witness.everyRuleReadAndNothingAbove(path.toString()))
+                : new Reachability.Unsettled(WhyUnsettled.noWitness());
     }
 }

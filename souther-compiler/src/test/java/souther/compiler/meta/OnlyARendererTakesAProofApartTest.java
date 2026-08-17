@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * What decides a policy reads the answer, and what writes a sentence reads one payload.
+ * What decides a policy reads the answer, and what writes a sentence writes one payload's words.
  *
  * <p>{@code Reachability} has three arms and each carries something: why nothing arrives, what says
  * something does, why nothing settled it. A reader that took one of those apart would be deciding
@@ -25,11 +25,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * added there later would silently become a change to that decision. Kept out, an arm added to a
  * payload is a compile error in one place and a change to no policy.
  *
- * <p><b>One place each, not one list of trusted files.</b> A file allowed to read a proof is not
- * thereby allowed to read a reason: those are different sentences written by different readers, and
- * a single exemption would let either grow into the other without anything saying so. Building one
- * of these is its own permission again — the answers are made by the reading that makes them and by
- * nothing downstream.
+ * <p><b>Held by the types first, and measured here second.</b> The arms of a proof, a witness and a
+ * reason are package-private in {@code souther.compiler.reach}, so nothing outside can name one: a
+ * reader gets at what one holds by implementing its {@code Words}, which is a compile error the day
+ * an arm is added and no error at all when it is not. That is the guarantee; a scan cannot be one,
+ * since a nested import, a simple name or a qualified constructor walks round any spelling it looks
+ * for.
+ *
+ * <p>What is left for a scan is the thing the compiler has no word for: which file may write which
+ * payload's sentences. A file allowed to write a proof's is not thereby allowed to write a reason's
+ * — those are different sentences by different readers, and one exemption would let either grow
+ * into the other without anything saying so.
  */
 class OnlyARendererTakesAProofApartTest {
 
@@ -59,15 +65,19 @@ class OnlyARendererTakesAProofApartTest {
      *  line can be met from — and a scan by spelling would answer about those. */
     private static final String THE_PACKAGE = "souther.compiler.reach";
 
+    /** Writing a payload's sentences is implementing its {@code Words}. Nothing else can. */
     private static Pattern namesAnArmOf(String payload) {
-        return Pattern.compile("\\b" + payload + "\\s*\\.\\s*[A-Z][A-Za-z]*");
+        return Pattern.compile("\\b" + payload + "\\s*\\.\\s*Words\\b");
     }
 
     private static final Pattern BUILDS =
-            Pattern.compile("new\\s+(?:Proof|Witness|WhyUnsettled|Reachability)\\s*\\.");
+            Pattern.compile("\\b(?:Proof|Witness|WhyUnsettled|Reachability)\\s*\\.\\s*"
+                    + "(?:conditionsThatCannotAllHold|everyCaseRefused|aRunWentThrough"
+                    + "|everyRuleReadAndNothingAbove|noWitness|aConditionWasNotRead"
+                    + "|thePositionDidNotSettleIt|theWalkDidNotReachIt)\\s*\\(");
 
     @Test
-    void eachPayloadIsTakenApartByItsOwnReaderAndNoOther() throws IOException {
+    void eachPayloadsSentencesAreWrittenByItsOwnReaderAndNoOther() throws IOException {
         List<String> offenders = new ArrayList<>();
         for (Path source : sourcesThatNameThePackage()) {
             String name = source.getFileName().toString();
@@ -88,7 +98,7 @@ class OnlyARendererTakesAProofApartTest {
             }
         }
         assertEquals(List.of(), offenders,
-                "these read inside a payload they should be deciding from the arms of");
+                "these write sentences for a payload that is not theirs to write");
     }
 
     @Test

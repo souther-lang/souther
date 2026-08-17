@@ -125,10 +125,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
         assertEquals(1, proven.size(),
                 "the second guard's departure, and not the first's and neither of the arms it "
                         + "guards");
-        Proof why = proven.get(0);
-        assertInstanceOf(Proof.ConflictingPathConditions.class, why,
-                "what makes it unreachable is the conditions on the way to it");
-        assertEquals(2, ((Proof.ConflictingPathConditions) why).decisions().size(),
+        assertEquals(2, WhatAnAnswerSays.conditionsIn(proven.get(0)).size(),
                 "both guards are on the way to it, and the proof says which they are");
     }
 
@@ -146,7 +143,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 "one guard makes one fork of two arms");
         List<Proof> proven = provenIn(OUTSIDE_THE_DECLARATION);
         assertEquals(1, proven.size(), "an `Amount` stops at a million, so nothing reaches two");
-        assertEquals(1, ((Proof.ConflictingPathConditions) proven.get(0)).decisions().size(),
+        assertEquals(1, WhatAnAnswerSays.conditionsIn(proven.get(0)).size(),
                 "one guard is on the way to it; what it conflicts with is what the input is");
     }
 
@@ -297,9 +294,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                         .filter(Reachability.Unsettled.class::isInstance)
                         .map(each -> ((Reachability.Unsettled) each).why())
                         .toList();
-        assertTrue(why.stream()
-                        .anyMatch(souther.compiler.reach.WhyUnsettled.AConditionWasNotRead.class
-                                ::isInstance),
+        assertTrue(why.stream().anyMatch(WhatAnAnswerSays::isAConditionNotRead),
                 () -> "the fold is not a condition this reads: " + why);
     }
 
@@ -309,9 +304,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 .filter(Reachability.Unsettled.class::isInstance)
                 .map(each -> ((Reachability.Unsettled) each).why())
                 .toList();
-        assertTrue(why.stream()
-                        .noneMatch(souther.compiler.reach.WhyUnsettled.AConditionWasNotRead.class
-                                ::isInstance),
+        assertTrue(why.stream().noneMatch(WhatAnAnswerSays::isAConditionNotRead),
                 () -> "a size is read as it is written, so nothing here is unread: " + why);
     }
 
