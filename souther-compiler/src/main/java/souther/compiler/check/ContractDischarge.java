@@ -7,6 +7,7 @@ import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.check.BehaviorContract.Rule;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -47,24 +48,30 @@ public record ContractDischarge(List<RuleDischarge> rules,
     public record RuleDischarge(BehaviorContract.RuleId rule, ClauseDischarge capability) {}
 
     /**
-     * What the check can read of {@code contract}, which is written in the representation the check
-     * reads ({@link InliningPolicy#DISCHARGE}).
+     * What the check can read of {@code contract}, whose rules are as their author wrote them. Each
+     * is expanded into the representation the check reads ({@link InliningPolicy#DISCHARGE}) as it is
+     * classified, so what comes back is placed and split where it is written.
      *
      * <p>Handed a contract rather than a declaration. What a rule is about, what {@code value} is
      * there and which rule it is are the reading's answers ({@link BehaviorChecker}), and this asks
-     * one question of them. The contract handed here is the same declaration read by that same
-     * reading into the tree the check has rules about, so its {@link BehaviorContract.RuleId}s are the
-     * ids of the rules that run — a reader holding both is not left matching them up.
+     * one question of them. The contract handed here is the same declaration that reading reads for
+     * the tree that runs, so its {@link BehaviorContract.RuleId}s are the ids of the rules that run —
+     * a reader holding both is not left matching them up.
      *
+     * @param expansion what turns a piece of what was written into the tree the check reads. Applied
+     *                  here, one conjunct at a time, rather than to the declaration before it was
+     *                  read: an expansion carries the positions of the body it copies in, so a rule
+     *                  expanded first would be placed inside the helper it names and split where that
+     *                  helper's author split it
      * @param helpers the signatures a rule may reach without a binding, as the check that holds a
      *                rule to its declaration reads them
      */
-    public static ContractDischarge of(BehaviorContract contract, Symbols symbols,
-                                       Map<String, Type> helpers) {
+    public static ContractDischarge of(BehaviorContract contract, HelperInliner expansion,
+                                       Symbols symbols, Map<String, Type> helpers) {
         List<RuleDischarge> classified = new ArrayList<>();
         for (Clause clause : contract.clauses()) {
             for (Rule rule : clause.rules()) {
-                classified.addAll(of(contract, clause, rule, symbols, helpers));
+                classified.addAll(of(contract, clause, rule, expansion, symbols, helpers));
             }
         }
         return new ContractDischarge(classified, unstatedCases(contract, symbols));
@@ -77,9 +84,15 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * what discharges the other, and an author acts on the half. The name the clause was declared
      * with goes on each of them, because a violation is reported by the clause however many conjuncts
      * it was written as.
+     *
+     * <p>Split where the author wrote the {@code &&} and not where an expansion put one. A rule
+     * naming a helper whose body is a conjunction is one thing the author wrote, so it is one answer;
+     * splitting the expanded tree would hand back two answers to a rule nobody wrote as two, each
+     * placed inside the helper.
      */
     private static List<RuleDischarge> of(BehaviorContract contract, Clause clause, Rule rule,
-                                          Symbols symbols, Map<String, Type> helpers) {
+                                          HelperInliner expansion, Symbols symbols,
+                                          Map<String, Type> helpers) {
         Scope scope = BehaviorChecker.scopeOf(contract, rule).reaching(helpers);
         CheckContext ctx = CheckContext.of(symbols).forDischarge();
         // The parameters and `value` stand for themselves. A caller hands one value per parameter and
@@ -93,11 +106,13 @@ public record ContractDischarge(List<RuleDischarge> rules,
         named.add(rule.value());
         Denotations locations = Denotations.none().locations(named);
 
+        BindingOwner owner = BehaviorContract.ownerOf(contract.behavior());
         List<RuleDischarge> out = new ArrayList<>();
-        for (Hir.Expr conjunct : ClauseHelpers.conjunctsOf(rule.statement())) {
+        for (Hir.Expr written : ClauseHelpers.conjunctsOf(rule.statement())) {
             out.add(new RuleDischarge(rule.id(),
-                    InvariantChecker.capabilityOf(typed(conjunct, scope, ctx),
-                            ClauseHelpers.beginsAt(conjunct), locations, symbols,
+                    InvariantChecker.capabilityOf(
+                            typed(expansion.inline(written, owner), scope, ctx),
+                            ClauseHelpers.beginsAt(written), locations, symbols,
                             contract.behavior().name()).named(clause.name())));
         }
         return out;

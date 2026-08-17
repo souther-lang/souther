@@ -69,16 +69,26 @@ public final class BehaviorChecker {
      * which — is a property of the declaration and not of the representation, so this reads the same
      * rules under the same {@link RuleId}s as {@link #contractOf} does of the tree that runs. What is
      * not done again is the holding: a clause that is not well formed is one mistake, and the reading
-     * that reports it is the one the author's build is made of. An arm this cannot read contributes
-     * no rule, as it does there.
+     * that reports it is the one the author's build is made of.
+     *
+     * <p>All of the declaration or none of it. An arm that cannot be read contributes no rule, and a
+     * contract missing one is a contract that says the author stated nothing about the cases that arm
+     * named — which is the opposite of what they wrote, and is what a reader of it would be told. The
+     * refusal is already being reported by the reading that holds the declaration to its rules, so
+     * there is nothing to say here beyond declining to answer.
      *
      * @throws Unanswerable where there is no signature to read the rules against
-     * @throws CompileException where the declaration cannot be read at all, which the executable
+     * @throws CompileException where any of the declaration could not be read, which the executable
      *     reading of it reports as well
      */
     public static BehaviorContract contractAsRead(Hir.SpecBehavior behavior, String module, Sig sig,
                                                   Symbols symbols) {
-        return read(behavior, module, sig, symbols, new ArrayList<>());
+        List<Diagnostic> unread = new ArrayList<>();
+        BehaviorContract contract = read(behavior, module, sig, symbols, unread);
+        if (!unread.isEmpty()) {
+            throw CompileException.of(unread.get(0));
+        }
+        return contract;
     }
 
     /** The declaration as rules, with what could not be read of it collected into {@code found}. */

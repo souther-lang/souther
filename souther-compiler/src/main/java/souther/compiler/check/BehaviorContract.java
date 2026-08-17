@@ -105,6 +105,10 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
      * name the same case, and {@code Found -> p | Found -> q} is two rules. It moves when arms are
      * added, removed or reordered, which is the declaration changing shape — not something else in the
      * module moving.
+     *
+     * <p>It counts the arms of the whole behavior and not of its clause, so the arms of the second
+     * clause carry on from where the first left off. That is what the binding {@code value} is is
+     * numbered by, and one number for both is one thing to keep true instead of two.
      */
     public record RuleId(ValueName.Behavior behavior, int clause, int arm, TypeSymbol selector) {}
 

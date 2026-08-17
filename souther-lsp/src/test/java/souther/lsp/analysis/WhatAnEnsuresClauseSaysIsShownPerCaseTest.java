@@ -115,6 +115,91 @@ class WhatAnEnsuresClauseSaysIsShownPerCaseTest {
                 hover.get().contents());
     }
 
+    /**
+     * A rule written through a helper is still answered on the clause.
+     *
+     * <p>The helper is expanded before the rule is classified, and an expansion of a module's own
+     * helper carries the positions its body has. Placed by those, the answer falls outside the
+     * clause the cursor is in and this shows nothing — which reads as a rule the compiler has nothing
+     * to say about.
+     */
+    @Test
+    void aRuleWrittenThroughAHelperIsStillShown() {
+        String source = """
+                module demo exposing ( Id, Found, findIt )
+
+                let ranked (rank: Int, id: Id): Bool = rank > 0 && rank > id.n
+
+                data Id    = { n: Int }
+                data Found = { rank: Int }
+
+                behavior findIt : (id: Id) -> Found
+                    constructs Found
+                    ensures ranked(value.rank, id)
+
+                let findIt (id) = Found { rank = 1 }
+                """;
+
+        Optional<Hover> hover = hover(source, 9, 20);
+
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("What the check reads of this"),
+                hover.get().contents());
+    }
+
+    /**
+     * The note about unstated cases is for the behavior's declaration, and a name is not a
+     * declaration.
+     *
+     * <p>A definition is found here by the characters of a name, so a parameter spelled like a
+     * behavior of the module finds that behavior. What would be shown then is what a behavior states,
+     * on a value that states nothing.
+     */
+    @Test
+    void aParameterSpelledLikeABehaviorIsNotThatBehavior() {
+        String source = SRC.replace(
+                "      | Missing -> String.startsWith(id.label, value.asked)\n", "")
+                + "\nlet echo (findIt: Id): Int = findIt.n\n";
+
+        // over the parameter `findIt`, not over the behavior's name
+        Optional<Hover> hover = hover(source, 13, 11);
+
+        assertTrue(hover.isPresent());
+        assertFalse(hover.get().contents().contains("Nothing is stated about"),
+                hover.get().contents());
+    }
+
+    /**
+     * A behavior whose name is written decomposed is the same behavior.
+     *
+     * <p>What the compiler filed the answer under is the canonical name, and a cursor is characters.
+     * Which spelling an author's cursor happens to be on is not a thing an editor may answer
+     * differently.
+     */
+    @Test
+    void aDecomposedlyNamedBehaviorStillSaysWhatIsNotStated() {
+        String kana = new String(new int[] {0x304b, 0x3099}, 0, 2);
+        String source = """
+                module demo exposing ( Id, Found, Missing, %s )
+
+                data Id      = { n: Int }
+                data Found   = { n: Int }
+                data Missing = { asked: String }
+
+                behavior %s : (id: Id) -> Found | Missing
+                    constructs Found, Missing
+                    ensures Found -> value.n == id.n
+
+                let %s (id) = Found { n = id.n }
+                """.formatted(kana, kana, kana);
+
+        Optional<Hover> hover = hover(source, 6, 9);
+
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("Nothing is stated about `Missing`"),
+                hover.get().contents());
+    }
+
     /** Outside a clause the hover is what it was: this one has something semantic to say only where
      *  a rule is written. */
     @Test

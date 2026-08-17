@@ -405,14 +405,14 @@ public final class Bodies {
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             Map<String, ContractDischarge> out = new LinkedHashMap<>();
             try {
-                Map<String, Hir.SpecBehavior> declaring = ClauseHelpers.ensuresForDischarge(
+                ClauseHelpers.WrittenEnsures declaring = ClauseHelpers.ensuresForDischarge(
                         expandable.value(), scope.value(), published);
-                for (Map.Entry<String, Hir.SpecBehavior> each : declaring.entrySet()) {
+                for (Map.Entry<String, Hir.SpecBehavior> each : declaring.behaviors().entrySet()) {
                     try {
                         BehaviorContract contract = BehaviorChecker.contractAsRead(each.getValue(),
                                 name, signatures.value().get(each.getKey()), scope.value());
-                        out.put(each.getKey(),
-                                ContractDischarge.of(contract, scope.value(), helpers.value()));
+                        out.put(each.getKey(), ContractDischarge.of(contract, declaring.expansion(),
+                                scope.value(), helpers.value()));
                     } catch (Unanswerable | CompileException _) {
                         // The declaration could not be read, which is said where it is held to its
                         // rules. There is nothing to classify, and a behavior that cannot be read

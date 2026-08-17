@@ -86,27 +86,50 @@ public final class ClauseHelpers {
     }
 
     /**
-     * Each behavior's {@code ensures} in the representation the discharge analysis reads, by the name
-     * the behavior is declared under. A behavior stating nothing is not here.
+     * The behaviors of a module that state something, as their author wrote them, beside the
+     * expansion the discharge analysis reads them under.
      *
-     * <p>The same reading {@link #invariantsForDischarge} gives a declaration's clauses, of the other
-     * kind of clause. The whole declaration and not its clauses alone, because what a rule is read
-     * against — which cases the answer has, what each parameter holds — is read off the same node,
-     * and a reader handed the clauses would go back to the module for the rest.
+     * <p>Not expanded here, which is the difference from {@link #invariantsForDischarge} and the
+     * reason this hands over the expansion instead. A rule is shown to whoever wrote it, so what a
+     * reader is given has to be said at the position it is written at and split where the author
+     * split it — and an expansion carries the positions of the body it copied in
+     * ({@link HelperInliner}), so a rule expanded before it is read would be reported inside the
+     * helper it names. The clauses are split and placed against what is written, and each piece is
+     * expanded after that (spec §ensures-discharge-capability).
+     *
+     * <p>The whole declaration and not its clauses alone, because what a rule is read against —
+     * which cases the answer has, what each parameter holds — is read off the same node, and a
+     * reader handed the clauses would go back to the module for the rest.
      */
-    public static Map<String, Hir.SpecBehavior> ensuresForDischarge(
+    public static WrittenEnsures ensuresForDischarge(
             Expandable expandable, Symbols symbols, Map<String, Hir.FnDef> published) {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols);
-        HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
-                published, InliningPolicy.DISCHARGE);
         Map<String, Hir.SpecBehavior> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
-                out.put(spec.name(), withInlinedEnsures(inliner, settled.name(), spec));
+                out.put(spec.name(), spec);
             }
         }
-        return out;
+        return new WrittenEnsures(out, HelperInliner.forHelpers(m.name(),
+                HelperInliner.helpersOf(settled), published, InliningPolicy.DISCHARGE));
+    }
+
+    /**
+     * What a module states about its answers as it is written, and what expands a piece of it into
+     * the representation the discharge analysis reads.
+     *
+     * <p>The two travel together because neither is usable alone: the written form is what a reader
+     * is shown and is not what the analysis has rules about, and the expansion says nothing about
+     * which behavior or which clause is being expanded.
+     */
+    public record WrittenEnsures(Map<String, Hir.SpecBehavior> behaviors, HelperInliner expansion) {
+
+        public WrittenEnsures {
+            // Kept in the order the module declares them, so that what a reader is handed does not
+            // depend on how a map happened to hash the names.
+            behaviors = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(behaviors));
+        }
     }
 
     /** {@code m} with its helper parameter types settled and the names in its invariants written

@@ -152,6 +152,37 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
     }
 
     /**
+     * A rule naming a helper is answered where the rule is written, not where the helper is.
+     *
+     * <p>The helper is expanded before the rule is read, and an expansion of a module's own helper
+     * carries the positions its body has. Answered from the expanded tree, the rule would be placed
+     * inside the {@code let} — which for the reader that asks this is a rule belonging to no clause
+     * of the behavior at all.
+     */
+    @Test
+    void aRuleThroughAHelperIsAnsweredWhereItIsWritten() {
+        ContractDischarge discharge = of("""
+                module m.a exposing ( Id, Found, findIt )
+
+                let ranked (rank: Int, id: Id): Bool = rank > 0 && rank > id.value
+
+                data Id    = Int
+                data Found = { id: Id, rank: Int }
+
+                behavior findIt : (id: Id) -> Found
+                    constructs Found
+                    ensures ranked(value.rank, id)
+
+                let findIt (id) = Found { id = id, rank = 1 }
+                """, "findIt");
+
+        assertEquals(1, discharge.rules().size(),
+                "one rule, because the author wrote one — the `&&` is the helper's, not theirs");
+        assertEquals(10, discharge.rules().get(0).capability().clause().line(),
+                "the `ensures` line, not the `let` on line 3");
+    }
+
+    /**
      * A case no rule names carries no stated relation, and that is the declaration speaking rather
      * than a mistake in it. It is answered here so a reader can be shown it, not reported.
      */
@@ -167,6 +198,42 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
     @Test
     void aBehaviorWhoseEveryCaseIsSpokenForHasNoneLeft() {
         assertEquals(List.of(), of(FINDS, "findIt").casesNothingIsSaidAbout());
+    }
+
+    /**
+     * A declaration with an arm that cannot be read is not classified at all.
+     *
+     * <p>The arm contributes no rule, so what is left says nothing about the cases that arm named —
+     * and a reader of it would be told that the author stated nothing about them, which is the
+     * opposite of what they wrote. The refusal is reported where the declaration is held to its
+     * rules; here there is simply no answer.
+     */
+    @Test
+    void aDeclarationOneArmOfWhichCannotBeReadIsNotClassified() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("a.sou", """
+                module m.a exposing ( Id, Found, Missing, Other, findIt )
+
+                data Id      = Int
+                data Found   = { id: Id }
+                data Missing = { asked: Id }
+                data Other   = { x: Int }
+
+                behavior findIt : (id: Id) -> Found | Missing
+                    constructs Found, Missing
+                    ensures Found | Other -> value.id == id
+
+                let findIt (id) = if id.value > 0 then Found { id = id } else Missing { asked = id }
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+
+        Map<String, ContractDischarge> byName =
+                c.db().ask(new Bodies.ContractCapabilities("m.a")).value();
+
+        assertNotNull(byName);
+        assertFalse(byName.containsKey("findIt"),
+                "`Other` is not a case of the answer, so the arm naming `Found` beside it was not "
+                        + "read — and nothing here may say `Found` was left unspoken for");
     }
 
     /** A behavior stating nothing has no classification: there is nothing to classify, and an empty

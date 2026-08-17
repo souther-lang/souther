@@ -1862,12 +1862,16 @@ public final class Analyzer {
         SyntaxNode root = CstParser.parse(text).root();
         SyntaxToken ident = identAt(meaningfulTokens(root), lines,
                 lines.offsetOf(pos.line(), pos.character()));
-        // The name of a behavior this document declares, and nothing else. What a behavior states is
-        // asked of it by name, so a name that declares something else would be asked about under a
-        // spelling that means something else here.
+        // The cursor on the name a behavior is declared under, and nowhere else. `declaringDef` finds
+        // a definition by the characters of a name, so a parameter or a local spelled like a behavior
+        // of this module finds that behavior — and what is said here would be said about a value that
+        // states nothing. Which token the cursor is on tells the declaration from anything spelled
+        // like it.
         SyntaxNode def = ident == null ? null : declaringDef(root, nameOf(ident));
+        SyntaxToken declares = def == null ? null : nameToken(def);
         ContractDischarge discharge = def != null && def.kind() == SyntaxKind.BEHAVIOR_DEF
-                ? contractOf(uri, graph, ident.text()) : null;
+                && declares != null && declares.start() == ident.start()
+                ? contractOf(uri, graph, nameOf(ident)) : null;
         if (discharge == null || discharge.casesNothingIsSaidAbout().isEmpty()) {
             return shown;
         }
@@ -1898,7 +1902,7 @@ public final class Analyzer {
         if (clause == null || name == null) {
             return Optional.empty();
         }
-        ContractDischarge discharge = contractOf(uri, graph, name.text());
+        ContractDischarge discharge = contractOf(uri, graph, nameOf(name));
         if (discharge == null) {
             return Optional.empty();
         }
