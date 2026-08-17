@@ -63,7 +63,15 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
         List<String> differences = new ArrayList<>();
         for (Document document : documents) {
             String expected = read(document.file());
-            if (!expected.equals(document.actual())) {
+            if (expected == null) {
+                // Absent and empty are different answers, and one of these documents is empty
+                // whenever the compiler says nothing about a corpus — which is the state it is
+                // meant to be in. Read as the same, a deleted document would go on passing, and the
+                // check that a corpus is still silent would be a check on nothing.
+                differences.add(document.file() + " is not written down. A corpus with no expected"
+                        + " answer is not one whose answer was checked; an empty document says the"
+                        + " compiler said nothing, and a missing one says nobody looked.");
+            } else if (!expected.equals(document.actual())) {
                 differences.add(describe(document, expected));
             }
         }
@@ -78,12 +86,23 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
     /**
      * What moved, near enough to act on without opening the file.
      *
-     * <p>The first line that differs and a few either side, rather than the whole document. A
-     * report is thousands of lines and a difference in one of them is not something a reader finds
-     * by being handed all of them — and the point of holding these here at all is that the answer
-     * arrives in seconds, which a document nobody can read in seconds gives back.
+     * <p>A report is said in report terms — which module, which behavior, which measure — because
+     * that is what a reader deciding whether they meant to move it needs, and a line number in a
+     * JSON document is none of those. The other document is a list of diagnostics and is read as
+     * the lines it is.
      */
     private static String describe(Document document, String expected) {
+        if (document.file().endsWith(".json")) {
+            return document.file() + " is not what the compiler now answers about "
+                    + document.name() + ":" + System.lineSeparator() + "  "
+                    + String.join(System.lineSeparator() + "  ",
+                            WhatMoved.between(expected, document.actual()));
+        }
+        return describeByLine(document, expected);
+    }
+
+    /** A text document, said as the lines it is. */
+    private static String describeByLine(Document document, String expected) {
         List<String> was = expected.lines().toList();
         List<String> now = document.actual().lines().toList();
         int at = 0;
@@ -109,11 +128,12 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
         return said.toString();
     }
 
-    /** An expected document, or nothing where none has been written yet. */
+    /** An expected document, or null where none is written. Null rather than empty: an empty
+     *  document is one of the answers these carry. */
     private static String read(String file) {
         try (var in = ConformanceCorpus.class.getResourceAsStream(
                 ConformanceCorpus.ROOT + file)) {
-            return in == null ? "" : new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            return in == null ? null : new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
