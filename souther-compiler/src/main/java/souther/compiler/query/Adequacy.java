@@ -229,6 +229,14 @@ public final class Adequacy {
      * goes on to say, and what it may say about a behavior whose signature is not in hand is
      * nothing. Written once so that each reader does not decide again what to do without one.
      */
+    private static souther.compiler.check.PathReachability.Answers arrivalsOf(
+            Map<String, souther.compiler.check.PathReachability.Answers> read,
+            Hir.SpecBehavior spec) {
+        return read == null ? souther.compiler.check.PathReachability.Answers.NONE
+                : read.getOrDefault(spec.name(),
+                        souther.compiler.check.PathReachability.Answers.NONE);
+    }
+
     private static InputDomain domainOf(Map<String, InputDomain> read, Hir.SpecBehavior spec) {
         return read == null ? InputDomain.NONE
                 : read.getOrDefault(spec.name(), InputDomain.NONE);
@@ -482,6 +490,10 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
+            // What the guards above each place leave, asked once for the module and read by
+            // every measure below — the same reason the reading of the input is.
+            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
+                    db.ask(new PathReached(name)).value();
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
             Map<String, List<BoundaryAssessment>> boundaries = db.ask(new Boundaries(name)).value();
@@ -502,7 +514,8 @@ public final class Adequacy {
                 out.put(spec.name(), Coverages.of(spec, domainOf(readInputs, spec), sig,
                         scope.value(), bodies.get(spec.name()), plan, seen,
                         boundaries == null ? List.of()
-                                : boundaries.getOrDefault(spec.name(), List.of())));
+                                : boundaries.getOrDefault(spec.name(), List.of()),
+                        arrivalsOf(arrives, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -547,6 +560,10 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
+            // What the guards above each place leave, asked once for the module and read by
+            // every measure below — the same reason the reading of the input is.
+            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
+                    db.ask(new PathReached(name)).value();
             Symbols symbols = scope.value();
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say.
@@ -565,7 +582,7 @@ public final class Adequacy {
                 }
                 out.put(spec.name(), assess(spec, sig, symbols, bodies.get(spec.name()), plan,
                         byTarget.getOrDefault(spec.name(), Observed.NONE), armsAsked, building,
-                        domainOf(readInputs, spec)));
+                        domainOf(readInputs, spec), arrivalsOf(arrives, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -574,13 +591,14 @@ public final class Adequacy {
         private static List<BoundaryAssessment> assess(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                boolean armsAsked, FixtureReader.Construction building, InputDomain domain) {
+                boolean armsAsked, FixtureReader.Construction building, InputDomain domain,
+                souther.compiler.check.PathReachability.Answers arrives) {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan);
+                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives);
             Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
@@ -1131,6 +1149,10 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
+            // What the guards above each place leave, asked once for the module and read by
+            // every measure below — the same reason the reading of the input is.
+            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
+                    db.ask(new PathReached(name)).value();
             Symbols symbols = scope.value();
 
             Map<String, List<BoundaryAssessment>> boundaries =
@@ -1156,7 +1178,7 @@ public final class Adequacy {
                 try {
                     pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
-                            domainOf(readInputs, spec));
+                            domainOf(readInputs, spec), arrivalsOf(arrives, spec));
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -1385,7 +1407,8 @@ public final class Adequacy {
         private static Generator.GenerationResult pairsFor(
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                FixtureReader.Construction building, InputDomain domain) {
+                FixtureReader.Construction building, InputDomain domain,
+                souther.compiler.check.PathReachability.Answers arrives) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -1402,7 +1425,7 @@ public final class Adequacy {
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan);
+                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives);
             Generator.Subject subject = new Generator.Subject(inputs, partitioning.axes());
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());

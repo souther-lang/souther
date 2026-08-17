@@ -281,6 +281,31 @@ public final class Partitions {
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<BoundaryObligation> between) {
+        return withThresholds(base, thresholds, symbols, unread, singled, between,
+                souther.compiler.check.PathReachability.Answers.NONE);
+    }
+
+    /**
+     * The same, told what arrives at each comparison.
+     *
+     * <p>A comparison one of whose outcomes nothing takes draws no line. It is written, it is read,
+     * and what it divides is nothing that gets there — {@code guard a.value < 6000} under
+     * {@code guard a.value < 5000} puts a line at six thousand through values that are all under
+     * five, and a report asking for a row either side of it is asking for a row nobody can write.
+     *
+     * <p>Asked of the reading of the whole body, not of the position's own values. Whether a line
+     * falls inside what the position can hold is the other question and is asked below: that one is
+     * what the classes are built out of, and a cut outside the interval it divides is not a partition
+     * of anything. Both are needed and neither is the other — a line well inside a position's values
+     * can still be one nothing on the way to it can be either side of.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols,
+                                              List<UnreadRule> unread,
+                                              List<GuardThresholds.Guards.Singled> singled,
+                                              List<BoundaryObligation> between,
+                                              souther.compiler.check.PathReachability.Answers
+                                                      arrives) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
@@ -337,6 +362,11 @@ public final class Partitions {
             // position stops short of is outside it as much as anything past it is.
             List<Threshold> reachable = here.stream()
                     .filter(t -> domain == null || domain.admits(t.value()))
+                    // And what the guards above it left. Only a proof drops a line: a comparison
+                    // this could not settle keeps its line and its rows, which is the direction that
+                    // leaves an author with work rather than with a report about a model of theirs
+                    // that is fine.
+                    .filter(t -> !arrives.dividesNothing(t.origin().site()))
                     .toList();
             // What the term is, not what an invariant said about it. There is a bound to read only
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the

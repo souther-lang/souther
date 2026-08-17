@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.PathReachability;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
@@ -48,7 +49,8 @@ final class Coverages {
      */
     static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
                                                   Sig sig, Symbols symbols,
-                                                  Core body, CoverageSites.Plan plan) {
+                                                  Core body, CoverageSites.Plan plan,
+                                                  PathReachability.Answers arrives) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
@@ -61,7 +63,7 @@ final class Coverages {
         GuardThresholds.Guards guards =
                 GuardThresholds.of(behavior.name(), body, plan, inputs, symbols);
         return Partitions.withThresholds(partitioning, guards.thresholds(), symbols,
-                guards.unread(), guards.singled(), guards.between());
+                guards.unread(), guards.singled(), guards.between(), arrives);
     }
 
     /**
@@ -74,7 +76,8 @@ final class Coverages {
     static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
                                 Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
-                                List<BoundaryAssessment> boundaries) {
+                                List<BoundaryAssessment> boundaries,
+                                PathReachability.Answers arrives) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
@@ -82,7 +85,7 @@ final class Coverages {
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, body, plan);
+                partitioningOf(behavior, inputs, sig, symbols, body, plan, arrives);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 

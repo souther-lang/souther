@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.reach.PathDecision;
@@ -59,6 +60,29 @@ public final class PathReachability {
             Reachability answer = found.get(where);
             return answer != null ? answer
                     : Reachability.notSettled(new WhyUnsettled.TheWalkDidNotReachIt());
+        }
+
+        /**
+         * What arrives at the comparison recorded at {@code probe}, coming out {@code result}.
+         *
+         * <p>Asked by probe because that is what a line read off a comparison carries. The place is
+         * still the control point — this only finds it.
+         */
+        public Reachability atComparison(int probe, boolean result) {
+            for (Map.Entry<ControlPointId, Reachability> each : found.entrySet()) {
+                if (each.getKey() instanceof ControlPointId.ComparisonOutcome outcome
+                        && outcome.comparisonProbe() == probe && outcome.result() == result) {
+                    return each.getValue();
+                }
+            }
+            return Reachability.notSettled(new WhyUnsettled.TheWalkDidNotReachIt());
+        }
+
+        /** Whether the comparison at {@code probe} divides nothing that gets to it — one of its two
+         *  outcomes being one nothing takes. */
+        public boolean dividesNothing(int probe) {
+            return atComparison(probe, true) instanceof Reachability.Unreachable
+                    || atComparison(probe, false) instanceof Reachability.Unreachable;
         }
     }
 
@@ -142,6 +166,7 @@ public final class PathReachability {
         switch (e) {
             case Core.If iff -> {
                 walk(iff.cond(), k, at, decided);
+                outcomes(iff.cond(), k, at, decided);
                 ControlPointId.ArmOccurrence[] arms = plan.armsOf(iff);
                 enterArm(arms, 0, iff, iff.then(), k, at, decided, true);
                 enterArm(arms, 1, iff, iff.els(), k, at, decided, false);
@@ -158,6 +183,49 @@ public final class PathReachability {
     }
 
     /**
+     * Each comparison of a condition, read under what holds where that comparison runs.
+     *
+     * <p>Not under what holds at the fork. A condition stops as soon as it is settled, so the
+     * right-hand side of an {@code &&} runs only where the left-hand side held and the right-hand
+     * side of an {@code ||} only where it did not — and a comparison read under the fork's own
+     * state would be read under conditions that were never established when it ran.
+     *
+     * <p>Descends through {@code &&} and {@code ||} only, which is what a condition is built out of
+     * and what the plan numbered. Anything else is a leaf: the plan answers for it or does not, and
+     * a node it numbered nothing at is one nothing is filed about.
+     */
+    private void outcomes(Core cond, Known k, Denotations at, List<PathDecision> decided) {
+        if (cond instanceof Core.Binary b
+                && (b.op() == Hir.BinOp.AND || b.op() == Hir.BinOp.OR)) {
+            outcomes(b.left(), k, at, decided);
+            // The side that reaches the right operand: `&&` gets there having held, `||` having
+            // failed. Read the other way round, a comparison guarded by its neighbour would be
+            // proven against conditions nothing on the way to it established.
+            boolean reachedWhen = b.op() == Hir.BinOp.AND;
+            outcomes(b.right(), engine.assuming(b.left(), k, at, reachedWhen), at,
+                    with(decided, b.left().pos(), reachedWhen));
+            return;
+        }
+        for (boolean result : new boolean[] {true, false}) {
+            var where = plan.outcomeOf(cond, result);
+            if (where.isEmpty()) {
+                continue;
+            }
+            Known taken = engine.assuming(cond, k, at, result);
+            out.put(where.get(), taken.reachesNothing()
+                    ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(
+                            with(decided, cond.pos(), result)))
+                    : Reachability.notSettled(new WhyUnsettled.NoWitness()));
+        }
+    }
+
+    private static List<PathDecision> with(List<PathDecision> decided, SourcePos at, boolean held) {
+        List<PathDecision> out = new ArrayList<>(decided);
+        out.add(new PathDecision(at, held));
+        return out;
+    }
+
+    /**
      * One arm of a fork, read under its own side of the condition.
      *
      * <p>The answer is filed at the arm and the walk goes on inside it. Where the condition leaves
@@ -167,8 +235,7 @@ public final class PathReachability {
     private void enterArm(ControlPointId.ArmOccurrence[] arms, int index, Core.If iff, Core arm,
                           Known k, Denotations at, List<PathDecision> decided, boolean holds) {
         Known inside = engine.assuming(iff.cond(), k, at, holds);
-        List<PathDecision> under = new ArrayList<>(decided);
-        under.add(new PathDecision(iff.cond().pos(), holds));
+        List<PathDecision> under = with(decided, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
                     ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(under))

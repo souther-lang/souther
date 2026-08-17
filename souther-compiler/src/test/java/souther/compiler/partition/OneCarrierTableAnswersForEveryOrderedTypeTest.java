@@ -176,23 +176,27 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                 constructs Ok
             let boundStage (x) = Ok
 
+            // The wider line is guarded first, so both departures are ones values reach. Written
+            // the other way round the second guard departs at two while everything past the first
+            // is under one, and the line at two divides nothing — which is a model with a dead
+            // branch in it and not a position with three classes.
             behavior twoLinesDense : (x: Decimal) -> Verdict
                 constructs Ok, No
-            let twoLinesDense (x) = { guard x < 1.0m else Ok
-                guard x < 2.0m else No
+            let twoLinesDense (x) = { guard x < 2.0m else No
+                guard x < 1.0m else Ok
                 Ok }
 
             behavior twoLinesMoment : (x: DateTime) -> Verdict
                 constructs Ok, No
             let twoLinesMoment (x) = {
-                guard x < DateTime("2026-08-01T00:00:01") else Ok
                 guard x < DateTime("2026-08-01T00:00:02") else No
+                guard x < DateTime("2026-08-01T00:00:01") else Ok
                 Ok }
 
             behavior openOnBothSidesDense : (x: Decimal) -> Verdict
                 constructs Ok, No
-            let openOnBothSidesDense (x) = { guard x <= 1.0m else Ok
-                guard x < 2.0m else No
+            let openOnBothSidesDense (x) = { guard x < 2.0m else No
+                guard x <= 1.0m else Ok
                 Ok }
 
             data TwoDecimals = Decimal

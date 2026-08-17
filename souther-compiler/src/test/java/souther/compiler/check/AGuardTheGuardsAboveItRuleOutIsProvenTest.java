@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ControlPointId;
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.Proof;
@@ -139,6 +140,45 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
         assertEquals(1, proven.size(), "an `Amount` stops at a million, so nothing reaches two");
         assertEquals(1, ((Proof.ConflictingPathConditions) proven.get(0)).decisions().size(),
                 "one guard is on the way to it; what it conflicts with is what the input is");
+    }
+
+    /** The same model with the guard nothing reaches taken out. */
+    private static final String ONE_GUARD = """
+            module d
+
+            data Amount = Int invariant value >= 0 && value <= 1000000
+            data Free
+            data Charged = { yen: Int }
+
+            behavior charge : (a: Amount) -> Free | Charged
+                constructs Free, Charged
+
+            let charge (a) = {
+                guard a.value < 5000 else Free
+                Charged { yen = 500 }
+            }
+            """;
+
+    private static String rowsAskedOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "d");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        return souther.compiler.report.GeneratedRows.of(compilation, "d", "charge", true,
+                SourceNameResolver.identity());
+    }
+
+    /**
+     * A line the guards above it put nowhere divides nothing, so no class and no boundary comes off
+     * it.
+     *
+     * <p>Measured against the model with that guard taken out rather than against a count. What is
+     * being claimed is that the two models ask for the same work, and a count would pass a reading
+     * that dropped the wrong two rows.
+     */
+    @Test
+    void theModelAsksForWhatTheModelWithoutThatGuardAsksFor() {
+        assertEquals(rowsAskedOf(ONE_GUARD), rowsAskedOf(TWO_GUARDS),
+                "a guard whose departure nothing takes draws no line");
     }
 
     @Test
