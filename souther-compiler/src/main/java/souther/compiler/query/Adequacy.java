@@ -293,6 +293,57 @@ public final class Adequacy {
     }
 
     /**
+     * What the model's own rules say arrives at each place of each behavior of one module.
+     *
+     * <p>Asked once and here, for the reason every other reading of this is: what a position is
+     * divided into, which lines are owed a row, which arms are owed one and what a body declares
+     * about a case are projections of one universe of possible executions, and a derivation per
+     * measure is a chance per measure to disagree.
+     *
+     * <p>What this adds to {@link Reachable} is the conditions on the way. That one holds a
+     * comparison against what the declarations leave a position, which is the same answer wherever
+     * in a body the comparison stands — so a guard whose departure the guards above it have already
+     * ruled out came back as an arm still owed a row.
+     */
+    public record PathReached(String name)
+            implements Key<Map<String, souther.compiler.check.PathReachability.Answers>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, souther.compiler.check.PathReachability.Answers>> compute(Db db) {
+            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            if (!prepared.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.query.Bodies.Elaborated checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked == null ? Map.of() : checked.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.of(bodies);
+            Map<String, souther.compiler.check.PathReachability.Answers> out = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec)) {
+                    continue;   // a composition has no body of its own, so no places of its own
+                }
+                souther.compiler.core.Core body = bodies.get(spec.name());
+                Hir.FnDef fn = db.ask(new Bodies.SettledFn(name, spec.name())).value();
+                if (body == null || fn == null) {
+                    continue;
+                }
+                out.put(spec.name(), souther.compiler.check.PathReachability.of(
+                        body, spec, fn, plan, scope.value()));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * What is proven about a behavior's arms once the rows have run.
      *
      * <p>A proof is about the model's own rules and the rows are about what happened, so a row that
