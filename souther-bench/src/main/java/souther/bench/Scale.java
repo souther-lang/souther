@@ -83,20 +83,13 @@ final class Scale {
     }
 
     /**
-     * {@code modules} modules, each importing the {@code width} written just before it.
-     *
-     * <p>Every module is the same module. It declares the same data under a different number, the
-     * same behavior over it and the same body, and the import lines are the only text that differs
-     * between one width and another — so are the only thing a difference between two of these can be
-     * about.
-     *
-     * <p>The first {@code width} modules import fewer, there being fewer written before them. At the
-     * sizes this is measured at that is a fixed handful against the rest and it is the same handful
-     * at every width.
-     */
-    /**
      * How many imports {@link #imports} writes, which is not {@code modules * width}: the first
      * {@code width} modules import what is written before them and there is less of it.
+     *
+     * <p>What is short of the product is {@code width * (width + 1) / 2} — 1, 3, 10 and 36 at the
+     * widths measured — so it grows with the width rather than being the same allowance at each,
+     * and a run that reported the product would overstate the wide lines by more than the narrow
+     * ones. Counted here, and held against the imports the shape writes by a test.
      */
     static int links(int modules, int width) {
         int total = 0;
@@ -106,6 +99,17 @@ final class Scale {
         return total;
     }
 
+    /**
+     * {@code modules} modules, each importing the {@code width} written just before it.
+     *
+     * <p>Every module is the same module. It declares the same data under a different number, the
+     * same behavior over it and the same body, and the import lines are the only text that differs
+     * between one width and another — so are the only thing a difference between two of these can be
+     * about.
+     *
+     * <p>The first {@code width} modules import fewer, there being fewer written before them. How
+     * many fewer is {@link #links}'s to say, and what a run reports is that count.
+     */
     static List<String> imports(int modules, int width) {
         List<String> sources = new ArrayList<>();
         for (int i = 0; i < modules; i++) {

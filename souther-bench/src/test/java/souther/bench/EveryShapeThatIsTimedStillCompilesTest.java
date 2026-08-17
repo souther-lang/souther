@@ -63,14 +63,15 @@ class EveryShapeThatIsTimedStillCompilesTest {
      * lines would be about both and attributable to neither — which is what the first attempt at
      * this did, importing a name and using it in a construction, a call, a field read and an
      * addition.
+     *
+     * <p>The floor is among the widths asked, and is the one it matters most to ask of: every other
+     * line is read as what it has above that one, so a body that differed only there would move
+     * every reading and nothing would say it had.
      */
     @Test
     void aWidthIsItsImportsAndNothingElse() {
         String previous = null;
         for (int width : Scale.WIDTHS) {
-            if (width == 0) {
-                continue;
-            }
             String last = Scale.imports(MODULES, width).getLast();
             long imports = last.lines().filter(line -> line.startsWith("import ")).count();
             if (imports != width) {
