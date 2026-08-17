@@ -2353,6 +2353,17 @@ A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are di
 
 A clause travels with the published declaration, as a data's does and for the same reason: a reader that cannot read it cannot assume it.
 
+[#ensures-discharge-capability]
+==== A rule says how much of it the check reads
+
+A rule is classified as a data's clause is (<<invariant-discharge-capability>>), by the same three answers and for the same reason: what is written decides how much of it the checker can carry, and nothing in the source tells the two apart. The unit is the *rule* and, under a rule, the conjunct. A rule is already about one case — `+ensures Found | Missing -> value.id == id+` is a rule for `+Found+` and a rule for `+Missing+` — and what `+value+` is differs between them, so the same words can be read to different depths. One answer for the clause would be one of those readings shown as if it were the other's.
+
+The classification says nothing about whether the rule is enforced. Every rule holds when the behavior answers, whatever this says of it; what it says is how much of the relation is written in a form the checker reads — `+derivable+` a relation the numeric domain reasons over, `+exact match+` a term it can name and compare and nothing weaker, `+runtime only+` nothing it can represent.
+
+The rule is read as it is written. An operation whose meaning the language defines stands as that operation, as a data's clause is read (<<invariant-discharge-representation>>), so a rule naming one is classified by what the language says of it and not by the algorithm it is emitted as.
+
+It is a query rather than a diagnostic, again as a data's is, and the LSP surfaces it on the clause. So is which of the answer's cases no rule names: nothing being stated about a case is what the declaration says (<<ensures>>), and a reader who wants to know asks rather than being told.
+
 [#calling-a-behavior]
 === Calling a behavior
 

@@ -5,8 +5,9 @@ import souther.compiler.diag.SourcePos;
 import java.util.Optional;
 
 /**
- * How one clause of an invariant can be discharged at compile time (spec
- * §invariant-discharge-capability).
+ * How much of one clause of the model the check reads: a data's {@code invariant} (spec
+ * §invariant-discharge-capability) or a behavior's {@code ensures} (spec
+ * §ensures-discharge-capability).
  *
  * <p>Once some clauses are statically dischargeable and others are not, the same {@code invariant}
  * keyword means two different things to a reader: one shape reports an unguarded construction and the
@@ -14,8 +15,13 @@ import java.util.Optional;
  * This is the answer, per clause, so the classification is a property of the language and not of
  * whatever the checker happens to manage.
  *
- * <p>It is the clause's own capability, read with the construction assumed to name what it is given.
- * A construction that names nothing the check can name discharges nothing whatever its clauses say —
+ * <p>One record for both kinds because it is one question — whether what is written is a relation the
+ * numeric domain reasons over, a term the check can name, or neither. What follows from the answer is
+ * the reader's: for an invariant it says what discharges a construction, for a rule how much of the
+ * relation there is to read. Answering it twice would be two classifications to keep agreeing.
+ *
+ * <p>It is the clause's own capability, read with what it names assumed to stand for itself. A
+ * construction that names nothing the check can name discharges nothing whatever its clauses say —
  * that is a fact about the construction, and belongs where the construction is.
  */
 public record ClauseDischarge(SourcePos clause, Kind kind, Optional<String> reason,

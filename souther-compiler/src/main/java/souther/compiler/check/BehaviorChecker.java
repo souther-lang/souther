@@ -47,6 +47,43 @@ public final class BehaviorChecker {
      */
     public static BehaviorContract contractOf(Hir.SpecBehavior behavior, String module, Sig sig,
                                        Symbols symbols, Map<String, Type> helpers) {
+        List<Diagnostic> found = new ArrayList<>();
+        BehaviorContract contract = read(behavior, module, sig, symbols, found);
+        for (Rule rule : contract.rules()) {
+            collect(found, () -> checkRule(behavior, contract, rule, helpers, symbols));
+        }
+        if (found.size() == 1) {
+            throw CompileException.of(found.get(0));
+        }
+        if (!found.isEmpty()) {
+            throw CompileException.ofAll(found, DiagnosticRenderer.legacyBody(found.get(0)));
+        }
+        return contract;
+    }
+
+    /**
+     * The same declaration read again, in whatever representation {@code behavior} is written in, and
+     * held to nothing.
+     *
+     * <p>What the rules are — which case each applies to, what {@code value} is there, which rule is
+     * which — is a property of the declaration and not of the representation, so this reads the same
+     * rules under the same {@link RuleId}s as {@link #contractOf} does of the tree that runs. What is
+     * not done again is the holding: a clause that is not well formed is one mistake, and the reading
+     * that reports it is the one the author's build is made of. An arm this cannot read contributes
+     * no rule, as it does there.
+     *
+     * @throws Unanswerable where there is no signature to read the rules against
+     * @throws CompileException where the declaration cannot be read at all, which the executable
+     *     reading of it reports as well
+     */
+    public static BehaviorContract contractAsRead(Hir.SpecBehavior behavior, String module, Sig sig,
+                                                  Symbols symbols) {
+        return read(behavior, module, sig, symbols, new ArrayList<>());
+    }
+
+    /** The declaration as rules, with what could not be read of it collected into {@code found}. */
+    private static BehaviorContract read(Hir.SpecBehavior behavior, String module, Sig sig,
+                                         Symbols symbols, List<Diagnostic> found) {
         ValueName.Behavior name = new ValueName.Behavior(module, behavior.name());
         if (sig == null) {
             // The signature could not be made, which is reported where that failed. A rule is
@@ -65,7 +102,8 @@ public final class BehaviorChecker {
         BindingOwner owner = BehaviorContract.ownerOf(name);
         List<ContractParam> params = new ArrayList<>();
         for (int i = 0; i < behavior.params().size(); i++) {
-            params.add(new ContractParam(new BindingId(owner, i), sig.inputTypes().get(i), i));
+            params.add(new ContractParam(new BindingId(owner, i), behavior.params().get(i).name(),
+                    sig.inputTypes().get(i), i));
         }
 
         // Which cases the answer can be, and what `value` is in each, come from the same place a
@@ -77,7 +115,6 @@ public final class BehaviorChecker {
         // one pass — what a rule states is which case it applies to and what holds there, and every
         // refusal here is this not having been able to read that — so an arm that fails contributes
         // no rule and stops nothing else.
-        List<Diagnostic> found = new ArrayList<>();
         List<Clause> clauses = new ArrayList<>();
         int armOrdinal = 0;
         for (int c = 0; c < behavior.ensures().size(); c++) {
@@ -91,18 +128,7 @@ public final class BehaviorChecker {
             }
             clauses.add(new Clause(written.name(), rules, written.pos(), written.region()));
         }
-        BehaviorContract contract =
-                new BehaviorContract(name, params, sig.outputType(), clauses);
-        for (Rule rule : contract.rules()) {
-            collect(found, () -> checkRule(behavior, contract, rule, helpers, symbols));
-        }
-        if (found.size() == 1) {
-            throw CompileException.of(found.get(0));
-        }
-        if (!found.isEmpty()) {
-            throw CompileException.ofAll(found, DiagnosticRenderer.legacyBody(found.get(0)));
-        }
-        return contract;
+        return new BehaviorContract(name, params, sig.outputType(), clauses);
     }
 
     /**
@@ -172,21 +198,31 @@ public final class BehaviorChecker {
     /** One rule: what its expression comes to, and that it states a relation. */
     private static void checkRule(Hir.SpecBehavior behavior, BehaviorContract contract, Rule rule,
                                   Map<String, Type> helpers, Symbols symbols) {
-        Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
-        for (ContractParam param : contract.params()) {
-            bindings.put(param.binding(),
-                    new Scope.Binding(behavior.params().get(param.index()).name(), param.type()));
-        }
-        bindings.put(rule.value(),
-                new Scope.Binding("value", rule.valueType(contract.output())));
-        Type actual = Elaborator.typeOf(rule.statement(), Scope.of(bindings).reaching(helpers),
-                CheckContext.of(symbols));
+        Type actual = Elaborator.typeOf(rule.statement(),
+                scopeOf(contract, rule).reaching(helpers), CheckContext.of(symbols));
         if (actual != Type.BOOL) {
             throw CompileException.of(Diagnostic.at(rule.statement().pos())
                     .say(new BehaviorMessage.AnEnsuresExpressionIsNotBool(
                             behavior.name(), Type.show(actual))).build());
         }
         requireBothSides(behavior, contract, rule);
+    }
+
+    /**
+     * What a rule may name: the behavior's parameters, and {@code value} as the case it is written
+     * under holds it.
+     *
+     * <p>Everything it takes is the contract's. A rule is read here, where it is checked, and there
+     * where it is classified, and the two would be two scopes to keep saying the same thing if
+     * either built it from the declaration instead.
+     */
+    static Scope scopeOf(BehaviorContract contract, Rule rule) {
+        Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
+        for (ContractParam param : contract.params()) {
+            bindings.put(param.binding(), new Scope.Binding(param.name(), param.type()));
+        }
+        bindings.put(rule.value(), new Scope.Binding("value", rule.valueType(contract.output())));
+        return Scope.of(bindings);
     }
 
     /**

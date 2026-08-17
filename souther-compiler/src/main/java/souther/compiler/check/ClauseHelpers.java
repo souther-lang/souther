@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeSymbol;
 
@@ -84,6 +85,30 @@ public final class ClauseHelpers {
         return out;
     }
 
+    /**
+     * Each behavior's {@code ensures} in the representation the discharge analysis reads, by the name
+     * the behavior is declared under. A behavior stating nothing is not here.
+     *
+     * <p>The same reading {@link #invariantsForDischarge} gives a declaration's clauses, of the other
+     * kind of clause. The whole declaration and not its clauses alone, because what a rule is read
+     * against — which cases the answer has, what each parameter holds — is read off the same node,
+     * and a reader handed the clauses would go back to the module for the rest.
+     */
+    public static Map<String, Hir.SpecBehavior> ensuresForDischarge(
+            Expandable expandable, Symbols symbols, Map<String, Hir.FnDef> published) {
+        Hir.Module m = expandable.module();
+        Hir.Module settled = settled(m, symbols);
+        HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
+                published, InliningPolicy.DISCHARGE);
+        Map<String, Hir.SpecBehavior> out = new LinkedHashMap<>();
+        for (Hir.BehaviorDef behavior : settled.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
+                out.put(spec.name(), withInlinedEnsures(inliner, settled.name(), spec));
+            }
+        }
+        return out;
+    }
+
     /** {@code m} with its helper parameter types settled and the names in its invariants written
      * qualified — what both representations are expanded from, so neither reads a table the other
      * would key differently. */
@@ -110,25 +135,51 @@ public final class ClauseHelpers {
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : m.behaviors()) {
-            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
-                BindingOwner owner = new BindingOwner.OfSignature(
-                        new souther.compiler.types.ValueName.Behavior(m.name(), spec.name()));
-                List<Hir.EnsuresClause> clauses = new ArrayList<>();
-                for (Hir.EnsuresClause clause : spec.ensures()) {
-                    List<Hir.EnsuresArm> arms = new ArrayList<>();
-                    for (Hir.EnsuresArm arm : clause.arms()) {
-                        arms.add(arm.with(inliner.inline(arm.expr(), owner)));
-                    }
-                    clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
-                            clause.pos(), clause.region()));
-                }
-                behaviors.add(new Hir.SpecBehavior(spec.written(), spec.params(), spec.ret(),
-                        spec.constructs(), spec.dependsOn(), List.copyOf(clauses), spec.pos()));
-            } else {
-                behaviors.add(behavior);
-            }
+            behaviors.add(behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()
+                    ? withInlinedEnsures(inliner, m.name(), spec) : behavior);
         }
         return m.withDefs(defs).withBehaviors(behaviors);
+    }
+
+    /** {@code spec} with the helper calls in its {@code ensures} expanded as {@code inliner} expands
+     * them — which representation that leaves is the inliner's to say, and the same walk gives
+     * either. */
+    private static Hir.SpecBehavior withInlinedEnsures(HelperInliner inliner, String module,
+                                                       Hir.SpecBehavior spec) {
+        BindingOwner owner = new BindingOwner.OfSignature(
+                new souther.compiler.types.ValueName.Behavior(module, spec.name()));
+        List<Hir.EnsuresClause> clauses = new ArrayList<>();
+        for (Hir.EnsuresClause clause : spec.ensures()) {
+            List<Hir.EnsuresArm> arms = new ArrayList<>();
+            for (Hir.EnsuresArm arm : clause.arms()) {
+                arms.add(arm.with(inliner.inline(arm.expr(), owner)));
+            }
+            clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
+                    clause.pos(), clause.region()));
+        }
+        return new Hir.SpecBehavior(spec.written(), spec.params(), spec.ret(),
+                spec.constructs(), spec.dependsOn(), List.copyOf(clauses), spec.pos());
+    }
+
+    /**
+     * Where a written clause begins: the earliest position anything in it carries.
+     *
+     * <p>A node's own position is where its operator is written, so the position of {@code a && b} is
+     * the {@code &&}. A reader is pointed at the clause, which starts at whatever of it comes first.
+     */
+    public static SourcePos beginsAt(Hir.Expr e) {
+        SourcePos[] found = {e.pos()};
+        Hir.forEachChild(e, child -> {
+            SourcePos inner = beginsAt(child);
+            if (inner != null && (found[0] == null || earlier(inner, found[0]))) {
+                found[0] = inner;
+            }
+        });
+        return found[0];
+    }
+
+    private static boolean earlier(SourcePos a, SourcePos b) {
+        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
     }
 
     /** The conjuncts of a clause, flattened, in the order they are written — what a reader sees as

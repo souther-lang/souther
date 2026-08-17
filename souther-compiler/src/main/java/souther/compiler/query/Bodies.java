@@ -5,6 +5,8 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorChecker;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.check.ClauseHelpers;
+import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.HelperGraph;
@@ -362,6 +364,65 @@ public final class Bodies {
                 }
             }
             return Answer.of(Ordered.map(contracts), reports);
+        }
+    }
+
+    /**
+     * How much of what each behavior of a module declares the check can read, by the name the
+     * behavior is declared under (spec §ensures-discharge-capability).
+     *
+     * <p>Read in the representation the discharge analysis reads ({@link InliningPolicy#DISCHARGE}),
+     * which is not the one that runs: an operation the language defines the meaning of stays an
+     * operation here, and the classification is of what the author wrote rather than of the algorithm
+     * it becomes. That is the same reading a data's clauses are classified in
+     * ({@link Shapes.InvariantCapabilities}).
+     *
+     * <p>Only this module's own behaviors. The classification is the declaration's, and a reader in
+     * another module asks that module.
+     *
+     * <p>Nothing is reported from here. Whether a clause is well formed was decided by
+     * {@link Contracts}, which owns both the contracts and what reading them found; a behavior whose
+     * declaration cannot be read is left out of this rather than refused a second time.
+     */
+    public record ContractCapabilities(String name)
+            implements Key<Map<String, ContractDischarge>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, ContractDischarge>> compute(Db db) {
+            Answer<souther.compiler.check.Expandable> expandable = db.ask(new Shapes.Expandable(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
+            Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
+            if (!expandable.present() || !scope.present() || !signatures.present()
+                    || !helpers.present()) {
+                return Answer.absent();
+            }
+            Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
+            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
+            Map<String, ContractDischarge> out = new LinkedHashMap<>();
+            try {
+                Map<String, Hir.SpecBehavior> declaring = ClauseHelpers.ensuresForDischarge(
+                        expandable.value(), scope.value(), published);
+                for (Map.Entry<String, Hir.SpecBehavior> each : declaring.entrySet()) {
+                    try {
+                        BehaviorContract contract = BehaviorChecker.contractAsRead(each.getValue(),
+                                name, signatures.value().get(each.getKey()), scope.value());
+                        out.put(each.getKey(),
+                                ContractDischarge.of(contract, scope.value(), helpers.value()));
+                    } catch (Unanswerable | CompileException _) {
+                        // The declaration could not be read, which is said where it is held to its
+                        // rules. There is nothing to classify, and a behavior that cannot be read
+                        // leaves the rest of the module's readable.
+                    }
+                }
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+            return Answer.of(Ordered.map(out));
         }
     }
 

@@ -88,7 +88,7 @@ final class EnsuresGen {
             code.aload(param.index());
             int slot = gen.slot(param.type());
             unbox(code, param.type(), slot, ctx);
-            gen.bind(param.binding(), slotLabel(param), slot, param.type());
+            gen.bind(param.binding(), param.name(), slot, param.type());
         }
         for (Rule rule : contract.rules()) {
             emitRule(code, gen, contract, rule, answer);
@@ -161,16 +161,4 @@ final class EnsuresGen {
         }
     }
 
-    /**
-     * What the binding table calls a parameter's slot.
-     *
-     * <p>Not the name the author wrote, and nothing reads it: a rule names a parameter by its
-     * binding, and no local variable table is emitted for this method for a name to be quoted from.
-     * Written as the position it is, so that it does not read as a spelling somebody could be shown
-     * — the day one is shown, what has to arrive is the declared name, which the contract would
-     * carry rather than this inventing one.
-     */
-    private static String slotLabel(ContractParam param) {
-        return "in" + param.index();
-    }
 }

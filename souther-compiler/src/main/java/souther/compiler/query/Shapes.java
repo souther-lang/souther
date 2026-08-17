@@ -14,7 +14,6 @@ import souther.compiler.check.ValueCycles;
 import souther.compiler.check.Symbols;
 import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -430,7 +429,7 @@ public final class Shapes {
                         for (Hir.Expr written : ClauseHelpers.conjunctsOf(declared.expr())) {
                             clauses.add(InvariantChecker.capabilityOf(
                                     inliner.inline(written, new BindingOwner.OfData(named)),
-                                    leftmost(written), named, data, scope.value())
+                                    ClauseHelpers.beginsAt(written), named, data, scope.value())
                                     .named(declared.name()));
                         }
                     }
@@ -441,23 +440,6 @@ public final class Shapes {
                 return Answer.absent(e);
             }
         }
-    }
-
-    /** Where a clause begins: the earliest position anything in it carries. A node's own position is
-     * where its operator is written, and a reader points at the clause. */
-    private static SourcePos leftmost(Hir.Expr e) {
-        SourcePos[] found = {e.pos()};
-        Hir.forEachChild(e, child -> {
-            SourcePos inner = leftmost(child);
-            if (inner != null && (found[0] == null || earlier(inner, found[0]))) {
-                found[0] = inner;
-            }
-        });
-        return found[0];
-    }
-
-    private static boolean earlier(SourcePos a, SourcePos b) {
-        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
     }
 
     /**

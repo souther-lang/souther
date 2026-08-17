@@ -39,8 +39,16 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
         clauses = List.copyOf(clauses);
     }
 
-    /** A parameter as a rule names it: where it is bound, what it holds, and which one it is. */
-    public record ContractParam(BindingId binding, Type type, int index) {}
+    /**
+     * A parameter as a rule names it: where it is bound, what the author calls it, what it holds, and
+     * which one it is.
+     *
+     * <p>A rule names it by its binding and never by the spelling. The spelling is carried for a
+     * reader — a diagnostic quoting the parameter a rule could not be read against, and an editor
+     * showing what a behavior states — which is the reason it is here rather than looked up on the
+     * declaration by whoever needs to show one.
+     */
+    public record ContractParam(BindingId binding, String name, Type type, int index) {}
 
     /** One `ensures`, with the rules its arms state. A violation is reported by the clause, so this
      *  is what carries the name a reader is given. */
@@ -85,11 +93,18 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
     }
 
     /**
-     * Which rule this is, stably.
+     * Which rule this is: where in the declaration it is written, and which case it is about.
      *
-     * <p>Written down rather than counted off a walk. The emitter, the classification, the editor
-     * and a report all have to agree that they are talking about the same rule, and an identity that
-     * came from the order something was visited in would move when an unrelated declaration moved.
+     * <p>Coordinates in the declaration and not steps of a walk. Which clause, which arm of it, and
+     * which case that arm names is what the author wrote; nothing here comes from the order some
+     * reader happened to visit things in, so two readings of one declaration — the tree that runs and
+     * the tree the analysis reads — answer with the same ids without having to be matched up
+     * afterwards.
+     *
+     * <p>{@code arm} is needed and {@code (clause, selector)} would not do: two arms of one clause may
+     * name the same case, and {@code Found -> p | Found -> q} is two rules. It moves when arms are
+     * added, removed or reordered, which is the declaration changing shape — not something else in the
+     * module moving.
      */
     public record RuleId(ValueName.Behavior behavior, int clause, int arm, TypeSymbol selector) {}
 

@@ -191,25 +191,51 @@ public final class InvariantChecker {
         // stand for a value rather than holding one, so they are entered as locations and nothing is
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
-        Core stated = c.clauses.typed(clause, named, data);
-        Denotations fields = Denotations.none()
-                .locations(c.clauses.bindingsOf(named, data).values());
+        return c.capabilityOf(c.clauses.typed(clause, named, data), at,
+                Denotations.none().locations(c.clauses.bindingsOf(named, data).values()),
+                data.name());
+    }
+
+    /**
+     * How a statement of the model can be discharged, read on its own: what the check can make of it
+     * where the names in it stand for themselves.
+     *
+     * <p>Not a question about invariants. A data's clause and a behavior's rule are the same
+     * expression fragment read the same way, and what tells them apart — which names stand for what,
+     * and where those names come from — is settled by {@code locations} before this is asked. Held
+     * here because the answer is what this check can read, and a second reader working that out from
+     * the outside would be deciding it by what it happened to manage.
+     *
+     * @param stated the statement in the representation this check reads, or null where the front end
+     *               could not type it there
+     * @param at where it is written, which is the pre-expansion position an author is looking at
+     * @param locations the names it may read, each standing for itself
+     * @param describing what is being read, for the record a fail-open leaves behind
+     */
+    static ClauseDischarge capabilityOf(Core stated, SourcePos at, Denotations locations,
+                                        Symbols symbols, String describing) {
+        return new InvariantChecker(symbols, Map.of())
+                .capabilityOf(stated, at, locations, describing);
+    }
+
+    private ClauseDischarge capabilityOf(Core stated, SourcePos at, Denotations locations,
+                                         String describing) {
         Predicates.Owed owed;
         try {
             owed = stated == null ? Predicates.Owed.UNREADABLE
-                    : c.predicates.obligations(stated, Known.top(), fields, false);
+                    : predicates.obligations(stated, Known.top(), locations, false);
         } catch (RuntimeException why) {
             // Fail-open, as the walk is — and recorded, because a clause this could not read and an
             // analysis that fell over reading it both come out `runtimeOnly`, and only one of them
             // is something the model says.
-            gaveUp("capabilityOf " + data.name(), why);
+            gaveUp("capabilityOf " + describing, why);
             owed = Predicates.Owed.UNREADABLE;
         }
         // A clause owing nothing is answered here as one nothing can be asked of. What it is instead
         // — a clause that holds wherever it is built — is a fourth answer this classification does
         // not have, and giving it one is a change to what the language states about a clause.
         if (owed.clauses().isEmpty()) {
-            return ClauseDischarge.runtimeOnly(at, c.whyUnreadable(stated, fields));
+            return ClauseDischarge.runtimeOnly(at, whyUnreadable(stated, locations));
         }
         for (Predicates.Clause owe : owed.clauses()) {
             if (owe.numeric() != null) {
