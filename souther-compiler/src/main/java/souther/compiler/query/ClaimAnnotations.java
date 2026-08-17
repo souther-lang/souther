@@ -129,9 +129,12 @@ public record ClaimAnnotations(List<Said> all) {
             // that found no contradiction, one that could not take a condition in, one over a tree
             // that had the operation expanded away, and one that never got there all leave the same
             // thing unanswered: whether this fork is reached.
+            // A condition this reading has no rule for is its own limit and is said as such;
+            // everything else here leaves the same thing unanswered, which is whether this fork is
+            // reached at all.
+            case souther.compiler.reach.WhyUnsettled.AConditionWasNotRead _ ->
+                    Why.A_RULE_WENT_UNREAD;
             case souther.compiler.reach.WhyUnsettled.NoWitness _,
-                 souther.compiler.reach.WhyUnsettled.AConditionWasNotRead _,
-                 souther.compiler.reach.WhyUnsettled.TheOperationWasExpandedAway _,
                  souther.compiler.reach.WhyUnsettled.TheWalkDidNotReachIt _ ->
                     Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
         };

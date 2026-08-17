@@ -307,7 +307,7 @@ public final class PathReachability {
             // failed. Read the other way round, a comparison guarded by its neighbour would be
             // proven against conditions nothing on the way to it established.
             boolean reachedWhen = b.op() == Hir.BinOp.AND;
-            outcomes(b.right(), engine.assuming(b.left(), k, at, reachedWhen), at,
+            outcomes(b.right(), engine.assuming(b.left(), k, at, reachedWhen).known(), at,
                     with(decided, b.left().pos(), reachedWhen));
             return;
         }
@@ -316,12 +316,26 @@ public final class PathReachability {
             if (where.isEmpty()) {
                 continue;
             }
-            Known taken = engine.assuming(cond, k, at, result);
-            out.put(where.get(), taken.reachesNothing()
+            Predicates.Assumed taken = engine.assuming(cond, k, at, result);
+            out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(
                             with(decided, cond.pos(), result)))
-                    : Reachability.notSettled(new WhyUnsettled.NoWitness()));
+                    : Reachability.notSettled(whyNot(taken, cond)));
         }
+    }
+
+    /**
+     * Why an arm this could not prove is left as it was.
+     *
+     * <p>Two ways of settling nothing, and they are owed different things. A condition of a shape
+     * no rule here reads is this compiler's limit, and widening the reading removes it; a condition
+     * read to no effect is the ordinary state of a branch nobody built a value for, and no widening
+     * touches it. Told apart by asking the reading, not by comparing the state it answered with to
+     * the state it was given — that comparison says whether anything changed, which is neither.
+     */
+    private static WhyUnsettled whyNot(Predicates.Assumed taken, Core cond) {
+        return taken.read() ? new WhyUnsettled.NoWitness()
+                : new WhyUnsettled.AConditionWasNotRead(cond.pos());
     }
 
     private static List<PathDecision> with(List<PathDecision> decided, SourcePos at, boolean held) {
@@ -340,12 +354,13 @@ public final class PathReachability {
     private void enterArm(ControlPointId.ArmOccurrence[] arms, int index, Core.If iff, Core arm,
                           Known k, Denotations at, InputReads reads, List<PathDecision> decided,
                           boolean holds) {
-        Known inside = engine.assuming(iff.cond(), k, at, holds);
+        Predicates.Assumed taken = engine.assuming(iff.cond(), k, at, holds);
+        Known inside = taken.known();
         List<PathDecision> under = with(decided, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
                     ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(under))
-                    : Reachability.notSettled(new WhyUnsettled.NoWitness()));
+                    : Reachability.notSettled(whyNot(taken, iff.cond())));
         }
         walk(arm, inside, at, reads, under, false);
     }

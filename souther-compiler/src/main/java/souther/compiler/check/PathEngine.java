@@ -147,12 +147,15 @@ final class PathEngine {
     }
 
     /**
-     * {@code k} with {@code cond} taken as holding, or as failing where {@code positive} is false.
+     * {@code k} with {@code cond} taken as holding, or as failing where {@code positive} is false —
+     * and whether any of it was taken in at all.
      *
-     * <p>Sound where the condition is of a shape no rule here reads: what cannot be taken in is left
-     * out, and a reading that took nothing in is one that ruled nothing out.
+     * <p>Sound where the condition is of a shape no rule here reads: what cannot be taken in is
+     * left out, and a reading that took nothing in is one that ruled nothing out. Which of those
+     * happened is the second half of the answer, because the state alone cannot say: a condition
+     * nothing could read and one read to no effect leave it identical.
      */
-    Known assuming(Core cond, Known k, Denotations at, boolean positive) {
+    Predicates.Assumed assuming(Core cond, Known k, Denotations at, boolean positive) {
         return predicates.assumeCond(cond, k, at, positive);
     }
 

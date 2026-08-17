@@ -985,9 +985,9 @@ public final class InvariantChecker {
             // is given still holds those binders and walks into them again, which is why entering one
             // already entered is nothing: a second transition would forget what the branch settled.
             say(reading(without(e, alike, value.then()),
-                            predicates.assumeCond(value.cond(), within, there, true), there, depth),
+                            predicates.assumeCond(value.cond(), within, there, true).known(), there, depth),
                     reading(without(e, alike, value.els()),
-                            predicates.assumeCond(value.cond(), within, there, false), there, depth));
+                            predicates.assumeCond(value.cond(), within, there, false).known(), there, depth));
             return;
         }
         switch (e) {
@@ -997,8 +997,8 @@ public final class InvariantChecker {
             }
             case Core.If iff -> {
                 walk(iff.cond(), k, at, depth);
-                walk(iff.then(), predicates.assumeCond(iff.cond(), k, at, true), at, depth);
-                walk(iff.els(), predicates.assumeCond(iff.cond(), k, at, false), at, depth);
+                walk(iff.then(), predicates.assumeCond(iff.cond(), k, at, true).known(), at, depth);
+                walk(iff.els(), predicates.assumeCond(iff.cond(), k, at, false).known(), at, depth);
             }
             case Core.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else

@@ -28,19 +28,9 @@ public sealed interface WhyUnsettled {
      * <p>Left out rather than guessed at, which is what keeps the proofs sound: a reading that took
      * nothing in ruled nothing out. What it costs is this answer.
      *
-     * @param what the shape, as a report may say it
+     * @param at where the condition is written
      */
-    record AConditionWasNotRead(String what) implements WhyUnsettled {}
-
-    /**
-     * The place is in a representation this reading does not run over.
-     *
-     * <p>The tree a body is measured on has the language's own combinators expanded into the folds
-     * they are, and the rules about what a combinator does to a value are written against the
-     * combinator. So a condition that goes through one is read here as the fold, and what the fold
-     * establishes is not what the operation establishes.
-     */
-    record TheOperationWasExpandedAway(String what) implements WhyUnsettled {}
+    record AConditionWasNotRead(souther.compiler.diag.SourcePos at) implements WhyUnsettled {}
 
     /**
      * The rules of the position an arm matches on did not settle whether its cases can stand there.

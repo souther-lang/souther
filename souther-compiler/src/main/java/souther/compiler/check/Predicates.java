@@ -483,23 +483,49 @@ final class Predicates {
     /** Refines {@code k} by asserting {@code cond} (or its negation): a comparison tightens the
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
-    Known assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
+    /**
+     * What taking a condition as holding came to.
+     *
+     * <p>Two things and not one. A condition of a shape no rule here reads leaves what is known
+     * exactly as it was, and so does one that was read and ruled nothing out — the states are
+     * identical, and only the reading knows which happened. Answered here rather than guessed at
+     * afterwards by comparing the state to what went in: that comparison says whether anything
+     * changed, which is a third question and is the answer to neither.
+     *
+     * @param read whether any of these domains took the condition in
+     */
+    record Assumed(Known known, boolean read) {
+
+        Assumed alsoRead(boolean more) {
+            return more && !read ? new Assumed(known, true) : this;
+        }
+    }
+
+    Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         Core cond = asSizeComparison(rawCond);
+        boolean read = false;
         Core ordered = asOrderComparison(cond, at);
         if (ordered != cond) {
             // Both hold of the same values: the order the call decides, and the bound on the sign
             // that decides it. Which one a clause is read against is settled where the clause is
             // read, so a guard states each of them rather than choosing here.
-            k = assumeCond(ordered, k, at, positive);
+            Assumed first = assumeCond(ordered, k, at, positive);
+            k = first.known();
+            read = first.read();
         }
         // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
         if (cond instanceof Core.Binary b
                 && (b.op() == Hir.BinOp.AND && positive || b.op() == Hir.BinOp.OR && !positive)) {
-            return assumeCond(b.right(), assumeCond(b.left(), k, at, positive), at, positive);
+            Assumed left = assumeCond(b.left(), k, at, positive);
+            // Either side taken in is the condition taken in. A conjunction one half of which reads
+            // is not one nothing was read of, and calling it that would name this compiler's limit
+            // where the limit was reached on one operand only.
+            return assumeCond(b.right(), left.known(), at, positive)
+                    .alsoRead(left.read() || read);
         }
         Core under = negated(cond);
         if (under != null) {
-            return assumeCond(under, k, at, !positive);
+            return assumeCond(under, k, at, !positive).alsoRead(read);
         }
         Known out = k;
         // What holds of the sizes the condition names, and of what the operations in it answer,
@@ -519,8 +545,10 @@ final class Predicates {
         // a case read without them is one this would call reachable where the construction below,
         // which is handed the same facts, would not.
         if (noCaseSatisfies(cond, out, at, positive)) {
-            return out.reachingNothing();
+            // Read, and read to the end: what it comes to is that nothing enters here.
+            return new Assumed(out.reachingNothing(), true);
         }
+        read |= !known.isEmpty();
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
             Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
@@ -529,6 +557,7 @@ final class Predicates {
             if (la != null && ra != null) {
                 LinearForm compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
+                read = true;
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
@@ -539,11 +568,13 @@ final class Predicates {
         List<Quantified> quantified = new ArrayList<>();
         quantifiedBy(cond, at, positive, quantified);
         out = out.and(quantified);
+        read |= !quantified.isEmpty();
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
         Term key = terms.bodyKey(polar.expr(), at);
-        return key == null ? out : out.taking(key, polar.positive(), Known.Held.ON_THE_PATH);
+        return key == null ? new Assumed(out, read)
+                : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH), true);
     }
 
     /** The terms one side of a compared pair names: the expression itself, and each atom of the form it

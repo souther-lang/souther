@@ -283,6 +283,38 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                 "what the fold establishes is not what the operation does, so nothing is proven");
     }
 
+    /**
+     * And it says which of the two kinds of nothing it is.
+     *
+     * <p>A condition no rule here reads and one read to no effect leave what is known identical, so
+     * the reading has to say which happened. Without it both come back as a branch nobody built a
+     * value for, and this compiler's own limit is reported as a fact about the model.
+     */
+    @Test
+    void andSaysThatItCouldNotReadTheCondition() {
+        List<souther.compiler.reach.WhyUnsettled> why =
+                armsOf(THROUGH_A_COMBINATOR, "mk").stream()
+                        .filter(Reachability.Unsettled.class::isInstance)
+                        .map(each -> ((Reachability.Unsettled) each).why())
+                        .toList();
+        assertTrue(why.stream()
+                        .anyMatch(souther.compiler.reach.WhyUnsettled.AConditionWasNotRead.class
+                                ::isInstance),
+                () -> "the fold is not a condition this reads: " + why);
+    }
+
+    @Test
+    void whileASizeIsOneItDoesRead() {
+        List<souther.compiler.reach.WhyUnsettled> why = armsOf(THROUGH_A_SIZE, "mk").stream()
+                .filter(Reachability.Unsettled.class::isInstance)
+                .map(each -> ((Reachability.Unsettled) each).why())
+                .toList();
+        assertTrue(why.stream()
+                        .noneMatch(souther.compiler.reach.WhyUnsettled.AConditionWasNotRead.class
+                                ::isInstance),
+                () -> "a size is read as it is written, so nothing here is unread: " + why);
+    }
+
     @Test
     void andASizeIsReadExactlyAsItIsWritten() {
         // A `Name` is at least one character, so the departure at `>= 0` is one nothing takes. The
