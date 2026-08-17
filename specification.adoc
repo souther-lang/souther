@@ -3385,6 +3385,23 @@ The rules it obeys:
 
 Nothing further is proven and nothing further is refused. A case behind a second `+match+`, behind a `+guard+`, or at a position whose rules this compiler could not read is one nothing here settles — a table indexed by two sums says what it says about *pairs*, and neither axis states anything about the other — so the arm stands and what is not settled is said rather than decided (<<a-case-a-claim-is-made-about-is-counted-until-the-rules-refuse-it>>). Every such arm is read, wherever in the body it is written; what is not read is an arm of a `+match+` on something that is not an input position at all, which is a claim about a value the model's rules say nothing about.
 
+[[a-branch-the-rules-make-dead-is-said-so]]The other direction is a branch the model's own rules make dead, and it is *said*. Where the conditions on the way to a branch cannot all hold, no value the model admits arrives at it: no row can be written through it, and the arm asks for work nobody can do.
+
+[,text]
+----
+guard a.value < 5000 else Free
+guard a.value < 6000 else Free      // nothing under 5000 is 6000 or more
+----
+
+Reported as a warning (<<e1327>>) and not a refusal. Nothing about such a program is ill-formed — it runs, and the branch simply never runs — and there is no way to write "I know" at a `+guard+`'s departure the way `+unreachable+` says it at a `+match+` arm. Making it a refusal would leave an author no way out.
+
+The rules it obeys:
+
+* Only a proof reports. What is read of a path is an over-approximation of the values that can arrive, so a branch disjoint from it is disjoint from the values themselves; a branch the reading cannot settle keeps its rows and is said nothing about. The absence of a proof is not a proof.
+* Nothing here proves that a branch *is* reached. A reading that found no contradiction found none — which is not the same as a value existing — so what would be needed to refute an author's claim is a value, a run that went through, or a rule that states it settles the question, and none of those is this.
+* What takes an obligation away and what reports a defect read one answer and act on the one arm of it. A branch left unsettled keeps its rows and is silent; the two never disagree about which branches those are.
+* It is reported to the module whose source wrote the fork. A call splices another module's branches into this body, and an argument handed to them can leave one of their arms unreachable *here* while it is alive wherever else that module is used — which is a fact about the call, and a branch the author of this module cannot take out.
+
 [#guard]
 === guard
 
@@ -4966,6 +4983,20 @@ Reported at an `+unreachable+` in an arm of the first `+match+` a body reaches, 
 The diagnostic names three things, because acting on it takes all three: where the claim is written, which case at which position it is about, and the declaration that says the case can arrive. The answer is the one the rule above states — the arm answers a value, or that declaration changes.
 
 Read from the body as it is emitted, so a claim written in a `+let+` this body called is judged here as well: what the claim says about this behavior's input is what it says wherever it was written.
+
+[#e1327]
+=== A branch the model's own rules make dead
+
+[,text]
+----
+Nothing the model admits arrives at this branch, so no row can be written through it.
+Hint: The conditions on the way here cannot all hold: line 11 holding, line 12 failing.
+Hint: Take the branch out, or widen what reaches it.
+----
+
+Reported at the branch, as a warning (<<a-branch-the-rules-make-dead-is-said-so>>). What makes it dead is said with it: the conditions on the way and which way each went, the position whose values stop short of what the branch is written for, or the cases the rules refuse where the arm matches on them.
+
+The same reading is what takes the branch's rows out of what the model is measured against, so a report never asks for a row through a branch it has already said nothing reaches. Where the reading cannot settle a branch, both halves leave it alone: the rows stay owed and nothing is said.
 
 [#e1401-removed]
 === (retired)

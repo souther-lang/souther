@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import java.util.List;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Severity;
 
@@ -19,6 +20,16 @@ class CompileInvariantOneDenotationTest {
 
     private static long warnings(Compiler.Compiled c) {
         return c.warnings().stream().filter(d -> d.severity() == Severity.WARNING).count();
+    }
+
+    /** Every warning code a compile answered with, in order. Asked for by code where a model has
+     *  something other than a construction to be told about, so that the silence this check is
+     *  about is measured rather than the silence of every check at once. */
+    private static List<String> warningCodes(Compiler.Compiled c) {
+        return c.warnings().stream()
+                .filter(d -> d.severity() == Severity.WARNING)
+                .map(souther.compiler.diag.Diagnostic::code)
+                .toList();
     }
 
     @Test
@@ -371,7 +382,9 @@ class CompileInvariantOneDenotationTest {
                     constructs Positive
                 let mk (x) = if x > 5 then Positive(if x < 3 then 0 else 7) else Positive(9)
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+        // Nothing is said about the construction. That the branch holding it is one nothing
+        // reaches is the other reading of the same conditions, and is said.
+        assertEquals(List.of("E1327"), warningCodes(Compiler.compileWithWarnings(m)),
                 "a branch the conditions exclude is not one the value could have taken");
     }
 

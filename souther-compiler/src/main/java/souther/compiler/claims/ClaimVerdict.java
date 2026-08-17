@@ -1,6 +1,6 @@
 package souther.compiler.claims;
 
-import souther.compiler.inputs.Unsettlement;
+import souther.compiler.reach.WhyUnsettled;
 
 /**
  * What the model's own rules say about a claim its body makes.
@@ -41,7 +41,7 @@ public sealed interface ClaimVerdict {
      * what a report says about it is that it was not proven, so that an exclusion is never both
      * unproven and silent.
      */
-    record Unproven(Unsettlement why) implements ClaimVerdict {
+    record Unproven(WhyUnsettled why) implements ClaimVerdict {
 
         public Unproven {
             if (why == null) {

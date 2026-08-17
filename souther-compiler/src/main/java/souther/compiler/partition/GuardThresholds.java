@@ -45,7 +45,7 @@ import java.util.List;
  * carries the site its own value is recorded at, which is what a line is measured against. What the
  * shape of the condition does decide is which arm a row that reached the comparison can be in, and
  * that is a question about the classes either side of the line: it is carried as a {@link OriginRef
- * .GuardOrigin.Witness} and read by {@link GuardEdge}.
+ * .GuardOrigin.Witness}.
  *
  * <p>Three readers are kept apart here and are easy to run together. Which comparisons exist is
  * {@link #comparisonsIn}; which positions a comparison names at all is {@link #mentioned}; which
@@ -57,17 +57,18 @@ public final class GuardThresholds {
     /**
      * What one reading of a body says about the comparisons in it.
      *
-     * <p>Two answers from one walk, because they are read off the same comparison and the operator is
-     * known once. Asked separately they would be two readings of it, and the second would have to
-     * recover from {@link Threshold} which side of the line each arm takes — which a threshold does not
-     * say and cannot be made to say (see {@link GuardEdge}).
+     * <p>One walk, because the operator is known once. Which side of the line each arm takes is not
+     * recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put {@code c} on
+     * the low side and their {@code then} arms are opposite halves — so what a row reaching a
+     * comparison can be in is carried as {@link OriginRef.GuardOrigin.Witness} where the operator
+     * is still in hand, and which values arrive is asked of the reading of the whole body.
      */
-    public record Guards(List<Threshold> thresholds, List<GuardEdge> edges,
+    public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
                          List<BoundaryObligation> between) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of(), List.of());
+                new Guards(List.of(), List.of(), List.of(), List.of());
 
         /**
          * A value a body singles out rather than orders.
@@ -81,7 +82,6 @@ public final class GuardThresholds {
 
         public Guards {
             thresholds = List.copyOf(thresholds);
-            edges = List.copyOf(edges);
             unread = List.copyOf(unread);
             singled = List.copyOf(singled);
             between = List.copyOf(between);
@@ -94,22 +94,21 @@ public final class GuardThresholds {
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
-        List<GuardEdge> edges = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<BoundaryObligation> between = new ArrayList<>();
-        walk(behavior, body, plan, InputReads.of(inputs), symbols, found, edges, unread,
+        walk(behavior, body, plan, InputReads.of(inputs), symbols, found, unread,
                 singled, between);
-        return new Guards(found, edges, unread, singled, between);
+        return new Guards(found, unread, singled, between);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              InputReads reads, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges, List<UnreadRule> unread,
+                             List<UnreadRule> unread,
                              List<Guards.Singled> singled, List<BoundaryObligation> between) {
         if (e instanceof Core.If iff) {
             List<Core> read =
-                    read(behavior, iff, plan, reads, symbols, out, edges, singled, between);
+                    read(behavior, iff, plan, reads, symbols, out, singled, between);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
@@ -129,7 +128,7 @@ public final class GuardThresholds {
         // walk that did not follow the binding would find its comparisons about nothing.
         InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
                 : reads;
-        Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, out, edges,
+        Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, out,
                 unread, singled, between));
     }
 
@@ -259,7 +258,7 @@ public final class GuardThresholds {
      */
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    InputReads reads, Symbols symbols,
-                                   List<Threshold> out, List<GuardEdge> edges,
+                                   List<Threshold> out,
                                    List<Guards.Singled> singled, List<BoundaryObligation> between) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
@@ -279,7 +278,7 @@ public final class GuardThresholds {
             // is made of.
             int site = plan.requireComparisonSiteOf(each.comparison());
             TermPath here = readOne(behavior, iff, each, plan, guard, site, reads, symbols,
-                    out, edges, singled);
+                    out, singled);
             if (here != null) {
                 made.add(each.comparison());
                 continue;
@@ -449,7 +448,7 @@ public final class GuardThresholds {
     private static TermPath readOne(String behavior, Core.If iff, Placed placed,
                                     CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
                                     InputReads reads,
-                                    Symbols symbols, List<Threshold> out, List<GuardEdge> edges,
+                                    Symbols symbols, List<Threshold> out,
                                     List<Guards.Singled> singled) {
         Core.Binary comparison = placed.comparison();
         Hir.BinOp op = comparison.op();
@@ -507,35 +506,16 @@ public final class GuardThresholds {
                         ? CoverageSites.NO_SITE : guard.siteIndexElse();
         switch (op) {
             case LE -> {
-                edge(edges, guard, then, term, value, true, true);
-                edge(edges, guard, otherwise, term, value, false, false);
             }
             case GT -> {
-                edge(edges, guard, then, term, value, false, false);
-                edge(edges, guard, otherwise, term, value, true, true);
             }
             case LT -> {
-                edge(edges, guard, then, term, value, true, false);
-                edge(edges, guard, otherwise, term, value, false, true);
             }
             case GE -> {
-                edge(edges, guard, then, term, value, false, true);
-                edge(edges, guard, otherwise, term, value, true, false);
             }
             default -> { }
         }
         return term.path();
-    }
-
-    /** One arm's edge, where that arm has a probe. An arm answering nothing has none, and it is owed
-     * no row whether anything reaches it or not. */
-    private static void edge(List<GuardEdge> edges, CoverageSites.GuardRef guard, int site,
-                             NumericTerm term, Place value, boolean below, boolean inclusive) {
-        if (site == CoverageSites.NO_SITE) {
-            return;
-        }
-        edges.add(below ? GuardEdge.below(guard, site, term, value, inclusive)
-                : GuardEdge.above(guard, site, term, value, inclusive));
     }
 
     private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {

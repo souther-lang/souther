@@ -10,6 +10,7 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Map;
 
 /**
@@ -156,12 +157,53 @@ public final class CoverageSites {
      * here must be the ones the emitter is walking — the same answer, not an equal one.
      */
     public record Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
-                       IdentityHashMap<Core, Integer> byComparison) {
+                       IdentityHashMap<Core, Integer> byComparison,
+                       IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode,
+                       IdentityHashMap<Core, Integer> controlByComparison) {
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                new IdentityHashMap<>());
+                new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>());
 
-        public boolean isEmpty() {
+        /** The same plan built without the control layer, for a caller assembling one by hand. */
+        public Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
+                    IdentityHashMap<Core, Integer> byComparison) {
+            this(sites, guards, byNode, byComparison, new IdentityHashMap<>(),
+                    new IdentityHashMap<>());
+        }
+
+        /**
+         * The arms of {@code node}, in the order the emitter emits them, or null where this node has
+         * none.
+         *
+         * <p>Positional and parallel to {@link #probesOf}, and longer in what it can say: every arm
+         * is here whether or not a run through it could be recorded. A reader counting what rows are
+         * owed wants the probed ones and can ask each; a reader judging what an arm declares wants
+         * the arm, which is the one this has and the other does not.
+         */
+        public ControlPointId.ArmOccurrence[] armsOf(Core node) {
+            return armsByNode.get(node);
+        }
+
+        /** Which way {@code comparison} coming out {@code result} is, or empty where this plan
+         *  numbered no comparison there. */
+        public java.util.Optional<ControlPointId.ComparisonOutcome> outcomeOf(Core comparison,
+                                                                             boolean result) {
+            Integer control = controlByComparison.get(comparison);
+            Integer probe = byComparison.get(comparison);
+            return control == null || probe == null ? java.util.Optional.empty()
+                    : java.util.Optional.of(
+                            new ControlPointId.ComparisonOutcome(control, probe, result));
+        }
+
+        /**
+         * Whether this plan numbered any site a run can be recorded at.
+         *
+         * <p>Not whether it numbered anything. A body whose every arm answers {@code unreachable}
+         * has arms, and control points for them, and no site at all — so a reader asking this to
+         * find out whether there is anything to be about would skip exactly the bodies a claim is
+         * made in.
+         */
+        public boolean hasNoProbes() {
             return sites.isEmpty();
         }
 
@@ -226,7 +268,7 @@ public final class CoverageSites {
             walk.behavior(body.getKey(), body.getValue());
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
-                walk.byComparison);
+                walk.byComparison, walk.armsByNode, walk.controlByComparison);
     }
 
     private static final class Walk {
@@ -235,9 +277,15 @@ public final class CoverageSites {
         private final List<GuardRef> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Integer> byComparison = new IdentityHashMap<>();
+        private final IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode =
+                new IdentityHashMap<>();
+        private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
         private String behavior;
         private int ordinal;
+        /** Numbered across the whole plan and never reused, so that one number names one place
+         *  whichever behavior it is in — the same rule the probe numbers are under. */
+        private int controls;
 
         Walk() {
         }
@@ -257,10 +305,30 @@ public final class CoverageSites {
          * an {@code unreachable} is E1911 and states nothing, so an arm only such a row could go
          * through is an arm no row will ever be recorded in.
          */
-        private int armOf(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part,
-                          Core arm, boolean reachable) {
-            return reachable && NormalReturn.of(arm)
+        private ControlPointId.ArmOccurrence armOf(Site.Kind kind, String label, Core owner,
+                                                   CoverageOrigin origin, int part, Core arm,
+                                                   boolean reachable) {
+            // The arm is made either way. Whether a run through it can be recorded is the second
+            // question and only the probe turns on it — an arm nothing could record is still an arm,
+            // and the readings that judge one need to be able to name it.
+            int probe = reachable && NormalReturn.of(arm)
                     ? site(kind, label, owner, origin, part) : NO_SITE;
+            return new ControlPointId.ArmOccurrence(controls++,
+                    probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
+                    // The fork's own coordinate, as a site takes it: an arm's body is what lowering
+                    // rewrites and carries whatever position it was built from, so quoting it sends
+                    // an author somewhere else in the file.
+                    Citation.of(owner.pos()), origin);
+        }
+
+        /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has
+         *  none. What the emitter indexes and what the branch measure counts. */
+        private static int[] probesOf(ControlPointId.ArmOccurrence... arms) {
+            int[] out = new int[arms.length];
+            for (int i = 0; i < arms.length; i++) {
+                out[i] = arms[i].probe().orElse(NO_SITE);
+            }
+            return out;
         }
 
         /**
@@ -356,31 +424,38 @@ public final class CoverageSites {
                 case Core.Construct nd -> nd.values().forEach(given -> walk(given.value(), inside));
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
-                    int then = armOf(Site.Kind.THEN, "then", iff, iff.origin(), 0, iff.then(), inside);
+                    ControlPointId.ArmOccurrence then =
+                            armOf(Site.Kind.THEN, "then", iff, iff.origin(), 0, iff.then(), inside);
                     walk(iff.then(), inside);
-                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.origin(), 1, iff.els(), inside);
+                    ControlPointId.ArmOccurrence els =
+                            armOf(Site.Kind.ELSE, "else", iff, iff.origin(), 1, iff.els(), inside);
                     walk(iff.els(), inside);
-                    byNode.put(iff, new int[] {then, els});
-                    if (then != NO_SITE || els != NO_SITE) {
-                        guards.add(new GuardRef(behavior, iff.origin(), then, els,
+                    byNode.put(iff, probesOf(then, els));
+                    armsByNode.put(iff, new ControlPointId.ArmOccurrence[] {then, els});
+                    if (then.isMeasured() || els.isMeasured()) {
+                        guards.add(new GuardRef(behavior, iff.origin(),
+                                then.probe().orElse(NO_SITE), els.probe().orElse(NO_SITE),
                                 iff.pos()));
                         comparisons(iff.cond());
                     }
                 }
                 case Core.Match m -> {
                     walk(m.scrutinee(), inside);
-                    int[] arms = new int[m.cases().size()];
+                    ControlPointId.ArmOccurrence[] arms =
+                            new ControlPointId.ArmOccurrence[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
                         arms[i] = armOf(Site.Kind.CASE, label(arm), m, m.origin(), i, arm.body(),
                                 inside);
                         walk(arm.body(), inside);
                     }
-                    byNode.put(m, arms);
+                    byNode.put(m, probesOf(arms));
+                    armsByNode.put(m, arms);
                 }
                 case Core.IfConstructed ic -> {
                     ic.construct().values().forEach(given -> walk(given.value(), inside));
-                    int[] arms = new int[1 + ic.els().size()];
+                    ControlPointId.ArmOccurrence[] arms =
+                            new ControlPointId.ArmOccurrence[1 + ic.els().size()];
                     arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.origin(), 0,
                             ic.then(), inside);
                     walk(ic.then(), inside);
@@ -390,7 +465,8 @@ public final class CoverageSites {
                                 arm.body(), inside);
                         walk(arm.body(), inside);
                     }
-                    byNode.put(ic, arms);
+                    byNode.put(ic, probesOf(arms));
+                    armsByNode.put(ic, arms);
                 }
             }
         }
@@ -434,6 +510,7 @@ public final class CoverageSites {
                 byComparison.put(comparison,
                         site(Site.Kind.COMPARISON, comparison.op().toString(), comparison,
                                 comparison.origin(), 0));
+                controlByComparison.put(comparison, controls++);
             }
         }
 

@@ -6,19 +6,13 @@ import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.GuardEdge;
-import souther.compiler.partition.ArmReachability;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermPath;
+import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -324,18 +318,19 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * agrees with by construction, and what the rows below are about is what happens when the proof
      * the compiler made turns out to be wrong.
      */
-    private static ArmReachability proving() {
+    private static PathReachability.Answers proving() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.answerEverything();
         return compilation.db()
-                .ask(new Adequacy.Reachable(compilation.modules().get(0))).value().get("classify");
+                .ask(new Adequacy.PathReached(compilation.modules().get(0))).value()
+                .get("classify");
     }
 
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
                 List.of(arm(0), arm(1)), Set.of(1),
-                new Adequacy.Effective(proving(), Set.of()), MeasurementStatus.COMPLETE);
+                proving().asRunWith(Set.of(1)), MeasurementStatus.COMPLETE);
 
         assertEquals(List.of(1), measured.all().stream().map(CoverageSites.Site::index).toList());
         assertEquals(Set.of(1), measured.covered());
@@ -352,11 +347,11 @@ class AnArmNothingReachesIsNotOwedARowTest {
      */
     @Test
     void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
-        ArmReachability proven = proving();
-        Adequacy.Effective effective = new Adequacy.Effective(
-                proven.without(Set.of(0)), Set.of(0));
+        // The rows lit both arms, one of which nothing was supposed to reach. Handed to the same
+        // fold the measures read, so what a run does to a proof is decided in one place.
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(0, 1));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
-                List.of(arm(0), arm(1)), Set.of(0, 1), effective, MeasurementStatus.COMPLETE);
+                List.of(arm(0), arm(1)), Set.of(0, 1), asRun, MeasurementStatus.COMPLETE);
 
         assertEquals(Set.of(0), measured.contradicted(),
                 "arm 0 was proven unreachable and a row went through it");
@@ -372,12 +367,20 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * the case behind it would stay unowed over a proof already disproved. */
     @Test
     void theSameArmIsBackForEveryMeasure() {
-        Adequacy.Effective effective = new Adequacy.Effective(
-                proving().without(Set.of(0)), Set.of(0));
+        PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(0));
 
-        assertFalse(effective.reachable().provenUnreachable(0),
-                "a row went through it, so nothing about it is proven any more");
-        assertTrue(effective.reachable().isEmpty(),
-                "and what the signature reads is the same set the arms are counted by");
+        assertEquals(Set.of(0), asRun.provedWrong(),
+                "a row went through an arm this reading had proven nothing reaches");
+        assertFalse(asRun.answers().nothingArrivesAt(0),
+                "so nothing about it is proven any more");
+        // Both measures read this one object, so what is back for one is back for the other. Said
+        // of the arms: what a comparison's outcome was proven to be is not something a row through
+        // an arm settles — a lit comparison says it ran, not which way it came out.
+        assertTrue(asRun.answers().found().entrySet().stream()
+                        .filter(each -> each.getKey()
+                                instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence)
+                        .noneMatch(each -> each.getValue()
+                                instanceof souther.compiler.reach.Reachability.Unreachable),
+                "and what the signature reads is the same answer the arms are counted by");
     }
 }

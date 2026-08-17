@@ -1,5 +1,6 @@
 package souther.compiler.claims;
 
+import souther.compiler.coverage.ControlPointId;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeSymbol;
@@ -20,27 +21,12 @@ import java.util.List;
  *                reason, and taking the one written above the others would name it by where it
  *                happens to sit in the file
  * @param said    where the first of them is written, which is what a diagnostic points at
- * @param stands  what reaching the fork this arm belongs to takes
+ * @param where   the arm itself, as the reading of what arrives names it. Not the probe: an arm
+ *                answering {@code unreachable} answers no value, so no run can be recorded in it
+ *                and it never had one — which is why a claim is judged at the control point
  */
 public record Claim(TermPath at, TypeSymbol named, List<String> reasons, SourcePos said,
-                    Standing stands) {
-
-    /**
-     * What stands between the fork an arm belongs to and the caller.
-     *
-     * <p>The one thing that decides what an <em>admission</em> proves. A case the rules refuse
-     * cannot arrive however deep the fork is; a case they leave can arrive at the position, and
-     * whether it arrives <em>here</em> is another question — one that only the first fork of a body
-     * answers on its own.
-     */
-    public sealed interface Standing {
-
-        /** Nothing: the fork is what the body does first, so reaching it is being applied at all. */
-        record Reached() implements Standing {}
-
-        /** Another arm, whose own condition this reading does not decide. */
-        record Conditional() implements Standing {}
-    }
+                    ControlPointId.ArmOccurrence where) {
 
     public Claim {
         reasons = List.copyOf(reasons);

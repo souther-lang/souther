@@ -434,6 +434,6 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, CoverageSites.of(Map.of()).isEmpty());
+        assertSame(true, CoverageSites.of(Map.of()).hasNoProbes());
     }
 }

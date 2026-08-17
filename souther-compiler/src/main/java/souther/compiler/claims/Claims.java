@@ -1,9 +1,8 @@
 package souther.compiler.claims;
 
-import souther.compiler.inputs.Admits;
-import souther.compiler.inputs.InputDomain;
-import souther.compiler.inputs.Position;
-import souther.compiler.inputs.Unsettlement;
+import souther.compiler.check.PathReachability;
+import souther.compiler.reach.Reachability;
+import souther.compiler.reach.WhyUnsettled;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,31 +39,31 @@ public final class Claims {
      * what would settle it was never read, and a target nothing resolves is a fact about how far
      * this compiler walks rather than about the model.
      */
-    public static Claims of(UnreachableClaims claims, InputDomain read) {
+    public static Claims of(UnreachableClaims claims, PathReachability.Answers arrives) {
         if (claims.isEmpty()) {
             return NONE;
         }
         List<Judged> out = new ArrayList<>();
         for (Claim claim : claims.all()) {
-            out.add(new Judged(claim, verdictOf(claim, read.at(claim.at()))));
+            out.add(new Judged(claim, verdictOf(arrives.at(claim.where()))));
         }
         return new Claims(out);
     }
 
-    /** What the rules say about one claim. */
-    private static ClaimVerdict verdictOf(Claim claim, Position at) {
-        if (at == null) {
-            return new ClaimVerdict.Unproven(new Unsettlement.NoSuchDistinction());
-        }
-        return switch (at.admissionOf(claim.named())) {
-            case Admits.Refused _ -> new ClaimVerdict.Confirmed();
-            // What an admission comes to turns on what stands above the arm. A case the rules leave
-            // arrives at the position; whether it arrives at a fork inside another arm is a
-            // question about that arm's own condition, and nothing here reads one.
-            case Admits.Admitted _ -> claim.stands() instanceof Claim.Standing.Reached
-                    ? new ClaimVerdict.Contradicted()
-                    : new ClaimVerdict.Unproven(new Unsettlement.ForkNotKnownToBeReached());
-            case Admits.Unsettled unsettled -> new ClaimVerdict.Unproven(unsettled.why());
+    /**
+     * What one claim comes to, which is the one reading of what arrives read for this question.
+     *
+     * <p>Three answers and three, so there is nothing to decide here. The rules refusing the case
+     * is the claim borne out; something arriving is the claim refuted, and what says something
+     * arrives is a witness rather than the absence of a proof; anything else leaves the claim where
+     * it was. Written as a test of one thing and an else, a claim would be refuted wherever the
+     * reading happened to be silent.
+     */
+    private static ClaimVerdict verdictOf(Reachability arrives) {
+        return switch (arrives) {
+            case Reachability.Unreachable _ -> new ClaimVerdict.Confirmed();
+            case Reachability.Reachable _ -> new ClaimVerdict.Contradicted();
+            case Reachability.Unsettled unsettled -> new ClaimVerdict.Unproven(unsettled.why());
         };
     }
 
