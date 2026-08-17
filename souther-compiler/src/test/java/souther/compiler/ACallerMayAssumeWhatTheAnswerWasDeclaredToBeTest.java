@@ -6,6 +6,7 @@ import souther.compiler.diag.Severity;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -206,6 +207,65 @@ class ACallerMayAssumeWhatTheAnswerWasDeclaredToBeTest {
     private static List<Diagnostic> unprovenAcross(List<String> sources) {
         return Compiler.compileModulesWithWarnings(sources).warnings().stream()
                 .filter(d -> d.severity() == Severity.WARNING)
+                .filter(d -> d.code().equals("E2011")).toList();
+    }
+
+    /**
+     * And what the module published, not only what this compile happened to hold.
+     *
+     * <p>A module reached through its classes is a different path to the same question: what its
+     * author wrote travels as the declaration it published and is read back by this front end
+     * (ADR-0063), and nothing of the module that declared it is compiled here. A caller assuming a
+     * relation is a language guarantee across that boundary or it is a guarantee only inside one
+     * build.
+     */
+    @Test
+    void aRelationPublishedByAnotherProjectReachesItsCallerHere() {
+        String library = """
+                module shared.finding exposing ( Id, Found, Missing, findIt )
+
+                data Id      = Int
+                data Found   = { rank: Int }
+                data Missing = { asked: Id }
+
+                behavior findIt : (id: Id) -> Found | Missing
+                    constructs Found, Missing
+                    ensures Found -> value.rank > id.value
+
+                let findIt (id) =
+                    if id.value > 0 then Found { rank = id.value } else Missing { asked = id }
+                """;
+        String consumer = """
+                module app.ranking exposing ( Ranked, use )
+
+                import shared.finding ( Id, Found, Missing, findIt )
+
+                data Ranked = Int
+                    invariant value > 0
+
+                behavior use : (id: Id) -> Ranked | Missing
+                    constructs Ranked, Missing
+                let use (id) = {
+                    guard id.value >= 0
+                        else Missing { asked = id }
+                    match findIt(id) with
+                        | Found as found -> Ranked(found.rank)
+                        | Missing as missing -> missing
+                }
+                """;
+
+        assertEquals(List.of(), unprovenAgainst(consumer, library),
+                "the relation was read back off the published declaration and assumed here");
+        assertEquals(1, unprovenAgainst(consumer,
+                        library.replace("    ensures Found -> value.rank > id.value\n", "")).size(),
+                "and a library that declares nothing leaves the construction unproven, as before");
+    }
+
+    /** The consumer compiled on its own, against the library's classes and none of its source. */
+    private static List<Diagnostic> unprovenAgainst(String consumer, String library) {
+        Map<String, byte[]> classes = Compiler.compile(library);
+        return Compiler.compileModulesWithWarnings(List.of(consumer), classes::get).warnings()
+                .stream().filter(d -> d.severity() == Severity.WARNING)
                 .filter(d -> d.code().equals("E2011")).toList();
     }
 }
