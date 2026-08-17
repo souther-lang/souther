@@ -4,7 +4,8 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.HelperInliner;
-import souther.compiler.check.HelperInvariants;
+import souther.compiler.check.ClauseHelpers;
+import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.HelperNames;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
@@ -14,7 +15,6 @@ import souther.compiler.check.ValueCycles;
 import souther.compiler.check.Symbols;
 import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -409,29 +409,26 @@ public final class Shapes {
             // What the clause says is what the check reads, so an imported bound is substituted here
             // as it is where the invariant is settled. A clause left naming it would be classified as
             // a rule this analysis cannot read, and a construction the bound rejects would compile.
-            Hir.Module declaring = expandable.value().withQualifiedInvariants();
             try {
+                // The one reader of a clause: it holds the expansion, and what it hands back is a
+                // conjunct that knows where it was written and what it comes to. Nothing here places
+                // an answer, so nothing here can place one wrongly.
+                ClausesForDischarge declaring =
+                        ClausesForDischarge.of(expandable.value(), scope.value(), published);
                 Map<TypeSymbol, List<ClauseDischarge>> out = new LinkedHashMap<>();
-                for (Hir.Def def : declaring.defs()) {
-                    if (!(def instanceof Hir.Data data) || data.invariants().isEmpty()) {
-                        continue;
-                    }
-                    // The clause is classified in the representation the check reads, and reported at
-                    // the position it is written — an expansion carries positions of its own, and the
-                    // author is looking at the source.
-                    HelperInliner inliner = HelperInliner.forHelpers(name,
-                            HelperInliner.helpersOf(declaring), published, InliningPolicy.DISCHARGE);
+                for (Hir.Data data : declaring.declarationsThatState()) {
                     List<ClauseDischarge> clauses = new ArrayList<>();
                     TypeSymbol named = data.declares();
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
                     for (Hir.InvariantClause declared : data.invariants()) {
-                        for (Hir.Expr written : HelperInvariants.conjunctsOf(declared.expr())) {
-                            clauses.add(InvariantChecker.capabilityOf(
-                                    inliner.inline(written, new BindingOwner.OfData(named)),
-                                    leftmost(written), named, data, scope.value())
-                                    .named(declared.name()));
+                        for (ClausesForDischarge.ClauseReading written
+                                : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
+                            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(
+                                    written, named, data, scope.value())) {
+                                clauses.add(read.named(declared.name()));
+                            }
                         }
                     }
                     out.put(named, List.copyOf(clauses));
@@ -441,23 +438,6 @@ public final class Shapes {
                 return Answer.absent(e);
             }
         }
-    }
-
-    /** Where a clause begins: the earliest position anything in it carries. A node's own position is
-     * where its operator is written, and a reader points at the clause. */
-    private static SourcePos leftmost(Hir.Expr e) {
-        SourcePos[] found = {e.pos()};
-        Hir.forEachChild(e, child -> {
-            SourcePos inner = leftmost(child);
-            if (inner != null && (found[0] == null || earlier(inner, found[0]))) {
-                found[0] = inner;
-            }
-        });
-        return found[0];
-    }
-
-    private static boolean earlier(SourcePos a, SourcePos b) {
-        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
     }
 
     /**
@@ -488,7 +468,7 @@ public final class Shapes {
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
-                return Answer.of(HelperInvariants.invariantsForDischarge(
+                return Answer.of(ClauseHelpers.invariantsForDischarge(
                         expandable.value(), scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);

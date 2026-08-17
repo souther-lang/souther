@@ -2,7 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.HelperInvariants;
+import souther.compiler.check.ClauseHelpers;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
@@ -668,7 +668,7 @@ final class CodecGen {
             boolean refine = true;
             if (!refining) {
                 refine = false;
-                for (Hir.Expr conjunct : HelperInvariants.conjunctsOf(declared.get(i).expr())) {
+                for (Hir.Expr conjunct : ClauseHelpers.conjunctsOf(declared.get(i).expr())) {
                     Optional<InvariantConstraints.Constraint> c =
                             InvariantConstraints.of(conjunct, base);
                     if (c.isPresent()) {

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeSymbol;
 
@@ -10,9 +11,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A declaration's {@code invariant} with the helpers it names expanded.
+ * The clauses a module declares — a data's {@code invariant} and a behavior's {@code ensures} — with
+ * the helpers they name expanded.
  *
- * <p>An invariant is expanded well before a body is. An importer reads an included data's invariant
+ * <p>A clause is expanded well before a body is. An importer reads an included data's invariant
  * through the symbol table, so it has to be expanded by the time the table is built, and the settling
  * of the helper parameter types it reaches has to happen first — expanding a call carries the
  * parameter's type onto the binding the call becomes, so a type settled afterwards would never reach
@@ -22,10 +24,14 @@ import java.util.Map;
  * <p>There are two, and they are read by different things. The settled form is what travels to an
  * importer and what the backend emits; the discharge form leaves the language's own operations
  * standing, because the analysis has rules about them ({@link InliningPolicy}).
+ *
+ * <p>Both kinds of clause are here because the expansion is one rule. What a helper call comes to
+ * does not depend on whether the clause it stands in is written of a value or of an answer, and the
+ * two representations are the same two either way.
  */
-public final class HelperInvariants {
+public final class ClauseHelpers {
 
-    private HelperInvariants() {}
+    private ClauseHelpers() {}
 
     /**
      * Settles the helper parameter types the author left unwritten, then inlines the helper calls in
@@ -82,7 +88,7 @@ public final class HelperInvariants {
     /** {@code m} with its helper parameter types settled and the names in its invariants written
      * qualified — what both representations are expanded from, so neither reads a table the other
      * would key differently. */
-    private static Hir.Module settled(Hir.Module m, Symbols symbols) {
+    static Hir.Module settled(Hir.Module m, Symbols symbols) {
         return HelperNames.withQualifiedInvariants(HelperParams.settle(m, symbols, Map.of()));
     }
 
@@ -105,29 +111,59 @@ public final class HelperInvariants {
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : m.behaviors()) {
-            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
-                BindingOwner owner = new BindingOwner.OfSignature(
-                        new souther.compiler.types.ValueName.Behavior(m.name(), spec.name()));
-                List<Hir.EnsuresClause> clauses = new ArrayList<>();
-                for (Hir.EnsuresClause clause : spec.ensures()) {
-                    List<Hir.EnsuresArm> arms = new ArrayList<>();
-                    for (Hir.EnsuresArm arm : clause.arms()) {
-                        arms.add(arm.with(inliner.inline(arm.expr(), owner)));
-                    }
-                    clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
-                            clause.pos(), clause.region()));
-                }
-                behaviors.add(new Hir.SpecBehavior(spec.written(), spec.params(), spec.ret(),
-                        spec.constructs(), spec.dependsOn(), List.copyOf(clauses), spec.pos()));
-            } else {
-                behaviors.add(behavior);
-            }
+            behaviors.add(behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()
+                    ? withInlinedEnsures(inliner, m.name(), spec) : behavior);
         }
         return m.withDefs(defs).withBehaviors(behaviors);
     }
 
-    /** The conjuncts of an invariant expression, flattened, in the order they are written — what a
-     * reader sees as separate clauses. */
+    /** {@code spec} with the helper calls in its {@code ensures} expanded as {@code inliner} expands
+     * them — which representation that leaves is the inliner's to say, and the same walk gives
+     * either. */
+    private static Hir.SpecBehavior withInlinedEnsures(HelperInliner inliner, String module,
+                                                       Hir.SpecBehavior spec) {
+        BindingOwner owner = new BindingOwner.OfSignature(
+                new souther.compiler.types.ValueName.Behavior(module, spec.name()));
+        List<Hir.EnsuresClause> clauses = new ArrayList<>();
+        for (Hir.EnsuresClause clause : spec.ensures()) {
+            List<Hir.EnsuresArm> arms = new ArrayList<>();
+            for (Hir.EnsuresArm arm : clause.arms()) {
+                arms.add(arm.with(inliner.inline(arm.expr(), owner)));
+            }
+            clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
+                    clause.pos(), clause.region()));
+        }
+        return new Hir.SpecBehavior(spec.written(), spec.params(), spec.ret(),
+                spec.constructs(), spec.dependsOn(), List.copyOf(clauses), spec.pos());
+    }
+
+    /**
+     * Where a written clause begins: the earliest position anything in it carries.
+     *
+     * <p>A node's own position is where its operator is written, so the position of {@code a && b} is
+     * the {@code &&}. A reader is pointed at the clause, which starts at whatever of it comes first.
+     *
+     * <p>Of what was written. Asked of an expanded tree it answers with a position inside whatever
+     * was expanded into it, which is why the reader that wants both this and the expansion gets them
+     * made together ({@link ClausesForDischarge}).
+     */
+    static SourcePos beginsAt(Hir.Expr e) {
+        SourcePos[] found = {e.pos()};
+        Hir.forEachChild(e, child -> {
+            SourcePos inner = beginsAt(child);
+            if (inner != null && (found[0] == null || earlier(inner, found[0]))) {
+                found[0] = inner;
+            }
+        });
+        return found[0];
+    }
+
+    private static boolean earlier(SourcePos a, SourcePos b) {
+        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
+    }
+
+    /** The conjuncts of a clause, flattened, in the order they are written — what a reader sees as
+     * separate clauses. */
     public static List<Hir.Expr> conjunctsOf(Hir.Expr e) {
         if (e instanceof Hir.Binary b && b.op() == Hir.BinOp.AND) {
             List<Hir.Expr> out = new ArrayList<>(conjunctsOf(b.left()));
