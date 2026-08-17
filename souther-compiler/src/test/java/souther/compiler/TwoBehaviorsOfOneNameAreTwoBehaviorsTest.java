@@ -204,6 +204,39 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
                         + " both: " + fields);
     }
 
+    /**
+     * A {@code depends on} clause naming two behaviors of one name is refused, and the reason is
+     * the clause and not the field.
+     *
+     * <p>The boundary of the row above. A composition names its stages and nothing is named again,
+     * so two of one name are two fields. What a {@code depends on} names becomes the
+     * implementation's trailing parameter under that name, so the two have one name to be written
+     * under — which is a name listed twice, wherever the two are declared.
+     */
+    @Test
+    void aDependsOnNamingTwoOfOneNameIsRefused() {
+        String a = """
+                module app.a exposing ( In, Mid, f )
+                data In = { n: Int }
+                data Mid = { n: Int }
+                behavior f : (i: In) -> Mid
+                """;
+        String b = """
+                module app.b exposing ( Out, f )
+                data Out = { n: Int }
+                behavior f : (m: app.a.Mid) -> Out
+                """;
+        String own = """
+                module app.own exposing ( Res, use : Res )
+                data Res = { n: Int }
+                behavior use : (i: app.a.In) -> Res
+                    constructs Res
+                    depends on app.a.f, app.b.f
+                let use (i, one, two) = Res { n = 1 }
+                """;
+        assertEquals(List.of("E1011"), reported(a, b, own));
+    }
+
     /** One behavior reached twice — once bare through an import line, once through its module — is
      *  one requirement, because it is one behavior. */
     @Test
