@@ -87,21 +87,42 @@ final class WhatMoved {
             walkAsMembers(path, was, now, said);
             return;
         }
-        Set<String> identities = new LinkedHashSet<>();
-        for (JsonNode member : was) {
-            identityOf(member).ifPresent(identities::add);
-        }
-        boolean identified = identities.size() == was.size() && !identities.isEmpty();
-        for (JsonNode member : now) {
-            identityOf(member).ifPresent(identities::add);
-        }
-        if (!identified || identities.size() != countIdentified(now)) {
+        Set<String> before = identitiesOf(was);
+        Set<String> after = identitiesOf(now);
+        if (before == null || after == null) {
             walkByPosition(path, was, now, said);
             return;
         }
-        for (String identity : identities) {
+        // The union, because a member that only one of them holds is the difference to report. Asked
+        // of the two together — "are these the same identities" — a removal would answer no and send
+        // both arrays to be matched by position, which reports the one that left and every member
+        // after it as having moved.
+        Set<String> all = new LinkedHashSet<>(before);
+        all.addAll(after);
+        for (String identity : all) {
             walk(join(path, identity), memberNamed(was, identity), memberNamed(now, identity), said);
         }
+    }
+
+    /**
+     * What the members of one array call themselves, or null where they cannot be matched by name.
+     *
+     * <p>Of one array, not of two. Whether these members name themselves is a fact about this array,
+     * and answering it about a pair makes every difference between the pair look like a reason not
+     * to trust the names.
+     *
+     * <p>Null where any member names nothing, and where two name the same thing: a duplicate leaves
+     * no way to say which of them a difference is about.
+     */
+    private static Set<String> identitiesOf(JsonNode array) {
+        Set<String> out = new LinkedHashSet<>();
+        for (JsonNode member : array) {
+            String identity = identityOf(member).orElse(null);
+            if (identity == null || !out.add(identity)) {
+                return null;
+            }
+        }
+        return out;
     }
 
     /**
@@ -143,14 +164,6 @@ final class WhatMoved {
             walk(path + "[" + i + "]", i < was.size() ? was.get(i) : null,
                     i < now.size() ? now.get(i) : null, said);
         }
-    }
-
-    private static int countIdentified(JsonNode array) {
-        Set<String> seen = new LinkedHashSet<>();
-        for (JsonNode member : array) {
-            identityOf(member).ifPresent(seen::add);
-        }
-        return seen.size() == array.size() ? seen.size() : -1;
     }
 
     private static java.util.Optional<String> identityOf(JsonNode member) {
