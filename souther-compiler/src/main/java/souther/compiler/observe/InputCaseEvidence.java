@@ -21,11 +21,12 @@ import java.util.Set;
  * <p>Covering every case of an input is the mechanised half of asking whether a behavior is total:
  * every case the input can be, tried, and a result defined for it.
  *
- * @param excluded         cases the body says it does not answer for. Declared and not coverable: the
- *                         type has them, and a row naming one would reach an {@code unreachable} and
- *                         be E1911. They stay in {@link #declared} because what the type can be is
- *                         part of what the model says, and they are out of {@link #coverable} because
- *                         no row can be written at them
+ * @param excluded         cases the position's own rules refuse. Declared and not coverable: the
+ *                         type has them and no value of one can be constructed (E1903), so they stay
+ *                         in {@link #declared} because what the type can be is part of what the model
+ *                         says, and they are out of {@link #coverable} because no row can be written
+ *                         at them. Nothing a body declares reaches this: what leaves a denominator
+ *                         is what the rules refuse
  * @param unclassifiedRows rows whose input case could not be read
  */
 public record InputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> specified,
@@ -44,7 +45,7 @@ public record InputCaseEvidence(Set<TypeSymbol> declared, Set<TypeSymbol> specif
         return new InputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), 0);
     }
 
-    /** The cases a row can be written at: what the type declares, less what the body rules out. */
+    /** The cases a row can be written at: what the type declares, less what its rules refuse. */
     public List<TypeSymbol> coverable() {
         return declared.stream().filter(each -> !excluded.contains(each)).toList();
     }

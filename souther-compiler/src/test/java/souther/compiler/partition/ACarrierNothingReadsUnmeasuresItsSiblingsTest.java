@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -121,6 +122,6 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
-        return new Read(Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE), symbols);
+        return new Read(Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols), symbols);
     }
 }

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
+import souther.compiler.inputs.BlockReason;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 

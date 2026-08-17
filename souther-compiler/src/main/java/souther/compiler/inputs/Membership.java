@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;

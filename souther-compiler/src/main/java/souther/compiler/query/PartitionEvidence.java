@@ -33,9 +33,10 @@ import java.util.Set;
 public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
-                                List<souther.compiler.partition.UnreadRule> unread,
+                                List<souther.compiler.inputs.UnreadRule> unread,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
+
 
     /**
      * No measure of this kind here at all, which is not a measure that came back empty.
@@ -215,33 +216,22 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
         }
     }
 
-    /**
-     * One class the body says it does not answer for, and why.
-     *
-     * <p>{@code reasons} is every reason on the paths that abort, and usually one. An arm made of a
-     * {@code match} whose arms abort for different reasons has no single reason, and naming the one
-     * written above the others would describe the class by where the file happens to put it.
-     */
-    public record ExcludedClass(String classId, List<String> reasons) {
 
-        public ExcludedClass {
-            reasons = List.copyOf(reasons);
-        }
-    }
 
     /**
      * How much of one position's partition the rows reach.
      *
-     * @param classes          the classes a row can be written at. What the model divides the position
-     *                         into, less what the body says it does not answer for
-     * @param excluded         the classes the body rules out, named so that a report says what it took
+     * @param classes          the classes a row can be written at, which is what the model divides
+     *                         the position into: a case its rules refuse is not one of them. Nothing
+     *                         a body declares narrows this — what it declared is said beside these
+     *                         numbers ({@link ClaimAnnotations}) and never into them
+     * @param excluded         the classes the rules rule out and a body's claim named, so that a report says what it took
      *                         out rather than showing a position with fewer classes than the type has
      * @param unclassifiedRows rows whose value at this position could not be read. Above zero, an
      *                         unreached class is undecided rather than unreached.
      */
     public record AxisCoverage(String axis, String path, List<String> classes, Set<String> covered,
-                               List<ExcludedClass> excluded, int unclassifiedRows,
-                               MeasurementStatus status, Reason reason) {
+                               int unclassifiedRows, MeasurementStatus status, Reason reason) {
 
         /** Why a position has no coverage numbers. */
         public enum Reason implements souther.compiler.observe.MeasureReason {
@@ -261,18 +251,16 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
             }
         }
 
-        /** What the body rules out is still said. Which classes there are and which the body answers
-         * for are facts about the model, and no row has to exist for either. */
+        /** Which classes there are is a fact about the model, and no row has to exist for it to be
+         *  so — which is why a position nothing was measured at still names them. */
         public static AxisCoverage unavailable(String axis, String path, List<String> classes,
-                                               List<ExcludedClass> excluded, Reason reason) {
-            return new AxisCoverage(axis, path, classes, Set.of(), excluded, 0,
-                    reason.status(), reason);
+                                               Reason reason) {
+            return new AxisCoverage(axis, path, classes, Set.of(), 0, reason.status(), reason);
         }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
             covered = Set.copyOf(covered);
-            excluded = List.copyOf(excluded);
             Unavailable.check(status, reason);
         }
 

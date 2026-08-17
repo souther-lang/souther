@@ -7,6 +7,8 @@ import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
@@ -35,12 +37,12 @@ import java.util.TreeSet;
  * a legacy system or in someone's head, and a generator that guessed would turn a question into an
  * assertion nobody made.
  *
- * <p>What it reports is not only the rows. A combination it could produce nothing for is said out loud,
- * with which of the four things happened — the body leaves no class open at some other position,
- * nothing here composed a value, every value tried was refused at construction, or the search stopped
- * before deciding. A generator that returned only the rows it managed would read as though the rest
- * were covered, and one that gave the same answer to all four would send an author looking for a value
- * that does not exist while a row they could write in a line went unwritten.
+ * <p>What it reports is not only the rows. A combination it could produce nothing for is said out
+ * loud, with which of {@link UnresolvedCombination.Reason} it was — the list is that enum's to keep,
+ * and naming it here would be a second copy going stale. A generator that returned only the rows it
+ * managed would read as though the rest were covered, and one that gave the same answer to every kind
+ * would send an author looking for a value that does not exist while a row they could write in a line
+ * went unwritten.
  */
 public final class Generator {
 
@@ -121,15 +123,6 @@ public final class Generator {
                                         Optional<String> said) {
 
         public enum Reason {
-            /**
-             * Every class at some other position is one the body says it does not answer for, so no
-             * row reaches this combination whatever is written there.
-             *
-             * <p>About the classes a row may be written at and not about the values of the position:
-             * each of those classes has values, and what refuses them is the body. Read as a
-             * position without values, an author is sent looking for a type that has none.
-             */
-            NO_CLASS_OPEN_AT_POSITION,
             /**
              * Nothing here knows how to compose a value of the shape asked for.
              *
@@ -288,15 +281,6 @@ public final class Generator {
             }
             Pair seed = (pairs.isEmpty() ? singles : pairs).iterator().next();
             int[] where = assign(axes, pairs, seed);
-            if (where == null) {
-                // Some other position has no class a row may be written at, so no row reaches this
-                // combination however it is filled. Answered rather than attempted.
-                pairs.remove(seed);
-                singles.remove(seed);
-                unresolved.add(new UnresolvedCombination(labels(axes, seed),
-                        UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION));
-                continue;
-            }
             Attempt built = build(subject, axes, where, check);
             if (built.row() != null) {
                 rows.add(built.row());
@@ -520,26 +504,13 @@ public final class Generator {
         return List.copyOf(divided);
     }
 
-    /**
-     * Whether a row may be written at this class of this position.
-     *
-     * <p>A row at a class the body rules out reaches an {@code unreachable} and is E1911, so offering
-     * one hands the author work the compiler will refuse. Asked by index because everything here
-     * addresses a class by its place in the axis.
-     */
-    private static boolean open(Axis axis, int cls) {
-        return !axis.excluded().contains(axis.classes().get(cls).id());
-    }
-
     private static Set<Pair> pairsOf(List<Axis> axes) {
         Set<Pair> all = new TreeSet<>();
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
                 for (int a = 0; a < axes.get(i).classes().size(); a++) {
                     for (int b = 0; b < axes.get(j).classes().size(); b++) {
-                        if (open(axes.get(i), a) && open(axes.get(j), b)) {
-                            all.add(new Pair(i, a, j, b));
-                        }
+                        all.add(new Pair(i, a, j, b));
                     }
                 }
             }
@@ -551,9 +522,7 @@ public final class Generator {
         Set<Pair> all = new TreeSet<>();
         for (int i = 0; i < axes.size(); i++) {
             for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (open(axes.get(i), c)) {
-                    all.add(Pair.alone(i, c));
-                }
+                all.add(Pair.alone(i, c));
             }
         }
         return all;
@@ -616,15 +585,12 @@ public final class Generator {
             if (where[i] >= 0) {
                 continue;
             }
-            // A position this row is not about still has to hold something, and what it holds has to
-            // be writable: filling it with a class the body rules out would make the whole row
-            // E1911, whichever gap it was generated for.
+            // A position this row is not about still has to hold something, and every class of an
+            // axis is one a row can be written at: what the rules refuse is not a class of the
+            // position at all.
             int best = -1;
             int bestGain = -1;
             for (int c = 0; c < axes.get(i).classes().size(); c++) {
-                if (!open(axes.get(i), c)) {
-                    continue;
-                }
                 int gain = 0;
                 for (int j = 0; j < axes.size(); j++) {
                     if (j == i || where[j] < 0) {
@@ -640,10 +606,7 @@ public final class Generator {
                     best = c;
                 }
             }
-            if (best < 0) {
-                return null;   // every class of this position is ruled out: no row can be written
-            }
-            where[i] = best;
+            where[i] = best;   // every axis here has a class, so there is always one to place
         }
         return where;
     }

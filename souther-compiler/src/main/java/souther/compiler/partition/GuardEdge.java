@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;

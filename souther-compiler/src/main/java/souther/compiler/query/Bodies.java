@@ -1220,6 +1220,61 @@ public final class Bodies {
     }
 
     /**
+     * Every claim a module's bodies make that the model's own rules contradict.
+     *
+     * <p>Where a premise that cannot hold belongs: a claim the rules refute is a model whose own
+     * signature admits an input it aborts on, and that is a mistake in the model rather than a note
+     * about how well it is covered. Read from the bodies as they are emitted, which is what every
+     * measure reads, so that a claim is judged in the shape it is acted on — a claim written in a
+     * helper this body calls is judged against the input the call gave it.
+     *
+     * <p>Nothing is said where the signature is not in hand: a behavior whose signature did not work
+     * out has been reported on for that.
+     */
+    private static Map<String, souther.compiler.claims.Claims> judged(
+            Db db, String module, Hir.Module settled, Map<String, Core> bodies) {
+        Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
+        Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
+                db.ask(new souther.compiler.query.Adequacy.Inputs(module));
+        if (!scope.present() || !inputs.present()) {
+            return Map.of();
+        }
+        Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
+        for (Hir.BehaviorDef behavior : settled.behaviors()) {
+            souther.compiler.inputs.InputDomain read = inputs.value().get(behavior.name());
+            Core body = bodies.get(behavior.name());
+            if (!(behavior instanceof Hir.SpecBehavior) || read == null || body == null) {
+                continue;
+            }
+            out.put(behavior.name(), souther.compiler.claims.Claims.of(
+                    souther.compiler.claims.UnreachableClaims.of(body, read, scope.value()), read));
+        }
+        // In the order the module declares them, which is the order a reader meets the diagnostics
+        // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
+        // module with two refused claims reported them in whichever order the hashes fell.
+        return Ordered.map(out);
+    }
+
+    /** The claims a model's own rules contradict, as reports. Read from the judging above rather
+     *  than judged again: what refuses a build and what a report prints are one answer. */
+    private static List<Report> contradicted(Db db, String module,
+                                             Map<String, souther.compiler.claims.Claims> claims) {
+        Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
+                db.ask(new souther.compiler.query.Adequacy.Inputs(module));
+        if (!inputs.present()) {
+            return List.of();
+        }
+        List<Report> out = new ArrayList<>();
+        claims.forEach((behavior, judged) -> {
+            for (Diagnostic refused : souther.compiler.claims.ClaimDiagnostics.refusals(
+                    judged, inputs.value().get(behavior))) {
+                out.add(Report.of(refused));
+            }
+        });
+        return List.copyOf(out);
+    }
+
+    /**
      * What a module's own check found: its declarations, its helpers, its {@code exposing} line, its
      * compositions — everything that is not one behavior's body.
      *
@@ -1326,10 +1381,13 @@ public final class Bodies {
 
         private final Map<String, Core> behaviorBodies;
         private final Map<String, Core> emittedHelpers;
+        private final Map<String, souther.compiler.claims.Claims> claims;
 
-        private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers) {
+        private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers,
+                           Map<String, souther.compiler.claims.Claims> claims) {
             this.behaviorBodies = behaviorBodies;
             this.emittedHelpers = emittedHelpers;
+            this.claims = claims;
         }
 
         /** The Core of each behavior body, by the behavior's name. */
@@ -1340,6 +1398,45 @@ public final class Bodies {
         /** The Core of each helper the module emits as a method of its own. */
         public Map<String, Core> emittedHelpers() {
             return emittedHelpers;
+        }
+
+        /**
+         * What each body declares cannot arrive, judged against the reading of its input.
+         *
+         * <p>Made here because this is where the bodies are: the refusal of a contradicted claim is
+         * a report of this check, and a report of a confirmed or an unproven one is the measure's,
+         * and both read this. Made twice they would be two answers to one question, and the one
+         * that refuses a build and the one a report prints are the last two that should differ.
+         */
+        public Map<String, souther.compiler.claims.Claims> claims() {
+            return claims;
+        }
+    }
+
+    /**
+     * What each behavior of one module declared cannot arrive, in the words a report writes.
+     *
+     * <p>A projection of the judging the body check already made, and the only way out of it: what
+     * a report holds is what was said about a case, and not the verdicts a measure could act on.
+     * One entry per case of a position, however many arms declared it.
+     */
+    public record Claimed(String name) implements Key<Map<String, ClaimAnnotations>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, ClaimAnnotations>> compute(Db db) {
+            Elaborated checked = db.ask(new Checked(name)).value();
+            if (checked == null) {
+                return Answer.absent();
+            }
+            Map<String, ClaimAnnotations> out = new LinkedHashMap<>();
+            checked.claims().forEach((behavior, claims) ->
+                    out.put(behavior, ClaimAnnotations.of(claims)));
+            return Answer.of(Ordered.map(out));
         }
     }
 
@@ -1400,9 +1497,21 @@ public final class Bodies {
                     && bodiesCheck
                     && module.value().sound()
                     && !TypeOps.holdsAnErroneousType(settled.value());
-            return sound
-                    ? Answer.of(new Elaborated(bodies, module.value().emittedHelpers()))
-                    : Answer.absent();
+            if (!sound) {
+                return Answer.absent();
+            }
+            // What each body declares cannot arrive, held against what its input's own declarations
+            // leave. Judged here rather than beside each body: it reads the signature, which is the
+            // module's, and a body's own answer must not move when the one beside it is edited.
+            //
+            // Only of a module that came out whole. A model with a hole in it has been reported on
+            // where the hole is, and what a case can arrive at cannot be read through one — asked
+            // anyway, the reading meets a shape no position can have and says so about this
+            // compiler, which is true and is not what the author of a mistyped model needs.
+            Map<String, souther.compiler.claims.Claims> claims =
+                    judged(db, name, settled.value(), bodies);
+            return Answer.of(new Elaborated(bodies, module.value().emittedHelpers(), claims),
+                    contradicted(db, name, claims));
         }
     }
 }

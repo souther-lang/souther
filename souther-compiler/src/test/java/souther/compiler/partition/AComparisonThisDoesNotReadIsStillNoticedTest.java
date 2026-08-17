@@ -8,6 +8,9 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.UnreadRule;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -70,7 +73,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertNotNull(body);
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         return GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Hir.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
     }
 
     /** A comparison this reads is not also reported as one it did not. */

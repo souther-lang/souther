@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * answered, the one shape that produces classes without being admissible — a union nobody named —
  * would have gone round it, which is the disagreement the whole type is for.
  */
-class APositionAPartitionIsDerivedFromIsProvedToBeOneTest {
+class APositionAReadingIsMadeOfIsProvedToBeOneTest {
 
     private static final String MODULE = """
             module demo
@@ -58,8 +58,8 @@ class APositionAPartitionIsDerivedFromIsProvedToBeOneTest {
         return Resolve.module(parsed, SyntaxSymbols.of(parsed));
     }
 
-    private Shape.PartitionInputShape admit(Type type) {
-        return PartitionInput.of(type, symbols).shape();
+    private Shape.ReadablePositionShape admit(Type type) {
+        return ReadablePosition.of(type, symbols).shape();
     }
 
     private Type named(String name) {

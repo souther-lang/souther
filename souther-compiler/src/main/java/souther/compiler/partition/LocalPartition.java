@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.values.AdmissibleSet;
 
 import java.util.List;

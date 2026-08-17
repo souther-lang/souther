@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -50,7 +51,7 @@ class AFloorNothingBuildsIsSaidTheSameWhereverItIsWrittenTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
-        Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols), symbols);
         Generator.GenerationResult filled = Generator.fill(new Generator.Subject(
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
                         sig.inputTypes(), symbols),

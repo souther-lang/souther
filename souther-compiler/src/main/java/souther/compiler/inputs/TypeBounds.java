@@ -1,6 +1,7 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 
@@ -12,7 +13,7 @@ import souther.compiler.numeric.NumericDomain;
  * projection onto the position and what the term standing there guarantees of its own are read in
  * beside them, and only a partitioning has either.
  */
-final class TypeBounds {
+public final class TypeBounds {
 
     /**
      * What the position can hold: every rule reaching it, intersected, with what the term itself
@@ -32,7 +33,7 @@ final class TypeBounds {
      * them, so that a guard at zero is refused its neighbour below by the same intersection that
      * refuses one outside an invariant.
      */
-    static NumericDomain.Bounds admissible(DeclaredBounds.Bounds own, NumericDomain.Bounds projected,
+    public static NumericDomain.Bounds admissible(DeclaredBounds.Bounds own, NumericDomain.Bounds projected,
                                            NumericTerm term) {
         NumericDomain.Bounds intrinsic = term == null ? null : term.ownBounds();
         if (own == null) {
@@ -49,7 +50,7 @@ final class TypeBounds {
     }
 
     /** The same, of a position no term of its own is measured at. */
-    static NumericDomain.Bounds admissible(DeclaredBounds.Bounds own, NumericDomain.Bounds projected) {
+    public static NumericDomain.Bounds admissible(DeclaredBounds.Bounds own, NumericDomain.Bounds projected) {
         return admissible(own, projected, null);
     }
 

@@ -15,9 +15,9 @@ import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.BoundaryTarget;
-import souther.compiler.partition.Exclusions;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.partition.GuardThresholds;
-import souther.compiler.partition.NumericTerm;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
@@ -25,8 +25,8 @@ import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.RowClasses;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -46,20 +46,20 @@ final class Coverages {
      * covered and what a generator writes a row for have to be the same positions and the same classes,
      * and two derivations of them would be two chances to disagree.
      */
-    static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, Sig sig, Symbols symbols,
-                                                  Core body, CoverageSites.Plan plan,
-                                                  Exclusions excluded) {
+    static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
+                                                  Sig sig, Symbols symbols,
+                                                  Core body, CoverageSites.Plan plan) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
-        Partitions.Partitioning partitioning = Partitions.of(behavior, sig, symbols, excluded);
+        Partitions.Partitioning partitioning = Partitions.of(behavior.name(), inputs, symbols);
         if (body == null) {
             return partitioning;
         }
         GuardThresholds.Guards guards =
-                GuardThresholds.of(behavior.name(), body, plan, parameters, symbols);
+                GuardThresholds.of(behavior.name(), body, plan, inputs, symbols);
         return Partitions.withThresholds(partitioning, guards.thresholds(), symbols,
                 guards.unread(), guards.singled(), guards.between());
     }
@@ -71,9 +71,10 @@ final class Coverages {
      *                   something a coverage count can do on its own and not something that should
      *                   happen twice.
      */
-    static PartitionEvidence of(Hir.SpecBehavior behavior, Sig sig, Symbols symbols, Core body,
+    static PartitionEvidence of(Hir.SpecBehavior behavior, InputDomain inputs, Sig sig,
+                                Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
-                                List<BoundaryAssessment> boundaries, Exclusions excluded) {
+                                List<BoundaryAssessment> boundaries) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
@@ -81,7 +82,7 @@ final class Coverages {
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, sig, symbols, body, plan, excluded);
+                partitioningOf(behavior, inputs, sig, symbols, body, plan);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
@@ -93,7 +94,7 @@ final class Coverages {
                 continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, readings, excluded));
+                axes.add(coverageOf(axis, readings));
                 divided.add(axis);
             }
         }
@@ -201,14 +202,14 @@ final class Coverages {
      * single-position coverage is measured on its own and not derived from this.
      */
     private static PartitionEvidence.PairSpace pairsOf(List<Axis> axes, Readings readings) {
-        // The product of what a row can be written at, not of what the types declare. A class the
-        // body rules out takes a whole slice of the product with it — every combination it takes part
-        // in is one no row can sit in — which is a different thing from a pair whose two classes each
-        // have rows but never together.
+        // The product of what a row can be written at, not of what the types declare. A case the
+        // rules refuse is not a class of its position at all, so the slice of the product it would
+        // have taken part in is not here to be counted — which is a different thing from a pair
+        // whose two classes each have rows but never together.
         long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
-                total += (long) axes.get(i).eligible().size() * axes.get(j).eligible().size();
+                total += (long) axes.get(i).classes().size() * axes.get(j).classes().size();
             }
         }
         if (total == 0) {
@@ -245,32 +246,26 @@ final class Coverages {
                 (int) total - reached, false, readings.status(axes), null);
     }
 
-    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
-                                                             Exclusions excluded) {
-        List<String> classes = axis.eligible().stream().map(PartitionClass::id).toList();
-        // The model's own words for why, carried through so a report can say what it took out of the
-        // denominator rather than showing a position with fewer classes than its type has. Said
-        // whether or not a row was written: what the body rules out is a fact about the body.
-        List<PartitionEvidence.ExcludedClass> ruled = excluded.at(axis.path()).stream()
-                .filter(each -> axis.excluded().contains(each.name()))
-                .map(each -> new PartitionEvidence.ExcludedClass(each.name(),
-                        excluded.reasonsFor(axis.path(), each)))
-                .toList();
+    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
+        List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
+        // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
+        // own, and what was declared about those positions is put beside it afterwards
+        // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being
+        // in reach of the code that counts one.
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.unavailable(axis.id().toString(),
-                    axis.term().toString(), classes, ruled,
+                    axis.term().toString(), classes,
                     PartitionEvidence.AxisCoverage.Reason.NO_ROWS);
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
             String in = Readings.classIn(where, axis);
-            if (in != null && !axis.excluded().contains(in)) {
+            if (in != null) {
                 covered.add(in);
             }
         }
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
-                classes, covered, ruled, readings.couldNotSay(axis),
-                readings.status(List.of(axis)), null);
+                classes, covered, readings.couldNotSay(axis), readings.status(List.of(axis)), null);
     }
 
     /**

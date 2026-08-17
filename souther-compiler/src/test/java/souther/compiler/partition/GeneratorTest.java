@@ -6,6 +6,10 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.Membership;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -104,7 +108,7 @@ class GeneratorTest {
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
         List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
-        Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), InputDomain.of(spec, sig, symbols), symbols);
         return new Model(new Generator.Subject(
                 new BehaviorInputs(parameters, sig.inputTypes(), symbols), partitioning.axes()),
                 symbols);
@@ -326,34 +330,6 @@ class GeneratorTest {
         assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
         assertTrue(texts(filled).contains("Request { card = Card { number = Amount(0m) } }"),
                 () -> "the element composed, under the optional: " + texts(filled));
-    }
-
-    /**
-     * A position whose classes the body all rules out leaves no row to write anywhere else.
-     *
-     * <p>What that says is about the classes a row may be written at, and not about whether values
-     * of the position exist: every class here has a value, and the body is what refuses them. A
-     * reason that said no value can be written there would send an author looking for a type with
-     * no values.
-     */
-    @Test
-    void aPositionWithNoClassLeftOpenSaysThatAndNotThatNoValueExists() {
-        Symbols symbols = modelOf(TRIP, "submit").symbols();
-        Generator.Subject subject = twoNumbers(symbols,
-                List.of(number("shut", 1)), List.of(number("open", 10), number("wider", 20)));
-        Axis closed = subject.axes().get(0).excluding(List.of("shut"));
-        Generator.Subject shut = new Generator.Subject(subject.inputs(),
-                List.of(closed, subject.axes().get(1)));
-
-        Generator.GenerationResult filled =
-                Generator.fill(shut, List.of(), Generator.CandidateCheck.ANY);
-
-        assertEquals(List.of(), filled.rows(), "no row reaches a position with nothing open at it");
-        assertEquals(
-                List.of(Generator.UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION,
-                        Generator.UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION),
-                filled.unresolved().stream().map(Generator.UnresolvedCombination::reason).toList(),
-                () -> "one per combination the closed position takes part in: " + filled.unresolved());
     }
 
     /**

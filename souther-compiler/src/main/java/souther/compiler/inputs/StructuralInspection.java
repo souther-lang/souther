@@ -1,6 +1,7 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 import souther.compiler.check.Shape;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.types.Type;
 
 import java.util.Map;
@@ -88,7 +89,7 @@ public sealed interface StructuralInspection {
      * @param deeper  whether the walk may still go down, which only a position made of positions
      *                can be stopped by
      */
-    static StructuralInspection of(Shape.PartitionInputShape shape, boolean deeper) {
+    static StructuralInspection of(Shape.ReadablePositionShape shape, boolean deeper) {
         return switch (shape) {
             // Made of positions, and read one level down — unless the walk has gone as deep as it
             // goes, which is a reaching this compiler declines rather than a record with nothing in

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Dates;

@@ -10,6 +10,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.frontend.CstFrontend;
+import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
