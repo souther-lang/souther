@@ -42,6 +42,24 @@ public sealed interface WhyUnsettled {
      */
     record TheOperationWasExpandedAway(String what) implements WhyUnsettled {}
 
+    /**
+     * The rules of the position an arm matches on did not settle whether its cases can stand there.
+     *
+     * <p>Carried through rather than restated. Whether a distinction can stand at a position is the
+     * position's own question and it has its own words for not settling it
+     * ({@link souther.compiler.inputs.Unsettlement}); a reading that answered "no witness" here
+     * would drop what the position already said about why.
+     */
+    record ThePositionDidNotSettleIt(souther.compiler.inputs.Unsettlement why)
+            implements WhyUnsettled {
+
+        public ThePositionDidNotSettleIt {
+            if (why == null) {
+                throw new IllegalArgumentException("a position unsettled by nothing settled it");
+            }
+        }
+    }
+
     /** The walk did not get to it: something it could not read stood in the way, or it stopped at
      *  the depth it opens branches to. */
     record TheWalkDidNotReachIt() implements WhyUnsettled {}

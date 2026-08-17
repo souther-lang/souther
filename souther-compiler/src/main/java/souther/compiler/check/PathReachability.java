@@ -4,12 +4,19 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.coverage.ControlPointId;
+import souther.compiler.inputs.Admits;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.Position;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.Reachability;
+import souther.compiler.reach.Witness;
 import souther.compiler.reach.WhyUnsettled;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -95,7 +102,7 @@ public final class PathReachability {
      * stands for a behavior this one depends on and guarantees nothing about a value.
      */
     public static Answers of(Core body, Hir.SpecBehavior spec, Hir.FnDef fn,
-                             CoverageSites.Plan plan, Symbols symbols) {
+                             CoverageSites.Plan plan, InputDomain read, Symbols symbols) {
         if (fn == null || spec == null) {
             return Answers.NONE;
         }
@@ -104,7 +111,7 @@ public final class PathReachability {
             params = params.with(fn.params().get(i).binder(),
                     TypeOps.successType(spec.params().get(i).type()));
         }
-        return of(body, params, plan, symbols);
+        return of(body, params, plan, read, symbols);
     }
 
     /**
@@ -114,7 +121,8 @@ public final class PathReachability {
      * so the arms under it come out unsettled rather than proven either way; a walk that falls over
      * answers about what it had reached and no more.
      */
-    public static Answers of(Core body, Scope params, CoverageSites.Plan plan, Symbols symbols) {
+    public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
+                             Symbols symbols) {
         if (body == null || plan.isEmpty()) {
             return Answers.NONE;
         }
@@ -126,8 +134,9 @@ public final class PathReachability {
                 in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
                         p.getValue().type(), body.pos()), in.known(), in.at());
             }
-            new PathReachability(engine, plan, out)
-                    .walk(body, in.known(), in.at(), List.of());
+            new PathReachability(engine, plan, read == null ? InputDomain.NONE : read, symbols, out)
+                    .walk(body, in.known(), in.at(),
+                            InputReads.of(read == null ? InputDomain.NONE : read), List.of(), true);
         } catch (RuntimeException why) {
             // The run-time check is the backstop for the analysis this borrows, and it is the
             // backstop for this too: what was not read leaves an obligation standing.
@@ -138,12 +147,18 @@ public final class PathReachability {
 
     private final PathEngine engine;
     private final CoverageSites.Plan plan;
+    /** What the declarations leave each position, which is what a {@code match} arm is held
+     *  against. A condition narrows a path; a case is refused or left by the rules themselves. */
+    private final InputDomain read;
+    private final Symbols symbols;
     private final Map<ControlPointId, Reachability> out;
 
-    private PathReachability(PathEngine engine, CoverageSites.Plan plan,
-                             Map<ControlPointId, Reachability> out) {
+    private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputDomain read,
+                             Symbols symbols, Map<ControlPointId, Reachability> out) {
         this.engine = engine;
         this.plan = plan;
+        this.read = read;
+        this.symbols = symbols;
         this.out = out;
     }
 
@@ -155,7 +170,8 @@ public final class PathReachability {
      * allowed to name is what the domains were actually given: a condition of a shape nothing could
      * take in narrowed nothing and is not on the list.
      */
-    private void walk(Core e, Known k, Denotations at, List<PathDecision> decided) {
+    private void walk(Core e, Known k, Denotations at, InputReads reads,
+                      List<PathDecision> decided, boolean nothingAbove) {
         if (e == null || k.reachesNothing()) {
             // Nothing stands here, so nothing below is a place anything arrives at either. The arm
             // that made it so was answered where it was entered; the arms under it are left absent,
@@ -165,19 +181,32 @@ public final class PathReachability {
         }
         switch (e) {
             case Core.If iff -> {
-                walk(iff.cond(), k, at, decided);
+                walk(iff.cond(), k, at, reads, decided, nothingAbove);
                 outcomes(iff.cond(), k, at, decided);
                 ControlPointId.ArmOccurrence[] arms = plan.armsOf(iff);
-                enterArm(arms, 0, iff, iff.then(), k, at, decided, true);
-                enterArm(arms, 1, iff, iff.els(), k, at, decided, false);
+                enterArm(arms, 0, iff, iff.then(), k, at, reads, decided, true);
+                enterArm(arms, 1, iff, iff.els(), k, at, reads, decided, false);
             }
             case Core.LetIn li -> {
-                walk(li.value(), k, at, decided);
+                walk(li.value(), k, at, reads, decided, nothingAbove);
                 PathEngine.Entered in = engine.bindLet(li, k, at);
-                walk(li.body(), in.known(), in.at(), decided);
+                // Inside what the `let` binds, so an arm of an expanded helper is read against the
+                // position the call handed it. A binding is not a fork, so what stands above the
+                // body is what stood above the binding.
+                walk(li.body(), in.known(), in.at(), reads.and(li.binder(), li.value()), decided,
+                        nothingAbove);
+            }
+            case Core.Match match -> {
+                walk(match.scrutinee(), k, at, reads, decided, nothingAbove);
+                cases(match, reads, nothingAbove);
+                // Under an arm, this fork stands above whatever is inside it. Which arm was taken
+                // is not recorded as a decision: nothing was assumed from it, and a proof naming it
+                // would claim work the domains did not do.
+                InputReads inside = reads;
+                Core.forEachChild(e, child -> walk(child, k, at, inside, decided, false));
             }
             default -> {
-                Core.forEachChild(e, child -> walk(child, k, at, decided));
+                Core.forEachChild(e, child -> walk(child, k, at, reads, decided, nothingAbove));
             }
         }
     }
@@ -233,7 +262,8 @@ public final class PathReachability {
      * for the same reason, and one finding is what an author is owed.
      */
     private void enterArm(ControlPointId.ArmOccurrence[] arms, int index, Core.If iff, Core arm,
-                          Known k, Denotations at, List<PathDecision> decided, boolean holds) {
+                          Known k, Denotations at, InputReads reads, List<PathDecision> decided,
+                          boolean holds) {
         Known inside = engine.assuming(iff.cond(), k, at, holds);
         List<PathDecision> under = with(decided, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
@@ -241,6 +271,71 @@ public final class PathReachability {
                     ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(under))
                     : Reachability.notSettled(new WhyUnsettled.NoWitness()));
         }
-        walk(arm, inside, at, under);
+        walk(arm, inside, at, reads, under, false);
+    }
+
+    /**
+     * Every arm of a {@code match}, held against what the rules leave the position matched on.
+     *
+     * <p>A different question from a condition's, and answered from a different place. A condition
+     * narrows the path to an arm; a case is one the rules of the position refuse or leave, which is
+     * as true three arms deep as at the first fork — a refusal is unconditional.
+     *
+     * <p>The other direction is not. That the rules <em>leave</em> a case says a caller can supply
+     * one, which says something about arriving here only where nothing stands above: a fork the
+     * body reaches first is reached by the behavior being applied at all. So the witness takes both
+     * — every rule of the position read and leaving the case, and nothing decided on the way — and
+     * is built here where both are in hand rather than assembled by whoever asks.
+     */
+    private void cases(Core.Match match, InputReads reads, boolean nothingAbove) {
+        ControlPointId.ArmOccurrence[] arms = plan.armsOf(match);
+        if (arms == null) {
+            return;
+        }
+        TermPath path = reads.pathOf(match.scrutinee(), symbols);
+        if (path == null) {
+            return;   // not a position of this input: nothing here has rules about it
+        }
+        Position at = reads.read().at(path);
+        for (int i = 0; i < match.cases().size() && i < arms.length; i++) {
+            // A position this reading never got to — deeper than it reads into what a parameter
+            // holds — states no such distinction, which is the position's own answer and not this
+            // walk's. Said in its words so that a claim below the depth is told what it is told
+            // everywhere else.
+            Reachability said = at == null
+                    ? Reachability.notSettled(new WhyUnsettled.ThePositionDidNotSettleIt(
+                            new souther.compiler.inputs.Unsettlement.NoSuchDistinction()))
+                    : saidOf(at, path, match.cases().get(i), nothingAbove);
+            if (said != null) {
+                out.put(arms[i], said);
+            }
+        }
+    }
+
+    /** What the rules leave one arm, or null where the arm names no case — a binding of the whole
+     *  value, which the rules of the position say nothing about. */
+    private Reachability saidOf(Position at, TermPath path, Core.Case arm, boolean nothingAbove) {
+        List<TypeSymbol> named = arm.caseTypes();
+        if (named.isEmpty()) {
+            return null;
+        }
+        if (named.stream().allMatch(each -> at.admissionOf(each) instanceof Admits.Refused)) {
+            // Every case it is written for is one the rules refuse, so an arm a row could still
+            // take is not among these: an arm goes only where all of them go.
+            return new Reachability.Unreachable(new Proof.EveryCaseRefused(path.toString(), named));
+        }
+        for (TypeSymbol each : named) {
+            if (at.admissionOf(each) instanceof Admits.Unsettled unsettled) {
+                return Reachability.notSettled(
+                        new WhyUnsettled.ThePositionDidNotSettleIt(unsettled.why()));
+            }
+        }
+        // Every one of them left standing, so a caller can supply one. Whether it arrives at this
+        // fork as well is the other half, and nothing standing above is the one answer that settles
+        // it: a fork the body reaches first is reached by the behavior being applied at all.
+        return nothingAbove
+                ? new Reachability.Reachable(
+                        new Witness.EveryRuleReadAndNothingAbove(path.toString()))
+                : Reachability.notSettled(new WhyUnsettled.NoWitness());
     }
 }

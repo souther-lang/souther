@@ -120,12 +120,29 @@ public record ClaimAnnotations(List<Said> all) {
     /** What a reader is told about a claim nothing settled. One projection, so that a distinction
      *  this compiler learns to make later is a word the report chooses to add rather than one it
      *  gains by accident. */
+    private static Why said(souther.compiler.reach.WhyUnsettled why) {
+        return switch (why) {
+            // What the position said about its own cases, in the words it said it in.
+            case souther.compiler.reach.WhyUnsettled.ThePositionDidNotSettleIt position ->
+                    said(position.why());
+            // Everything else is about the way to the arm rather than about the case. A reading
+            // that found no contradiction, one that could not take a condition in, one over a tree
+            // that had the operation expanded away, and one that never got there all leave the same
+            // thing unanswered: whether this fork is reached.
+            case souther.compiler.reach.WhyUnsettled.NoWitness _,
+                 souther.compiler.reach.WhyUnsettled.AConditionWasNotRead _,
+                 souther.compiler.reach.WhyUnsettled.TheOperationWasExpandedAway _,
+                 souther.compiler.reach.WhyUnsettled.TheWalkDidNotReachIt _ ->
+                    Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
+        };
+    }
+
+    /** The same, for what a position answers about a case standing at it. */
     private static Why said(Unsettlement why) {
         return switch (why) {
             case Unsettlement.ReadingStopped _ -> Why.A_RULE_WENT_UNREAD;
             case Unsettlement.RulesLeaveNothing _ -> Why.THE_RULES_LEAVE_THE_POSITION_NOTHING;
             case Unsettlement.NoSuchDistinction _ -> Why.NOTHING_WAS_READ_ABOUT_THE_CASE;
-            case Unsettlement.ForkNotKnownToBeReached _ -> Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
         };
     }
 

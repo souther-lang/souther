@@ -333,8 +333,16 @@ public final class Adequacy {
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
+            if (bodies.isEmpty()) {
+                // Nothing checked, so there are no places to be about. Asked further, the reading
+                // of the input is derived over types that did not check — which is a position the
+                // partition refuses outright, and rightly: what would be answered there is about
+                // this compile having stopped and not about the model.
+                return Answer.of(Ordered.map(Map.of()));
+            }
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(bodies);
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             Map<String, souther.compiler.check.PathReachability.Answers> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Hir.SpecBehavior spec)) {
@@ -346,7 +354,7 @@ public final class Adequacy {
                     continue;
                 }
                 out.put(spec.name(), souther.compiler.check.PathReachability.of(
-                        body, spec, fn, plan, scope.value()));
+                        body, spec, fn, plan, domainOf(readInputs, spec), scope.value()));
             }
             return Answer.of(Ordered.map(out));
         }

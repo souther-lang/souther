@@ -1255,6 +1255,14 @@ public final class Bodies {
         if (!scope.present() || !inputs.present()) {
             return Map.of();
         }
+        // The same numbering every measure is taken over, so a claim and the reading that judges it
+        // name one arm. Built from the same bodies, which is what makes the two agree.
+        //
+        // Made here rather than asked for. What arrives is read off the checked bodies, so the
+        // query that answers it for a report depends on this one and cannot be asked from inside
+        // it. Both routes call one function over one input; what is not shared is the memo.
+        souther.compiler.coverage.CoverageSites.Plan plan =
+                souther.compiler.coverage.CoverageSites.of(bodies);
         Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             souther.compiler.inputs.InputDomain read = inputs.value().get(behavior.name());
@@ -1262,8 +1270,11 @@ public final class Bodies {
             if (!(behavior instanceof Hir.SpecBehavior) || read == null || body == null) {
                 continue;
             }
+            Hir.FnDef fn = db.ask(new SettledFn(module, behavior.name())).value();
             out.put(behavior.name(), souther.compiler.claims.Claims.of(
-                    souther.compiler.claims.UnreachableClaims.of(body, read, scope.value()), read));
+                    souther.compiler.claims.UnreachableClaims.of(body, read, scope.value(), plan),
+                    souther.compiler.check.PathReachability.of(
+                            body, (Hir.SpecBehavior) behavior, fn, plan, read, scope.value())));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
