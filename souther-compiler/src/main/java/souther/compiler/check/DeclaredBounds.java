@@ -106,7 +106,7 @@ public final class DeclaredBounds {
         // and every layer that put an end where it is is kept, because each is a rule a row is owed.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+                for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
                     // An end and nothing else. A rule this reads no end from narrows nothing here,
                     // and a rule stepping past the last value of the order states an end no value is
                     // at — which is a declaration with no value, answered where counts are and not

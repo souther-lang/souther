@@ -4,7 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
-import souther.compiler.check.HelperInvariants;
+import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.InvariantBound;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Sig;
@@ -343,7 +343,7 @@ public final class InputDomain {
         List<UnreadRule> out = new ArrayList<>();
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Hir.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+                for (Hir.Expr each : ClauseHelpers.conjunctsOf(clause.expr())) {
                     BlockReason why = whyUnread(each, carried, measure);
                     // Once per position, as a comparison is: what a reader has to lift is the first
                     // limit in the way, and a second clause behind it says nothing further.

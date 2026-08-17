@@ -4,7 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.HelperInliner;
-import souther.compiler.check.HelperInvariants;
+import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.HelperNames;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
@@ -427,7 +427,7 @@ public final class Shapes {
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
                     for (Hir.InvariantClause declared : data.invariants()) {
-                        for (Hir.Expr written : HelperInvariants.conjunctsOf(declared.expr())) {
+                        for (Hir.Expr written : ClauseHelpers.conjunctsOf(declared.expr())) {
                             clauses.add(InvariantChecker.capabilityOf(
                                     inliner.inline(written, new BindingOwner.OfData(named)),
                                     leftmost(written), named, data, scope.value())
@@ -488,7 +488,7 @@ public final class Shapes {
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
-                return Answer.of(HelperInvariants.invariantsForDischarge(
+                return Answer.of(ClauseHelpers.invariantsForDischarge(
                         expandable.value(), scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);

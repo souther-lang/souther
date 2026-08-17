@@ -67,7 +67,7 @@ public final class InvariantSettled {
                                           Map<String, Hir.FnDef> published) {
         Hir.Module derived = Deriver.derive(expandable.module(), scope);
         return new InvariantSettled(
-                HelperInvariants.withSettledInvariants(derived, scope, published));
+                ClauseHelpers.withSettledInvariants(derived, scope, published));
     }
 
 
