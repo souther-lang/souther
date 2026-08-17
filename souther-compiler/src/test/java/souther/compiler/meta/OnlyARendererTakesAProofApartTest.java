@@ -6,8 +6,10 @@ import java.io.IOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeModel;
+import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.classfile.instruction.NewObjectInstruction;
+import java.lang.constant.DirectMethodHandleDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -42,10 +44,20 @@ class OnlyARendererTakesAProofApartTest {
 
     private static final String REACH = "souther.compiler.reach.";
 
-    /** Who may ask a payload what it says, and write the words it says it in. */
-    private static final Map<String, String> WRITES_THE_WORDS_OF = Map.of(
-            REACH + "Proof", "souther.compiler.query.Adequacy$DeadBranches$DeadBranchProofWords",
-            REACH + "WhyUnsettled", "souther.compiler.query.ClaimAnnotations$UnsettledWords");
+    /**
+     * Who may ask each payload what it says, and write the words it says it in.
+     *
+     * <p>Every payload is named, including the one nothing reads: a payload left out of this map
+     * would be one the rules below say nothing about, and adding words to it later would open a
+     * reader that nothing here would notice. {@code Witness} has no words today and the expected
+     * set for it is empty, which is a claim this check makes rather than a case it skips.
+     */
+    private static final Map<String, List<String>> WRITES_THE_WORDS_OF = Map.of(
+            REACH + "Proof",
+            List.of("souther.compiler.query.Adequacy$DeadBranches$DeadBranchProofWords"),
+            REACH + "WhyUnsettled",
+            List.of("souther.compiler.query.ClaimAnnotations$UnsettledWords"),
+            REACH + "Witness", List.of());
 
     /**
      * Who may make an answer.
@@ -73,14 +85,11 @@ class OnlyARendererTakesAProofApartTest {
                 asked.computeIfAbsent(use.owner(), _ -> new ArrayList<>()).add(use.from());
             }
         }
-        WRITES_THE_WORDS_OF.forEach((payload, words) -> {
-            List<String> callers = asked.getOrDefault(payload, List.of()).stream().distinct()
-                    .toList();
-            assertFalse(callers.isEmpty(), payload + " is asked what it says by nothing at all;"
-                    + " this check is reading no calls");
-            assertEquals(List.of(words), callers,
-                    payload + " is asked what it says by something that is not its words");
-        });
+        WRITES_THE_WORDS_OF.forEach((payload, words) -> assertEquals(words,
+                asked.getOrDefault(payload, List.of()).stream().distinct().toList(),
+                payload + " is asked what it says by something that is not its words"));
+        assertFalse(asked.isEmpty(),
+                "no payload is asked what it says at all; this check is reading no calls");
     }
 
     @Test
@@ -98,9 +107,11 @@ class OnlyARendererTakesAProofApartTest {
                 });
             }
         }
-        WRITES_THE_WORDS_OF.forEach((payload, words) -> assertEquals(List.of(words),
+        WRITES_THE_WORDS_OF.forEach((payload, words) -> assertEquals(words,
                 implementors.getOrDefault(payload, List.of()),
                 payload + "'s words are written somewhere other than by its own renderer"));
+        assertFalse(implementors.isEmpty(),
+                "no payload's words are written at all; this check is reading no classes");
     }
 
     @Test
@@ -126,6 +137,24 @@ class OnlyARendererTakesAProofApartTest {
         assertFalse(!sawAConstructor,
                 "no answer's constructor was seen; the check would miss one built directly");
         assertEquals(List.of(), outside, "these make an answer the reading did not make");
+    }
+
+    /**
+     * What a method handle in a bootstrap argument comes to, said the way a call is.
+     *
+     * <p>A reference is the call it stands for. Which kind of call it is decides the two things the
+     * rules ask: a static handle is a factory, a constructor handle makes the value, and a virtual
+     * one on a payload is asking it what it says.
+     */
+    private static Use referenced(String from, DirectMethodHandleDesc handle) {
+        String owner = handle.owner().descriptorString();
+        owner = owner.startsWith("L") && owner.endsWith(";")
+                ? owner.substring(1, owner.length() - 1).replace('/', '.') : owner;
+        return switch (handle.kind()) {
+            case STATIC, INTERFACE_STATIC -> new Use(from, owner, handle.methodName(), true);
+            case CONSTRUCTOR -> new Use(from, owner, "<init>", false);
+            default -> new Use(from, owner, handle.methodName(), false);
+        };
     }
 
     /** The nest a class belongs to: what is written inside the reading is the reading. */
@@ -157,6 +186,16 @@ class OnlyARendererTakesAProofApartTest {
                         found.add(new Use(from,
                                 made.className().asInternalName().replace('/', '.'), "<init>",
                                 false));
+                    } else if (element instanceof InvokeDynamicInstruction lambda) {
+                        // A method or constructor reference is neither of the above. What it names
+                        // is a handle in the bootstrap arguments, and a factory reached that way is
+                        // a factory called — `Proof::conditionsThatCannotAllHold` and
+                        // `Reachability.Unreachable::new` put nothing else in the caller's code.
+                        for (var argument : lambda.bootstrapArgs()) {
+                            if (argument instanceof DirectMethodHandleDesc handle) {
+                                found.add(referenced(from, handle));
+                            }
+                        }
                     }
                 }
             }
