@@ -95,7 +95,7 @@ final class CodegenContext {
     }
 
     boolean measuring() {
-        return !coverage.isEmpty();
+        return !coverage.hasNoProbes();
     }
 
     /**

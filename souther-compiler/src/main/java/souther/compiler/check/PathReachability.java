@@ -186,7 +186,7 @@ public final class PathReachability {
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
                              Symbols symbols) {
-        if (body == null || plan.isEmpty()) {
+        if (body == null) {
             return Answers.NONE;
         }
         PathEngine engine = new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS);
@@ -250,6 +250,19 @@ public final class PathReachability {
                 enterArm(arms, 0, iff, iff.then(), k, at, reads, decided, true);
                 enterArm(arms, 1, iff, iff.els(), k, at, reads, decided, false);
             }
+            case Core.IfConstructed ic -> {
+                // The construction's own arguments, then the arms. Reaching the success branch is
+                // the construction having held, so its binding carries what the type guarantees —
+                // which is the whole of what a guard inside that branch has to read against. Each
+                // departure stands where nothing was built, so none is entered with any of it.
+                ic.construct().values().forEach(given ->
+                        walk(given.value(), k, at, reads, decided, nothingAbove));
+                PathEngine.Entered built = engine.enteringBuilt(ic, k, at);
+                walk(ic.then(), built.known(), built.at(), reads, decided, false);
+                for (Core.ElseArm arm : ic.els()) {
+                    walk(arm.body(), k, at, reads, decided, false);
+                }
+            }
             case Core.LetIn li -> {
                 walk(li.value(), k, at, reads, decided, nothingAbove);
                 PathEngine.Entered in = engine.bindLet(li, k, at);
@@ -276,8 +289,7 @@ public final class PathReachability {
                 // is not recorded as a decision: nothing was assumed from it, and a proof naming it
                 // would claim work the domains did not do.
                 for (Core.Case arm : match.cases()) {
-                    PathEngine.Entered in = engine.enter(
-                            Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+                    PathEngine.Entered in = engine.enteringArm(arm, k, at);
                     walk(arm.body(), in.known(), in.at(), reads, decided, false);
                 }
             }
@@ -307,8 +319,9 @@ public final class PathReachability {
             // failed. Read the other way round, a comparison guarded by its neighbour would be
             // proven against conditions nothing on the way to it established.
             boolean reachedWhen = b.op() == Hir.BinOp.AND;
-            outcomes(b.right(), engine.assuming(b.left(), k, at, reachedWhen).known(), at,
-                    with(decided, b.left().pos(), reachedWhen));
+            Predicates.Assumed reaching = engine.assuming(b.left(), k, at, reachedWhen);
+            outcomes(b.right(), reaching.known(), at,
+                    with(decided, reaching, b.left().pos(), reachedWhen));
             return;
         }
         for (boolean result : new boolean[] {true, false}) {
@@ -319,7 +332,7 @@ public final class PathReachability {
             Predicates.Assumed taken = engine.assuming(cond, k, at, result);
             out.put(where.get(), taken.known().reachesNothing()
                     ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(
-                            with(decided, cond.pos(), result)))
+                            with(decided, taken, cond.pos(), result)))
                     : Reachability.notSettled(whyNot(taken, cond)));
         }
     }
@@ -338,7 +351,19 @@ public final class PathReachability {
                 : new WhyUnsettled.AConditionWasNotRead(cond.pos());
     }
 
-    private static List<PathDecision> with(List<PathDecision> decided, SourcePos at, boolean held) {
+    /**
+     * The conditions on the way here, with this one — where it was taken in at all.
+     *
+     * <p>The only way one of these is made, so that a proof cannot name a condition the domains
+     * never read. A condition of a shape no rule here reads narrowed nothing: what came out is what
+     * went in, and listing it among the reasons would say a line was holding when nothing here
+     * could tell whether it was.
+     */
+    private static List<PathDecision> with(List<PathDecision> decided, Predicates.Assumed taken,
+                                           SourcePos at, boolean held) {
+        if (!taken.read()) {
+            return decided;
+        }
         List<PathDecision> out = new ArrayList<>(decided);
         out.add(new PathDecision(at, held));
         return out;
@@ -356,7 +381,7 @@ public final class PathReachability {
                           boolean holds) {
         Predicates.Assumed taken = engine.assuming(iff.cond(), k, at, holds);
         Known inside = taken.known();
-        List<PathDecision> under = with(decided, iff.cond().pos(), holds);
+        List<PathDecision> under = with(decided, taken, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
                     ? new Reachability.Unreachable(new Proof.ConflictingPathConditions(under))

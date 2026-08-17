@@ -195,7 +195,15 @@ public final class CoverageSites {
                             new ControlPointId.ComparisonOutcome(control, probe, result));
         }
 
-        public boolean isEmpty() {
+        /**
+         * Whether this plan numbered any site a run can be recorded at.
+         *
+         * <p>Not whether it numbered anything. A body whose every arm answers {@code unreachable}
+         * has arms, and control points for them, and no site at all — so a reader asking this to
+         * find out whether there is anything to be about would skip exactly the bodies a claim is
+         * made in.
+         */
+        public boolean hasNoProbes() {
             return sites.isEmpty();
         }
 

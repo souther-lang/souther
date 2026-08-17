@@ -1013,7 +1013,7 @@ public final class InvariantChecker {
                 // of the attempt, and an attempt is written where it could not say enough: an
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
-                Entered in = enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
+                Entered in = engine.enteringBuilt(ic, k, at);
                 walk(ic.then(), in.known(), in.at(), depth);
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
@@ -1035,11 +1035,7 @@ public final class InvariantChecker {
                     // could have named — the case's value names only itself. What the arm binds is a
                     // value of the case's type, reached only here, so it is a location this arm
                     // introduces and it carries what that type guarantees.
-                    if (c.binding() == null || c.bindType() == null) {
-                        walk(c.body(), k, at, depth);
-                        continue;
-                    }
-                    Entered in = enter(Terms.read(c.binding(), c.bindType(), c.pos()), k, at);
+                    Entered in = engine.enteringArm(c, k, at);
                     walk(c.body(), in.known(), in.at(), depth);
                 }
             }
@@ -1704,15 +1700,13 @@ public final class InvariantChecker {
         /** A {@code match} arm's body, read with what the arm binds standing for a value of the
          * case's type — a location this arm introduces, carrying what that type guarantees. */
         static Binder of(Core.Case arm) {
-            return (engine, k, at) ->
-                    engine.enter(Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+            return (engine, k, at) -> engine.enteringArm(arm, k, at);
         }
 
         /** An attempted construction's success branch, read with the binding carrying the invariant
          * the attempt established. */
         static Binder of(Core.IfConstructed ic) {
-            return (engine, k, at) ->
-                    engine.enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
+            return (engine, k, at) -> engine.enteringBuilt(ic, k, at);
         }
     }
 

@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,85 +17,141 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * What decides a policy reads the answer, and what writes a sentence reads the proof.
+ * What decides a policy reads the answer, and what writes a sentence reads one payload.
  *
- * <p>{@code Reachability} has three arms and each of them carries something: why nothing arrives,
- * what says something does, why nothing settled it. A reader that took one of those apart would be
- * deciding an obligation, a diagnostic or a claim on a distinction inside the payload — and a
- * distinction added there later would silently become a change to that decision. Kept out, an arm
- * added to a proof is a compile error in one place and a change to no policy.
+ * <p>{@code Reachability} has three arms and each carries something: why nothing arrives, what says
+ * something does, why nothing settled it. A reader that took one of those apart would be deciding
+ * an obligation, a diagnostic or a claim on a distinction inside the payload — and a distinction
+ * added there later would silently become a change to that decision. Kept out, an arm added to a
+ * payload is a compile error in one place and a change to no policy.
  *
- * <p>Measured over the sources rather than argued for. The rule is worth nothing if the next reader
- * to want a nicer sentence reaches for the proof where they stand.
+ * <p><b>One place each, not one list of trusted files.</b> A file allowed to read a proof is not
+ * thereby allowed to read a reason: those are different sentences written by different readers, and
+ * a single exemption would let either grow into the other without anything saying so. Building one
+ * of these is its own permission again — the answers are made by the reading that makes them and by
+ * nothing downstream.
  */
 class OnlyARendererTakesAProofApartTest {
 
     /**
-     * The places a payload is turned into words: the dead-branch warning, and the projection that
-     * writes what a report says about a claim nothing settled.
+     * Which file may take each payload apart, and nothing else may.
      *
-     * <p>Named by file rather than by a marker, because what makes one of these a renderer is that
-     * a sentence is written there and nothing else about it. A third is a decision to take, not
+     * <p>Named by file rather than by a marker, because what makes one of these its reader is that
+     * a sentence about that payload is written there. A second reader is a decision to take, not
      * something to let in by writing an annotation.
      */
-    private static final List<String> RENDERERS =
-            List.of("Adequacy.java", "ClaimAnnotations.java");
+    private static final Map<String, String> READS = Map.of(
+            // how it was shown that nothing arrives -> the dead-branch warning
+            "Proof", "Adequacy.java",
+            // why nothing settled it -> what a report says about a claim
+            "WhyUnsettled", "ClaimAnnotations.java");
 
-    /**
-     * The payloads. Taking one apart means naming one of its arms in a pattern or a test.
-     *
-     * <p>Asked of the files that name the package these live in. {@code Witness} is a word other
-     * readings use for their own types — a formatter's evidence, the arms a comparison's line can
-     * be met from — and a scan by spelling would answer about those, which is a different question
-     * from this one.
-     */
-    private static final Pattern TAKES_APART = Pattern.compile(
-            "\\b(?:Proof|Witness|WhyUnsettled)\\s*\\.\\s*[A-Z][A-Za-z]*");
+    /** What says something arrives. Nothing writes a sentence about one yet, so nothing reads one
+     *  apart — and the day something does, this is where that is decided. */
+    private static final List<String> READ_BY_NOBODY = List.of("Witness");
 
-    /** What names the answer's own package, and so is talking about these types. */
+    /** The one place any of them is built. An answer assembled by a consumer is a consumer deciding
+     *  what the reading should have said. */
+    private static final String BUILDER = "PathReachability.java";
+
+    /** What names the answer's own package, and so is talking about these types. {@code Witness} is
+     *  a word other readings use for their own — a formatter's evidence, the arms a comparison's
+     *  line can be met from — and a scan by spelling would answer about those. */
     private static final String THE_PACKAGE = "souther.compiler.reach";
 
+    private static Pattern namesAnArmOf(String payload) {
+        return Pattern.compile("\\b" + payload + "\\s*\\.\\s*[A-Z][A-Za-z]*");
+    }
+
+    private static final Pattern BUILDS =
+            Pattern.compile("new\\s+(?:Proof|Witness|WhyUnsettled|Reachability)\\s*\\.");
+
     @Test
-    void nothingButARendererNamesAnArmOfAProof() throws IOException {
+    void eachPayloadIsTakenApartByItsOwnReaderAndNoOther() throws IOException {
         List<String> offenders = new ArrayList<>();
-        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+        for (Path source : sourcesThatNameThePackage()) {
             String name = source.getFileName().toString();
-            // The payloads' own declarations say what their arms are; that is not reading one.
-            if (RENDERERS.contains(name) || isPartOfTheAnswer(source)) {
+            // The reading that makes these names every arm it makes, which is building and not
+            // taking apart. What it may not do is decide anything by which arm it got, and the rule
+            // below is what holds it to that: nothing else builds one at all.
+            if (name.equals(BUILDER)) {
                 continue;
             }
             String text = Files.readString(source, StandardCharsets.UTF_8);
-            if (!text.contains(THE_PACKAGE)) {
-                continue;   // whatever it calls a witness, it is not one of these
-            }
-            Matcher m = TAKES_APART.matcher(text);
-            while (m.find()) {
-                // A javadoc link is a reference and not a reading. What is being looked for is code
-                // that branches on which arm it got.
-                if (!text.startsWith("{@link ", Math.max(0, m.start() - "{@link ".length()))) {
-                    offenders.add(name + ": " + m.group());
+            READS.forEach((payload, reader) -> {
+                if (!name.equals(reader)) {
+                    offenders.addAll(namesOf(namesAnArmOf(payload), text, name));
                 }
+            });
+            for (String payload : READ_BY_NOBODY) {
+                offenders.addAll(namesOf(namesAnArmOf(payload), text, name));
             }
         }
         assertEquals(List.of(), offenders,
-                "these read inside an answer they should be deciding from the arms of");
+                "these read inside a payload they should be deciding from the arms of");
     }
 
-    /** Whether the file is one of the answer's own types, or the walk that builds them. */
-    private static boolean isPartOfTheAnswer(Path source) {
-        String path = source.toString();
-        return path.contains(Path.of("souther", "compiler", "reach").toString())
-                || source.getFileName().toString().equals("PathReachability.java");
-    }
-
-    /** The check is worth having only if it can fail. */
     @Test
-    void andTheRendererIsOneThatDoes() throws IOException {
-        String rendered = Files.readString(
-                Path.of("src", "main", "java", "souther", "compiler", "query", "Adequacy.java")
-                        .toAbsolutePath(),
-                StandardCharsets.UTF_8);
-        assertFalse(TAKES_APART.matcher(rendered).results().toList().isEmpty(),
-                "the renderer names no arm of a proof, so this test forbids nothing");
+    void andNothingButTheReadingBuildsOne() throws IOException {
+        List<String> offenders = new ArrayList<>();
+        for (Path source : sourcesThatNameThePackage()) {
+            String name = source.getFileName().toString();
+            if (name.equals(BUILDER)) {
+                continue;
+            }
+            offenders.addAll(namesOf(BUILDS,
+                    Files.readString(source, StandardCharsets.UTF_8), name));
+        }
+        assertEquals(List.of(), offenders, "these make an answer the reading did not make");
+    }
+
+    /** The checks are worth having only if they can fail. */
+    @Test
+    void andEachReaderIsOneThatDoes() throws IOException {
+        for (Map.Entry<String, String> each : READS.entrySet()) {
+            String text = Files.readString(sourceNamed(each.getValue()), StandardCharsets.UTF_8);
+            assertFalse(namesAnArmOf(each.getKey()).matcher(text).results().toList().isEmpty(),
+                    each.getValue() + " names no arm of " + each.getKey()
+                            + ", so this test forbids nothing");
+        }
+        assertFalse(BUILDS.matcher(Files.readString(sourceNamed(BUILDER), StandardCharsets.UTF_8))
+                        .results().toList().isEmpty(),
+                BUILDER + " builds no answer, so the rule above forbids nothing");
+    }
+
+    /** The places a match is a reading rather than a reference. A javadoc link names a type; it
+     *  does not branch on which arm it got. */
+    private static List<String> namesOf(Pattern what, String text, String file) {
+        List<String> found = new ArrayList<>();
+        Matcher m = what.matcher(text);
+        while (m.find()) {
+            if (!text.startsWith("{@link ", Math.max(0, m.start() - "{@link ".length()))) {
+                found.add(file + ": " + m.group());
+            }
+        }
+        return found;
+    }
+
+    /** Every main source that talks about these types at all, the answers' own declarations aside:
+     *  what an arm is, is what those files say. */
+    private static List<Path> sourcesThatNameThePackage() throws IOException {
+        List<Path> found = new ArrayList<>();
+        for (Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
+            if (source.toString().contains(Path.of("souther", "compiler", "reach").toString())) {
+                continue;
+            }
+            if (Files.readString(source, StandardCharsets.UTF_8).contains(THE_PACKAGE)) {
+                found.add(source);
+            }
+        }
+        return found;
+    }
+
+    private static Path sourceNamed(String name) throws IOException {
+        return sourcesThatNameThePackage().stream()
+                .filter(each -> each.getFileName().toString().equals(name))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        name + " does not name " + THE_PACKAGE + "; this test names the wrong file"));
     }
 }

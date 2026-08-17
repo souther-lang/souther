@@ -159,6 +159,41 @@ final class PathEngine {
         return predicates.assumeCond(cond, k, at, positive);
     }
 
+    /**
+     * What a {@code match} arm's body is read under.
+     *
+     * <p>A sum has no fields of its own, so the scrutinee is not a location any clause could have
+     * named — the case's value names only itself. What the arm binds is a value of the case's type,
+     * reached only here, so it is a location this arm introduces and it carries what that type
+     * guarantees.
+     *
+     * <p>An arm that binds nothing introduces nothing, and its body is read as the arm's own. Held
+     * here rather than at each walk: two readings deciding it apart is two chances to forget, and
+     * the one that forgot fell over on every ordinary unit case.
+     */
+    Entered enteringArm(Core.Case arm, Known k, Denotations at) {
+        return arm.binding() == null || arm.bindType() == null
+                ? new Entered(k, at)
+                : enter(Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+    }
+
+    /**
+     * What an attempted construction's success branch is read under.
+     *
+     * <p>Reaching it is the construction having held, so the binding carries the type's invariant
+     * exactly as an input of that type does — which is a location, and not the construction read
+     * again. What the construction denotes is what a reading could say of the attempt, and an
+     * attempt is written where it could not say enough: an expression it cannot name denotes
+     * nothing, and inheriting that would drop the one thing reaching this branch established.
+     *
+     * <p>Its departures stand where the invariant did not hold and nothing was built, so none of
+     * them is entered with anything the attempt would have guaranteed. That is the caller's to
+     * honour by not asking.
+     */
+    Entered enteringBuilt(Core.IfConstructed ic, Known k, Denotations at) {
+        return enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
+    }
+
     // --- seeding -------------------------------------------------------------------------------
 
     /**

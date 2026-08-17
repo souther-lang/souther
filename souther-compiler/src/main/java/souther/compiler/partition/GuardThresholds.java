@@ -45,7 +45,7 @@ import java.util.List;
  * carries the site its own value is recorded at, which is what a line is measured against. What the
  * shape of the condition does decide is which arm a row that reached the comparison can be in, and
  * that is a question about the classes either side of the line: it is carried as a {@link OriginRef
- * .GuardOrigin.Witness} and read by {@link GuardEdge}.
+ * .GuardOrigin.Witness}.
  *
  * <p>Three readers are kept apart here and are easy to run together. Which comparisons exist is
  * {@link #comparisonsIn}; which positions a comparison names at all is {@link #mentioned}; which
@@ -57,10 +57,11 @@ public final class GuardThresholds {
     /**
      * What one reading of a body says about the comparisons in it.
      *
-     * <p>Two answers from one walk, because they are read off the same comparison and the operator is
-     * known once. Asked separately they would be two readings of it, and the second would have to
-     * recover from {@link Threshold} which side of the line each arm takes — which a threshold does not
-     * say and cannot be made to say (see {@link GuardEdge}).
+     * <p>One walk, because the operator is known once. Which side of the line each arm takes is not
+     * recoverable from a {@link Threshold} — {@code x <= c} and {@code x > c} both put {@code c} on
+     * the low side and their {@code then} arms are opposite halves — so what a row reaching a
+     * comparison can be in is carried as {@link OriginRef.GuardOrigin.Witness} where the operator
+     * is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<Threshold> thresholds,
                          List<UnreadRule> unread, List<Singled> singled,
