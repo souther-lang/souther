@@ -48,33 +48,21 @@ public record ContractDischarge(List<RuleDischarge> rules,
     public record RuleDischarge(BehaviorContract.RuleId rule, ClauseDischarge capability) {}
 
     /**
-     * What the check can read of {@code contract}, whose rules are as their author wrote them. Each
-     * is expanded into the representation the check reads ({@link InliningPolicy#DISCHARGE}) as it is
-     * classified, so what comes back is placed and split where it is written.
+     * What the check can read of what {@code stated} states, rule by rule.
      *
-     * <p>Handed a contract rather than a declaration. What a rule is about, what {@code value} is
-     * there and which rule it is are the reading's answers ({@link BehaviorChecker}), and this asks
-     * one question of them. The contract handed here is the same declaration that reading reads for
-     * the tree that runs, so its {@link BehaviorContract.RuleId}s are the ids of the rules that run —
-     * a reader holding both is not left matching them up.
+     * <p>Handed the rules as the analysis holds them rather than the declaration they came from.
+     * Which case a rule is about, what {@code value} is there, where each conjunct was written and
+     * what it types to are all settled by the one reading ({@link StatedContract}), and this asks one
+     * question of it — the same reading the check at a call takes what it may assume from, so what an
+     * author is shown and what a caller is given cannot drift apart.
      *
-     * @param expansion what turns a piece of what was written into the tree the check reads. Applied
-     *                  here, one conjunct at a time, rather than to the declaration before it was
-     *                  read: an expansion carries the positions of the body it copies in, so a rule
-     *                  expanded first would be placed inside the helper it names and split where that
-     *                  helper's author split it
-     * @param helpers the signatures a rule may reach without a binding, as the check that holds a
-     *                rule to its declaration reads them
      */
-    public static ContractDischarge of(BehaviorContract contract, ClausesForDischarge declaring,
-                                       Symbols symbols, Map<String, Type> helpers) {
+    public static ContractDischarge of(StatedContract stated, Symbols symbols) {
         List<RuleDischarge> classified = new ArrayList<>();
-        for (Clause clause : contract.clauses()) {
-            for (Rule rule : clause.rules()) {
-                classified.addAll(of(contract, clause, rule, declaring, symbols, helpers));
-            }
+        for (StatedContract.StatedRule rule : stated.rules()) {
+            classified.addAll(of(stated, rule, symbols));
         }
-        return new ContractDischarge(classified, unstatedCases(contract, symbols));
+        return new ContractDischarge(classified, unstatedCases(stated, symbols));
     }
 
     /**
@@ -84,17 +72,9 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * what discharges the other, and an author acts on the half. The name the clause was declared
      * with goes on each of them, because a violation is reported by the clause however many conjuncts
      * it was written as.
-     *
-     * <p>Split where the author wrote the {@code &&} and not where an expansion put one. A rule
-     * naming a helper whose body is a conjunction is one thing the author wrote, so it is one answer;
-     * splitting the expanded tree would hand back two answers to a rule nobody wrote as two, each
-     * placed inside the helper.
      */
-    private static List<RuleDischarge> of(BehaviorContract contract, Clause clause, Rule rule,
-                                          ClausesForDischarge declaring, Symbols symbols,
-                                          Map<String, Type> helpers) {
-        Scope scope = BehaviorChecker.scopeOf(contract, rule).reaching(helpers);
-        CheckContext ctx = CheckContext.of(symbols).forDischarge();
+    private static List<RuleDischarge> of(StatedContract contract, StatedContract.StatedRule rule,
+                                          Symbols symbols) {
         // The parameters and `value` stand for themselves. A caller hands one value per parameter and
         // the behavior answers one value, so a rule naming either names something wherever it is read
         // — entered as locations, and nothing is seeded of them, since what the rule states is the
@@ -106,14 +86,11 @@ public record ContractDischarge(List<RuleDischarge> rules,
         named.add(rule.value());
         Denotations locations = Denotations.none().locations(named);
 
-        BindingOwner owner = BehaviorContract.ownerOf(contract.behavior());
         List<RuleDischarge> out = new ArrayList<>();
-        for (ClausesForDischarge.ClauseReading written
-                : declaring.conjunctsOf(rule.statement(), owner)) {
-            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(written,
-                    toRead -> Elaborator.elaborate(toRead, scope, ctx, Type.BOOL), locations,
-                    symbols, contract.behavior().name())) {
-                out.add(new RuleDischarge(rule.id(), read.named(clause.name())));
+        for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
+            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(conjunct, locations, symbols,
+                    contract.behavior().name())) {
+                out.add(new RuleDischarge(rule.id(), read.named(rule.clause())));
             }
         }
         return out;
@@ -127,9 +104,9 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * Answered here rather than reported, because a correct model may say nothing about most of what
      * it answers, and a reader wanting to know asks.
      */
-    private static List<TypeSymbol> unstatedCases(BehaviorContract contract, Symbols symbols) {
+    private static List<TypeSymbol> unstatedCases(StatedContract contract, Symbols symbols) {
         Set<TypeSymbol> stated = new LinkedHashSet<>();
-        for (Rule rule : contract.rules()) {
+        for (StatedContract.StatedRule rule : contract.rules()) {
             if (rule.guard() instanceof Guard.Case(CaseSelector selector)) {
                 stated.add(selector.name());
             }

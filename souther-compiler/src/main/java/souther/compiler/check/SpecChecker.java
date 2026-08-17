@@ -436,7 +436,8 @@ public final class SpecChecker {
                         new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
                                 .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = InvariantChecker.analyze(dischargeBody,
-                discharge == null ? Map.of() : discharge.invariants(), env, symbols);
+                discharge == null ? Map.of() : discharge.invariants(),
+                discharge == null ? Map.of() : discharge.contracts(), env, symbols);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);

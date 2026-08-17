@@ -15,6 +15,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -144,7 +145,13 @@ public final class InvariantChecker {
      * author wrote, so where a declaration was written does not decide what can be discharged
      * against it (spec §invariant-discharge-representation).
      */
-    public record Source(Hir.Expr body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants) {}
+    public record Source(Hir.Expr body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
+                         Map<ValueName.Behavior, StatedContract> contracts) {
+
+        public Source {
+            contracts = Map.copyOf(contracts);
+        }
+    }
 
     /** How many conditionals a construction opens before the rest is left to the run-time check.
      * Each one doubles the paths, and a value written over three of them is not what the bound is
@@ -168,7 +175,13 @@ public final class InvariantChecker {
 
     private InvariantChecker(Symbols symbols,
                              Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
-        this.engine = new PathEngine(symbols, dischargeInvariants);
+        this(symbols, dischargeInvariants, Map.of());
+    }
+
+    private InvariantChecker(Symbols symbols,
+                             Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                             Map<ValueName.Behavior, StatedContract> contracts) {
+        this.engine = new PathEngine(symbols, dischargeInvariants, contracts);
         // Named here because this check reads them directly and often. They are the engine's, not a
         // second copy: one engine builds them once and everything below sees those.
         this.symbols = engine.symbols();
@@ -225,11 +238,10 @@ public final class InvariantChecker {
      * @param locations the names it may read, each standing for itself
      * @param describing what is being read, for the record a fail-open leaves behind
      */
-    static List<ClauseDischarge> capabilitiesOf(ClausesForDischarge.ClauseReading clause,
-                                        Typing typing, Denotations locations, Symbols symbols,
-                                        String describing) {
+    static List<ClauseDischarge> capabilitiesOf(StatedContract.Conjunct conjunct,
+                                        Denotations locations, Symbols symbols, String describing) {
         return new InvariantChecker(symbols, Map.of())
-                .capabilitiesOf(clause, typing, locations, describing);
+                .capabilitiesOf(conjunct.stated(), conjunct.at(), locations, describing);
     }
 
     /** What turns the read form of a clause into the tree this check walks, which is the reader's to
@@ -991,8 +1003,9 @@ public final class InvariantChecker {
      * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
     static Findings analyze(Core body, Map<TypeSymbol, List<Hir.InvariantClause>> invariants,
+                            Map<ValueName.Behavior, StatedContract> contracts,
                             Scope params, Symbols symbols) {
-        InvariantChecker c = new InvariantChecker(symbols, invariants);
+        InvariantChecker c = new InvariantChecker(symbols, invariants, contracts);
         if (body == null) {
             return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
@@ -1139,7 +1152,10 @@ public final class InvariantChecker {
                     // could have named — the case's value names only itself. What the arm binds is a
                     // value of the case's type, reached only here, so it is a location this arm
                     // introduces and it carries what that type guarantees.
-                    Entered in = engine.enteringArm(c, k, at);
+                    // The scrutinee travels with the arm: what a caller may assume of an answer is
+                    // decided by which behavior answered and which case this arm opened, and the
+                    // first of those is a question about what is being matched.
+                    Entered in = engine.enteringArm(c, m.scrutinee(), k, at);
                     walk(c.body(), in.known(), in.at(), depth);
                 }
             }

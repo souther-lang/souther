@@ -2355,6 +2355,16 @@ A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are di
 
 A clause travels with the published declaration, as a data's does and for the same reason: a reader that cannot read it cannot assume it.
 
+==== What a caller may assume
+
+Where a caller has reached the case a rule is about, that rule holds of the answer, and the checker takes it as holding — the same seeding an input's type gives (<<invariant-discharge>>). This is what declaring a relation buys: the answer does not carry the input, so before it a caller could only re-establish the relation with a `+guard+` it had no way to derive.
+
+It is reached by matching that case and by nothing weaker. An arm answering for several cases says the answer is one of them, which is not that it is any one of them, so a rule about one of those cases is a rule about a value that arm may not have. A rule under no case applies to every answer and is reached wherever the answer is.
+
+What is taken in is what the checker can read of the rule, conjunct by conjunct, as everywhere else a clause is read (<<ensures-discharge-capability>>). A rule one part of which it cannot read still says the part it can.
+
+The answer has to be a value the checker can name, which a matched case's binding is. An answer no arm opens — a behavior whose output has no cases — is named by nothing the checker reasons about, so what is stated about such an answer is held when the behavior answers and reaches no caller.
+
 [#ensures-discharge-capability]
 ==== A rule says how much of it the check reads
 
