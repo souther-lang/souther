@@ -28,6 +28,10 @@ public final class Deviations {
     /** One decision a source did not take, and where in it that shows. */
     public record Deviation(int line, int column, String rule, String canonical, String source) {}
 
+    /** How many times the rules are asked before a report gives up on reaching the canonical
+     * form. */
+    private static final int ROUNDS = 8;
+
     /**
      * What a source has against it, and whether that is all of it.
      *
@@ -64,7 +68,7 @@ public final class Deviations {
         Set<String> seen = new LinkedHashSet<>();
         List<List<Repair.Edit>> repaired = new ArrayList<>();
         String text = source;
-        for (int round = 0; round < 8; round++) {
+        for (int round = 0; round < ROUNDS; round++) {
             Witnesses.Pairing pairing = new Witnesses.Pairing(text, form);
             List<Witness> witnesses = all(text, form, pairing);
             for (Witness w : witnesses) {
@@ -97,6 +101,12 @@ public final class Deviations {
             }
             repaired.add(edits);
             text = next;
+            if (round + 1 == ROUNDS) {
+                // No round is left to ask about this text. Writing its canonical form here would
+                // be a pass nothing reads, and this is where the source can be one the formatter
+                // refuses — so it is not written at all.
+                break;
+            }
             form = Formatter.canonicalize(CstParser.parse(text).root());
         }
         return new Report(sorted(out), text.equals(canonical));

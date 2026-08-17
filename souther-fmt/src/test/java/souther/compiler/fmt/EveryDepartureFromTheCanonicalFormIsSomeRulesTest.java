@@ -47,8 +47,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>What admits a candidate is the whole file it was found in, and what it is then asked about is
  * the declaration that line stands in, where that declaration can answer for it. Both are a
- * canonical form with one line of it written differently, and the smaller one is a seventh of the
- * text: 357 of these 500 are cut to their declaration, and 2,445,251 characters come to 345,778.
+ * canonical form with one line of it written differently, and the smaller one is a tenth of the
+ * text: 423 of these 500 are cut to their declaration, and 2,445,251 characters come to 248,118.
  *
  * <p>Over this corpus that comes to a few hundred candidates of a few thousand lines. Every line of
  * every source, written every way, was run against these rules and named: 3823 of 3823. It is not
@@ -133,11 +133,27 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                     Locally.Answered asked = says instanceof Locally.Answered a ? a
                             : new Locally.Answered(text, canonical);
                     out.add(new Departure(m.getKey(), shape, asked.text(), asked.canonical(),
-                            Deviations.of(asked.text())));
+                            asked(m.getKey() + " of " + shape, asked.text())));
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * What the rules say about one candidate, with the row it was said about.
+     *
+     * <p>The reports are taken here, where each check would otherwise take its own. A candidate the
+     * rules cannot answer at all now ends the sweep rather than one parameterized test, and the
+     * test that would have been named it is never run — so the row is named here instead.
+     */
+    private static Deviations.Report asked(String pair, String text) {
+        try {
+            return Deviations.of(text);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                    "the rules could not answer about " + pair + ":\n" + text, e);
+        }
     }
 
     /**
@@ -162,6 +178,11 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
         /**
          * The declarations of {@code lines}: what opens at column zero under a blank line, and the
          * header everything before the first of them.
+         *
+         * <p>The first declaration is the header and itself. A line of the header stands in every
+         * declaration's source, so asked about in the first it is asked in front of the same text
+         * it has in front of it in the whole file — and that is the only declaration whose source
+         * would be its own text with the header written twice.
          */
         static Declarations of(List<String> lines) {
             List<Integer> opens = new ArrayList<>();
@@ -179,11 +200,13 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
             String header = String.join("\n", lines.subList(0, opens.get(0)));
             List<List<String>> pieces = new ArrayList<>();
             List<String> canonical = new ArrayList<>();
-            for (int d = 0; d < opens.size(); d++) {
-                int to = d + 1 < opens.size() ? opens.get(d + 1) : lines.size();
-                List<String> piece = lines.subList(opens.get(d), to);
+            List<Integer> from = new ArrayList<>(opens);
+            from.set(0, 0);   // the first declaration is the header and itself
+            for (int d = 0; d < from.size(); d++) {
+                int to = d + 1 < from.size() ? from.get(d + 1) : lines.size();
+                List<String> piece = lines.subList(from.get(d), to);
                 pieces.add(piece);
-                String alone = header + "\n" + String.join("\n", piece);
+                String alone = standing(d, header, String.join("\n", piece));
                 CstParser.Result parsed = CstParser.parse(alone);
                 // A declaration that will not stand on its own, or that the formatter writes
                 // differently when it does, is one this cannot answer for. Its own canonical form
@@ -191,22 +214,35 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                 canonical.add(parsed.errors().isEmpty()
                         && Formatter.format(parsed.root()).equals(alone) ? alone : null);
             }
-            return new Declarations(header, pieces, canonical, opens);
+            return new Declarations(header, pieces, canonical, from);
         }
 
-        /** Which declaration line {@code i} is in, or -1 where this cannot answer for it. */
+        /**
+         * Declaration {@code d}, whose lines are {@code piece}, as a source of its own.
+         *
+         * <p>The first carries the header, and a source that has none — the corpus holds sources
+         * that open with a declaration — puts nothing in front of any of them. Written as a blank
+         * line instead, every declaration of those sources is a source the formatter writes
+         * differently, and all of them go to the whole file.
+         */
+        private static String standing(int d, String header, String piece) {
+            return d == 0 || header.isEmpty() ? piece : header + "\n" + piece;
+        }
+
+        /**
+         * Which declaration line {@code i} is in, or -1 where this cannot answer for it.
+         *
+         * <p>Every line is in one, the first declaration beginning at line zero. What a declaration
+         * cannot answer for is the first line of it and the last, where a blank line written in and
+         * two lines run together reach the declaration next door — which is a question about the
+         * file rather than about either of them.
+         */
         private int at(int i) {
-            for (int d = 0; d < opensAt.size(); d++) {
-                int from = opensAt.get(d);
-                int to = d + 1 < opensAt.size() ? opensAt.get(d + 1) : Integer.MAX_VALUE;
-                if (i >= from && i < to) {
-                    // The first line of a declaration and the last are where a blank line written
-                    // in and two lines run together reach the declaration next door, which is a
-                    // question about the file rather than about either of them.
-                    return canonical.get(d) == null ? -1 : d;
-                }
+            int d = 0;
+            while (d + 1 < opensAt.size() && i >= opensAt.get(d + 1)) {
+                d++;
             }
-            return -1;   // the header
+            return canonical.get(d) == null ? -1 : d;
         }
 
         /**
@@ -218,7 +254,7 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
          * where it stands.
          *
          * <p>What this buys is the refusal below being sound rather than any row: filtering those
-         * two as well leaves this corpus with the same 481, since none of them is admitted here
+         * two as well leaves this corpus with the same 500, since none of them is admitted here
          * anyway. It is the local question being a part of the whole one that the refusal rests on,
          * and for these two it is not.
          */
@@ -249,7 +285,7 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
             if (d < 0 || local == null || reachesTheNextOne(kind, i, d)) {
                 return new Locally.NotAsked();
             }
-            String alone = header + "\n" + local;
+            String alone = standing(d, header, local);
             CstParser.Result parsed = CstParser.parse(alone);
             return parsed.errors().isEmpty()
                     && Formatter.format(parsed.root()).equals(canonical.get(d))
@@ -269,9 +305,9 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
     private sealed interface Locally {
 
         /**
-         * Nothing was asked, so the whole file answers both: the header, a declaration that does
-         * not stand on its own, and the ways of writing a line that reach the declaration next
-         * door.
+         * Nothing was asked, so the whole file answers both: a file of one declaration, a
+         * declaration that does not stand on its own, and the ways of writing a line that reach the
+         * declaration next door.
          */
         record NotAsked() implements Locally {}
 
