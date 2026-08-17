@@ -183,7 +183,7 @@ public final class InvariantChecker {
      * where the clause is written, which is the pre-expansion position; {@code clause} is that clause
      * in the representation the check reads.
      */
-    public static ClauseDischarge capabilityOf(Hir.Expr clause, SourcePos at, TypeSymbol named,
+    public static List<ClauseDischarge> capabilitiesOf(Hir.Expr clause, SourcePos at, TypeSymbol named,
                                                Hir.Data data, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         // Read over the declaration's own fields, each standing for itself: a construction hands one
@@ -191,7 +191,7 @@ public final class InvariantChecker {
         // stand for a value rather than holding one, so they are entered as locations and nothing is
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
-        return c.capabilityOf(c.clauses.typed(clause, named, data), at,
+        return c.capabilitiesOf(c.clauses.typed(clause, named, data), at,
                 Denotations.none().locations(c.clauses.bindingsOf(named, data).values()),
                 data.name());
     }
@@ -206,19 +206,26 @@ public final class InvariantChecker {
      * here because the answer is what this check can read, and a second reader working that out from
      * the outside would be deciding it by what it happened to manage.
      *
+     * <p>More than one where more than one is true of it. What is written as one thing can be read as
+     * several — a rule that names a helper is one thing to its author and is whatever that helper
+     * states to this — and the readings need not agree: a bound and a term the check can only compare
+     * are discharged by different guards, and one of them being there says nothing about the other.
+     * Answering with one of them would be picking which half of a clause to describe, and the half not
+     * picked is the one an author is about to be surprised by.
+     *
      * @param stated the statement in the representation this check reads, or null where the front end
      *               could not type it there
      * @param at where it is written, which is the pre-expansion position an author is looking at
      * @param locations the names it may read, each standing for itself
      * @param describing what is being read, for the record a fail-open leaves behind
      */
-    static ClauseDischarge capabilityOf(Core stated, SourcePos at, Denotations locations,
+    static List<ClauseDischarge> capabilitiesOf(Core stated, SourcePos at, Denotations locations,
                                         Symbols symbols, String describing) {
         return new InvariantChecker(symbols, Map.of())
-                .capabilityOf(stated, at, locations, describing);
+                .capabilitiesOf(stated, at, locations, describing);
     }
 
-    private ClauseDischarge capabilityOf(Core stated, SourcePos at, Denotations locations,
+    private List<ClauseDischarge> capabilitiesOf(Core stated, SourcePos at, Denotations locations,
                                          String describing) {
         Predicates.Owed owed;
         try {
@@ -228,21 +235,26 @@ public final class InvariantChecker {
             // Fail-open, as the walk is — and recorded, because a clause this could not read and an
             // analysis that fell over reading it both come out `runtimeOnly`, and only one of them
             // is something the model says.
-            gaveUp("capabilityOf " + describing, why);
+            gaveUp("capabilitiesOf " + describing, why);
             owed = Predicates.Owed.UNREADABLE;
         }
-        // A clause owing nothing is answered here as one nothing can be asked of. What it is instead
-        // — a clause that holds wherever it is built — is a fourth answer this classification does
-        // not have, and giving it one is a change to what the language states about a clause.
-        if (owed.clauses().isEmpty()) {
-            return ClauseDischarge.runtimeOnly(at, whyUnreadable(stated, locations));
-        }
+        boolean asABound = false;
+        boolean asATerm = false;
         for (Predicates.Clause owe : owed.clauses()) {
+            // A clause read both ways is one obligation with two readings of it, not two obligations
+            // — the bound is the stronger of them, and any guard implying it discharges the clause,
+            // so that is what it is here.
             if (owe.numeric() != null) {
-                return ClauseDischarge.derivable(at);
+                asABound = true;
+            } else {
+                asATerm = true;
             }
         }
-        return ClauseDischarge.exactMatch(at);
+        // What was not read at all is said even where something else was: a clause half of which
+        // could not be read would otherwise be described entirely by the half that was.
+        Core read = stated;
+        return ClauseDischarge.readings(asABound, asATerm, owed.unreadable(), at,
+                () -> whyUnreadable(read, locations));
     }
 
     /** What in {@code clause} the check cannot read, said so an author can act on it. */
@@ -824,9 +836,13 @@ public final class InvariantChecker {
             }
         } else {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-                if (capabilityOf(clause.expr(), clause.pos(), named, data, symbols).kind()
-                        != ClauseDischarge.Kind.DERIVABLE) {
-                    return false;
+                // Every reading of it, and not one of them: a clause read as a bound and as
+                // something else besides is a clause part of which no bound expresses.
+                for (ClauseDischarge read
+                        : capabilitiesOf(clause.expr(), clause.pos(), named, data, symbols)) {
+                    if (read.kind() != ClauseDischarge.Kind.DERIVABLE) {
+                        return false;
+                    }
                 }
             }
         }

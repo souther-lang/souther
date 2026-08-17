@@ -47,8 +47,11 @@ public final class BehaviorChecker {
      */
     public static BehaviorContract contractOf(Hir.SpecBehavior behavior, String module, Sig sig,
                                        Symbols symbols, Map<String, Type> helpers) {
-        List<Diagnostic> found = new ArrayList<>();
-        BehaviorContract contract = read(behavior, module, sig, symbols, found);
+        Reading reading = read(behavior, module, sig, symbols);
+        BehaviorContract contract = reading.contract();
+        // The rules it did read, held to what a rule has to be. Two mistakes in one declaration are
+        // two things for an author to fix, and this is the reading that reports them.
+        List<Diagnostic> found = new ArrayList<>(reading.unread());
         for (Rule rule : contract.rules()) {
             collect(found, () -> checkRule(behavior, contract, rule, helpers, symbols));
         }
@@ -83,17 +86,38 @@ public final class BehaviorChecker {
      */
     public static BehaviorContract contractAsRead(Hir.SpecBehavior behavior, String module, Sig sig,
                                                   Symbols symbols) {
-        List<Diagnostic> unread = new ArrayList<>();
-        BehaviorContract contract = read(behavior, module, sig, symbols, unread);
-        if (!unread.isEmpty()) {
-            throw CompileException.of(unread.get(0));
-        }
-        return contract;
+        return read(behavior, module, sig, symbols).whole();
     }
 
-    /** The declaration as rules, with what could not be read of it collected into {@code found}. */
-    private static BehaviorContract read(Hir.SpecBehavior behavior, String module, Sig sig,
-                                         Symbols symbols, List<Diagnostic> found) {
+    /**
+     * What reading a declaration came to: the rules it made, and what it could not read.
+     *
+     * <p>The two are one value because the contract alone does not say it is short of anything. A
+     * declaration whose arm could not be read makes a contract that states nothing about the cases
+     * that arm named, which is indistinguishable from a declaration that said nothing about them —
+     * and a reader deriving what is left unstated would report the opposite of what the author wrote.
+     * So what was lost arrives with what was kept, and a caller says which it is asking for.
+     */
+    private record Reading(BehaviorContract contract, List<Diagnostic> unread) {
+
+        /**
+         * The contract where the whole declaration was read.
+         *
+         * @throws CompileException where any of it was not, which is reported by the reading that
+         *     holds the declaration to its rules rather than said twice
+         */
+        BehaviorContract whole() {
+            if (!unread.isEmpty()) {
+                throw CompileException.of(unread.get(0));
+            }
+            return contract;
+        }
+    }
+
+    /** The declaration as rules, beside what could not be read of it. */
+    private static Reading read(Hir.SpecBehavior behavior, String module, Sig sig,
+                                Symbols symbols) {
+        List<Diagnostic> found = new ArrayList<>();
         ValueName.Behavior name = new ValueName.Behavior(module, behavior.name());
         if (sig == null) {
             // The signature could not be made, which is reported where that failed. A rule is
@@ -138,7 +162,7 @@ public final class BehaviorChecker {
             }
             clauses.add(new Clause(written.name(), rules, written.pos(), written.region()));
         }
-        return new BehaviorContract(name, params, sig.outputType(), clauses);
+        return new Reading(new BehaviorContract(name, params, sig.outputType(), clauses), found);
     }
 
     /**

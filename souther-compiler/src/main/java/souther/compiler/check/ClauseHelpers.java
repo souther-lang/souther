@@ -185,10 +185,51 @@ public final class ClauseHelpers {
     }
 
     /**
+     * A clause as a reader of it sees it: one entry per conjunct the author wrote, each placed where
+     * they wrote it and expanded into the representation that reads it.
+     *
+     * <p>The three steps are here together because their order is the whole of the correctness. An
+     * expansion carries the positions of the body it copies in and splices in whatever that body is
+     * made of, so a clause expanded first is placed inside the helper it names and split where that
+     * helper's author put an {@code &&} — and what comes back is an answer about a rule nobody wrote,
+     * pointing at a line they did not write it on. Split and placed first, then expanded, none of
+     * that can happen; done in either other order, all of it does.
+     *
+     * <p>Both kinds of clause read this. Having said the order once, there is nowhere left to say it
+     * differently — which is what it cost to have it written twice: the invariant reader had it right
+     * and the rule reader had it backwards, and nothing in either of them said which was which.
+     *
+     * @param written the clause as its author wrote it, before anything is expanded
+     * @param owner what the names in an expansion of it belong to — a declaration or a signature
+     * @param expansion what turns one conjunct into the tree its reader has rules about
+     */
+    public static List<Conjunct> conjunctsToRead(Hir.Expr written, BindingOwner owner,
+                                                 HelperInliner expansion) {
+        List<Conjunct> out = new ArrayList<>();
+        for (Hir.Expr each : conjunctsOf(written)) {
+            out.add(new Conjunct(beginsAt(each), expansion.inline(each, owner)));
+        }
+        return out;
+    }
+
+    /**
+     * One conjunct of a clause: where the author wrote it, and what it comes to for the reader that
+     * asked.
+     *
+     * <p>The two travel together because the answer is about both — what a reader works out has to be
+     * said at a place, and the place is not a property of what they worked it out from.
+     */
+    public record Conjunct(SourcePos at, Hir.Expr read) {}
+
+    /**
      * Where a written clause begins: the earliest position anything in it carries.
      *
      * <p>A node's own position is where its operator is written, so the position of {@code a && b} is
      * the {@code &&}. A reader is pointed at the clause, which starts at whatever of it comes first.
+     *
+     * <p>Of what was written. Asked of an expanded tree it answers with a position inside whatever
+     * was expanded into it, which is why a reader wanting both this and the expansion asks
+     * {@link #conjunctsToRead} for the two at once.
      */
     public static SourcePos beginsAt(Hir.Expr e) {
         SourcePos[] found = {e.pos()};

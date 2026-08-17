@@ -108,12 +108,13 @@ public record ContractDischarge(List<RuleDischarge> rules,
 
         BindingOwner owner = BehaviorContract.ownerOf(contract.behavior());
         List<RuleDischarge> out = new ArrayList<>();
-        for (Hir.Expr written : ClauseHelpers.conjunctsOf(rule.statement())) {
-            out.add(new RuleDischarge(rule.id(),
-                    InvariantChecker.capabilityOf(
-                            typed(expansion.inline(written, owner), scope, ctx),
-                            ClauseHelpers.beginsAt(written), locations, symbols,
-                            contract.behavior().name()).named(clause.name())));
+        for (ClauseHelpers.Conjunct written
+                : ClauseHelpers.conjunctsToRead(rule.statement(), owner, expansion)) {
+            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(
+                    typed(written.read(), scope, ctx), written.at(), locations, symbols,
+                    contract.behavior().name())) {
+                out.add(new RuleDischarge(rule.id(), read.named(clause.name())));
+            }
         }
         return out;
     }

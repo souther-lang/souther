@@ -426,11 +426,12 @@ public final class Shapes {
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
                     for (Hir.InvariantClause declared : data.invariants()) {
-                        for (Hir.Expr written : ClauseHelpers.conjunctsOf(declared.expr())) {
-                            clauses.add(InvariantChecker.capabilityOf(
-                                    inliner.inline(written, new BindingOwner.OfData(named)),
-                                    ClauseHelpers.beginsAt(written), named, data, scope.value())
-                                    .named(declared.name()));
+                        for (ClauseHelpers.Conjunct written : ClauseHelpers.conjunctsToRead(
+                                declared.expr(), new BindingOwner.OfData(named), inliner)) {
+                            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(
+                                    written.read(), written.at(), named, data, scope.value())) {
+                                clauses.add(read.named(declared.name()));
+                            }
                         }
                     }
                     out.put(named, List.copyOf(clauses));

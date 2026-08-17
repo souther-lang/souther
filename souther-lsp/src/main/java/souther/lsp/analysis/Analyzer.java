@@ -1871,7 +1871,7 @@ public final class Analyzer {
         SyntaxToken declares = def == null ? null : nameToken(def);
         ContractDischarge discharge = def != null && def.kind() == SyntaxKind.BEHAVIOR_DEF
                 && declares != null && declares.start() == ident.start()
-                ? contractOf(uri, graph, nameOf(ident)) : null;
+                ? contractOf(uri, graph, ident) : null;
         if (discharge == null || discharge.casesNothingIsSaidAbout().isEmpty()) {
             return shown;
         }
@@ -1902,7 +1902,7 @@ public final class Analyzer {
         if (clause == null || name == null) {
             return Optional.empty();
         }
-        ContractDischarge discharge = contractOf(uri, graph, nameOf(name));
+        ContractDischarge discharge = contractOf(uri, graph, name);
         if (discharge == null) {
             return Optional.empty();
         }
@@ -1920,17 +1920,25 @@ public final class Analyzer {
                 : Optional.of(new Hover(ruleContents(here), nodeRange(lines, clause)));
     }
 
-    /** What the compiler says about the behavior {@code named} declares, or null where the document
-     * belongs to no module this compile has, or the behavior states nothing. */
-    private ContractDischarge contractOf(String uri, ModuleGraph graph, String named) {
+    /**
+     * What the compiler says about the behavior the token {@code named} spells, or null where the
+     * document belongs to no module this compile has, or the behavior states nothing.
+     *
+     * <p>A token and not a spelling. The compiler files its answer under the canonical name, and a
+     * cursor is characters; handed a {@link String}, a caller has already decided which of the two
+     * it is passing, and both call sites here had that decision to make. Canonically equivalent
+     * spellings are one name ({@link #nameOf}), and which of them an author's cursor happens to be
+     * on is not a thing an editor may answer differently.
+     */
+    private ContractDischarge contractOf(String uri, ModuleGraph graph, SyntaxToken named) {
         Compilation compilation = compileOf(graph);
         String module = moduleOf(compilation, graph, uri);
-        if (module == null) {
+        if (module == null || named == null) {
             return null;
         }
         Map<String, ContractDischarge> byName =
                 compilation.db().ask(new Bodies.ContractCapabilities(module)).value();
-        return byName == null ? null : byName.get(named);
+        return byName == null ? null : byName.get(nameOf(named));
     }
 
     /**
@@ -1991,16 +1999,24 @@ public final class Analyzer {
         }
         // The clauses are in the order they are written, so the one the cursor is in is the last that
         // starts at or before it.
-        ClauseDischarge found = null;
+        SourcePos found = null;
         for (ClauseDischarge c : clauses) {
             if (lines.offsetOf(c.clause().line() - 1, c.clause().column() - 1) <= offset) {
-                found = c;
+                found = c.clause();
             }
         }
         if (found == null) {
             return Optional.empty();
         }
-        return Optional.of(new Hover(dischargeContents(found), nodeRange(lines, clause)));
+        // Every reading of that clause, which may be more than one: what is written once can be read
+        // as a bound and as a term besides, and showing whichever came last would describe half of it.
+        List<String> said = new ArrayList<>();
+        for (ClauseDischarge c : clauses) {
+            if (c.clause().equals(found)) {
+                said.add(dischargeContents(c));
+            }
+        }
+        return Optional.of(new Hover(String.join("\n\n", said), nodeRange(lines, clause)));
     }
 
     /** What a clause's classification says, in the terms an author acts on. */
