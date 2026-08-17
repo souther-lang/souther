@@ -394,8 +394,11 @@ public final class TypeChecker {
             throw new Unanswerable(module.pos());
         }
         for (Hir.BehaviorDef behavior : module.behaviors()) {
-            if (behavior instanceof Hir.SpecBehavior spec) {
-                collect(errors, abandoned, () -> BehaviorChecker.check(spec, module.name(),
+            // A behavior declaring nothing about its answer is asked nothing. Reading it would want
+            // a signature this does not need for it, and one that could not be made is a mistake
+            // reported where it happened.
+            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
+                collect(errors, abandoned, () -> BehaviorChecker.contractOf(spec, module.name(),
                         sigs.get(spec.name()), symbols, recursiveHelperFns));
             }
         }
