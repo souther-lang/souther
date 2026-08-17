@@ -84,6 +84,32 @@ class WhereAnOffsetStandsAmongTheTokensIsWhatWalkingThemSaysTest {
     }
 
     /**
+     * And a run is written in order, which is what lets either question be searched for.
+     *
+     * <p>The walk this replaced read the run from its first token and needed nothing of the sort. A
+     * search does: it is right because a token that begins later ends later, and a run that broke
+     * that would be answered wrongly at offsets no case above happens to ask about. So it is held
+     * of the runs the corpus makes rather than assumed of the tree that makes them.
+     */
+    @Test
+    void andARunIsWrittenInOrder() {
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+            String canonical = Formatter.format(CstParser.parse(source).root());
+            for (String text : List.of(source, canonical)) {
+                List<SyntaxToken> tokens = Witnesses.code(CstParser.parse(text).root());
+                for (int i = 0; i + 1 < tokens.size(); i++) {
+                    assertTrue(tokens.get(i).start() <= tokens.get(i + 1).start(),
+                            "a token begins before the one written in front of it, at " + i);
+                    assertTrue(tokens.get(i).end() <= tokens.get(i + 1).end(),
+                            "a token ends before the one written in front of it, at " + i);
+                    assertTrue(tokens.get(i).end() <= tokens.get(i + 1).start(),
+                            "two tokens of a run overlap, at " + i);
+                }
+            }
+        }
+    }
+
+    /**
      * And the sweep reaches the offsets the two questions are told apart by.
      *
      * <p>An offset inside a token stands in no adjacency and still has a token in front of it; one

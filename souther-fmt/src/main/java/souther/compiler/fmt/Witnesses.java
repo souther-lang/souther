@@ -275,54 +275,46 @@ final class Witnesses {
     }
 
     /**
-     * A run of code tokens, with where an offset stands among them answered in one step.
+     * A run of code tokens, with where an offset stands among them searched for rather than walked
+     * to.
      *
      * <p>The families ask the same two questions of the same two runs, once for every place they
      * answer about: which adjacency an offset stands in, and which token stands in front of it.
      * Asked by walking the run, each answer costs its length, and the places are as many as the
      * tokens — so a report over a file cost the square of it.
      *
-     * <p>What is held here is what those walks said, written down instead of restated. Both tables
-     * are indexed by offset and built in one pass over the run, so an answer is a read.
+     * <p>A run is written in order and its tokens do not overlap, so both of a token's ends rise
+     * along it and either question is a search on a sorted list. What is held beside the tokens is
+     * two runs of {@code int} the length of the run — where each token starts, and where it ends —
+     * so that a search reads numbers laid out together rather than following a token at every step.
      *
-     * <p>Two tables and not one, because the two questions are not the same question. An offset
+     * <p>Searched and not tabulated by offset. A table indexed by character would answer in one
+     * step, and it would be the length of the text rather than of the run: a source is not made of
+     * tokens at an even rate, and one holding a long literal or a page of comments above its first
+     * declaration would carry a table many times the size of everything else about it — for a
+     * question asked at a few thousand offsets.
+     *
+     * <p>Two searches and not one, because the two questions are not the same question. An offset
      * inside a token stands in no adjacency and still has a token in front of it, and an offset
-     * past the last token has a token in front of it and no adjacency after it. Each table holds
-     * what its own walk answered.
+     * past the last token has a token in front of it and no adjacency after it.
      */
     static final class Run {
 
         private final List<SyntaxToken> tokens;
 
-        /** For each offset, the first {@code i} with {@code end(i) <= at <= start(i + 1)}, or -1. */
-        private final int[] adjacency;
+        /** Where each token starts, rising along the run. */
+        private final int[] starts;
 
-        /** For each offset, the last {@code i} with {@code end(i) <= at}, or -1. */
-        private final int[] inFrontOf;
+        /** Where each token ends, rising along the run. */
+        private final int[] ends;
 
         Run(List<SyntaxToken> tokens) {
             this.tokens = List.copyOf(tokens);
-            int width = this.tokens.isEmpty()
-                    ? 0 : this.tokens.get(this.tokens.size() - 1).end() + 1;
-            this.adjacency = new int[width];
-            Arrays.fill(this.adjacency, -1);
-            for (int i = 0; i + 1 < this.tokens.size(); i++) {
-                int from = Math.max(0, this.tokens.get(i).end());
-                int to = Math.min(width - 1, this.tokens.get(i + 1).start());
-                for (int at = from; at <= to; at++) {
-                    if (this.adjacency[at] < 0) {
-                        this.adjacency[at] = i;   // the first one the walk would have stopped at
-                    }
-                }
-            }
-            this.inFrontOf = new int[width];
-            int ended = -1;
-            for (int at = 0; at < width; at++) {
-                while (ended + 1 < this.tokens.size()
-                        && this.tokens.get(ended + 1).end() <= at) {
-                    ended++;
-                }
-                this.inFrontOf[at] = ended;
+            this.starts = new int[this.tokens.size()];
+            this.ends = new int[this.tokens.size()];
+            for (int i = 0; i < this.tokens.size(); i++) {
+                this.starts[i] = this.tokens.get(i).start();
+                this.ends[i] = this.tokens.get(i).end();
             }
         }
 
@@ -333,24 +325,56 @@ final class Witnesses {
         /**
          * Which adjacency {@code at} stands in, or -1 where it stands in none.
          *
+         * <p>The first of them, which is what the walk this replaced returned. An adjacency holds
+         * {@code at} where the token before it has ended and the token after it has not begun; the
+         * first is a prefix of the run and the second a suffix, so the ones that hold it are a
+         * stretch and the answer is where that stretch begins.
+         *
          * <p>Past the last token there is no adjacency: the run has one fewer than it has tokens,
          * and an offset after the last of them is inside none of them.
          */
         int adjacencyAt(int at) {
-            return at < 0 || at >= adjacency.length ? -1 : adjacency[at];
+            int ended = inFrontOf(at);
+            if (ended < 0) {
+                return -1;
+            }
+            int first = Math.max(firstStartingAt(at) - 1, 0);
+            return first <= Math.min(ended, tokens.size() - 2) ? first : -1;
+        }
+
+        /** The first token that begins at or after {@code at}, or the length of the run. */
+        private int firstStartingAt(int at) {
+            int low = 0;
+            int high = starts.length;
+            while (low < high) {
+                int mid = (low + high) >>> 1;
+                if (starts[mid] < at) {
+                    low = mid + 1;
+                } else {
+                    high = mid;
+                }
+            }
+            return low;
         }
 
         /**
-         * Which token stands in front of {@code at}, or -1 where none does.
-         *
-         * <p>Past the last token that is the last of them, which is why this is not answered from
-         * the table alone.
+         * Which token stands in front of {@code at}, or -1 where none does: the last one to have
+         * ended by it.
          */
         int inFrontOf(int at) {
-            if (at < 0) {
-                return -1;
+            int low = 0;
+            int high = ends.length - 1;
+            int found = -1;
+            while (low <= high) {
+                int mid = (low + high) >>> 1;
+                if (ends[mid] <= at) {
+                    found = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
             }
-            return at >= inFrontOf.length ? tokens.size() - 1 : inFrontOf[at];
+            return found;
         }
     }
 
