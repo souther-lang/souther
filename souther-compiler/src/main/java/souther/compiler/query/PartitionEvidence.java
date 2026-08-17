@@ -68,7 +68,15 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                  souther.compiler.partition.UndividedPosition.Reason reason) {}
 
     /**
-     * Every position this reading could not finish reading the rules about.
+     * Every position this reading carries an unread finding about: a rule it did not turn into a
+     * line, and a position it divided no way and said why.
+     *
+     * <p>Not every position whose rules this reading is short of. How far the reading of a position
+     * ran is what its axis carries ({@link AxisCoverage#read()}), and a position measured on a
+     * reading that did not run to the end need have no entry here — these are findings about rules
+     * and that is an account of a position. Read as the whole of what was left unread, this would
+     * be the very thing it was written to stop: one question answered by a list that answers
+     * another.
      *
      * <p>One reading, and the two surfaces write from it. It used to be assembled twice — a person
      * was shown the rules no line came from together with the positions divided no way, and the

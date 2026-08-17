@@ -1868,6 +1868,8 @@ public final class Adequacy {
         private static String said(souther.compiler.partition.UndividedPosition.Reason reason) {
             return switch (reason) {
                 case UNSUPPORTED_SYNTAX -> "a rule about it is one this compiler did not read";
+                case RULES_NOT_READ_AT_ALL ->
+                        "the rules written about it were not reached at all";
                 case UNSUPPORTED_DOMAIN ->
                         "it is compared against values no line can be drawn on here";
                 case UNSUPPORTED_PARTITION_SHAPE ->

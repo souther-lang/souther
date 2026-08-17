@@ -87,10 +87,15 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
         assertEquals(2, axis.get("classes").size(), axis.toString());
         assertEquals("partial", axis.get("read").get("extent").asText(),
                 "the axis says how much of what its position's rules say was read");
-        assertTrue(axis.get("read").has("stoppedBy"), axis.toString());
+        // The word, and not only that there is one. What stopped this reading is that it never
+        // reached the rules behind the option — which is not a rule it read and could not use, and
+        // saying so would publish a cause this was not observed to have.
+        assertEquals("rules_not_read_at_all", axis.get("read").get("stoppedBy").asText(),
+                axis.toString());
 
         String human = humanOf(MEASURED_IN_PART);
-        assertTrue(human.contains("read in part: i.assignee"),
+        assertTrue(human.contains(
+                        "read in part: i.assignee (the rules written about it were not reached"),
                 "a measured position says it is read in part, which a position with no axis"
                         + " does not: " + human);
         assertFalse(human.contains("not read: i.assignee"),
