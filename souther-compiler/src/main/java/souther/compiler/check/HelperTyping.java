@@ -8,6 +8,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.InvariantMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.source.SourceId;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
@@ -421,6 +422,20 @@ public final class HelperTyping {
                 .build());
     }
 
+    static void rejectPartialHelperInEnsures(Hir.Expr e, String behavior,
+                                             PartialReachability reachability) {
+        List<String> path = reachability.fromExpression(e).orElse(null);
+        if (path == null) {
+            return;
+        }
+        String reached = path.get(path.size() - 1);
+        String rendered = "ensures -> " + PartialReachability.render(path);
+        Hir.Apply at = firstCallTo(e, path.get(0));
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
+                .say(new BehaviorMessage.TheEnsuresReachesAPartialHelper(
+                        behavior, reached, rendered)).build());
+    }
+
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where
      * the clause holds none (a lowering wrote the call without a name of its own). */
     private static Hir.Apply firstCallTo(Hir.Expr e, String name) {
@@ -472,6 +487,27 @@ public final class HelperTyping {
         TypeChecker.forEachChild(e, c -> rejectConstructionInInvariant(c, data, clause));
     }
 
+    static void rejectConstructionInEnsures(Hir.Expr e, String behavior,
+                                            Hir.EnsuresClause clause) {
+        if (e instanceof Hir.NewData nd) {
+            String constructed = nd.typeName().written();
+            String named = clause.name().orElse(null);
+            Diagnostic.Builder b = Diagnostic.at(nd.pos(), constructed.length())
+                    .say(named == null
+                            ? new BehaviorMessage.TheEnsuresConstructsAData(behavior, constructed)
+                            : new BehaviorMessage.TheNamedEnsuresConstructsAData(
+                                    behavior, constructed, named));
+            if (!onOneLine(nd.pos(), clause.pos())) {
+                b.secondary(clause.reportedAt(),
+                        named == null
+                                ? new InvariantMessage.ThisClauseReachesThatConstruction()
+                                : new InvariantMessage.TheClauseReachesThatConstruction(named));
+            }
+            throw CompileException.of(b.build());
+        }
+        TypeChecker.forEachChild(e, c -> rejectConstructionInEnsures(c, behavior, clause));
+    }
+
     /**
      * Whether two places are the one line a reader is being shown.
      *
@@ -501,6 +537,14 @@ public final class HelperTyping {
                             .say(new InvariantMessage.AnInvariantAnswersOnEveryPath(data)).build());
         }
         TypeChecker.forEachChild(e, c -> rejectUnreachableInInvariant(c, data, clause));
+    }
+
+    static void rejectUnreachableInEnsures(Hir.Expr e, String behavior) {
+        if (e instanceof Hir.Unreachable u) {
+            throw CompileException.of(Diagnostic.at(u.pos(), "unreachable".length())
+                    .say(new BehaviorMessage.AnEnsuresAnswersOnEveryPath(behavior)).build());
+        }
+        TypeChecker.forEachChild(e, c -> rejectUnreachableInEnsures(c, behavior));
     }
 
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec §fn-declaration). */

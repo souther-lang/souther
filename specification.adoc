@@ -503,6 +503,7 @@ The full formal grammar (BNF) is deferred (<<future-work>>).
 !a behavior's signature !production !<<behavior-io>>
 !a `+constructs+` clause !production !<<constructs>>
 !a `+depends on+` clause !production !<<depends-on>>
+!an `+ensures+` clause !production !<<ensures>>
 !a definition (`+let+` at the top level) !production !<<fn-declaration>>
 !a binding (`+let+` in a block) !production !<<let>>
 !a lambda and a block !production !<<blocks>>
@@ -540,7 +541,7 @@ The full formal grammar (BNF) is deferred (<<future-work>>).
 ----
 module   import    exposing
 data     invariant
-behavior constructs depends
+behavior constructs depends  ensures
 match    with      as
 let      if        then     else
 guard    unreachable
@@ -583,7 +584,7 @@ The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and 
 What a text MUST be for the compiler to read it is stated with each construct, and a text that is not is refused where the reading stops. Where the reading can stop is kept apart, because a reader looking one up is asking about a different part of the language, and each place names where the forms it is about are given (<<grammar>> indexes them all):
 
 [role="reading-stops"]
-* [[declaration-syntax]]a declaration MUST be written in the form given for it: the module header (<<modules>>), a top-level `+data+` (<<product-data>>, <<sum-data>>, <<unit-data>>, <<newtype>>), a behavior's signature (<<behavior-io>>), a top-level `+let+` (<<fn-declaration>>), a `+constructs+` clause (<<constructs>>), a `+depends on+` clause (<<depends-on>>);
+* [[declaration-syntax]]a declaration MUST be written in the form given for it: the module header (<<modules>>), a top-level `+data+` (<<product-data>>, <<sum-data>>, <<unit-data>>, <<newtype>>), a behavior's signature (<<behavior-io>>), a top-level `+let+` (<<fn-declaration>>), a `+constructs+` clause (<<constructs>>), a `+depends on+` clause (<<depends-on>>), an `+ensures+` clause (<<ensures>>);
 * [[expression-syntax]]an expression MUST be written in the form given for it, and a block MUST end in one (<<blocks>>, <<block-expression>>): a literal below, a record literal (<<record-literal>>), a list (<<stdlib-list>>), a tuple (<<tuple>>), an `+if+` (<<if>>), a `+match+` (<<match>>), a `+guard+` (<<guard>>), an `+unreachable+` (<<unreachable>>), an application (<<fn>>), a pipe (<<pipe>>);
 * [[pattern-syntax]]a pattern MUST be written in the form given for the thing it destructures (<<binding-patterns>>, <<match>>);
 * [[examples-syntax]]an `+example+`, a `+fake+` and an `+examples for+` file MUST be written in the form given for them (<<examples>>, <<example-fakes>>, <<example-placement>>);
@@ -1707,10 +1708,12 @@ The classification is the clause's own, read with the construction assumed to na
 
 The answer carries the clause's name where it has one (<<invariant-clause-name>>), so what the LSP shows on a clause says both how it can be discharged and what an attempt departs by. The unit is the conjunct, as it is for the rest of the check, so a named clause written as `+a && b+` is classified twice under that one name — what discharges each half is what an author acts on, and the name is what a caller reads.
 
+An `+ensures+` clause is classified by the same three answers and the same conjunct unit (<<ensures>>). Its locations are the parameters and `+value+` rather than a data's fields; a relation no domain can represent is checked at run time and reported as runtime only rather than silently treated as an assumption.
+
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
-The check does not cross behaviors: a relation established in one behavior is not assumed in another (<<sequential-composition>>). Inferring such a precondition would be an implicit cross-unit contract, which the language declines — `+depends on+` and an exposed composition's output are always declared, not inferred (<<depends-on>>). The consistent way to carry a relation is to *reify it as a type invariant*, which the seeding then assumes downstream for free.
+The check does not infer relations across behaviors: an implicit relation would be an implicit cross-unit contract, which the language declines — `+depends on+` and an exposed composition's output are always declared, not inferred (<<depends-on>>). The consistent way to carry a relation that fits in one value is to *reify it as a type invariant*, which the seeding then assumes downstream for free. A relation between a behavior's parameters and its answer, which cannot fit in the answer without changing the model's shape, is declared with `+ensures+` (<<ensures>>).
 
 [,souther]
 ----
@@ -2313,6 +2316,30 @@ The set of behaviors with a non-empty requirement set that a `+let+` uses and th
 * [[depends-on-names-no-more]]every behavior the clause names MUST actually be reached by the implementation (<<e1603>>).
 
 [[depends-on-names-a-dependency]]An entry MUST name something there is to inject: a behavior in scope whose own requirement set is not empty (<<e1607>>). A behavior that requires nothing is reached by name, and a `+>->+` composition infers its requirements from its stages rather than being handed them.
+
+[#ensures]
+=== `ensures`
+
+An `+ensures+` clause declares the relation between a behavior's named parameters and the value it answers. It is a clause of the behavior signature, beside `+constructs+` and `+depends on+`, and travels with the published declaration.
+
+[,souther]
+----
+behavior findBuildings : (cond: SearchCriteria) -> List<Building>
+    ensures inTheAreaAsked = List.all(b -> b.area == cond.area, value)
+
+behavior findTodo : (id: TodoId) -> Todo | NotFound
+    ensures Todo | NotFound -> value.id == id
+----
+
+The answer is named `+value+`. [[an-ensures-clause-names-the-answer]]Each arm expression MUST name `+value+`, and [[an-ensures-clause-names-a-parameter]]MUST name at least one parameter. A value-only property belongs on the answer type's invariant; a parameter-only property is a precondition and is modelled as ADR-0003 decides. [[a-behavior-with-a-clause-has-no-parameter-named-value]]A behavior carrying a clause MUST NOT have a parameter named `+value+`.
+
+For a single output type the form is `+ensures [name =] expression+`. [[an-ensures-clause-over-a-single-type-names-no-arm]]It MUST name no output arm. For an anonymous sum output the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the behavior's output. Several cases MAY share an expression. A case no clause names carries no stated postcondition, and there is no wildcard arm.
+
+A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are distinct within the behavior, and [[an-ensures-clause-name-is-not-underscore]]`+_+` is not a clause name. The expression fragment is the invariant fragment unchanged: it is total, constructs nothing and contains no `+unreachable+` (<<invariant-expressions>>).
+
+[[a-composition-carries-no-ensures]]A `+>->+` composition MUST NOT carry `+ensures+`: it writes no parameter list whose names a clause could relate to its answer, and a stage's relation is not inferred as the composition's.
+
+A violation aborts as a `+ConstraintViolation+`, naming the module, behavior and optional clause. A behavior implemented in Souther checks at the exit of its generated `+$Impl.apply+`; an injected behavior is checked where its answer crosses into generated code. One generated `+$Ensures.check(parameters..., value)+` implements the clause and every checking site calls it. A caller assumes a clause only after the output arm is known, and only when the existing constraint domain can represent the relation (<<invariant-discharge-capability>>).
 
 [#calling-a-behavior]
 === Calling a behavior
@@ -4256,7 +4283,7 @@ DecoderDef  EncoderDef  SpecBehavior  PipeBehavior  FnDef  Import
 Construct  FieldInit  Expression  Case  RawExpr  DecRef  Block
 ----
 
-Behavior definition nodes are two, corresponding to the two right-hand sides of <<behavior>>. `+SpecBehavior+` holds only input type, output type, and `+constructs+`, with no body. If a same-named `+FnDef+` exists it is the implementation; otherwise it is subject to Java injection (<<injected-behavior>>). `+PipeBehavior+` holds the sequence of stage names. It is itself the implementation, so it takes no `+FnDef+` and is not injected; its type is computed from the stages (<<type-routing>>). Composition vs. simple is distinguished by these two nodes, so later stages need not re-read the right-hand side to tell them apart.
+Behavior definition nodes are two, corresponding to the two right-hand sides of <<behavior>>. `+SpecBehavior+` holds input type, output type, `+constructs+`, `+depends on+`, and its `+ensures+` clauses, with no body. If a same-named `+FnDef+` exists it is the implementation; otherwise it is subject to Java injection (<<injected-behavior>>). `+PipeBehavior+` holds the sequence of stage names and no `+ensures+` slot. It is itself the implementation, so it takes no `+FnDef+` and is not injected; its type is computed from the stages (<<type-routing>>). Composition vs. simple is distinguished by these two nodes, so later stages need not re-read the right-hand side to tell them apart.
 
 `+FnDef+` holds argument names and a body. If a same-named `+SpecBehavior+` exists the type comes from it; otherwise it is a helper `+let+` and holds its own argument types, except for a parameter its body determines (<<fn-declaration>>).
 
@@ -5191,6 +5218,51 @@ parameters, in declared order.
 ----
 
 Reported at the `+let+` (<<an-implementing-let-takes-its-shape-from-the-behavior>>). The behavior states the shape — how many parameters, what they are, the order the injected ones arrive in, what it answers with — so the `+let+` writes none of them again, and the same code says whichever of the four was written or was wrong.
+
+[#e1616]
+=== An `ensures` clause does not name the answer
+
+Reported at the clause when an arm expression does not name `+value+` (<<an-ensures-clause-names-the-answer>>).
+
+[#e1617]
+=== An `ensures` clause does not name a parameter
+
+Reported at the clause when an arm expression names no parameter (<<an-ensures-clause-names-a-parameter>>).
+
+[#e1618]
+=== A behavior with `ensures` has a parameter named `value`
+
+Reported at the parameter (<<a-behavior-with-a-clause-has-no-parameter-named-value>>).
+
+[#e1619]
+=== An `ensures` arm is not an output case
+
+Reported at the arm name (<<an-ensures-arm-is-an-output-case>>).
+
+[#e1620]
+=== An `ensures` clause over a sum names no arm
+
+Reported at the clause (<<an-ensures-clause-over-a-sum-names-arms>>).
+
+[#e1621]
+=== An `ensures` clause over one type names an arm
+
+Reported at the clause (<<an-ensures-clause-over-a-single-type-names-no-arm>>).
+
+[#e1622]
+=== Two `ensures` clauses share one name
+
+Reported at the second name (<<ensures-clause-names-are-distinct>>).
+
+[#e1623]
+=== `_` names an `ensures` clause
+
+Reported at the name (<<an-ensures-clause-name-is-not-underscore>>).
+
+[#e1624]
+=== A composition carries `ensures`
+
+Reported at the clause (<<a-composition-carries-no-ensures>>).
 
 [#e1701]
 === behavior composition type mismatch

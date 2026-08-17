@@ -560,7 +560,7 @@ public final class Resolve {
             behaviors.add(switch (b) {
                 case Ast.SpecBehavior spec -> new Hir.SpecBehavior(spec.written(), r.params(spec.params()),
                         r.retType(spec.ret()), r.names(spec.constructs()),
-                        r.required(spec.dependsOn(), spec.name()), spec.pos());
+                        r.required(spec.dependsOn(), spec.name()), r.ensures(spec), spec.pos());
                 case Ast.PipeBehavior pipe -> new Hir.PipeBehavior(pipe.written(),
                         r.stages(pipe.stages()), r.retType(pipe.declaredOut()), pipe.pos());
             });
@@ -846,6 +846,27 @@ public final class Resolve {
             out.add(new Hir.Param(p.written(), retType(p.type())));
         }
         return out;
+    }
+
+    private List<Hir.EnsuresClause> ensures(Ast.SpecBehavior behavior) {
+        owner = new BindingOwner.OfSignature(
+                new ValueName.Behavior(reachable.module(), behavior.name()));
+        Bindings params = Bindings.NONE;
+        for (Ast.Param p : behavior.params()) {
+            params = bind(params, Ast.Binder.of(Ast.Name.written(p.written()))).bound();
+        }
+        List<Hir.EnsuresClause> out = new ArrayList<>();
+        for (Ast.EnsuresClause clause : behavior.ensures()) {
+            List<Hir.EnsuresArm> arms = new ArrayList<>();
+            for (Ast.EnsuresArm arm : clause.arms()) {
+                Answered answer = bind(params, Ast.Binder.desugared("value", arm.pos()));
+                arms.add(new Hir.EnsuresArm(names(arm.cases()), expr(arm.expr(), answer.bound()),
+                        arm.pos(), arm.region()));
+            }
+            out.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
+                    clause.pos(), clause.region()));
+        }
+        return List.copyOf(out);
     }
 
     /** A declaration's invariant clauses, each read against the fields it constrains. */

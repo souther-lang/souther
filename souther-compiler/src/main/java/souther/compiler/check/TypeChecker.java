@@ -235,6 +235,21 @@ public final class TypeChecker {
                 }
             }
         }
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec) {
+                for (Hir.EnsuresClause clause : spec.ensures()) {
+                    for (Hir.EnsuresArm arm : clause.arms()) {
+                        collect(errors, abandoned, () -> {
+                            HelperTyping.rejectPartialHelperInEnsures(
+                                    arm.expr(), spec.name(), reachability);
+                            HelperTyping.rejectConstructionInEnsures(
+                                    arm.expr(), spec.name(), clause);
+                            HelperTyping.rejectUnreachableInEnsures(arm.expr(), spec.name());
+                        });
+                    }
+                }
+            }
+        }
         // Only a declaration whose meaning was settled is checked, and `settled` is what says which
         // those are. What a check over one of the others would find is the mistake that stopped it
         // being settled, said again from further down — that the type it is made of has no decoder,
@@ -377,6 +392,12 @@ public final class TypeChecker {
         // declaration, an `exposing` line, a stage's arity — still say what they found.
         if (sigs == null) {
             throw new Unanswerable(module.pos());
+        }
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec) {
+                collect(errors, abandoned, () -> BehaviorChecker.check(spec, module.name(),
+                        sigs.get(spec.name()), symbols, recursiveHelperFns));
+            }
         }
         // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1023).

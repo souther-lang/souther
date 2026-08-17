@@ -1095,7 +1095,7 @@ public final class Backend {
      * older compiler asked about {@code Map<LoanDate, Int>} would refuse a declaration this one
      * publishes.
      */
-    public static final int BOUNDARY_VERSION = 15;
+    public static final int BOUNDARY_VERSION = 16;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java

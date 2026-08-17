@@ -358,6 +358,12 @@ public interface Hir {
                     takenOn, examples, fakes, exampleFileTarget, pos);
         }
 
+        /** This module with its behavior declarations replaced. */
+        public Module withBehaviors(List<BehaviorDef> replacement) {
+            return new Module(name, exposing, exposedOutputs, imports, defs, replacement, fns,
+                    takenOn, examples, fakes, exampleFileTarget, pos);
+        }
+
         /** This module with {@code replacement} standing where its definitions were. */
         public Module withFns(List<FnDef> replacement) {
             return new Module(name, exposing, exposedOutputs, imports, defs, behaviors, replacement,
@@ -496,12 +502,24 @@ public interface Hir {
                         RetType ret,
                         List<Name> constructs,
                         List<Var> dependsOn,
+                        List<EnsuresClause> ensures,
                         SourcePos pos) implements BehaviorDef {
 
         /** A behavior a pass wrote, named but written nowhere. */
         public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
-                            List<Var> dependsOn, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, pos);
+                            List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
+            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
+        }
+    }
+
+    /** A behavior postcondition. Positions belong to the clause/arm, not merely the expression, so
+     * diagnostics and rewrites keep the name and the output cases the author addressed. */
+    record EnsuresClause(Optional<String> name, List<EnsuresArm> arms, SourcePos pos, Region region)
+            implements Written {}
+
+    record EnsuresArm(List<Name> cases, Expr expr, SourcePos pos, Region region) implements Written {
+        public EnsuresArm with(Expr rewritten) {
+            return new EnsuresArm(cases, rewritten, pos, region);
         }
     }
 

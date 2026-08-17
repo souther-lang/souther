@@ -426,6 +426,9 @@ public final class CstParser {
             behaviorSig();
         } else if (eat(SyntaxKind.ASSIGN)) {
             pipeBehavior();
+            while (at(SyntaxKind.ENSURES_KW)) {
+                ensuresClause();
+            }
         } else {
             error(new ParseMessage.ABehaviorIsWrittenWithAColonOrAnEquals());
         }
@@ -443,11 +446,79 @@ public final class CstParser {
                 nameClause(SyntaxKind.CONSTRUCTS_CLAUSE);
             } else if (at(SyntaxKind.DEPENDS_KW)) {
                 dependsClause();
+            } else if (at(SyntaxKind.ENSURES_KW)) {
+                ensuresClause();
             } else {
                 more = false;
             }
         }
         finish();
+    }
+
+    /** A behavior postcondition, either one expression over a single output type or one or more
+     * output-case arms. The latter is recognized only when the leading qualified-name sequence is
+     * followed by {@code ->}; equality is {@code ==}, so an ordinary expression beginning with a
+     * name cannot be mistaken for a named arm. */
+    private void ensuresClause() {
+        start(SyntaxKind.ENSURES_CLAUSE);
+        bump();   // ensures
+        if ((at(SyntaxKind.IDENT) || at(SyntaxKind.UNDERSCORE)) && nth(1) == SyntaxKind.ASSIGN) {
+            bump();
+            bump();
+        }
+        if (atEnsuresArm()) {
+            ensuresArm();
+            while (at(SyntaxKind.PIPE) && atEnsuresArmFrom(1)) {
+                bump();
+                ensuresArm();
+            }
+        } else {
+            expr();
+        }
+        finish();
+    }
+
+    private void ensuresArm() {
+        start(SyntaxKind.ENSURES_ARM);
+        qualifiedName();
+        while (at(SyntaxKind.PIPE) && atEnsuresArmCaseFrom(1)) {
+            bump();
+            qualifiedName();
+        }
+        expect(SyntaxKind.ARROW, Reading.A_DECLARATION);
+        expr();
+        finish();
+    }
+
+    private boolean atEnsuresArm() {
+        return atEnsuresArmFrom(0);
+    }
+
+    /** Whether a qualified-name list beginning {@code offset} tokens ahead ends at an arrow. */
+    private boolean atEnsuresArmFrom(int offset) {
+        int i = offset;
+        if (nth(i) != SyntaxKind.IDENT) {
+            return false;
+        }
+        while (true) {
+            i++;
+            while (nth(i) == SyntaxKind.DOT && nth(i + 1) == SyntaxKind.IDENT) {
+                i += 2;
+            }
+            if (nth(i) == SyntaxKind.ARROW) {
+                return true;
+            }
+            if (nth(i) != SyntaxKind.PIPE || nth(i + 1) != SyntaxKind.IDENT) {
+                return false;
+            }
+            i++;
+        }
+    }
+
+    /** A pipe inside an arm joins another output case only when another case still precedes the
+     * arrow; otherwise it starts the next arm and is consumed by {@link #ensuresClause()}. */
+    private boolean atEnsuresArmCaseFrom(int offset) {
+        return atEnsuresArmFrom(offset);
     }
 
     private void paramList() {

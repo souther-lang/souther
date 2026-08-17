@@ -65,7 +65,7 @@
     },
     "control-keywords" : {
       "name" : "keyword.control.souther",
-      "match" : "\\b(as|constructs|depends|else|guard|if|invariant|match|then|unreachable|with)\\b"
+      "match" : "\\b(as|constructs|depends|else|ensures|guard|if|invariant|match|then|unreachable|with)\\b"
     },
     "type-variable" : {
       "name" : "variable.other.generic.souther",

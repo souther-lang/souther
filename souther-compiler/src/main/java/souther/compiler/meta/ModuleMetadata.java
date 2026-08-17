@@ -187,6 +187,15 @@ public final class ModuleMetadata {
                 }
             }
         }
+        for (Ast.BehaviorDef behavior : module.behaviors()) {
+            if (behavior instanceof Ast.SpecBehavior spec) {
+                for (Ast.EnsuresClause clause : spec.ensures()) {
+                    for (Ast.EnsuresArm arm : clause.arms()) {
+                        reach(arm.expr(), own, reached);
+                    }
+                }
+            }
+        }
         Set<String> exposed = new java.util.HashSet<>(module.exposing());
         // A behavior's body is not published — a reader has its signature and calls it — so a
         // behavior's own `let` is not carried whatever its shape.

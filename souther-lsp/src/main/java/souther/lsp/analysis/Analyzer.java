@@ -2234,6 +2234,7 @@ public final class Analyzer {
         }
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
+                 ENSURES_ARM,
                  DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
             case BEHAVIOR_DEF, FN_DEF, STAGE -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
@@ -2245,7 +2246,7 @@ public final class Analyzer {
 
     private static boolean isKeyword(SyntaxKind k) {
         return switch (k) {
-            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW,
+            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW,
                  ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
                  MATCH_KW, WITH_KW, UNREACHABLE_KW -> true;
             default -> false;

@@ -22,6 +22,7 @@ import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Placement;
@@ -427,6 +428,8 @@ public final class AstBuilder {
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
             List<Ast.Name> constructs = new ArrayList<>();
             List<Ast.Var> dependsOn = new ArrayList<>();
+            List<Ast.EnsuresClause> ensures = new ArrayList<>();
+            Set<String> namedEnsures = new HashSet<>();
             for (SyntaxNode clause : s.childNodes()) {
                 // either clause may name through a module, so the idents of one name are joined and
                 // a comma starts the next
@@ -438,17 +441,57 @@ public final class AstBuilder {
                     for (Ast.Name dep : dottedNames(clause, 1)) {
                         dependsOn.add(Ast.Var.written(dep.name()));
                     }
+                } else if (clause.kind() == SyntaxKind.ENSURES_CLAUSE) {
+                    Ast.EnsuresClause read = ensuresClause(clause);
+                    if (read.name().isPresent()) {
+                        String clauseName = read.name().orElseThrow();
+                        if (clauseName.equals("_")) {
+                            throw CompileException.of(Diagnostic.at(read.pos())
+                                    .say(new BehaviorMessage.UnderscoreCannotNameAnEnsuresClause(
+                                            declared.canonical())).build());
+                        }
+                        if (!namedEnsures.add(clauseName)) {
+                            throw CompileException.of(Diagnostic.at(read.pos())
+                                    .say(new BehaviorMessage.TwoEnsuresClausesShareOneName(
+                                            clauseName, declared.canonical())).build());
+                        }
+                    }
+                    ensures.add(read);
                 }
             }
-            return new Ast.SpecBehavior(declared, params, ret, constructs, dependsOn, pos);
+            return new Ast.SpecBehavior(declared, params, ret, constructs, dependsOn, ensures, pos);
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
+        if (n.child(SyntaxKind.ENSURES_CLAUSE).isPresent()) {
+            throw CompileException.of(Diagnostic.at(pos(n.child(SyntaxKind.ENSURES_CLAUSE).orElseThrow()))
+                    .say(new BehaviorMessage.ACompositionCarriesAnEnsures(declared.canonical())).build());
+        }
         List<Ast.Var> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
             stages.add(Ast.Var.written(qualifiedNameOf(st)));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         return new Ast.PipeBehavior(declared, stages, declaredOut, pos);
+    }
+
+    private Ast.EnsuresClause ensuresClause(SyntaxNode clause) {
+        Optional<String> name = Optional.empty();
+        if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
+            name = Optional.of(ident(identTokens(clause).get(0)));
+        }
+        List<Ast.EnsuresArm> arms = new ArrayList<>();
+        for (SyntaxNode arm : childNodes(clause, SyntaxKind.ENSURES_ARM)) {
+            List<Ast.Name> cases = new ArrayList<>();
+            for (SyntaxNode qn : childNodes(arm, SyntaxKind.QUALIFIED_NAME)) {
+                cases.add(Ast.Name.written(qualifiedNameOf(qn)));
+            }
+            arms.add(new Ast.EnsuresArm(cases, expr(onlyExpr(arm)), pos(arm), region(arm)));
+        }
+        if (arms.isEmpty()) {
+            Ast.Expr condition = expr(onlyExpr(clause));
+            arms.add(new Ast.EnsuresArm(List.of(), condition, pos(clause), region(clause)));
+        }
+        return new Ast.EnsuresClause(name, List.copyOf(arms), pos(clause), region(clause));
     }
 
     // --- fn ---

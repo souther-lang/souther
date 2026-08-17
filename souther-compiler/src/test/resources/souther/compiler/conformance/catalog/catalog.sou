@@ -36,6 +36,7 @@ data Rate = Decimal
 
 behavior discount : (item: Item, rate: Rate) -> Discounted | TooCheap
     constructs Discounted, Price, TooCheap
+    ensures Discounted -> value.sku == item.sku
 
 // A helper the behavior reaches. `private` is not written on it: that modifier is a core privilege
 // the reserved namespace holds, and a model outside it has no way to write one.
