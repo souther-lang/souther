@@ -16,6 +16,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A fork's binding is what the guards inside it read against, and every fork that has one hands it
@@ -172,9 +173,14 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
         assertEquals(List.of("E1327"), codes,
                 "nothing ran through it, so what the reading proved stands");
 
-        // And the same answers with a run through that arm, which is what the diagnostic reads.
-        // The warning above comes off these; corrected, there is no longer anything to warn about,
-        // which is the whole of the difference between reading the proof and reading what arrived.
+        // And it is the answer with the rows in it that the diagnostic asked for. A row cannot be
+        // written through an arm nothing reaches, so no model puts the two readings apart on its
+        // own — what can be measured is which of them the question was put to, and asking this one
+        // is what makes a run through such an arm take the warning away.
+        assertTrue(c.db().isComputed(new Adequacy.Arrived("demo")),
+                "the diagnostic reads what arrives once the rows have run");
+
+        // What that answer does with a run, at the value it is made of.
         PathReachability.Answers answers =
                 c.db().ask(new Adequacy.PathReached("demo")).value().get("charge");
         int probe = answers.found().entrySet().stream()
@@ -182,7 +188,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
                 .map(each -> (ControlPointId.ArmOccurrence) each.getKey())
                 .findFirst().orElseThrow().probe().orElseThrow();
-        PathReachability.Answers.AsRun ran = answers.asRunWith(java.util.Set.of(probe));
+        PathReachability.Answers.AsRun ran = answers.asRunWith(Set.of(probe));
         assertEquals(Set.of(probe), ran.provedWrong(),
                 "a row through it is what takes the proof back");
         assertEquals(List.of(), ran.answers().found().entrySet().stream()
@@ -213,13 +219,15 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
 
                 let pick (a, xs) = {
                     guard List.length(List.filter(x -> x > 0, xs)) >= 1 else Free
-                    guard a.value < 200 else Free
+                    guard a.value < 50 else Free
+                    guard a.value < 80 else Free
                     Charged { yen = 1 }
                 }
                 """, "demo", "pick");
-        assertEquals(1, proven.size(), "the numeric guard departs where an `Amount` cannot go");
+        assertEquals(1, proven.size(),
+                "nothing under fifty is eighty or more, and the guard above is what says so");
         List<PathDecision> why = WhatAnAnswerSays.conditionsIn(proven.get(0));
-        assertEquals(1, why.size(),
-                () -> "only the condition that was read is a reason: " + why);
+        assertEquals(2, why.size(),
+                () -> "the two guards that were read, and not the one through a fold: " + why);
     }
 }

@@ -9,6 +9,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
@@ -197,8 +198,12 @@ public final class PathReachability {
                 in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
                         p.getValue().type(), body.pos()), in.known(), in.at());
             }
-            new PathReachability(engine, plan, read == null ? InputDomain.NONE : read, symbols, out)
-                    .walk(body, in.known(), in.at(),
+            PathReachability reading =
+                    new PathReachability(engine, plan, read == null ? InputDomain.NONE : read,
+                            symbols, out);
+            reading.entry = in.known();
+            reading.entered = in.at();
+            reading.walk(body, in.known(), in.at(),
                             InputReads.of(read == null ? InputDomain.NONE : read), List.of(), true);
         } catch (RuntimeException why) {
             // The run-time check is the backstop for the analysis this borrows, and it is the
@@ -215,6 +220,16 @@ public final class PathReachability {
     private final InputDomain read;
     private final Symbols symbols;
     private final Map<ControlPointId, Reachability> out;
+    /**
+     * What holds where the body begins: the inputs entered and seeded, and no condition taken.
+     *
+     * <p>Kept so a proof can say which of two things contradicts a branch. A condition that leaves
+     * nothing against this alone is one the declarations rule out wherever it stands, and an author
+     * told that the conditions on the way cannot all hold would go looking at the guards above for
+     * something that is not there.
+     */
+    private Known entry = Known.top();
+    private Denotations entered = Denotations.none();
 
     private PathReachability(PathEngine engine, CoverageSites.Plan plan, InputDomain read,
                              Symbols symbols, Map<ControlPointId, Reachability> out) {
@@ -338,6 +353,55 @@ public final class PathReachability {
     }
 
     /**
+     * How it was shown that nothing arrives at an arm.
+     *
+     * <p>Two things can contradict a branch and they send an author to different places. What the
+     * declarations guarantee of an input holds wherever the branch stands, so a condition that
+     * leaves nothing against the entry facts alone is ruled out by the position and not by anything
+     * on the way; everything else is the conditions on the way, taken together.
+     *
+     * <p>Asked by putting the condition to the entry facts again rather than by reading which
+     * domain went empty: what is wanted is whether the guards above did any of the work, and that
+     * is a question about those two states and not about how either was reached.
+     */
+    private Proof why(Core cond, boolean holds, Predicates.Assumed taken,
+                      List<PathDecision> under, InputReads reads) {
+        if (engine.assuming(cond, entry, entered, holds).known().reachesNothing()) {
+            TermPath position = comparedPositionIn(cond, reads);
+            NumericDomain.Bounds admits = position == null ? null : boundsAt(position);
+            if (admits != null && !under.isEmpty()) {
+                return Proof.outsideInputDomain(position, admits, under.get(under.size() - 1));
+            }
+        }
+        return Proof.conditionsThatCannotAllHold(under);
+    }
+
+    /** The position a comparison turns on, where it turns on exactly one this reading knows. */
+    private TermPath comparedPositionIn(Core cond, InputReads reads) {
+        if (!(cond instanceof Core.Binary b)) {
+            return null;
+        }
+        TermPath left = pathUnder(b.left(), reads);
+        TermPath right = pathUnder(b.right(), reads);
+        return left != null && right == null ? left : right != null && left == null ? right : null;
+    }
+
+    /** Where a side of a comparison sits, reading through a newtype's own value. */
+    private TermPath pathUnder(Core side, InputReads reads) {
+        TermPath here = reads.pathOf(side, symbols);
+        return here != null ? here
+                : side instanceof Core.FieldAccess field ? reads.pathOf(field.target(), symbols)
+                        : null;
+    }
+
+    /** What the rules leave {@code position}, where they leave it numbers at all. */
+    private NumericDomain.Bounds boundsAt(TermPath position) {
+        Position at = read.at(position);
+        return at == null || at.numericDomain() == null || at.numericDomain().isEmpty()
+                ? null : at.numericDomain();
+    }
+
+    /**
      * Why an arm this could not prove is left as it was.
      *
      * <p>Two ways of settling nothing, and they are owed different things. A condition of a shape
@@ -384,7 +448,8 @@ public final class PathReachability {
         List<PathDecision> under = with(decided, taken, iff.cond().pos(), holds);
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
-                    ? new Reachability.Unreachable(Proof.conditionsThatCannotAllHold(under))
+                    ? new Reachability.Unreachable(
+                            why(iff.cond(), holds, taken, under, reads))
                     : new Reachability.Unsettled(whyNot(taken, iff.cond())));
         }
         walk(arm, inside, at, reads, under, false);

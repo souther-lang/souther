@@ -1,5 +1,7 @@
 package souther.compiler.reach;
 
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -19,7 +21,8 @@ import java.util.List;
  * which is the whole point of keeping this out of the readers that decide — rather than a silent
  * fall into whichever branch a switch happened to end with.
  */
-public sealed interface Proof permits ConditionsThatCannotAllHold, EveryCaseRefused {
+public sealed interface Proof
+        permits ConditionsThatCannotAllHold, OutsideInputDomain, EveryCaseRefused {
 
     /**
      * The sentences a proof can come to, one per arm.
@@ -42,6 +45,22 @@ public sealed interface Proof permits ConditionsThatCannotAllHold, EveryCaseRefu
         T conditionsThatCannotAllHold(List<PathDecision> decisions);
 
         /**
+         * The values the branch is written for are not values the position can hold.
+         *
+         * <p>Nearer than the general form and about a different thing. What contradicts the branch
+         * here is what the declarations guarantee of the input, not what the guards above it
+         * established — the condition alone leaves nothing, wherever in the body it stands. An
+         * author reading the general form would be sent to look at the guards above, and there is
+         * nothing there to find.
+         *
+         * @param position  where the value the branch turns on sits
+         * @param admits    what the rules leave that position
+         * @param departure the condition, and the way this branch takes it
+         */
+        T outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
+                             PathDecision departure);
+
+        /**
          * Every case the arm is written for is one the rules refuse at the position matched on.
          *
          * <p>Unconditional, so it holds as truly under three enclosing arms as at the first fork: a
@@ -59,6 +78,12 @@ public sealed interface Proof permits ConditionsThatCannotAllHold, EveryCaseRefu
     /** @see Words#conditionsThatCannotAllHold */
     static Proof conditionsThatCannotAllHold(List<PathDecision> decisions) {
         return new ConditionsThatCannotAllHold(decisions);
+    }
+
+    /** @see Words#outsideInputDomain */
+    static Proof outsideInputDomain(TermPath position, NumericDomain.Bounds admits,
+                                    PathDecision departure) {
+        return new OutsideInputDomain(position, admits, departure);
     }
 
     /** @see Words#everyCaseRefused */
@@ -80,6 +105,22 @@ record ConditionsThatCannotAllHold(List<PathDecision> decisions) implements Proo
     @Override
     public <T> T said(Words<T> words) {
         return words.conditionsThatCannotAllHold(decisions);
+    }
+}
+
+record OutsideInputDomain(TermPath position, NumericDomain.Bounds admits, PathDecision departure)
+        implements Proof {
+
+    OutsideInputDomain {
+        if (position == null || admits == null || departure == null) {
+            throw new IllegalArgumentException(
+                    "a position outside what it holds, with no position, no bounds or no branch");
+        }
+    }
+
+    @Override
+    public <T> T said(Words<T> words) {
+        return words.outsideInputDomain(position, admits, departure);
     }
 }
 

@@ -404,6 +404,15 @@ public final class Adequacy {
                         }
 
                         @Override
+                        public souther.compiler.diag.Diagnostic.Builder outsideInputDomain(
+                                souther.compiler.inputs.TermPath position,
+                                souther.compiler.numeric.NumericDomain.Bounds admits,
+                                souther.compiler.reach.PathDecision departure) {
+                            return said.hint(new DeadBranchMessage.ThePositionStopsShortOfIt(
+                                    position.toString(), shown(admits)));
+                        }
+
+                        @Override
                         public souther.compiler.diag.Diagnostic.Builder everyCaseRefused(
                                 String position,
                                 List<souther.compiler.types.TypeSymbol> cases) {
@@ -418,6 +427,22 @@ public final class Adequacy {
                     });
             return Report.of(why.hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
                     .build());
+        }
+
+        /**
+         * What a position's values come to, as an author reads them.
+         *
+         * <p>In the shape a generated row's name is written in, so that the sentence about a branch
+         * and the row a report offers beside it say a range the same way. An end nothing bounds is
+         * left out rather than written as an infinity nobody typed.
+         */
+        private static String shown(souther.compiler.numeric.NumericDomain.Bounds admits) {
+            String low = admits.min() == null ? null
+                    : admits.min().at() + (admits.min().inclusive() ? " <= " : " < ");
+            String high = admits.max() == null ? null
+                    : (admits.max().inclusive() ? " <= " : " < ") + admits.max().at();
+            return low == null && high == null ? "any number"
+                    : (low == null ? "x" : low + "x") + (high == null ? "" : high);
         }
 
         /** One dead branch and how it was shown, before either is turned into words. */

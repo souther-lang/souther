@@ -137,14 +137,37 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                         + "second — so nothing here is an arm nothing reaches");
     }
 
+    /**
+     * And it is shown by what the position holds, not by the conditions on the way.
+     *
+     * <p>Two things can contradict a branch and they send an author to different places. Nothing
+     * stands above this guard, so "the conditions on the way cannot all hold" would send them
+     * looking for a guard that is not there; what rules it out is the declaration, and the proof
+     * names it and what it leaves.
+     */
     @Test
-    void aDepartureOutsideWhatTheDeclarationAdmitsIsProvenToo() {
+    void aDepartureOutsideWhatTheDeclarationAdmitsIsShownByTheDeclaration() {
         assertEquals(2, armsOf(OUTSIDE_THE_DECLARATION).size(),
                 "one guard makes one fork of two arms");
         List<Proof> proven = provenIn(OUTSIDE_THE_DECLARATION);
         assertEquals(1, proven.size(), "an `Amount` stops at a million, so nothing reaches two");
-        assertEquals(1, WhatAnAnswerSays.conditionsIn(proven.get(0)).size(),
-                "one guard is on the way to it; what it conflicts with is what the input is");
+        assertEquals("a 0..1000000",
+                WhatAnAnswerSays.positionOutrunIn(proven.get(0)),
+                "the position, and what its rules leave it");
+    }
+
+    /**
+     * The two proofs are told apart, and by what does the work rather than by the shape of the
+     * model.
+     *
+     * <p>The guard of #779 is inside what another guard left, and the declaration alone says
+     * nothing against it — an `Amount` of 6000 is an ordinary one. So that proof is the conditions
+     * on the way, and this one is not, and neither reads as the other.
+     */
+    @Test
+    void andTheOneTheGuardsAboveRuleOutIsNot() {
+        assertEquals(null, WhatAnAnswerSays.positionOutrunIn(provenIn(TWO_GUARDS).get(0)),
+                "nothing about an `Amount` rules out six thousand; the guard above it does");
     }
 
     /** The same model with the guard nothing reaches taken out. */
