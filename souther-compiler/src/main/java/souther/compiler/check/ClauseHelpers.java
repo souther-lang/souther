@@ -85,57 +85,10 @@ public final class ClauseHelpers {
         return out;
     }
 
-    /**
-     * The behaviors of a module that state something, as their author wrote them, beside the
-     * expansion the discharge analysis reads them under.
-     *
-     * <p>Not expanded here, which is the difference from {@link #invariantsForDischarge} and the
-     * reason this hands over the expansion instead. A rule is shown to whoever wrote it, so what a
-     * reader is given has to be said at the position it is written at and split where the author
-     * split it — and an expansion carries the positions of the body it copied in
-     * ({@link HelperInliner}), so a rule expanded before it is read would be reported inside the
-     * helper it names. The clauses are split and placed against what is written, and each piece is
-     * expanded after that (spec §ensures-discharge-capability).
-     *
-     * <p>The whole declaration and not its clauses alone, because what a rule is read against —
-     * which cases the answer has, what each parameter holds — is read off the same node, and a
-     * reader handed the clauses would go back to the module for the rest.
-     */
-    public static WrittenEnsures ensuresForDischarge(
-            Expandable expandable, Symbols symbols, Map<String, Hir.FnDef> published) {
-        Hir.Module m = expandable.module();
-        Hir.Module settled = settled(m, symbols);
-        Map<String, Hir.SpecBehavior> out = new LinkedHashMap<>();
-        for (Hir.BehaviorDef behavior : settled.behaviors()) {
-            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
-                out.put(spec.name(), spec);
-            }
-        }
-        return new WrittenEnsures(out, HelperInliner.forHelpers(m.name(),
-                HelperInliner.helpersOf(settled), published, InliningPolicy.DISCHARGE));
-    }
-
-    /**
-     * What a module states about its answers as it is written, and what expands a piece of it into
-     * the representation the discharge analysis reads.
-     *
-     * <p>The two travel together because neither is usable alone: the written form is what a reader
-     * is shown and is not what the analysis has rules about, and the expansion says nothing about
-     * which behavior or which clause is being expanded.
-     */
-    public record WrittenEnsures(Map<String, Hir.SpecBehavior> behaviors, HelperInliner expansion) {
-
-        public WrittenEnsures {
-            // Kept in the order the module declares them, so that what a reader is handed does not
-            // depend on how a map happened to hash the names.
-            behaviors = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(behaviors));
-        }
-    }
-
     /** {@code m} with its helper parameter types settled and the names in its invariants written
      * qualified — what both representations are expanded from, so neither reads a table the other
      * would key differently. */
-    private static Hir.Module settled(Hir.Module m, Symbols symbols) {
+    static Hir.Module settled(Hir.Module m, Symbols symbols) {
         return HelperNames.withQualifiedInvariants(HelperParams.settle(m, symbols, Map.of()));
     }
 
@@ -185,53 +138,16 @@ public final class ClauseHelpers {
     }
 
     /**
-     * A clause as a reader of it sees it: one entry per conjunct the author wrote, each placed where
-     * they wrote it and expanded into the representation that reads it.
-     *
-     * <p>The three steps are here together because their order is the whole of the correctness. An
-     * expansion carries the positions of the body it copies in and splices in whatever that body is
-     * made of, so a clause expanded first is placed inside the helper it names and split where that
-     * helper's author put an {@code &&} — and what comes back is an answer about a rule nobody wrote,
-     * pointing at a line they did not write it on. Split and placed first, then expanded, none of
-     * that can happen; done in either other order, all of it does.
-     *
-     * <p>Both kinds of clause read this. Having said the order once, there is nowhere left to say it
-     * differently — which is what it cost to have it written twice: the invariant reader had it right
-     * and the rule reader had it backwards, and nothing in either of them said which was which.
-     *
-     * @param written the clause as its author wrote it, before anything is expanded
-     * @param owner what the names in an expansion of it belong to — a declaration or a signature
-     * @param expansion what turns one conjunct into the tree its reader has rules about
-     */
-    public static List<Conjunct> conjunctsToRead(Hir.Expr written, BindingOwner owner,
-                                                 HelperInliner expansion) {
-        List<Conjunct> out = new ArrayList<>();
-        for (Hir.Expr each : conjunctsOf(written)) {
-            out.add(new Conjunct(beginsAt(each), expansion.inline(each, owner)));
-        }
-        return out;
-    }
-
-    /**
-     * One conjunct of a clause: where the author wrote it, and what it comes to for the reader that
-     * asked.
-     *
-     * <p>The two travel together because the answer is about both — what a reader works out has to be
-     * said at a place, and the place is not a property of what they worked it out from.
-     */
-    public record Conjunct(SourcePos at, Hir.Expr read) {}
-
-    /**
      * Where a written clause begins: the earliest position anything in it carries.
      *
      * <p>A node's own position is where its operator is written, so the position of {@code a && b} is
      * the {@code &&}. A reader is pointed at the clause, which starts at whatever of it comes first.
      *
      * <p>Of what was written. Asked of an expanded tree it answers with a position inside whatever
-     * was expanded into it, which is why a reader wanting both this and the expansion asks
-     * {@link #conjunctsToRead} for the two at once.
+     * was expanded into it, which is why the reader that wants both this and the expansion gets them
+     * made together ({@link ClausesForDischarge}).
      */
-    public static SourcePos beginsAt(Hir.Expr e) {
+    static SourcePos beginsAt(Hir.Expr e) {
         SourcePos[] found = {e.pos()};
         Hir.forEachChild(e, child -> {
             SourcePos inner = beginsAt(child);

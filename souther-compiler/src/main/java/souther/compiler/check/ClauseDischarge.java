@@ -99,16 +99,32 @@ public record ClauseDischarge(SourcePos clause, Kind kind, Optional<String> reas
     public static List<ClauseDischarge> readings(boolean asABound, boolean asATerm, boolean unread,
                                                  SourcePos clause, Supplier<String> why) {
         List<ClauseDischarge> found = new ArrayList<>();
+        for (Kind read : kindsRead(asABound, asATerm, unread)) {
+            found.add(read == Kind.RUNTIME_ONLY ? runtimeOnly(clause, why.get())
+                    : new ClauseDischarge(clause, read, Optional.empty()));
+        }
+        return List.copyOf(found);
+    }
+
+    /**
+     * The same rule, for a reader with nowhere to say it.
+     *
+     * <p>A caller that only wants to know whether a clause was read as a bound has no author in front
+     * of it and so no position to be right or wrong about — asked for one it would have to invent
+     * one, and an invented position is the thing this classification has been got wrong by twice.
+     */
+    public static List<Kind> kindsRead(boolean asABound, boolean asATerm, boolean unread) {
+        List<Kind> found = new ArrayList<>();
         if (asABound) {
-            found.add(derivable(clause));
+            found.add(Kind.DERIVABLE);
         }
         if (asATerm) {
-            found.add(exactMatch(clause));
+            found.add(Kind.EXACT_MATCH);
         }
         // A clause nothing was found of is one nothing can be asked of, which is the same answer as a
         // clause the check read no part of.
         if (unread || found.isEmpty()) {
-            found.add(runtimeOnly(clause, why.get()));
+            found.add(Kind.RUNTIME_ONLY);
         }
         return List.copyOf(found);
     }

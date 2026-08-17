@@ -183,15 +183,15 @@ public final class InvariantChecker {
      * where the clause is written, which is the pre-expansion position; {@code clause} is that clause
      * in the representation the check reads.
      */
-    public static List<ClauseDischarge> capabilitiesOf(Hir.Expr clause, SourcePos at, TypeSymbol named,
-                                               Hir.Data data, Symbols symbols) {
+    public static List<ClauseDischarge> capabilitiesOf(ClausesForDischarge.ClauseReading clause,
+                                               TypeSymbol named, Hir.Data data, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         // Read over the declaration's own fields, each standing for itself: a construction hands one
         // value per field, so a clause naming a field names something wherever it is built. These
         // stand for a value rather than holding one, so they are entered as locations and nothing is
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
-        return c.capabilitiesOf(c.clauses.typed(clause, named, data), at,
+        return c.capabilitiesOf(clause, read -> c.clauses.typed(read, named, data),
                 Denotations.none().locations(c.clauses.bindingsOf(named, data).values()),
                 data.name());
     }
@@ -213,20 +213,59 @@ public final class InvariantChecker {
      * Answering with one of them would be picking which half of a clause to describe, and the half not
      * picked is the one an author is about to be surprised by.
      *
-     * @param stated the statement in the representation this check reads, or null where the front end
-     *               could not type it there
-     * @param at where it is written, which is the pre-expansion position an author is looking at
+     * <p>Where the answers are said is the clause's and is not passed in. A position that can be
+     * passed can be passed from the wrong tree — which is what an expansion of the clause is, and
+     * what every reader of this had to be told not to take it from. Handed the clause itself, there
+     * is nothing left to get wrong: it says where it was written and what it comes to, and the two
+     * were made together ({@link ClausesForDischarge}).
+     *
+     * @param clause the conjunct, as written and as this check reads it
+     * @param typing what types the read form here — a declaration's fields, a signature's names —
+     *               answering null where this compiler could not type it
      * @param locations the names it may read, each standing for itself
      * @param describing what is being read, for the record a fail-open leaves behind
      */
-    static List<ClauseDischarge> capabilitiesOf(Core stated, SourcePos at, Denotations locations,
-                                        Symbols symbols, String describing) {
+    static List<ClauseDischarge> capabilitiesOf(ClausesForDischarge.ClauseReading clause,
+                                        Typing typing, Denotations locations, Symbols symbols,
+                                        String describing) {
         return new InvariantChecker(symbols, Map.of())
-                .capabilitiesOf(stated, at, locations, describing);
+                .capabilitiesOf(clause, typing, locations, describing);
+    }
+
+    /** What turns the read form of a clause into the tree this check walks, which is the reader's to
+     * say: a declaration's clause is typed over its fields and a behavior's rule over its signature. */
+    @FunctionalInterface
+    interface Typing {
+        Core type(Hir.Expr read);
+    }
+
+    private List<ClauseDischarge> capabilitiesOf(ClausesForDischarge.ClauseReading clause,
+                                         Typing typing, Denotations locations, String describing) {
+        SourcePos at = clause.at();
+        Core stated;
+        try {
+            stated = typing.type(clause.read());
+        } catch (RuntimeException _) {
+            stated = null;
+        }
+        return capabilitiesOf(stated, at, locations, describing);
     }
 
     private List<ClauseDischarge> capabilitiesOf(Core stated, SourcePos at, Denotations locations,
                                          String describing) {
+        List<ClauseDischarge> found = new ArrayList<>();
+        for (ClauseDischarge.Kind read : kindsRead(stated, locations, describing)) {
+            found.add(read == ClauseDischarge.Kind.RUNTIME_ONLY
+                    ? ClauseDischarge.runtimeOnly(at, whyUnreadable(stated, locations))
+                    : new ClauseDischarge(at, read, java.util.Optional.empty()));
+        }
+        return List.copyOf(found);
+    }
+
+    /** What the check made of {@code stated}, said as the readings it got and nothing about where
+     * they belong. */
+    private List<ClauseDischarge.Kind> kindsRead(Core stated, Denotations locations,
+                                                 String describing) {
         Predicates.Owed owed;
         try {
             owed = stated == null ? Predicates.Owed.UNREADABLE
@@ -252,9 +291,7 @@ public final class InvariantChecker {
         }
         // What was not read at all is said even where something else was: a clause half of which
         // could not be read would otherwise be described entirely by the half that was.
-        Core read = stated;
-        return ClauseDischarge.readings(asABound, asATerm, owed.unreadable(), at,
-                () -> whyUnreadable(read, locations));
+        return ClauseDischarge.kindsRead(asABound, asATerm, owed.unreadable());
     }
 
     /** What in {@code clause} the check cannot read, said so an author can act on it. */
@@ -821,6 +858,27 @@ public final class InvariantChecker {
      * empty, so a rule inside it is a rule about a value the construction need not make. A type
      * already met is not entered again, which is what stops a record that holds itself.
      */
+    /**
+     * Whether every reading of {@code clause} is a bound.
+     *
+     * <p>Nothing here is shown to anybody, so nothing here is placed: this asks what the check made
+     * of a clause and not where to say it, and a reader with no author in front of it has no position
+     * to be right or wrong about. What it reads is the clause as this checker holds it, which is the
+     * representation the rest of this walk is written against.
+     */
+    private static boolean readOnlyAsBounds(Hir.Expr clause, TypeSymbol named, Hir.Data data,
+                                            Symbols symbols) {
+        InvariantChecker c = new InvariantChecker(symbols, Map.of());
+        for (ClauseDischarge.Kind read : c.kindsRead(c.clauses.typed(clause, named, data),
+                Denotations.none().locations(c.clauses.bindingsOf(named, data).values()),
+                data.name())) {
+            if (read != ClauseDischarge.Kind.DERIVABLE) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static boolean everyRuleRead(TypeSymbol named, Hir.Data data, Symbols symbols) {
         return everyRuleRead(named, data, symbols, new HashSet<>());
     }
@@ -838,11 +896,8 @@ public final class InvariantChecker {
             for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                 // Every reading of it, and not one of them: a clause read as a bound and as
                 // something else besides is a clause part of which no bound expresses.
-                for (ClauseDischarge read
-                        : capabilitiesOf(clause.expr(), clause.pos(), named, data, symbols)) {
-                    if (read.kind() != ClauseDischarge.Kind.DERIVABLE) {
-                        return false;
-                    }
+                if (!readOnlyAsBounds(clause.expr(), named, data, symbols)) {
+                    return false;
                 }
             }
         }

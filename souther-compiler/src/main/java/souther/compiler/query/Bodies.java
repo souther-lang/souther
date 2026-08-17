@@ -5,7 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorChecker;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
-import souther.compiler.check.ClauseHelpers;
+import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
@@ -405,13 +405,14 @@ public final class Bodies {
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             Map<String, ContractDischarge> out = new LinkedHashMap<>();
             try {
-                ClauseHelpers.WrittenEnsures declaring = ClauseHelpers.ensuresForDischarge(
-                        expandable.value(), scope.value(), published);
-                for (Map.Entry<String, Hir.SpecBehavior> each : declaring.behaviors().entrySet()) {
+                ClausesForDischarge declaring =
+                        ClausesForDischarge.of(expandable.value(), scope.value(), published);
+                for (Map.Entry<String, Hir.SpecBehavior> each
+                        : declaring.behaviorsThatState().entrySet()) {
                     try {
                         BehaviorContract contract = BehaviorChecker.contractAsRead(each.getValue(),
                                 name, signatures.value().get(each.getKey()), scope.value());
-                        out.put(each.getKey(), ContractDischarge.of(contract, declaring.expansion(),
+                        out.put(each.getKey(), ContractDischarge.of(contract, declaring,
                                 scope.value(), helpers.value()));
                     } catch (Unanswerable | CompileException _) {
                         // The declaration could not be read, which is said where it is held to its

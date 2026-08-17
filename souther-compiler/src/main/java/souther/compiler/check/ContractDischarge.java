@@ -66,12 +66,12 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * @param helpers the signatures a rule may reach without a binding, as the check that holds a
      *                rule to its declaration reads them
      */
-    public static ContractDischarge of(BehaviorContract contract, HelperInliner expansion,
+    public static ContractDischarge of(BehaviorContract contract, ClausesForDischarge declaring,
                                        Symbols symbols, Map<String, Type> helpers) {
         List<RuleDischarge> classified = new ArrayList<>();
         for (Clause clause : contract.clauses()) {
             for (Rule rule : clause.rules()) {
-                classified.addAll(of(contract, clause, rule, expansion, symbols, helpers));
+                classified.addAll(of(contract, clause, rule, declaring, symbols, helpers));
             }
         }
         return new ContractDischarge(classified, unstatedCases(contract, symbols));
@@ -91,7 +91,7 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * placed inside the helper.
      */
     private static List<RuleDischarge> of(BehaviorContract contract, Clause clause, Rule rule,
-                                          HelperInliner expansion, Symbols symbols,
+                                          ClausesForDischarge declaring, Symbols symbols,
                                           Map<String, Type> helpers) {
         Scope scope = BehaviorChecker.scopeOf(contract, rule).reaching(helpers);
         CheckContext ctx = CheckContext.of(symbols).forDischarge();
@@ -108,30 +108,15 @@ public record ContractDischarge(List<RuleDischarge> rules,
 
         BindingOwner owner = BehaviorContract.ownerOf(contract.behavior());
         List<RuleDischarge> out = new ArrayList<>();
-        for (ClauseHelpers.Conjunct written
-                : ClauseHelpers.conjunctsToRead(rule.statement(), owner, expansion)) {
-            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(
-                    typed(written.read(), scope, ctx), written.at(), locations, symbols,
-                    contract.behavior().name())) {
+        for (ClausesForDischarge.ClauseReading written
+                : declaring.conjunctsOf(rule.statement(), owner)) {
+            for (ClauseDischarge read : InvariantChecker.capabilitiesOf(written,
+                    toRead -> Elaborator.elaborate(toRead, scope, ctx, Type.BOOL), locations,
+                    symbols, contract.behavior().name())) {
                 out.add(new RuleDischarge(rule.id(), read.named(clause.name())));
             }
         }
         return out;
-    }
-
-    /**
-     * {@code conjunct} as the check reads it, or null where this compiler could not type it there.
-     *
-     * <p>Null is an answer and not a failure, as it is for a data's clause: a rule the check cannot
-     * read is not a rule an author wrote wrongly, and whether it is well formed was settled where the
-     * declaration was held to its rules.
-     */
-    private static Core typed(Hir.Expr conjunct, Scope scope, CheckContext ctx) {
-        try {
-            return Elaborator.elaborate(conjunct, scope, ctx, Type.BOOL);
-        } catch (RuntimeException _) {
-            return null;
-        }
     }
 
     /**
