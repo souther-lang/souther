@@ -67,11 +67,7 @@ final class Crossing {
      * and one wants the gathering to reach further.
      */
     static BlockReason stopped(souther.compiler.values.UnreadReason why) {
-        return switch (why) {
-            case RELATES_TWO_POSITIONS -> new BlockReason.ComparisonBetweenPositions();
-            case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new BlockReason.UnreadValueRule();
-            case NOT_REACHED -> new BlockReason.ValueRulesNotReached();
-        };
+        return BlockReason.of(why);
     }
 
     /**

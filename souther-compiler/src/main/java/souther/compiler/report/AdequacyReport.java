@@ -735,6 +735,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("      %s not read: %s (%s)%n",
                     mark(f), f.args().get(0), f.args().get(1)));
         }
+        // And a third thing, said apart from both: a position the axes did measure, on a reading
+        // that did not run to the end. The classes beside it are what the model was read to say,
+        // and a rule that went unread may yet refuse one of them — which is a different thing to
+        // act on from a position nothing established anything about.
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_READ_IN_PART)) {
+            out.append(String.format("      %s read in part: %s (%s)%n",
+                    mark(f), f.args().get(0), f.args().get(1)));
+        }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      %s omitted: %s (axis limit)%n",
                     mark(f), f.args().get(0)));
@@ -917,6 +925,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * The word a document writes for how far a position's rules were read.
+     *
+     * <p>Here rather than at the one place it is written, so a reader holding the arms can be held
+     * to the words without reading the writer. No {@code default}: an arm added and not given a
+     * word stops the compile rather than arriving in a document as one that already existed.
+     */
+    public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
+        return switch (read) {
+            case PartitionEvidence.AxisCoverage.Reading.InFull _ -> "complete";
+            case PartitionEvidence.AxisCoverage.Reading.InPart _ -> "partial";
+        };
+    }
+
+    /**
      * The report as a build reads it, explaining the source identities it carries.
      *
      * <p>The names are asked for here for the reason {@link #human} asks for them, and are put to a
@@ -1087,6 +1109,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ObjectNode a = axes.addObject();
             a.put("axis", axis.axis());
             a.put("path", axis.path());
+            // How far the rules about this position were read, beside the classes it came to. A
+            // class arrived at from part of the rules is a value the model singled out, and a rule
+            // that went unread may yet refuse it — so a consumer holding these classes is told what
+            // they rest on rather than left to take them for a set every member of which stands.
+            // Its own words, not the ones a measure uses. `status` and `reason` say elsewhere in
+            // this document whether a number was arrived at and why there is none; this says how
+            // far a reading got, which is a different question about a position that has numbers.
+            // Under one pair of keys a consumer would read one as the other.
+            ObjectNode read = a.putObject("read");
+            read.put("extent", readingWord(axis.read()));
+            if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.InPart short_) {
+                read.put("stoppedBy", word(short_.why()));
+            }
             axis.classes().forEach(a.putArray("classes")::add);
             axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
             ArrayNode excluded = a.putArray("excluded");
@@ -1156,15 +1191,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         partition.notDerivable().forEach(each -> {
             if (each.isAbsent()) {
                 undivided.add(each.at().toString());
-                return;
             }
-            // The position and what stopped it, kept as the product they are. Which limit a position
-            // is waiting on is the thing this list was added to say, and a document that named only
-            // the position would leave a consumer to guess it back.
+        });
+        // The position and what stopped it, kept as the product they are. Which limit a position is
+        // waiting on is the thing this list was added to say, and a document that named only the
+        // position would leave a consumer to guess it back.
+        //
+        // Asked of the one reading both surfaces write from. Written from the undivided positions
+        // alone, this list was short of every rule left unread at a position the axes went on to
+        // measure — which a person reading the report was shown and a consumer keyed on this
+        // document was not.
+        partition.notRead().forEach(each -> {
             ObjectNode said = unread.addObject();
-            said.put("position", each.at().toString());
-            said.put("reason", word(((souther.compiler.partition.UndividedPosition.Why.CannotDerive)
-                    each.why()).reason()));
+            said.put("position", each.at());
+            said.put("reason", word(each.reason()));
         });
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
@@ -1254,7 +1294,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARM_UNREACHED -> finding.at();
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, INPUT_CASE_UNSPECIFIED,
                     AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, PARTITION_NOT_DERIVABLE,
-                    PARTITION_NOT_READ, PARTITION_OMITTED -> null;
+                    PARTITION_NOT_READ, PARTITION_READ_IN_PART, PARTITION_OMITTED -> null;
         };
     }
 
@@ -1275,7 +1315,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         List<Object> args = finding.args();
         return switch (finding.kind()) {
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
-                    ARM_UNREACHED, PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, PARTITION_OMITTED ->
+                    ARM_UNREACHED, PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
+                    PARTITION_READ_IN_PART, PARTITION_OMITTED ->
                     String.valueOf(args.get(0));
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
