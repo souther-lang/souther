@@ -1,0 +1,319 @@
+{
+  "schemaVersion" : 1,
+  "compilerVersion" : "<version>",
+  "status" : "complete",
+  "adequacy" : "satisfied",
+  "modules" : [ {
+    "module" : "conformance.catalog",
+    "status" : "complete",
+    "incompleteness" : [ ],
+    "behaviors" : [ {
+      "name" : "discount",
+      "implementation" : "implemented",
+      "rows" : 4,
+      "pending" : 0,
+      "status" : "complete",
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "Discounted", "TooCheap" ],
+          "specified" : [ "Discounted", "TooCheap" ],
+          "observed" : [ "Discounted", "TooCheap" ],
+          "verified" : [ "Discounted", "TooCheap" ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "specified" : [ ],
+          "executed" : [ ],
+          "verified" : [ ],
+          "excluded" : [ ],
+          "unclassifiedRows" : 0
+        }, {
+          "declared" : [ ],
+          "specified" : [ ],
+          "executed" : [ ],
+          "verified" : [ ],
+          "excluded" : [ ],
+          "unclassifiedRows" : 0
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "complete"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ {
+          "axis" : "discount/item.note",
+          "path" : "item.note",
+          "classes" : [ "None", "Some" ],
+          "covered" : [ "None", "Some" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "unclassifiedRows" : 0,
+          "status" : "complete"
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "axis" : "discount/String.length(item.sku)",
+          "origin" : "invariant Sku (min)",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "1",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        }, {
+          "axis" : "discount/item.price",
+          "origin" : "invariant Price (min)",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "0",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        }, {
+          "axis" : "discount/item.weight",
+          "origin" : "invariant Weight (min)",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "1",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        } ],
+        "pairs" : {
+          "total" : 0,
+          "covered" : 0,
+          "witnessedFeasible" : 0,
+          "provenInfeasible" : 0,
+          "unknown" : 0,
+          "truncated" : false,
+          "status" : "complete"
+        },
+        "notDerivable" : [ ],
+        "notRead" : [ ],
+        "omitted" : [ ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "arms" : 2,
+        "covered" : 2,
+        "unreached" : [ ]
+      }
+    } ]
+  }, {
+    "module" : "conformance.shipping",
+    "status" : "complete",
+    "incompleteness" : [ ],
+    "behaviors" : [ {
+      "name" : "台帳へ書く",
+      "implementation" : "injected",
+      "rows" : 6,
+      "pending" : 6,
+      "status" : "complete",
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "出荷済み", "書けなかった" ],
+          "specified" : [ "出荷済み", "書けなかった" ],
+          "observed" : [ ],
+          "verified" : [ ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "specified" : [ ],
+          "executed" : [ ],
+          "verified" : [ ],
+          "excluded" : [ ],
+          "unclassifiedRows" : 0
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "complete"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ {
+          "axis" : "台帳へ書く/指示.区分",
+          "path" : "指示.区分",
+          "classes" : [ "通常", "速達", "冷蔵" ],
+          "covered" : [ "冷蔵", "通常", "速達" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "unclassifiedRows" : 0,
+          "status" : "complete"
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "axis" : "台帳へ書く/String.length(指示.番号)",
+          "origin" : "invariant 送り状番号 (min)",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "1",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        }, {
+          "axis" : "台帳へ書く/指示.重量",
+          "origin" : "invariant Weight (min)",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "1",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        } ],
+        "pairs" : {
+          "total" : 0,
+          "covered" : 0,
+          "witnessedFeasible" : 0,
+          "provenInfeasible" : 0,
+          "unknown" : 0,
+          "truncated" : false,
+          "status" : "complete"
+        },
+        "notDerivable" : [ "指示.受付日", "指示.締切", "指示.集荷時刻", "指示.記録時刻" ],
+        "notRead" : [ {
+          "position" : "指示.品目",
+          "reason" : "unsupported_traversal"
+        } ],
+        "omitted" : [ ]
+      },
+      "branch" : {
+        "status" : "unavailable",
+        "reason" : "no_body",
+        "arms" : 0,
+        "covered" : 0,
+        "unreached" : [ ]
+      }
+    }, {
+      "name" : "出荷する",
+      "implementation" : "implemented",
+      "rows" : 10,
+      "pending" : 0,
+      "status" : "complete",
+      "signature" : {
+        "status" : "complete",
+        "output" : {
+          "declared" : [ "出荷済み", "書けなかった", "重量超過" ],
+          "specified" : [ "出荷済み", "書けなかった", "重量超過" ],
+          "observed" : [ "出荷済み", "書けなかった", "重量超過" ],
+          "verified" : [ "出荷済み", "書けなかった", "重量超過" ],
+          "unclassifiedRows" : 0
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "specified" : [ ],
+          "executed" : [ ],
+          "verified" : [ ],
+          "excluded" : [ ],
+          "unclassifiedRows" : 0
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "complete"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ {
+          "axis" : "出荷する/指示.重量",
+          "path" : "指示.重量",
+          "classes" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
+          "covered" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "unclassifiedRows" : 0,
+          "status" : "complete"
+        }, {
+          "axis" : "出荷する/指示.区分",
+          "path" : "指示.区分",
+          "classes" : [ "通常", "速達", "冷蔵" ],
+          "covered" : [ "冷蔵", "通常", "速達" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "unclassifiedRows" : 0,
+          "status" : "complete"
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "axis" : "出荷する/String.length(指示.番号)",
+          "origin" : "invariant 送り状番号 (min)",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "1",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        }, {
+          "axis" : "出荷する/指示.重量",
+          "origin" : "invariant Weight (min)",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "1",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        }, {
+          "axis" : "出荷する/指示.重量",
+          "origin" : "guard@1:73:5",
+          "side" : "at",
+          "kind" : "at_value",
+          "value" : "30000",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        }, {
+          "axis" : "出荷する/指示.重量",
+          "origin" : "guard@1:73:5",
+          "side" : "above",
+          "kind" : "at_value",
+          "value" : "30001",
+          "hit" : true,
+          "knownWritable" : true,
+          "status" : "complete"
+        } ],
+        "pairs" : {
+          "total" : 6,
+          "covered" : 4,
+          "witnessedFeasible" : 4,
+          "provenInfeasible" : 0,
+          "unknown" : 2,
+          "truncated" : false,
+          "status" : "complete"
+        },
+        "notDerivable" : [ "指示.記録時刻" ],
+        "notRead" : [ {
+          "position" : "指示.品目",
+          "reason" : "unsupported_traversal"
+        }, {
+          "position" : "指示.受付日",
+          "reason" : "unsupported_syntax"
+        }, {
+          "position" : "指示.締切",
+          "reason" : "unsupported_syntax"
+        }, {
+          "position" : "指示.集荷時刻",
+          "reason" : "unsupported_syntax"
+        } ],
+        "omitted" : [ ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "arms" : 10,
+        "covered" : 10,
+        "unreached" : [ ]
+      }
+    } ]
+  } ],
+  "sources" : {
+    "1" : "shipping.sou"
+  }
+}
