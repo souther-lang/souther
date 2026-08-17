@@ -359,8 +359,15 @@ public final class Main {
             // them: waiting is the normal state of a model being written, and a gate on it refuses the
             // record of what an injected behavior owes — which is the thing the report exists to keep.
             if (strict && report.adequacy() == AdequacyReport.AdequacyStatus.NOT_SATISFIED) {
-                System.err.println(Messages.get("cli.examples.strict.refused", render.locale(),
-                        report.adequacyGaps().size()));
+                // Said in the terms of the report the reader was given. A count is only worth
+                // anything beside a way of finding the entries it counts, and the two surfaces name
+                // them differently: a person reads a mark and a consumer reads a field. Pointing at
+                // the mark whatever was printed sent a reader of a JSON document looking for a
+                // character that is nowhere in it.
+                System.err.println(Messages.get(render.json()
+                                ? "cli.examples.strict.refused.json"
+                                : "cli.examples.strict.refused",
+                        render.locale(), report.adequacyGaps().size()));
                 return 1;
             }
             return 0;

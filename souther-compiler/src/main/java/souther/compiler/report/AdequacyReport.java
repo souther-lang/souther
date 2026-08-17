@@ -968,7 +968,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 signature(b, behavior.signature());
                 partition(b, behavior.partition(), behavior.claimed(), sources);
                 branch(b, behavior.branch(), sources);
-                findings(b, behavior);
+                findings(b, behavior, sources);
             }
         }
         // Last, because what it explains is what was written above it. Where a field sits in an
@@ -1209,12 +1209,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * this says which findings there are and what a build does about each, which is neither
      * measure's question and was nobody's.
      *
-     * <p>No place is written. Every one of these is cited at the behavior's own declaration except an
-     * arm's, so a place written here would be the same coordinate repeated under each finding of a
-     * behavior the entry already names — and where the finding is about a line or a class, that
-     * coordinate is not where the reader would go.
+     * <p>A place is written where the finding has one of its own, which is the arms and nothing else.
+     * The rest are cited at the behavior's own declaration, so writing it would repeat one coordinate
+     * under every finding of a behavior the entry already names — and where the finding is about a
+     * line or a class, that coordinate is not where the reader would go.
      */
-    private static void findings(ObjectNode behavior, BehaviorReport of) {
+    private static void findings(ObjectNode behavior, BehaviorReport of, DocumentSources sources) {
         ArrayNode out = behavior.putArray("findings");
         for (Adequacy.Finding finding : of.findings()) {
             ObjectNode f = out.addObject();
@@ -1225,7 +1225,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // not one with an empty code, and a consumer joining these to the diagnostics a build
             // printed reads the difference.
             finding.code().ifPresent(code -> f.put("code", code.name()));
+            Citation place = placeOfItsOwn(finding);
+            if (place != null) {
+                at(f, place, sources);
+            }
         }
+    }
+
+    /**
+     * Where a finding is, for the kinds whose place is not the declaration they are under.
+     *
+     * <p>An arm's, and no other's. A behavior with two {@code guard}s writes two arms labelled
+     * {@code else}, and the label is what a finding's subject is — so two findings of one behavior
+     * came out identical in every field, and which of them a reader was being told about could not be
+     * worked out from the document at all. The place is what {@code branch.unreached} already tells
+     * them apart by, and it is written here in the same shape, so the two join.
+     *
+     * <p>The other eight are cited at the declaration the entry sits under. Writing that coordinate
+     * would say where the behavior is, under a finding about a line the model draws or a class of an
+     * input — neither of which is there.
+     *
+     * <p>A switch and not a look at the citation. Whether a finding's place is its own is a fact
+     * about the kind, and reading it back off a coordinate would be this report working out something
+     * the measure already knew.
+     */
+    private static Citation placeOfItsOwn(Adequacy.Finding finding) {
+        return switch (finding.kind()) {
+            case ARM_UNREACHED -> finding.at();
+            case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, INPUT_CASE_UNSPECIFIED,
+                    AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, PARTITION_NOT_DERIVABLE,
+                    PARTITION_NOT_READ, PARTITION_OMITTED -> null;
+        };
     }
 
     /**

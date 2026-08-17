@@ -171,6 +171,78 @@ class WhichFindingsABuildRefusesOverIsWrittenDownTest {
     }
 
     /**
+     * Two findings of one behavior that no other field tells apart.
+     *
+     * <p>A behavior with two {@code guard}s writes two arms labelled {@code else}, and the label is
+     * what a finding's subject is — so kind, disposition, subject and code came out identical on
+     * both, and which arm a reader was being told about could not be worked out from the document.
+     * The place is what {@code branch.unreached} already tells them apart by, so it is written under
+     * the same key and the two join.
+     */
+    @Test
+    void twoArmsOfOneNameAreToldApartByWhereTheyAre() {
+        Compilation compilation = Compilation.ofSource("""
+                module a
+
+                data Amount = Int
+                    invariant value > 0
+
+                data Req = { small: Amount, large: Amount }
+                data Ok
+                data TooSmall
+                data TooLarge
+
+                behavior check : (r: Req) -> Ok | TooSmall | TooLarge
+                    constructs Ok, TooSmall, TooLarge, Amount
+
+                let check (r) = {
+                    guard r.small >= Amount(10) else TooSmall
+                    guard r.large <= Amount(100) else TooLarge
+                    Ok
+                }
+
+                example check
+                    | "both fit" : (Req { small = Amount(20), large = Amount(50) }) -> Ok
+                """, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        JsonNode check = JSON.readTree(
+                        AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
+                .get("modules").get(0).get("behaviors").get(0);
+
+        List<JsonNode> arms = new ArrayList<>();
+        for (JsonNode each : check.get("findings")) {
+            if ("arm_unreached".equals(each.get("kind").asString())) {
+                arms.add(each);
+            }
+        }
+        assertEquals(2, arms.size(), check.toString());
+        assertEquals(List.of("else", "else"),
+                arms.stream().map(a -> a.get("subject").asString()).toList());
+        assertEquals(2, arms.stream().map(a -> a.get("at").toString()).distinct().count(),
+                "two arms of one name are two places: " + arms);
+
+        // The same places, under the same key, as the measure that already told them apart.
+        List<String> unreached = new ArrayList<>();
+        for (JsonNode each : check.get("branch").get("unreached")) {
+            unreached.add(each.get("at").toString());
+        }
+        assertEquals(unreached.stream().sorted().toList(),
+                arms.stream().map(a -> a.get("at").toString()).sorted().toList());
+    }
+
+    /** The eight whose place is the declaration the entry already names do not write it again. */
+    @Test
+    void aFindingCitedAtItsDeclarationWritesNoPlace() {
+        JsonNode findings = JSON.readTree(report().json(SourceNameResolver.identity()))
+                .get("modules").get(0).get("behaviors").get(0).get("findings");
+
+        for (JsonNode each : findings) {
+            assertFalse(each.has("at"), each.toString());
+        }
+    }
+
+    /**
      * The three answers, on the two facts they come from.
      *
      * <p>Asked of the finding directly, because the middle answer is what a two-valued field would

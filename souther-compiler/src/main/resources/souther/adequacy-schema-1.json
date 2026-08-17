@@ -106,6 +106,10 @@
             "type": "string",
             "description": "The code a build is told this under, present exactly where the kind has one. A kind a build is never told about carries no code rather than an empty one.",
             "pattern": "^E[0-9]{4}$"
+          },
+          "at": {
+            "description": "Where the finding is, present exactly where its place is its own rather than the declaration it sits under — `arm_unreached` and nothing else. A behavior with two `guard`s has two arms labelled `else`, so the place is what tells two of these apart, and it is the same place under the same key as the matching `branch.unreached` entry. The other kinds are cited at the behavior's own declaration, which the entry above already names.",
+            "$ref": "#/$defs/at"
           }
         }
       }

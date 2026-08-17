@@ -124,6 +124,28 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
+     * The refusal points at the entries in the terms of the report the reader was given.
+     *
+     * <p>A count is worth something beside a way of finding what it counts, and the two surfaces name
+     * the same findings differently: a person reads a mark and a consumer reads a field. Naming the
+     * mark whatever was printed sent a reader of a JSON document looking for a character that is
+     * nowhere in it.
+     */
+    @Test
+    void theRefusalNamesTheFindingsTheWayTheReportItPrintedDoes() throws Exception {
+        Run human = examples(UNCOVERED_ONLY, "--strict");
+        Run json = examples(UNCOVERED_ONLY, "--strict", "--format", "json");
+
+        assertEquals(1, json.code(), json.out() + json.err());
+        assertTrue(human.err().contains("marked `!` above"), human.err());
+        assertTrue(json.err().contains("`disposition: refused`"), json.err());
+        assertFalse(json.err().contains("`!`"), json.err());
+        // The word the document it just printed says it under.
+        assertTrue(json.out().contains("\"disposition\" : \"refused\""), json.out());
+        assertFalse(json.out().contains("!"), "a JSON document carries no mark: " + json.out());
+    }
+
+    /**
      * The round trip the report used to lose.
      *
      * <p>{@code --generate --boundaries} proposes a row for the boundary nothing sits on. Answering it
