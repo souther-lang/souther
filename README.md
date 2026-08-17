@@ -94,6 +94,23 @@ java -jar souther-bench/target/souther-bench.jar
 java -jar souther-bench/target/souther-bench.jar phase edit
 ```
 
+`souther-compiler` carries a conformance corpus: a model written for this compiler, held to reaching every top-level form, every reserved word and every standard library module the language declares, and checked against what the compiler answered about it last — the whole adequacy report and every diagnostic, written down beside the sources. A change that moves an answer is a change to those documents, made in the commit that moved it. This is what answers "did this break a model of the size someone writes"; running the examples repository is not part of it.
+
+```sh
+# Everything the corpus is held to. Ten seconds after an edited compiler source.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test'
+
+# One corpus while iterating.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
+  -Dsouther.conformance.corpus=catalog
+
+# Take up what a deliberate change did to the answers, then read the diff and commit it.
+mvn -pl souther-compiler test -Dtest='souther.compiler.conformance.*Test' \
+  -Dsouther.conformance.update=true
+```
+
+The last one rewrites the expected documents and then fails: a run that rewrote what it was going to be measured against has not measured anything.
+
 To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. The [examples repository](https://github.com/souther-lang/examples) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
 
 Embedding the compiler goes through `souther.compiler.Compiler`, the one class name a caller outside this repository is meant to write down. It compiles a source string containing either one module or several linked modules:

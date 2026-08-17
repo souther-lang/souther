@@ -35,11 +35,35 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
      */
     private static final String UPDATE = "souther.conformance.update";
 
+    /**
+     * One corpus instead of all of them, for someone going round this loop.
+     *
+     * <p>Only here. What the corpus reaches of the language is a claim about the corpus as a whole —
+     * a form written in one of them is written, whichever it is in — and narrowing that claim to a
+     * part would report the rest of the language as unreached. So the sibling test does not read
+     * this, and a narrowed run is still held to everything that test holds.
+     *
+     * <p>A name matching no corpus raises rather than narrowing to nothing. Every document passing
+     * is what this answers with, and a run that checked none of them would answer the same way.
+     */
+    private static final String ONLY = "souther.conformance.corpus";
+
     private record Document(String name, String file, String actual) {}
 
     private static List<Document> documents() {
+        String only = System.getProperty(ONLY);
+        List<ConformanceCorpus> corpora = ConformanceCorpus.all();
+        if (only != null && !only.isBlank()) {
+            List<ConformanceCorpus> named = corpora.stream()
+                    .filter(c -> c.name().equals(only.strip())).toList();
+            if (named.isEmpty()) {
+                throw new AssertionError("-D" + ONLY + "=" + only + " names no corpus. There is "
+                        + corpora.stream().map(ConformanceCorpus::name).toList());
+            }
+            corpora = named;
+        }
         List<Document> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
+        for (ConformanceCorpus corpus : corpora) {
             ConformanceCorpus.Analysed analysed = corpus.analyse();
             out.add(new Document(corpus.name(), corpus.name() + "/expected.report.json",
                     ConformanceSnapshot.report(analysed)));
@@ -57,7 +81,8 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
                 write(ConformanceCorpus.SOURCE_DIR.resolve(document.file()), document.actual());
             }
             throw new AssertionError("rewrote " + documents.size() + " expected document(s) under "
-                    + ConformanceCorpus.SOURCE_DIR + ". Read the diff: it is what this change did to"
+                    + ConformanceCorpus.SOURCE_DIR + " (" + documents.stream().map(Document::name)
+                            .distinct().toList() + "). Read the diff: it is what this change did to"
                     + " the compiler's answers. Then run again without -D" + UPDATE + ".");
         }
         List<String> differences = new ArrayList<>();

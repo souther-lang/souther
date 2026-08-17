@@ -11,6 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * says nothing reliable about how long anything takes — but what they are measured against has to
  * keep working, and a language change that leaves a corpus behind would otherwise be found the next
  * time someone took a measurement and read a faster number as an improvement.
+ *
+ * <p>Compiling is the whole claim. Whether the compiler still answers what it did about a model this
+ * size is the conformance corpus's, in {@code souther-compiler}, and looking for it here would find
+ * nothing: these sources are timed, not read back, and every measure a report carries could move
+ * without one of them failing to compile.
  */
 class CorpusTest {
 
