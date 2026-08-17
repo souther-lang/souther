@@ -67,7 +67,7 @@ public final class HelperInliner {
      * arity; the query layer works out which behaviors are here, since which of them may be named is
      * a fact about the module rather than about any one body.
      */
-    private Map<String, Integer> callableBehaviors = Map.of();
+    private Map<ValueName.Behavior, Integer> callableBehaviors = Map.of();
     /**
      * The values whose own answer this expansion was given, so that a reference to one need not
      * copy its body. Empty for every expansion that has no such answer — the tree the backend emits
@@ -258,7 +258,7 @@ public final class HelperInliner {
      * without being told names none of them, and a name it cannot reify is left as it was written
      * for the check to report.
      */
-    public HelperInliner namingBehaviors(Map<String, Integer> arities) {
+    public HelperInliner namingBehaviors(Map<ValueName.Behavior, Integer> arities) {
         this.callableBehaviors = Map.copyOf(arities);
         return this;
     }
@@ -1331,7 +1331,7 @@ public final class HelperInliner {
             // emitted code goes through the behavior's class and not through the `let` that
             // implements it. Only the ones a body may name are here — a behavior with a requirement
             // is a binding by the time it can be written.
-            case ValueName.Behavior b -> callableBehaviors.getOrDefault(b.name(), 0);
+            case ValueName.Behavior b -> callableBehaviors.getOrDefault(b, 0);
             // A binding holds whatever it was given; a construction, a checker built-in and a name
             // that denotes nothing stand for no declaration at all.
             case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ -> 0;
@@ -1470,7 +1470,7 @@ public final class HelperInliner {
                 continue;
             }
             Hir.Binder name = writing.binders().binder(
-                    "$s" + next() + "_" + spread.answered().bare(), spread.pos());
+                    "$s" + next() + "_" + spread.answered().denotes().name(), spread.pos());
             bound.add(name);
             values.add(substituted(spread.name(), value.writtenBody()));
             spreads.add(Hir.Var.local(name, spread.pos()));

@@ -31,6 +31,7 @@ import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -111,8 +112,9 @@ public final class Output {
          * stop being the same program, which is the one thing a measurement of them may not do.
          */
         record Inputs(Hir.Module lowered, Symbols scope, Map<String, String> typePackages,
-                      Map<String, Sig> sigs, Map<String, Sig> imported, Set<String> injected,
-                      Map<String, ReqSig> callees,
+                      Map<ValueName.Behavior, Sig> sigs, Map<ValueName.Behavior, Sig> imported,
+                      Set<ValueName.Behavior> injected,
+                      Map<ValueName.Behavior, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
@@ -125,10 +127,13 @@ public final class Output {
             // The same answer the check read. The backend replays the composition walk and emits
             // the codecs a signature says are needed, so building its own would be the boundary's
             // question answered a third time.
-            Answer<Map<String, Sig>> signatures = db.ask(new Bodies.Signatures(name));
-            Answer<Map<String, Sig>> imported = db.ask(new Bodies.Imported(name));
-            Answer<Set<String>> injected = db.ask(new Bodies.ImportedInjected(name));
-            Answer<Map<String, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
+            // The behaviors this module can name, each under the declaration it belongs to: what
+            // the check typed the compositions against, so the emitter routes over the same ones.
+            Answer<Map<ValueName.Behavior, Sig>> signatures = db.ask(new Bodies.Reachable(name));
+            Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Bodies.Imported(name));
+            Answer<Set<ValueName.Behavior>> injected =
+                    db.ask(new Bodies.ImportedInjected(name));
+            Answer<Map<ValueName.Behavior, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Bodies.Requirements(name));

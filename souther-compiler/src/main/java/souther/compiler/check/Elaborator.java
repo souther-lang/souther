@@ -41,7 +41,7 @@ public final class Elaborator {
     // --- expression typing (shared with the backend) ---
 
     /** No required behaviors are in scope (decoders, encoders, invariants — spec §invariant-expressions, §purity). */
-    static final Map<String, ReqSig> NO_REQS = Map.of();
+    static final Map<ValueName.Behavior, ReqSig> NO_REQS = Map.of();
 
 
     public static Type typeOf(Hir.Expr e, Scope env, CheckContext ctx) {
@@ -258,7 +258,7 @@ public final class Elaborator {
                             && named.denotes() instanceof ValueName.Local local)) {
                         throw notAValue(s, env);
                     }
-                    spreads.add(new Core.Read(named.bare(), local.id(), env.typeOf(local.id()),
+                    spreads.add(new Core.Read(named.denotes().name(), local.id(), env.typeOf(local.id()),
                             s.pos()));
                 }
                 List<Core.FieldValue> values = DataChecker.checkConstruction(built.written(),

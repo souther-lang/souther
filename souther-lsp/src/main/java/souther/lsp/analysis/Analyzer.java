@@ -1406,7 +1406,7 @@ public final class Analyzer {
             }
         }
         List<String> unsupplied = ExampleProvisioning.unsupplied(List.of(),
-                Requirements.names(required), prepared.forExamples());
+                Requirements.asWritten(required), prepared.forExamples());
         return built(TopLevelForm.EXAMPLE.starter() + " " + declared.name(),
                 CompletionItem.SNIPPET, module,
                 DeclarationSkeletons.exampleFor(declared.name(), argumentsOf(declared, sig),

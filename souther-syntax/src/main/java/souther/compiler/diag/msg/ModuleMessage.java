@@ -40,11 +40,6 @@ public sealed interface ModuleMessage extends Message {
     record AnAliasIsANameNothingElseAnswersTo() implements ModuleMessage, Supporting {}
 
     @Code(DiagnosticCode.E1508)
-    record ABehaviorIsNamedFromTwoModules(String behavior, String one, String other) implements ModuleMessage, Reported {}
-
-    record ABehaviorsNameIsAlsoItsInjectedField(String behavior) implements ModuleMessage, Supporting {}
-
-    @Code(DiagnosticCode.E1508)
     record TheNameIsImportedFromTwoModules(String name, String one, String other) implements ModuleMessage, Reported {}
 
     record ItWasAlreadyImportedHere(String name, String from) implements ModuleMessage, Supporting {}

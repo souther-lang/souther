@@ -5,7 +5,6 @@ import souther.compiler.generated.GeneratedBehavior;
 import souther.compiler.generated.JsonBoundary;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
@@ -14,6 +13,8 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
+import souther.compiler.check.BehaviorRequirement;
+import souther.compiler.query.Bodies;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;
 
@@ -211,7 +212,7 @@ public final class Runner {
         Prepared module = compilation.module(compilation.modules().get(0));
         Map<String, Sig> sigs = compilation.signatures(module.name());
 
-        Hir.BehaviorDef spec = resolveBehavior(module, behaviorName);
+        Hir.BehaviorDef spec = resolveBehavior(compilation, module, behaviorName);
         Sig sig = sigs.get(spec.name());
 
         // The compilation's own — its classes over the ones the path already built. Composing a
@@ -245,7 +246,7 @@ public final class Runner {
      */
     private static String named(Hir.Var name) {
         return switch (name) {
-            case Hir.Var.Denoting d -> d.bare();
+            case Hir.Var.Denoting d -> d.denotes().name();
             case Hir.Var.Unanswered u -> throw u.unexpectedHere();
         };
     }
@@ -270,13 +271,14 @@ public final class Runner {
      * module and arrives the way any other reader does. A behavior can answer the first and not the
      * second, and one the module keeps to itself is exactly that.
      */
-    private static Hir.BehaviorDef resolveBehavior(Prepared module, String requestedSpelling) {
+    private static Hir.BehaviorDef resolveBehavior(Compilation compilation, Prepared module,
+                                                   String requestedSpelling) {
         // What `--behavior` was given is a name arriving from outside, and it is looked up
         // against names the source settled.
         String requested = Reserved.name(requestedSpelling);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
-        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
+        Map<String, List<BehaviorRequirement>> requirements = requirementsOf(compilation, module);
         Map<String, Hir.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!exposes(module, b.name())) {
@@ -286,7 +288,7 @@ public final class Runner {
                     && implemented.contains(spec.name()) && spec.dependsOn().isEmpty()) {
                 drivable.put(spec.name(), spec);
             } else if (b instanceof Hir.PipeBehavior pipe
-                    && pipelineBlocker(module, pipe, implemented, pipeStages) == null) {
+                    && pipelineBlocker(pipe, requirements) == null) {
                 drivable.put(pipe.name(), pipe);
             }
         }
@@ -308,7 +310,7 @@ public final class Runner {
         if (found != null) {
             return found;
         }
-        throw whyNotRunnable(module, requested, drivable.keySet());
+        throw whyNotRunnable(compilation, module, requested, drivable.keySet());
     }
 
     /** A reason a behavior cannot be driven, in both forms: the catalog key with its arguments, and
@@ -322,33 +324,53 @@ public final class Runner {
      * behavior. A stage with no implementation (injected from Java) or one that needs its own injected
      * dependencies would make that constructor take those behaviors, which {@code run} cannot supply.
      */
-    private static Blocker pipelineBlocker(Prepared module, Hir.PipeBehavior pipe,
-            java.util.Set<String> implemented, Map<String, List<Hir.Var>> pipeStages) {
-        Map<String, Hir.SpecBehavior> specs = new java.util.HashMap<>();
-        for (Hir.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Hir.SpecBehavior spec) {
-                specs.put(spec.name(), spec);
+    private static Blocker pipelineBlocker(Hir.PipeBehavior pipe,
+            Map<String, List<BehaviorRequirement>> requirements) {
+        List<BehaviorRequirement> requires = requirements.get(pipe.name());
+        if (requires == null || requires.isEmpty()) {
+            return null;
+        }
+        // What the composition would be handed, and who wanted it. A dependency the composition
+        // itself asks for is a stage with no implementation; one another definition asks for came in
+        // through a stage that declares it.
+        BehaviorRequirement first = requires.get(0);
+        if (first.requiredBy().contains(pipe.name())) {
+            String stage = first.dependency().toString();
+            return new Blocker("run.pipeline.noimpl",
+                    "`" + pipe.name() + "` is a pipeline whose stage `" + stage
+                            + "` has no implementation (it is injected from Java), which `run` cannot supply.",
+                    pipe.name(), stage);
+        }
+        String stage = first.requiredBy().get(0);
+        List<String> wanted = new java.util.ArrayList<>();
+        for (BehaviorRequirement each : requires) {
+            if (each.requiredBy().contains(stage)) {
+                wanted.add("`" + each.dependency().name() + "`");
             }
         }
-        for (Hir.Var each : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
-            String stage = named(each);
-            if (!implemented.contains(stage)) {
-                return new Blocker("run.pipeline.noimpl",
-                        "`" + pipe.name() + "` is a pipeline whose stage `" + stage
-                                + "` has no implementation (it is injected from Java), which `run` cannot supply.",
-                        pipe.name(), stage);
-            }
-            Hir.SpecBehavior spec = specs.get(stage);
-            if (spec != null && !spec.dependsOn().isEmpty()) {
-                String dependencies = dependencyNames(spec);
-                return new Blocker("run.pipeline.depends",
-                        "`" + pipe.name() + "` is a pipeline whose stage `" + stage
-                                + "` depends on injected dependencies (" + dependencies
-                                + "), which `run` cannot supply.",
-                        pipe.name(), stage, dependencies);
-            }
-        }
-        return null;
+        String dependencies = String.join(", ", wanted);
+        return new Blocker("run.pipeline.depends",
+                "`" + pipe.name() + "` is a pipeline whose stage `" + stage
+                        + "` depends on injected dependencies (" + dependencies
+                        + "), which `run` cannot supply.",
+                pipe.name(), stage, dependencies);
+    }
+
+    /**
+     * What each behavior of the module has to be handed to be built.
+     *
+     * <p>Asked of the compilation rather than worked out from the stages here. Which behavior a
+     * stage names was answered when the module was resolved, and a name is not the answer: a stage
+     * naming another module's behavior and one naming this module's own can be written the same, so
+     * a walk that matched the spelling offered a composition nothing here can build as one `run`
+     * could drive. This is the same answer the emitter reads when it decides whether the generated
+     * class takes a constructor argument, which is the thing `run` needs to know.
+     */
+    private static Map<String, List<BehaviorRequirement>> requirementsOf(Compilation compilation,
+                                                                        Prepared module) {
+        Map<String, List<BehaviorRequirement>> answered =
+                compilation.db().ask(new Bodies.Requirements(module.name())).value();
+        return answered == null ? Map.of() : answered;
     }
 
     /**
@@ -359,11 +381,12 @@ public final class Runner {
      * what a reader standing outside it is owed, and following one of them would only bring the
      * author back to the same refusal.
      */
-    private static RunException whyNotRunnable(Prepared module, String name, java.util.Set<String> drivable) {
+    private static RunException whyNotRunnable(Compilation compilation, Prepared module,
+                                               String name, java.util.Set<String> drivable) {
         String available = drivable.isEmpty() ? "none" : String.join(", ", drivable);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
-        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
+        Map<String, List<BehaviorRequirement>> requirements = requirementsOf(compilation, module);
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;
@@ -375,7 +398,7 @@ public final class Runner {
                         name, available);
             }
             if (b instanceof Hir.PipeBehavior pipe) {
-                Blocker blocker = pipelineBlocker(module, pipe, implemented, pipeStages);
+                Blocker blocker = pipelineBlocker(pipe, requirements);
                 if (blocker == null) {
                     return fail("run.behavior.runnable",
                             "`" + name + "` is runnable. Available to run: " + available + ".", name, available);

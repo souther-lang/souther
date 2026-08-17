@@ -8,6 +8,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
+import souther.compiler.types.ValueName;
 
 import java.lang.classfile.ClassFile;
 import java.lang.constant.ClassDesc;
@@ -53,10 +54,11 @@ final class CodegenContext {
      * {@code invokevirtual}, not the unary {@code Behavior}. Both {@link Backend} and
      * {@link Backend.Gen}/{@code BodyGen} read this, so the field type, ctor param and call
      * descriptor cannot drift apart. */
-    private Map<String, List<Type>> reqParams = Map.of();
-    private Map<String, Type> reqSuccess = Map.of();
+    private Map<ValueName.Behavior, List<Type>> reqParams = Map.of();
+    private Map<ValueName.Behavior, Type> reqSuccess = Map.of();
 
-    void setRequiredSignatures(Map<String, List<Type>> params, Map<String, Type> success) {
+    void setRequiredSignatures(Map<ValueName.Behavior, List<Type>> params,
+                               Map<ValueName.Behavior, Type> success) {
         this.reqParams = params;
         this.reqSuccess = success;
     }
@@ -195,14 +197,14 @@ final class CodegenContext {
      * {@code [#calling-a-behavior]}). A call to one is built where it is called rather than read out
      * of a field, so it needs no injection; what is kept is the signature the call was typed against,
      * which decides the descriptor the call links to. Set once, with the required signatures. */
-    private Map<String, ReqSig> callees = Map.of();
+    private Map<ValueName.Behavior, ReqSig> callees = Map.of();
 
-    void setCalleeSignatures(Map<String, ReqSig> sigs) {
+    void setCalleeSignatures(Map<ValueName.Behavior, ReqSig> sigs) {
         this.callees = sigs;
     }
 
     /** The signature a behavior called by name was typed against, or null when the name is not one. */
-    ReqSig calleeSig(String name) {
+    ReqSig calleeSig(ValueName.Behavior name) {
         return callees.get(name);
     }
 
@@ -210,20 +212,20 @@ final class CodegenContext {
      * than the unary {@code Behavior} (issue #57, spec §java-base-class). Two inputs are too many to
      * hand along an arrow and none is too few, so both are called on their own class with a typed
      * {@code apply}; only a single input is the transformation {@code Behavior} describes. */
-    boolean isStandaloneRequired(String name) {
+    boolean isStandaloneRequired(ValueName.Behavior name) {
         List<Type> params = reqParams.get(name);
         return params != null && params.size() != 1;   // absent: not a required behavior at all
     }
 
     /** The JVM type a required behavior is stored/injected as: its own base class unless it takes
      * exactly one input, which is the unary {@code Behavior} composition contract. */
-    ClassDesc requiredFieldType(String name) {
+    ClassDesc requiredFieldType(ValueName.Behavior name) {
         return isStandaloneRequired(name) ? cdBehavior(name) : CD_Behavior;
     }
 
     /** The typed {@code apply(A,B,…)} descriptor of a standalone required behavior's base — the same
      * descriptor {@link Backend#generateRequiredBase} declared, so an {@code invokevirtual} on it links. */
-    MethodTypeDesc requiredApplyDesc(String name) {
+    MethodTypeDesc requiredApplyDesc(ValueName.Behavior name) {
         return typedApplyDesc(name, reqParams.get(name), reqSuccess.get(name));
     }
 
@@ -231,7 +233,7 @@ final class CodegenContext {
      * mapped to its runtime reference type. A collection keeps its {@code java.util.List/Map/Set} (or
      * runtime {@code Option}) interface — not degraded to {@code Object} — with the element type
      * carried by {@link #applySignatureOrNull} (issue #57). */
-    MethodTypeDesc typedApplyDesc(String name, List<Type> paramTypes, Type retType) {
+    MethodTypeDesc typedApplyDesc(ValueName.Behavior name, List<Type> paramTypes, Type retType) {
         ClassDesc[] p = new ClassDesc[paramTypes.size()];
         for (int i = 0; i < p.length; i++) {
             p[i] = applyParamType(paramTypes.get(i), name);
@@ -242,7 +244,7 @@ final class CodegenContext {
     /** The JVM reference type an {@code apply} slot takes for {@code t}: a collection keeps its raw
      * runtime interface ({@code java.util.List/Map/Set}, runtime {@code Option}); a data/union/primitive
      * maps to its ref; anything erased (type var, tuple, fn) falls back to {@code Object}. */
-    ClassDesc applyParamType(Type t, String name) {
+    ClassDesc applyParamType(Type t, ValueName.Behavior name) {
         if (t instanceof Type.ListOf || t instanceof Type.MapOf
                 || t instanceof Type.SetOf || t instanceof Type.OptionOf) {
             return JvmTypes.jvmType(t, this);
@@ -254,7 +256,7 @@ final class CodegenContext {
     /** A generic {@code Signature} for a typed {@code apply}, or null when no param/return is a
      * collection (the raw descriptor then already names every type). Mirrors the data-factory signature:
      * a collection element is carried via {@link JvmTypes#genericSig}, everything else by its descriptor. */
-    String applySignatureOrNull(String name, List<Type> params, Type ret) {
+    String applySignatureOrNull(ValueName.Behavior name, List<Type> params, Type ret) {
         boolean anyContainer = JvmTypes.genericSig(ret, this) != null;
         for (Type p : params) {
             anyContainer |= JvmTypes.genericSig(p, this) != null;
@@ -269,7 +271,7 @@ final class CodegenContext {
         return sb.append(")").append(applySigElem(ret, name)).toString();
     }
 
-    private String applySigElem(Type t, String name) {
+    private String applySigElem(Type t, ValueName.Behavior name) {
         String g = JvmTypes.genericSig(t, this);
         return g != null ? g : applyParamType(t, name).descriptorString();
     }
@@ -277,7 +279,7 @@ final class CodegenContext {
     /** The signature-form of a single {@code Behavior<In, Out>} type argument: a collection carries its
      * element type; a data/primitive/union its descriptor; a truly erased type (var/tuple/fn) yields
      * null, which suppresses the whole generic {@code Behavior} signature. */
-    String sigRefOrNull(Type t, String name) {
+    String sigRefOrNull(Type t, ValueName.Behavior name) {
         String g = JvmTypes.genericSig(t, this);
         if (g != null) {
             return g;
@@ -325,16 +327,16 @@ final class CodegenContext {
         return cd(def.declares());
     }
 
-    ClassDesc cdBehavior(String name) {
-        return cd(new GeneratedClass.BehaviorInterface(moduleOf(name), name));
+    ClassDesc cdBehavior(ValueName.Behavior name) {
+        return cd(new GeneratedClass.BehaviorInterface(name.module(), name.name()));
     }
 
     /** The implementation class behind a fn/pipe behavior's public interface. The interface is what
      * Java code declares; the implementation holds the fields, constructor and {@code apply}, and is
      * what a pipeline instantiates. Injected behaviors have none (their abstract base is the named
      * class). */
-    ClassDesc cdBehaviorImpl(String name) {
-        return cd(new GeneratedClass.BehaviorImpl(moduleOf(name), name));
+    ClassDesc cdBehaviorImpl(ValueName.Behavior name) {
+        return cd(new GeneratedClass.BehaviorImpl(name.module(), name.name()));
     }
 
     /**
@@ -343,8 +345,8 @@ final class CodegenContext {
      * right only for a behavior declared here. An imported one is called on a typed {@code apply}
      * naming this class, and the class lives where the behavior does.
      */
-    ClassDesc cdBehaviorResult(String name) {
-        return cd(new GeneratedClass.BehaviorResult(moduleOf(name), name));
+    ClassDesc cdBehaviorResult(ValueName.Behavior name) {
+        return cd(new GeneratedClass.BehaviorResult(name.module(), name.name()));
     }
 
     /**
@@ -382,8 +384,8 @@ final class CodegenContext {
 
     /** The bridged members of a behavior's output, decided in the module that declares that behavior:
      * a member is local to the union's own module, which for a call is the callee's, not this one's. */
-    List<TypeSymbol> bridgedMembersOf(String behavior, Type out) {
-        return bridgedMembersIn(moduleOf(behavior), out);
+    List<TypeSymbol> bridgedMembersOf(ValueName.Behavior behavior, Type out) {
+        return bridgedMembersIn(behavior.module(), out);
     }
 
     private List<TypeSymbol> bridgedMembersIn(String module, Type out) {
@@ -400,14 +402,10 @@ final class CodegenContext {
     }
 
     /** The bridge case of {@code member} in the module that declares {@code behavior}. */
-    ClassDesc bridgeCaseClassOf(String behavior, TypeSymbol member) {
-        return cd(new GeneratedClass.BridgeCase(moduleOf(behavior), member));
+    ClassDesc bridgeCaseClassOf(ValueName.Behavior behavior, TypeSymbol member) {
+        return cd(new GeneratedClass.BridgeCase(behavior.module(), member));
     }
 
-    /** The module a behavior is declared in: another module for an imported one, this one otherwise. */
-    private String moduleOf(String behavior) {
-        return typePackage.getOrDefault(behavior, pkg);
-    }
 
     /** The {@code $Fns} method name for a definition the module emits. A module-own helper keeps its
      * bare name; one reached under a qualified name ({@code List.foldFrom}) has the dot mangled to
@@ -458,7 +456,7 @@ final class CodegenContext {
      * named data/sum for a single case, the boxed class for a primitive. Returns {@code null} for a
      * list/option/map, which has no single reference class to name here.
      */
-    ClassDesc refTypeOrNull(Type t, String behaviorName) {
+    ClassDesc refTypeOrNull(Type t, ValueName.Behavior behaviorName) {
         if (t instanceof Type.Union) {
             return cdBehaviorResult(behaviorName);
         }

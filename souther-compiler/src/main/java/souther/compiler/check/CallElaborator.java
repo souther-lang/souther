@@ -149,7 +149,15 @@ public final class CallElaborator {
         }
         // Typing the call above refuses what is not a name outright, so what is left here names a
         // declaration and says which one and how this module reaches it.
-        return new Core.Call(callee.reachedAs(), callee.denotes(), ca.cores(), result, call.pos());
+        //
+        // A trailing parameter an implementation takes its `depends on` as is written as a binding
+        // and reaches the behavior the clause named: the call is to that behavior, and everything
+        // below asks what a call reaches rather than which parameter carried it here. The reach
+        // name stays what this module writes, which is the parameter's spelling.
+        ValueName denotes = callee.denotes() instanceof ValueName.Local local
+                && ctx.dependencyOf(local.id()) != null
+                ? ctx.dependencyOf(local.id()) : callee.denotes();
+        return new Core.Call(callee.reachedAs(), denotes, ca.cores(), result, call.pos());
     }
 
     /**
@@ -580,16 +588,27 @@ public final class CallElaborator {
                 // which is this compiler having failed to do one of them rather than anything the
                 // author wrote. Said outright: reported as a wrong library call, it named a library
                 // the author never wrote.
-                if (callee.reachedAs() instanceof ReachName.OfModule reached) {
-                    throw new IllegalStateException("`" + reached + "` was neither expanded nor"
+                if (callee.denotes() instanceof ValueName.Helper helper) {
+                    throw new IllegalStateException("`" + helper + "` was neither expanded nor"
                             + " bound before the call to it at " + call.pos() + " was typed");
                 }
                 // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
                 // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
                 // declaration; where the behavior comes from at run time is the backend's to know.
-                ReqSig required = ctx.reqs().get(callee.reaches());
-                if (required == null) {
-                    required = ctx.callees().get(callee.reaches());
+                // Asked of the declaration the call reaches. Two modules may declare a behavior
+                // of one name, and a table asked with the name this module writes answers for
+                // whichever of them the entry happens to be.
+                // A behavior named outright, or the trailing parameter an implementation takes it
+                // as — which is a binding, and which behavior it stands for was settled where the
+                // `depends on` clause was resolved.
+                ValueName.Behavior reached = switch (callee.denotes()) {
+                    case ValueName.Behavior behavior -> behavior;
+                    case ValueName.Local local -> ctx.dependencyOf(local.id());
+                    default -> null;
+                };
+                ReqSig required = reached == null ? null : ctx.reqs().get(reached);
+                if (required == null && reached != null) {
+                    required = ctx.callees().get(reached);
                 }
                 if (required == null) {
                     Elaborator.optionCaseWritten(call.written(), call.pos());

@@ -46,7 +46,7 @@ public final class HelperTyping {
      * repeated here.
      */
     static void checkHelpers(HelperInliner inliner, Symbols symbols,
-                                     Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
+                                     Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Hir.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
         // What each value of this module was settled as, filled in as they are checked. A value is
@@ -67,7 +67,7 @@ public final class HelperTyping {
             // compiled as is nullary and static, with nothing injected into it. Handed the same
             // requirement table a body gets, a call to a required behavior types here and reaches
             // no implementation at all.
-            Map<String, ReqSig> reachable = standsAt != null ? Map.of() : reqSigs;
+            Map<ValueName.Behavior, ReqSig> reachable = standsAt != null ? Map.of() : reqSigs;
             // A helper reads a settled value as a value does. A helper's body is expanded into
             // whoever calls it, and a value it names is expanded into that expansion, so a chain of
             // values written through helpers reaches every link exactly as one written without them
@@ -304,7 +304,7 @@ public final class HelperTyping {
      * it again is what turns "not settled" into a report that names the use that named no type.
      */
     private static void typeFromBody(Hir.FnDef h, List<Integer> open, Scope env,
-            Hir.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
+            Hir.Expr body, Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs,
             Map<String, Type> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
         // combinator determines its type; the inliner also needs the annotation to tell a function
@@ -504,9 +504,11 @@ public final class HelperTyping {
     }
 
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec §fn-declaration). */
-    private static void rejectInjectedCalls(Hir.Expr e, String helper, Set<String> injected) {
+    private static void rejectInjectedCalls(Hir.Expr e, String helper,
+                                            Set<ValueName.Behavior> injected) {
         if (e instanceof Hir.Apply call && call.answered() != null
-                && injected.contains(call.answered().reaches())) {
+                && call.answered().denotes() instanceof ValueName.Behavior reached
+                && injected.contains(reached)) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new NameMessage.ARecursiveHelperIsPure(helper, call.written())).build());
         }
@@ -527,7 +529,7 @@ public final class HelperTyping {
      * skipped and the ordinary inlined check still applies.
      */
     static void checkFunctionArgs(Hir.Expr e, Scope env, Symbols symbols,
-                                          Map<String, ReqSig> reqs, HelperInliner inliner) {
+                                          Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
         if (e instanceof Hir.Apply call) {
             checkHelperCallFnArgs(call, env, symbols, reqs, inliner);
         }
@@ -535,7 +537,7 @@ public final class HelperTyping {
     }
 
     private static void checkHelperCallFnArgs(Hir.Apply call, Scope env, Symbols symbols,
-                                              Map<String, ReqSig> reqs, HelperInliner inliner) {
+                                              Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner) {
         // what the call applies, which a binding of a helper's spelling is not: applying a
         // function-typed parameter is not a call to the helper it happens to be named after
         Hir.FnDef h = inliner.applied(call);
@@ -623,7 +625,7 @@ public final class HelperTyping {
 
     private static void checkFunctionArg(Hir.FnDef h, String paramName, Type.FnOf want, Hir.Expr arg,
                                          Scope env, Symbols symbols,
-                                         Map<String, ReqSig> reqs, HelperInliner inliner,
+                                         Map<ValueName.Behavior, ReqSig> reqs, HelperInliner inliner,
                                          Map<String, Type> bind) {
         if (arg instanceof Hir.Block lambda) {
             if (lambda.params().size() != want.params().size()) {

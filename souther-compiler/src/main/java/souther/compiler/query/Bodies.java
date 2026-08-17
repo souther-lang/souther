@@ -163,51 +163,67 @@ public final class Bodies {
     }
 
     /** The behaviors a module borrows whose requirement set is not empty where they are declared. */
-    public record ImportedDependencies(String name) implements Key<Set<String>> {
+    public record ImportedDependencies(String name) implements Key<Set<ValueName.Behavior>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Set<String>> compute(Db db) {
+        public Answer<Set<ValueName.Behavior>> compute(Db db) {
             if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.of(Set.of());
             }
-            Set<String> result = new LinkedHashSet<>();
-            borrowed(db, name).forEach((bare, from) -> {
-                Set<String> deps = db.ask(new Dependencies(from)).value();
-                if (deps != null && deps.contains(bare)) {
-                    result.add(bare);
-                }
-            });
-            return Answer.of(Ordered.set(result));
+            return Answer.of(Ordered.set(borrowedWhere(db, name, Dependencies::new)));
         }
     }
 
     /**
-     * The behaviors this module borrows by writing a bare name, and which module each is of.
+     * The behaviors this module borrows, each as the declaration it is.
      *
      * <p>Read off what the import lines settled, and not worked out from the lines again. Walked
      * here, a module that declares a behavior and does not offer it answers yes to "do you declare
      * one" — so a line refused for that was borrowed from all the same, and an author was told the
      * module does not expose the name and then told two modules were offering it.
      *
-     * <p>A name a qualified reference reaches is not here. That claims no bare spelling, so nothing
-     * settled it, and it joins where the one rule that sees it is.
+     * <p>A set of declarations and not a table under the names this module writes. Two modules
+     * declaring a behavior of one name are two behaviors, and a qualified reference says which is
+     * meant; keyed by the spelling, the second to arrive stood for both. What a bare name written
+     * here reaches is settled where the lines are, and one spelling two lines both claim is refused
+     * there — which is a question about what is written, not about what is declared.
      */
-    private static Map<String, String> borrowed(Db db, String module) {
-        Map<String, String> out = new LinkedHashMap<>();
+    private static Set<ValueName.Behavior> borrowed(Db db, String module) {
+        Set<ValueName.Behavior> out = new LinkedHashSet<>();
         Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(module));
         if (scoped.present()) {
-            scoped.value().imports().behaviors()
-                    .forEach((bare, named) -> out.put(bare, named.module()));
+            out.addAll(scoped.value().imports().behaviors().values());
         }
         // And the ones a qualified reference reaches, which claim no bare spelling and so were
         // settled by no contest. They are borrowed all the same: naming a behavior through its
         // module reaches it, and the signature and the injected field come with it.
         for (Resolve.QualifiedUse each : reachedByAQualifier(db, module)) {
-            out.putIfAbsent(each.named().name(), each.named().module());
+            out.add(each.named());
+        }
+        return out;
+    }
+
+    /**
+     * The behaviors this module borrows that {@code asks} answers yes about where they are
+     * declared — an injection target, one that may be called by name, one that requires something.
+     *
+     * <p>One walk for the three, so that which of them a borrowed behavior falls into is asked of
+     * the module that declares it in one way. Asked of the declaration and not of a name: the
+     * question is about that module's own behavior, so the name it goes by there is the whole of
+     * what is handed over, and what this module happens to write for it never enters.
+     */
+    private static Set<ValueName.Behavior> borrowedWhere(
+            Db db, String module, java.util.function.Function<String, Key<Set<String>>> asks) {
+        Set<ValueName.Behavior> out = new LinkedHashSet<>();
+        for (ValueName.Behavior each : borrowed(db, module)) {
+            Set<String> there = db.ask(asks.apply(each.module())).value();
+            if (there != null && there.contains(each.name())) {
+                out.add(each);
+            }
         }
         return out;
     }
@@ -240,46 +256,47 @@ public final class Bodies {
 
 
     /** The behaviors a module borrows that may be called by name where they are declared. */
-    public record ImportedCallable(String name) implements Key<Set<String>> {
+    public record ImportedCallable(String name) implements Key<Set<ValueName.Behavior>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Set<String>> compute(Db db) {
+        public Answer<Set<ValueName.Behavior>> compute(Db db) {
             if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.of(Set.of());
             }
-            Set<String> result = new LinkedHashSet<>();
-            borrowed(db, name).forEach((bare, from) -> {
-                Set<String> callable = db.ask(new Callable(from)).value();
-                if (callable != null && callable.contains(bare)) {
-                    result.add(bare);
-                }
-            });
-            return Answer.of(Ordered.set(result));
+            return Answer.of(Ordered.set(borrowedWhere(db, name, Callable::new)));
         }
     }
 
-    /** The signatures of the behaviors a module declares. */
-    public record Signatures(String name) implements Key<Map<String, Sig>> {
+    /**
+     * The signature of every behavior this module can name — its own and the ones it borrows — each
+     * under the declaration it belongs to.
+     *
+     * <p>What a composition's stages are typed against. A stage says which behavior it reaches and
+     * two behaviors of one name are two declarations, so this is keyed by the declaration: a table
+     * under the names written here answers one entry for both, and which one it is falls to
+     * whichever was written into it last.
+     */
+    public record Reachable(String name) implements Key<Map<ValueName.Behavior, Sig>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Sig>> compute(Db db) {
+        public Answer<Map<ValueName.Behavior, Sig>> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared =
                     db.ask(new Shapes.Desugared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
+            Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             if (!desugared.present() || !scope.present() || !imported.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(PipelineSigs.signatures(desugared.value().behaviors(),
+                return Answer.of(PipelineSigs.signatures(name, desugared.value().behaviors(),
                         scope.value(), imported.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -288,11 +305,13 @@ public final class Bodies {
     }
 
     /**
-     * The signatures of the behaviors a module borrows from others, under the bare names it reaches
-     * them by. A qualified behavior reference has already become an import, so the imports are the
-     * whole list.
+     * The signatures of the behaviors a module declares, by the name each is declared under.
+     *
+     * <p>A projection of {@link Reachable} onto this module's own declarations, which is what a
+     * reader walking the module's behaviors asks for. The bare name is a key here because the
+     * module every one of them belongs to is the one being asked about.
      */
-    public record Imported(String name) implements Key<Map<String, Sig>> {
+    public record Signatures(String name) implements Key<Map<String, Sig>> {
         @Override
         public String module() {
             return name;
@@ -300,6 +319,37 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, Sig>> compute(Db db) {
+            Answer<Map<ValueName.Behavior, Sig>> reachable = db.ask(new Reachable(name));
+            if (!reachable.present()) {
+                return Answer.absent();
+            }
+            Map<String, Sig> own = new LinkedHashMap<>();
+            reachable.value().forEach((behavior, sig) -> {
+                if (behavior.module().equals(name)) {
+                    own.put(behavior.name(), sig);
+                }
+            });
+            return Answer.of(Ordered.map(own));
+        }
+    }
+
+    /**
+     * The signatures of the behaviors a module borrows from others, each under the declaration it
+     * is. A qualified behavior reference reaches one as much as an import line does, so both are
+     * here.
+     *
+     * <p>Nothing is refused here for sharing a name. One bare spelling claimed by two import lines
+     * is a question about what this module writes, and is settled where the lines are; a behavior
+     * reached through its module claims no spelling, and is not in that contest.
+     */
+    public record Imported(String name) implements Key<Map<ValueName.Behavior, Sig>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Behavior, Sig>> compute(Db db) {
             // A module in a cycle borrows a signature from a module that borrows one from it. This
             // is where that would be asked, so this is where it stops; the cycle itself is reported
             // by Names.InCycle.
@@ -309,69 +359,32 @@ public final class Bodies {
             if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.absent();
             }
-            // A behavior's name is a member of the generated class, so two of them cannot share
-            // one. Two written lines claiming a spelling are a contest and are settled where
-            // claims are; what is left here is a name reached through a qualified reference — it
-            // claims no bare spelling, so no contest saw it, and this is the one rule that does.
-            Map<String, String> from = new LinkedHashMap<>();
-            Answer<Scoping.Scoped> scoped = db.ask(new Names.ModuleScope(name));
-            if (scoped.present()) {
-                scoped.value().imports().behaviors()
-                        .forEach((each, named) -> from.put(each, named.module()));
-            }
-            for (Resolve.QualifiedUse each : reachedByAQualifier(db, name)) {
-                String earlier = from.put(each.named().name(), each.named().module());
-                if (earlier != null && !earlier.equals(each.named().module())) {
-                    return Answer.absent(collision(each.named().name(), earlier,
-                            each.named().module(), each.at()));
-                }
-            }
-            Map<String, Sig> result = new LinkedHashMap<>();
-            from.forEach((each, declaredBy) -> {
-                Map<String, Sig> sigs = db.ask(new Signatures(declaredBy)).value();
-                Sig sig = sigs == null ? null : sigs.get(each);
+            Map<ValueName.Behavior, Sig> result = new LinkedHashMap<>();
+            for (ValueName.Behavior each : borrowed(db, name)) {
+                Map<String, Sig> sigs = db.ask(new Signatures(each.module())).value();
+                Sig sig = sigs == null ? null : sigs.get(each.name());
                 if (sig != null) {
                     result.put(each, sig);
                 }
-            });
+            }
             return Answer.of(Ordered.map(result));
         }
-
-        /**
-         * The same bare behavior name arrived from two modules. Unlike a type, a behavior name is
-         * also a member name in the generated class — an injected behavior is a field, and a stage
-         * that is one becomes a field here too — so the two cannot both be reached.
-         */
-        private Report collision(String bare, String earlier, String andThis, SourcePos at) {
-            return Report.raised(Diagnostic
-                    .say(new ModuleMessage.ABehaviorIsNamedFromTwoModules(bare, earlier, andThis))
-                    .at(at)
-                    .hint(new ModuleMessage.ABehaviorsNameIsAlsoItsInjectedField(bare)).build());
-        }
-
     }
 
     /** The behaviors a module borrows that are injection targets where they are declared, so a
      * composition here inherits them as requirements of its own. */
-    public record ImportedInjected(String name) implements Key<Set<String>> {
+    public record ImportedInjected(String name) implements Key<Set<ValueName.Behavior>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Set<String>> compute(Db db) {
+        public Answer<Set<ValueName.Behavior>> compute(Db db) {
             if (db.ask(new Front.Available(name)).value() == null) {
                 return Answer.of(Set.of());
             }
-            Set<String> result = new LinkedHashSet<>();
-            borrowed(db, name).forEach((bare, from) -> {
-                Set<String> injected = db.ask(new Injected(from)).value();
-                if (injected != null && injected.contains(bare)) {
-                    result.add(bare);
-                }
-            });
-            return Answer.of(Ordered.set(result));
+            return Answer.of(Ordered.set(borrowedWhere(db, name, Injected::new)));
         }
     }
 
@@ -396,7 +409,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, List<BehaviorRequirement>>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
-            Answer<Set<String>> injected = db.ask(new ImportedInjected(name));
+            Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
             if (!lowering.present() || !injected.present()) {
                 return Answer.absent();
             }
@@ -421,26 +434,26 @@ public final class Bodies {
      * with nothing at all would make every helper in the module undetermined on top of the real
      * error.
      */
-    public record ReqSigs(String name) implements Key<Map<String, ReqSig>> {
+    public record ReqSigs(String name) implements Key<Map<ValueName.Behavior, ReqSig>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, ReqSig>> compute(Db db) {
+        public Answer<Map<ValueName.Behavior, ReqSig>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
+            Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Dependencies(name));
-            Answer<Set<String>> borrowed = db.ask(new ImportedDependencies(name));
+            Answer<Set<ValueName.Behavior>> borrowed = db.ask(new ImportedDependencies(name));
             if (!prepared.present() || !scope.present() || !imported.present()
                     || !own.present() || !borrowed.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.dependencies(prepared.value().behaviors(), scope.value(),
-                        own.value(), imported.value(), borrowed.value()));
+                return Answer.of(InjectionSigs.dependencies(name, prepared.value().behaviors(),
+                        scope.value(), own.value(), imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
             }
@@ -455,26 +468,26 @@ public final class Bodies {
      * <p>What this reads of the callee is its declaration. A behavior's body is not among the
      * questions here, so editing one does not re-check the behaviors that call it.
      */
-    public record CalleeSigs(String name) implements Key<Map<String, ReqSig>> {
+    public record CalleeSigs(String name) implements Key<Map<ValueName.Behavior, ReqSig>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, ReqSig>> compute(Db db) {
+        public Answer<Map<ValueName.Behavior, ReqSig>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
+            Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Callable(name));
-            Answer<Set<String>> borrowed = db.ask(new ImportedCallable(name));
+            Answer<Set<ValueName.Behavior>> borrowed = db.ask(new ImportedCallable(name));
             if (!prepared.present() || !scope.present() || !imported.present()
                     || !own.present() || !borrowed.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.callable(prepared.value().behaviors(), scope.value(), own.value(),
-                        imported.value(), borrowed.value()));
+                return Answer.of(InjectionSigs.callable(name, prepared.value().behaviors(),
+                        scope.value(), own.value(), imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
             }
@@ -492,15 +505,16 @@ public final class Bodies {
      * <p>Its own question rather than a read of {@link CalleeSigs} at the expansion, so a change to a
      * behavior's input <em>types</em> does not expand every body of the module again.
      */
-    public record NamedBehaviorArity(String name) implements Key<Map<String, Integer>> {
+    public record NamedBehaviorArity(String name)
+            implements Key<Map<ValueName.Behavior, Integer>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Integer>> compute(Db db) {
-            Answer<Map<String, ReqSig>> sigs = db.ask(new CalleeSigs(name));
+        public Answer<Map<ValueName.Behavior, Integer>> compute(Db db) {
+            Answer<Map<ValueName.Behavior, ReqSig>> sigs = db.ask(new CalleeSigs(name));
             if (!sigs.present()) {
                 return Answer.absent();
             }
@@ -520,7 +534,7 @@ public final class Bodies {
         public Answer<Hir.Module> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
+            Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             if (!prepared.present() || !scope.present() || !reqSigs.present()) {
                 return Answer.absent();
             }
@@ -941,7 +955,8 @@ public final class Bodies {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
             Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
-            Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
+            Answer<Map<ValueName.Behavior, Integer>> behaviors =
+                    db.ask(new NamedBehaviorArity(module));
             if (!def.present() || !inliner.present() || !recursive.present()
                     || !behaviors.present()) {
                 return Answer.absent();
@@ -972,7 +987,8 @@ public final class Bodies {
             Answer<Hir.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.DISCHARGE);
             Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
-            Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
+            Answer<Map<ValueName.Behavior, Integer>> behaviors =
+                    db.ask(new NamedBehaviorArity(module));
             if (!def.present() || !inliner.present() || !recursive.present()
                     || !behaviors.present()) {
                 return Answer.absent();
@@ -1135,7 +1151,7 @@ public final class Bodies {
         for (Hir.Var req : spec.value().dependsOn()) {
             // Reported where it is written; it names no parameter for a body to be held to.
             if (req.answered() instanceof Hir.Var.Denoting named) {
-                names.add(named.bare());
+                names.add(named.denotes().name());
             }
         }
         return names;
@@ -1175,8 +1191,8 @@ public final class Bodies {
             Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
             Answer<Hir.FnDef> body = db.ask(new LoweredBody(module, behavior));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
-            Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(module));
-            Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
+            Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(module));
+            Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
             Answer<Map<String, DataChecker.Constructs>> constructs =
@@ -1308,10 +1324,10 @@ public final class Bodies {
             // being handed nothing — it goes as far as it can without one and abandons the module
             // there, and what went wrong was reported where signatures are made.
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
-            Answer<Set<String>> injected = db.ask(new ImportedInjected(name));
-            Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
+            Answer<Set<ValueName.Behavior>> injected = db.ask(new ImportedInjected(name));
+            Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
-            Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
+            Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Hir.FnDef>> published = db.ask(new ImportedDefinitions(name));
             if (!lowering.present() || !scope.present()
                     || !injected.present() || !reqSigs.present() || !sigs.present()

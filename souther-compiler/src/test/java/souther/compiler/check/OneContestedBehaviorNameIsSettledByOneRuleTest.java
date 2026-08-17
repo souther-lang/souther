@@ -24,10 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * refused them under a rule of its own — so an author who wrote one pair of lines was told about it
  * twice, in two vocabularies, on the same line.
  *
- * <p>The second rule is not the same rule, which is why it is still here. A behavior's name is a
- * member of the generated class, so two of them cannot share it however they arrived — and one of
- * the ways they arrive is a qualified reference, which claims no bare spelling and so is settled by
- * no contest. That case has one rule too, and it is that one.
+ * <p>There is no second rule. A qualified reference claims no bare spelling, so no contest sees it —
+ * and there is no contest to see: it says which module the behavior comes from, and a behavior is
+ * the module that declares it and its name. What the two rules used to have in common was the
+ * spelling, which is what the first of them is about and the second never was.
  */
 class OneContestedBehaviorNameIsSettledByOneRuleTest {
 
@@ -74,24 +74,26 @@ class OneContestedBehaviorNameIsSettledByOneRuleTest {
     }
 
     /**
-     * A written line and a qualified reference, which no contest settles.
+     * A written line and a qualified reference, which no contest settles — and which nothing else
+     * settles either.
      *
      * <p>The reference names its module, so what it denotes was never in doubt and the scope says
-     * nothing. What the two cannot both have is the member name in the generated class, and that is
-     * this rule.
+     * nothing. The two are two behaviors: each stage is typed against the one it names, and the
+     * bare spelling this module writes reaches only the one the line brought in.
      */
     @Test
-    void aQualifiedReferenceBesideAWrittenLineIsStillRefused() {
-        assertEquals(List.of("ABehaviorIsNamedFromTwoModules", "ImportedButNeverUsedUnderThisName"),
-                saidAbout("""
-                        module app.own exposing ( Out, flow : Out )
-                        import app.other ( quote, In )
+    void aQualifiedReferenceBesideAWrittenLineIsTwoBehaviors() {
+        assertEquals(List.of(), saidAbout("""
+                        module app.own exposing ( Out, flow : Out, fromThird : Out )
+                        import app.other ( quote )
                         data Out = { n: Int }
                         behavior plus : (m: app.other.Mid) -> Out constructs Out
                         let plus (m) = Out { n = m.n + 1 }
+                        behavior plusThird : (m: app.third.Mid) -> Out constructs Out
+                        let plusThird (m) = Out { n = m.n + 1 }
                         behavior flow = quote >-> plus
-                        behavior other = app.third.quote >-> plus
+                        behavior fromThird = app.third.quote >-> plusThird
                         """),
-                "no claim was made on the bare spelling, so this is the one rule that sees it");
+                "each names the behavior it means, and neither is the other");
     }
 }

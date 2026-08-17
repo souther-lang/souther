@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,7 +44,7 @@ public final class Lower {
      * the binding a call becomes (issue #178): a type settled afterwards would never reach it.
      */
     public static Hir.Module settle(Prepared prepared, Symbols symbols,
-                                    Map<String, ReqSig> reqSigs) {
+                                    Map<ValueName.Behavior, ReqSig> reqSigs) {
         return HelperParams.settle(prepared.module(), symbols, reqSigs);
     }
 

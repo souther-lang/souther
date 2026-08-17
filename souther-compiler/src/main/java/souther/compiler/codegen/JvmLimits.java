@@ -10,6 +10,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.HashSet;
 import java.util.List;
@@ -75,7 +76,7 @@ final class JvmLimits {
      */
     static void checkParameterSlots(Hir.Module module, CodegenContext ctx,
                                     Map<String, Hir.FnDef> recursiveHelpers,
-                                    Map<String, Sig> sigs,
+                                    Map<ValueName.Behavior, Sig> sigs,
                                     Map<String, List<BehaviorRequirement>> requirements) {
         for (Hir.Def def : module.defs()) {
             if (def instanceof Hir.Data data) {
@@ -101,7 +102,7 @@ final class JvmLimits {
             implemented.add(fn.name());
         }
         for (Hir.BehaviorDef bd : module.behaviors()) {
-            Sig sig = sigs.get(bd.name());
+            Sig sig = sigs.get(new ValueName.Behavior(module.name(), bd.name()));
             // a composition whose stage names nothing has no signature, and nothing is emitted for it
             if (sig != null && sig.inputTypes().size() > INSTANCE_SLOTS) {
                 throw tooWide(Wide.BEHAVIOR_PARAMETERS, bd.written(), sig.inputTypes().size(),

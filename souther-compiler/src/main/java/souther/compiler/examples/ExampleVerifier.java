@@ -1194,7 +1194,11 @@ public final class ExampleVerifier {
     private DependencyStandin resolveFake(FixtureReader fixtures, String target,
                                           BehaviorRequirement req, Hir.ExampleRow row,
                                           List<Diagnostic> out) {
-        String depName = req.dependency();
+        // The name the dependency is written under here. A `fake` names one identifier
+        // (spec [#fake]), so this is what a row can say; a dependency another module declares is
+        // reached by its own name and is not an injection target of this module, which is what the
+        // refusal below says.
+        String depName = req.dependency().name();
         Hir.SpecBehavior dep = injectedSpec(depName);
         if (dep == null) {
             out.add(fakeMissingDiag(target, req, row, "`" + depName
@@ -1252,10 +1256,11 @@ public final class ExampleVerifier {
         }
         Diagnostic.Builder d = stages.isEmpty()
                 ? Diagnostic.at(row.pos())
-                        .say(new ExampleMessage.ADependencyHasNoFake(target, req.dependency()))
+                        .say(new ExampleMessage.ADependencyHasNoFake(target,
+                                req.dependency().name()))
                 : Diagnostic.at(row.pos())
                         .say(new ExampleMessage.ADependencyReachedThroughHasNoFake(target,
-                                req.dependency(), String.join(", ", stages)));
+                                req.dependency().name(), String.join(", ", stages)));
         return d.hint(new ExampleMessage.WriteAFakeLikeThis(detail)).build();
     }
 

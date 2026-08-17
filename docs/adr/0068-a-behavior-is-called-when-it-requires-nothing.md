@@ -1,6 +1,8 @@
 # ADR-0068: What a name may be used for does not depend on which module reads it
 
-Status: Accepted (the clause is `depends on` since ADR-0071; it was `requires` when this was decided)
+Status: Accepted (the clause is `depends on` since ADR-0071; it was `requires` when this was decided).
+One consequence below was withdrawn by issue #792: two behaviors of one name, reached through their
+modules, are told apart like types. What follows is the measurement that withdrew it.
 
 ## Context
 
@@ -59,20 +61,31 @@ Prior art is the reason this is a correction rather than a design. Elm exposes v
 | Hiding a type's construction | `constructs` on the builder | leave constructors out of `exposing` | `private` constructor / `.fsi` | leave constructors out of the list |
 | Public signature on an unexposed type | allowed (issue #187) | allowed (inference) | `FS0410` | allowed (inference) |
 | A sum over cases from another module | **no (E1606)** | yes | yes | yes |
-| Two same-named imports, told apart by qualifier | types yes, **behaviors no** | yes | yes | yes |
+| Two same-named imports, told apart by qualifier | yes | yes | yes | yes |
 | Effects/dependencies in the signature | `depends on` | none (pure) | none | effect in the type |
 
-Bold marks where Souther is alone. Four of those five are the surface someone coming from the three would notice, and each has a reason of its own:
+Bold marks where Souther is alone. Three of those four are the surface someone coming from the three would notice, and each has a reason of its own:
 
 - **No helper export.** `exposing` lists what the spec DSL has (ADR-0005), and a helper is not in it. A pure function meant to be shared is written as a behavior, which — after this decision — is applied like any other function. The keyword differs; the capability does not.
 - **Qualified access with no import.** The standard library already worked this way, and ADR-0058 extended it rather than adding a second rule. Closer to F# than to Elm, and strictly more permissive than both — it removes an error rather than adding one.
-- **No sum over imported cases (E1606).** The only one of the five with no design content: a case class carries the interfaces it implements, decided when its own module is generated, so a union declared elsewhere cannot enrol it (ADR-0057, measured against `ClassCastException`).
-- **Behaviors that cannot be told apart by qualifier.** A behavior name is also a field name in the class that injects it, so qualifying does not separate the fields.
+- **No sum over imported cases (E1606).** The only one of the four with no design content: a case class carries the interfaces it implements, decided when its own module is generated, so a union declared elsewhere cannot enrol it (ADR-0057, measured against `ClassCastException`).
 
-The first is a consequence of what `exposing` is for; the second widens what is legal; the last two are the JVM showing through, and the specification names them as such rather than as module-system principles. What is *not* on the list any more is a name that is visible and not applicable, which none of the three can express and Souther no longer does either.
+The first is a consequence of what `exposing` is for; the second widens what is legal; the last is the JVM showing through, and the specification names it as such rather than as a module-system principle. What is *not* on the list any more is a name that is visible and not applicable, which none of the three can express and Souther no longer does either.
+
+## What issue #792 withdrew
+
+This decision used to carry a fourth entry: a behavior's name is also a field name in the class that injects it, so two behaviors of one name could not both be reached and naming both was refused. That was written as a fact about the JVM. It is a fact about one line of the emitter.
+
+What the JVM requires is that a class not declare one member twice. Which member names a generated class uses is the emitter's to choose, and choosing the behavior's name is what made two dependencies of one name collide. Named by position — `$dep0`, `$dep1`, in the injecting constructor's parameter order — they do not, and `$` is barred from an identifier (§identifier) so no author can write one. Nothing else about the class moves: the constructor's parameters, the `bind` factory's signature and the body are what they were. Measured over the example corpus: of 5020 generated classes, 23 differ, and every differing line is a field declaration or a read or write of that field.
+
+The restriction it justified was not a restriction the language needed. Resolution answers which behavior a qualified reference reaches, and answered it before this; what came after read the name instead, so a module's own behavior and one it reached silently shared an entry in every table below — a composition typed against a behavior nobody named, a class file emitted under a name it did not declare, an injection demanded that the model never asked for. None of that was reported.
+
+The rule that stands is the one about spellings, and it is untouched: a bare name two `import` lines both claim has two answers here and is refused (E1508). That error already tells the author to import at most one and qualify the other, which is the very thing the withdrawn consequence then refused.
+
+This strengthens the decision rather than qualifying it. What a name may be used for is decided by what it is — and which thing it is, when two are spelled alike, is decided by the reference and not by which module happens to be reading.
 
 ## References
 
 - Specification: `[#modules]`, `[#depends-on]`, `[#calling-a-behavior]`, `[#requirement-propagation]`, `[#e1607]`, `[#e1608]`
-- Issue #159, issue #187
+- Issue #159, issue #187, issue #792
 - ADR-0005, ADR-0016, ADR-0017, ADR-0052, ADR-0058

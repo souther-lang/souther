@@ -110,11 +110,18 @@ public sealed interface ReachName {
         return switch (denotes) {
             case ValueName.Helper helper -> helper.module().equals(self)
                     ? new Bare(helper.name()) : new OfModule(helper.module(), helper.name());
+            // A behavior is declared by a module, so it is reached the two ways a helper is, and
+            // the answer is read off the declaration rather than off the spelling. Written it can
+            // be either — a module's own behavior may be written through its own module, and
+            // another's may be written bare where an import brought it in — and neither spelling
+            // says which module declares what it reaches.
+            case ValueName.Behavior behavior -> behavior.module().equals(self)
+                    ? new Bare(behavior.name())
+                    : new OfModule(behavior.module(), behavior.name());
             case ValueName.Stdlib library -> new OfLibrary(library);
             // Each of these is reached by the name it is written with: a binding is named where it
-            // is bound, and a behavior and a type by what this module calls them.
-            case ValueName.Local _, ValueName.Behavior _, ValueName.OfType _,
-                    ValueName.Builtin _ -> new Bare(written);
+            // is bound, and a type used as a value by what this module calls it.
+            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _ -> new Bare(written);
         };
     }
 

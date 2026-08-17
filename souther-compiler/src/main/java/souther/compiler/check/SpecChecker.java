@@ -46,30 +46,33 @@ public final class SpecChecker {
      * check has not already seen.
      */
     static void checkBehaviorsDoNotRecurse(Hir.Module module) {
-        Set<String> names = new LinkedHashSet<>();
+        // This module's own behaviors, as declarations. A reference to another module's may be
+        // written with the same name as one of these, and it is not one of these: matched by
+        // spelling, a stage naming `other.f` would be an edge from this module's `f` to itself.
+        Set<ValueName.Behavior> names = new LinkedHashSet<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
-            names.add(b.name());
+            names.add(new ValueName.Behavior(module.name(), b.name()));
         }
-        Map<String, List<String>> edges = new LinkedHashMap<>();
+        Map<ValueName.Behavior, List<ValueName.Behavior>> edges = new LinkedHashMap<>();
         Map<String, Hir.FnDef> fns = new LinkedHashMap<>();
         for (Hir.FnDef fn : module.fns()) {
             fns.put(fn.name(), fn);
         }
         for (Hir.BehaviorDef b : module.behaviors()) {
-            List<String> out = new ArrayList<>();
+            List<ValueName.Behavior> out = new ArrayList<>();
             switch (b) {
                 case Hir.SpecBehavior spec -> {
                     for (Hir.Var req : spec.dependsOn()) {
-                        if (!(req.answered() instanceof Hir.Var.Denoting named)) {
-                            continue;   // it names no behavior, so it is no edge of this graph
-                        }
-                        if (names.contains(named.bare()) && !out.contains(named.bare())) {
-                            out.add(named.bare());
+                        ValueName.Behavior named = behaviorReached(req);
+                        if (named != null && names.contains(named) && !out.contains(named)) {
+                            out.add(named);
                         }
                     }
                     Hir.FnDef fn = fns.get(spec.name());
                     if (fn != null) {
-                        for (String called : requiredCalls(fn.writtenBody(), names)) {
+                        for (ValueName.Behavior called
+                                : requiredCalls(fn.writtenBody(), names,
+                                        dependencyBindings(spec, fn))) {
                             if (!out.contains(called)) {
                                 out.add(called);
                             }
@@ -78,24 +81,27 @@ public final class SpecChecker {
                 }
                 case Hir.PipeBehavior pipe -> {
                     for (Hir.Var stage : pipe.stages()) {
-                        if (!(stage.answered() instanceof Hir.Var.Denoting named)) {
-                            continue;   // it names no behavior, so it is no edge of this graph
-                        }
-                        if (names.contains(named.bare()) && !out.contains(named.bare())) {
-                            out.add(named.bare());
+                        ValueName.Behavior named = behaviorReached(stage);
+                        if (named != null && names.contains(named) && !out.contains(named)) {
+                            out.add(named);
                         }
                     }
                 }
             }
-            edges.put(b.name(), out);
+            edges.put(new ValueName.Behavior(module.name(), b.name()), out);
         }
         for (Hir.BehaviorDef b : module.behaviors()) {
-            List<String> path = new ArrayList<>();
-            if (reaches(b.name(), b.name(), edges, path, new HashSet<>())) {
-                path.add(b.name());
+            ValueName.Behavior self = new ValueName.Behavior(module.name(), b.name());
+            List<ValueName.Behavior> path = new ArrayList<>();
+            if (reaches(self, self, edges, path, new HashSet<>())) {
+                path.add(self);
+                List<String> written = new ArrayList<>();
+                for (ValueName.Behavior each : path) {
+                    written.add(each.name());
+                }
                 throw CompileException.of(Diagnostic
                                 .at(b.pos())
-                                .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(b.name(), String.join(" -> ", path))).build());
+                                .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(b.name(), String.join(" -> ", written))).build());
             }
         }
     }
@@ -103,13 +109,14 @@ public final class SpecChecker {
     /** Whether {@code target} is reachable from {@code from}, recording the way there in
      *  {@code path}. {@code path} starts with {@code from} and ends at the last step before
      *  {@code target}. */
-    private static boolean reaches(String from, String target, Map<String, List<String>> edges,
-                                   List<String> path, Set<String> seen) {
+    private static boolean reaches(ValueName.Behavior from, ValueName.Behavior target,
+                                   Map<ValueName.Behavior, List<ValueName.Behavior>> edges,
+                                   List<ValueName.Behavior> path, Set<ValueName.Behavior> seen) {
         if (!seen.add(from)) {
             return false;
         }
         path.add(from);
-        for (String next : edges.getOrDefault(from, List.of())) {
+        for (ValueName.Behavior next : edges.getOrDefault(from, List.of())) {
             if (next.equals(target) || reaches(next, target, edges, path, seen)) {
                 return true;
             }
@@ -129,18 +136,21 @@ public final class SpecChecker {
      * behavior has to be declared or imported. The body check would see only a call it cannot type
      * and report all three as a name that resolves to nothing (E1023).
      */
-    static void checkRequiresAreInjectionTargets(Hir.Module module, Map<String, ReqSig> reqSigs,
-                                                 Map<String, ReqSig> calleeSigs) {
+    static void checkRequiresAreInjectionTargets(Hir.Module module, Map<ValueName.Behavior, ReqSig> reqSigs,
+                                                 Map<ValueName.Behavior, ReqSig> calleeSigs) {
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!(b instanceof Hir.SpecBehavior spec)) {
                 continue;
             }
             for (Hir.Var required : spec.dependsOn()) {
-                if (!(required.answered() instanceof Hir.Var.Denoting named)
-                        || reqSigs.containsKey(named.bare())) {
+                if (!(required.answered() instanceof Hir.Var.Denoting named)) {
                     continue;
                 }
-                String req = named.bare();
+                ValueName.Behavior reached = behaviorReached(required);
+                if (reached != null && reqSigs.containsKey(reached)) {
+                    continue;
+                }
+                String req = named.written().canonical();
                 // Three ways a name can be wrong here, told apart because the fix differs. A
                 // behavior that depends on nothing has nothing to inject and is called instead; a
                 // composition cannot be rested on because its requirements are not written; a name
@@ -148,7 +158,7 @@ public final class SpecChecker {
                 // what the name was resolved to, so an imported composition is the composition case
                 // rather than the unknown one — scanning this module's own behaviors would only find
                 // the local ones. All are reported at the name, as the clause that names nothing is.
-                boolean dependsOnNothing = calleeSigs.containsKey(req);
+                boolean dependsOnNothing = reached != null && calleeSigs.containsKey(reached);
                 boolean aComposition = named.denotes() instanceof ValueName.Behavior;
                 throw CompileException.of(Diagnostic.at(required.written().reportedAt())
                         .say(dependsOnNothing
@@ -240,8 +250,8 @@ public final class SpecChecker {
      */
     static Core checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
                                     InvariantChecker.Source discharge,
-                                    Symbols symbols, Map<String, ReqSig> calleeSigs,
-                                    Map<String, ReqSig> reqSigs, HelperInliner inliner,
+                                    Symbols symbols, Map<ValueName.Behavior, ReqSig> calleeSigs,
+                                    Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     List<Diagnostic> warnings) {
@@ -299,6 +309,12 @@ public final class SpecChecker {
             env = env.with(fn.params().get(i).binder(),
                     TypeOps.successType(spec.params().get(i).type()));
         }
+        // Which behavior each trailing parameter stands for. The clause and the parameter list are
+        // held in the same order above, so the two are read together here rather than paired by
+        // name — an implementation names its own parameters, and the behaviors it depends on may be
+        // declared by different modules under one name.
+        Map<souther.compiler.types.BindingId, ValueName.Behavior> dependsOn =
+                dependencyBindings(spec, fn);
         Type output = TypeOps.successType(spec.ret());
         // recursive helpers this behavior calls resolve through their signatures (spec §fn-declaration); merged
         // only for typing, so the construction and dependency walks below still see the business params alone.
@@ -317,7 +333,8 @@ public final class SpecChecker {
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
         Core elaboratedBody = Elaborator.elaborate(body, tenv,
-                new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs), output);
+                new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
+                        .withDependencies(dependsOn), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
             throw CompileException.of(Diagnostic
@@ -382,24 +399,27 @@ public final class SpecChecker {
         }
         // The `depends on` clause must match what the fn actually calls (spec §depends-on): missing -> E1602,
         // extra -> E1603.
-        List<String> actual = requiredCalls(body, reqSigs.keySet());
-        List<String> declared = new ArrayList<>();
+        List<ValueName.Behavior> actual = requiredCalls(body, reqSigs.keySet(), dependsOn);
+        List<ValueName.Behavior> declared = new ArrayList<>();
         for (Hir.Var required : spec.dependsOn()) {
             // Reported where it is written; it declares no requirement for a call to answer to.
-            if (required.answered() instanceof Hir.Var.Denoting named) {
-                declared.add(named.bare());
+            ValueName.Behavior named = behaviorReached(required);
+            if (named != null) {
+                declared.add(named);
             }
         }
-        for (String call : actual) {
+        for (ValueName.Behavior call : actual) {
             if (!declared.contains(call)) {
+                String written = call.name();
                 throw CompileException.of(Diagnostic.at(spec.pos())
-                                .hint(new DeclarationMessage.AddTheDependsOnEntry(call, spec.name())).say(new DeclarationMessage.ItCallsSomethingWithNoImplementation(fn.name(), call, spec.name())).build());
+                                .hint(new DeclarationMessage.AddTheDependsOnEntry(written, spec.name())).say(new DeclarationMessage.ItCallsSomethingWithNoImplementation(fn.name(), written, spec.name())).build());
             }
         }
-        for (String req : declared) {
+        for (ValueName.Behavior req : declared) {
             if (!actual.contains(req)) {
+                String written = req.name();
                 throw CompileException.of(Diagnostic.at(spec.pos())
-                                .hint(new DeclarationMessage.RemoveTheDependsOnEntry(req)).say(new DeclarationMessage.ItDeclaresDependsOnAndNeverCallsIt(spec.name(), req, fn.name())).build());
+                                .hint(new DeclarationMessage.RemoveTheDependsOnEntry(written)).say(new DeclarationMessage.ItDeclaresDependsOnAndNeverCallsIt(spec.name(), written, fn.name())).build());
             }
         }
         // Intraprocedural invariant discharge: seed from the input
@@ -414,7 +434,7 @@ public final class SpecChecker {
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv,
                         new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
-                                .forDischarge(), output);
+                                .withDependencies(dependsOn).forDischarge(), output);
         InvariantChecker.Findings inv = InvariantChecker.analyze(dischargeBody,
                 discharge == null ? Map.of() : discharge.invariants(), env, symbols);
         warnings.addAll(inv.warnings());
@@ -670,13 +690,13 @@ public final class SpecChecker {
      * very line 14.1 cites.
      */
     static void checkStagesAreSingleInput(Hir.Module module) {
-        Map<String, Integer> arity = new HashMap<>();
+        Map<ValueName.Behavior, Integer> arity = new HashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (b instanceof Hir.SpecBehavior spec) {
-                arity.put(spec.name(), spec.params().size());
+                arity.put(new ValueName.Behavior(module.name(), spec.name()), spec.params().size());
             }
         }
-        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!(b instanceof Hir.PipeBehavior pipe)) {
                 continue;
@@ -686,14 +706,14 @@ public final class SpecChecker {
             List<Hir.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
                     pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
-                if (!(stages.get(i).answered() instanceof Hir.Var.Denoting named)) {
+                ValueName.Behavior stage = behaviorReached(stages.get(i));
+                if (stage == null) {
                     continue;   // reported where it is written; it declares no arity to hold it to
                 }
-                String stage = named.bare();
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
                     throw CompileException.of(Diagnostic
-                                    .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stage, String.valueOf(n), pipe.name())).build());
+                                    .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stage.name(), String.valueOf(n), pipe.name())).build());
                 }
             }
         }
@@ -701,23 +721,69 @@ public final class SpecChecker {
 
     /** The distinct injection targets a fn body calls, in first-seen order. Calls may appear
      * anywhere in an expression (e.g. inline in a record literal), not only bound to a let. */
-    public static List<String> requiredCalls(Hir.Expr body, java.util.Set<String> requiredNames) {
-        List<String> calls = new java.util.ArrayList<>();
-        collectRequiredCalls(body, requiredNames, calls);
+    public static List<ValueName.Behavior> requiredCalls(
+            Hir.Expr body, java.util.Set<ValueName.Behavior> requiredNames,
+            Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies) {
+        List<ValueName.Behavior> calls = new java.util.ArrayList<>();
+        collectRequiredCalls(body, requiredNames, dependencies, calls);
         return calls;
     }
 
-    private static void collectRequiredCalls(Hir.Expr e, Set<String> requiredNames, List<String> out) {
-        if (e instanceof Hir.Apply call && call.answered() != null
-                && requiredNames.contains(call.answered().reaches())
-                && !out.contains(call.answered().reaches())) {
-            out.add(call.written());
+    /**
+     * Which behavior each trailing parameter of {@code fn} stands for.
+     *
+     * <p>The clause and the parameter list are held in the same order (checked just above), so the
+     * two are read together rather than paired by name: an implementation names its own parameters,
+     * and two modules may declare a behavior of one name.
+     */
+    static Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencyBindings(
+            Hir.SpecBehavior spec, Hir.FnDef fn) {
+        Map<souther.compiler.types.BindingId, ValueName.Behavior> bound = new LinkedHashMap<>();
+        int business = spec.params().size();
+        for (int i = 0; i < spec.dependsOn().size() && business + i < fn.params().size(); i++) {
+            ValueName.Behavior named = behaviorReached(spec.dependsOn().get(i));
+            if (named != null) {
+                bound.put(fn.params().get(business + i).binder().id(), named);
+            }
+        }
+        return bound;
+    }
+
+    /**
+     * The behavior {@code named} reaches, or null where resolution found none or it names something
+     * that is no behavior.
+     *
+     * <p>Asked of the declaration and not of the name it was written under. A call to another
+     * module's behavior and a call to one this module declares can be written the same, and what a
+     * requirement is about is one of the two.
+     */
+    private static ValueName.Behavior behaviorReached(Hir.Var named) {
+        return named.answered() != null
+                && named.answered().denotes() instanceof ValueName.Behavior behavior
+                ? behavior : null;
+    }
+
+    private static void collectRequiredCalls(
+            Hir.Expr e, Set<ValueName.Behavior> requiredNames,
+            Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencies,
+            List<ValueName.Behavior> out) {
+        if (e instanceof Hir.Apply call && call.answered() != null) {
+            // The behavior called: one named outright, or the trailing parameter an implementation
+            // takes it as, which is a binding.
+            ValueName.Behavior reached = switch (call.answered().denotes()) {
+                case ValueName.Behavior behavior -> behavior;
+                case ValueName.Local local -> dependencies.get(local.id());
+                default -> null;
+            };
+            if (reached != null && requiredNames.contains(reached) && !out.contains(reached)) {
+                out.add(reached);
+            }
         }
         // Every subexpression, through the one exhaustive walk — a call to an injected behavior may
         // sit anywhere. Listing the node kinds here instead left `-dep(x)` and `(dep(x), y)` out of
         // the set, and a block's requirements still float out to the behavior that passes it
         // (spec §blocks, §requirement-propagation) because a Block's body is one of its children.
-        Hir.forEachChild(e, c -> collectRequiredCalls(c, requiredNames, out));
+        Hir.forEachChild(e, c -> collectRequiredCalls(c, requiredNames, dependencies, out));
     }
 
 }

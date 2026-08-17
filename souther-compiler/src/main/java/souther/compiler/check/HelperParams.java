@@ -43,7 +43,7 @@ final class HelperParams {
      * only by passing it to {@code hold}, whose own parameter the body settles — so the rounds run
      * until nothing new is settled.
      */
-    static Hir.Module settle(Hir.Module module, Symbols symbols, Map<String, ReqSig> reqSigs) {
+    static Hir.Module settle(Hir.Module module, Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs) {
         Hir.Module current = module;
         while (true) {
             Hir.Module next = settleOnce(current, symbols, reqSigs);
@@ -55,7 +55,7 @@ final class HelperParams {
     }
 
     /** One round: returns {@code m} itself when no parameter was settled. */
-    private static Hir.Module settleOnce(Hir.Module m, Symbols symbols, Map<String, ReqSig> reqSigs) {
+    private static Hir.Module settleOnce(Hir.Module m, Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs) {
         if (!hasOpenParam(m)) {
             return m;   // nothing to settle: don't build the inliner (it scans the whole prelude)
         }
@@ -147,7 +147,7 @@ final class HelperParams {
 
     /** {@code h} with its determinable parameters typed, or null when none of them is. */
     private static Hir.FnDef settle(Hir.FnDef h, HelperInliner inliner, Symbols symbols,
-                                    Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
+                                    Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
         List<Integer> open = new ArrayList<>();
         Scope env = Scope.NONE;
         Hir.Expr body;
@@ -242,7 +242,7 @@ final class HelperParams {
      * nothing determined.
      */
     static Map<Integer, Type> determine(Hir.FnDef h, List<Integer> open, Scope env,
-                                        Hir.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
+                                        Hir.Expr body, Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<Integer, OpenUse> openUses) {
         BodyTyping typing = new BodyTyping(symbols, reqSigs, recursiveHelperFns);
@@ -380,7 +380,7 @@ final class HelperParams {
     private static final class BodyTyping {
         private final Symbols symbols;
         private final CheckContext ctx;
-        private final Map<String, ReqSig> reqSigs;
+        private final Map<ValueName.Behavior, ReqSig> reqSigs;
         private final Map<String, Type> recursiveHelperFns;
         /** What each call in this body has decided for the variables its callee left open. One
          * decision per call, read by every parameter that reaches it — and by the walk one step
@@ -397,7 +397,7 @@ final class HelperParams {
         private final Readings readings = new Readings();
         private OpenUse openUse;
 
-        BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
+        BodyTyping(Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
             this(symbols, reqSigs, recursiveHelperFns, new Freshening());
         }
 
@@ -405,7 +405,7 @@ final class HelperParams {
          * decided is the same decision. Deciding again would name two applications alike — the count
          * a name carries starts over with the reader — and unifying them would say the two hold one
          * thing. */
-        BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
+        BodyTyping(Symbols symbols, Map<ValueName.Behavior, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                    Freshening freshening) {
             this.freshening = freshening;
             this.symbols = symbols;
@@ -1056,9 +1056,13 @@ final class HelperParams {
                 return env.typeOf(local.id()) instanceof Type.FnOf sig ? sig : null;
             }
             String fn = call.answered().reaches();
-            ReqSig req = reqSigs.get(fn);
-            if (req != null) {
-                return new Type.FnOf(req.params(), req.success());
+            // Asked of the declaration: two modules may declare a behavior of one name, and what is
+            // applied here is the one this call was resolved to.
+            if (call.answered().denotes() instanceof ValueName.Behavior behavior) {
+                ReqSig req = reqSigs.get(behavior);
+                if (req != null) {
+                    return new Type.FnOf(req.params(), req.success());
+                }
             }
             if (recursiveHelperFns.get(fn) instanceof Type.FnOf sig) {
                 return sig;
