@@ -89,13 +89,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * @param rows      how many {@code example} rows name it, across every source that writes one
      * @param pending   how many of those are recorded rather than evaluated
      * @param signature what those rows establish about the cases of its inputs and its output
+     * @param claimed   what the body declared cannot arrive, beside the measures rather than in
+     *                  them. The two are joined where this report is written and nowhere else,
+     *                  which is what keeps a claim from reaching a denominator
      * @param findings  what the measures found and nothing filled, which is what the lines under this
      *                  behavior print and what a build is warned about — one list, read three ways
-     */
-    /**
-     * @param claimed what the body declared cannot arrive, beside the measures rather than in them.
-     *                The two are joined where this report is written and nowhere else, which is what
-     *                keeps a claim from reaching a denominator
      */
     public record BehaviorReport(String name, boolean injected, int rows, int pending,
                                  MeasurementStatus status,
@@ -537,12 +535,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 ? "no row " : "undecided whether a row ";
     }
 
-    /**
-     * The reason the model wrote, where there is one to name.
-     *
-     * <p>Several reasons are not printed: a class ruled out by a fork whose paths abort for different
-     * reasons has no one sentence about it, and picking one would say something the model does not.
-     */
     /** The positions this report has an axis for, which is what tells a claim it can print beside
      *  one from a claim it has to name a position for. */
     private static List<String> measuredPaths(PartitionEvidence partition) {
@@ -595,7 +587,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     .filter(a -> a.status().counted()).toList();
             int classes = measuredAxes.stream().mapToInt(a -> a.classes().size()).sum();
             int covered = measuredAxes.stream().mapToInt(a -> a.covered().size()).sum();
-            int excluded = (int) behavior.claimed().all().stream()
+            // Over the positions this line counts and no others. A claim about a position past the
+            // axis limit is said further down, under its own name — counted here it would be a
+            // number taken out of a denominator that never held it.
+            // Over the positions this line counts and no others. A claim about a position past the
+            // axis limit is said further down, under its own name — counted here it would be a
+            // number taken out of a denominator that never held it.
+            int excluded = (int) measuredAxes.stream()
+                    .flatMap(each -> behavior.claimed().at(each.path()).stream())
                     .filter(ClaimAnnotations.Said::settled).count();
             out.append(String.format("    partition   axes %d   single-axis %d/%d%s%s%s%n",
                     partition.axes().size(), covered, classes,
