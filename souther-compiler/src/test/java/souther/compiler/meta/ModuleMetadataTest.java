@@ -101,6 +101,114 @@ class ModuleMetadataTest {
                         "invariantHelpers"));
     }
 
+    /** What a clause reaches is read off the names it resolved to. A parameter is a binding, so a
+     *  helper it happens to be spelled like is not one this declaration needs. */
+    @Test
+    void aParameterSpelledLikeAHelperDoesNotCarryIt() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shadow.helper exposing ( echo )
+
+                let positive (n: Int) = n > 0
+
+                behavior echo : (positive: Int) -> Int
+                    ensures value == positive
+                let echo (positive) = positive
+                """);
+
+        assertEquals(List.of(),
+                strings(annotation(classes, Emitted.declarations("shadow.helper"), "SoutherModule"),
+                        "invariantHelpers"));
+    }
+
+    /**
+     * And a behavior's body never crosses, whatever is spelled like it.
+     *
+     * <p>The strongest form of the same rule: an implementation is not part of what a reader of the
+     * declarations needs, so a parameter sharing a behavior's name must not carry that behavior's
+     * `let` — nor, through it, the helpers only the implementation reaches.
+     */
+    @Test
+    void aParameterSpelledLikeABehaviorDoesNotCarryItsImplementation() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shadow.impl exposing ( echo )
+
+                behavior calculate : (x: Int) -> Int
+                let calculate (x) = implementationOnly(x)
+
+                let implementationOnly (n: Int) = n + 1
+
+                behavior echo : (calculate: Int) -> Int
+                    ensures value == calculate
+                let echo (calculate) = calculate
+                """);
+
+        assertEquals(List.of(),
+                strings(annotation(classes, Emitted.declarations("shadow.impl"), "SoutherModule"),
+                        "invariantHelpers"),
+                "an implementation does not cross the boundary, and neither does what only it reaches");
+    }
+
+    /** A helper a clause really calls is carried, since a reader cannot read the clause without it. */
+    @Test
+    void theHelperAClauseCallsIsCarried() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module carries.helper exposing ( echo )
+
+                let doubled (n: Int) = n * 2
+
+                behavior echo : (x: Int) -> Int
+                    ensures value == doubled(x)
+                let echo (x) = doubled(x)
+                """);
+
+        assertEquals(List.of("let doubled (n: Int) = n * 2"),
+                strings(annotation(classes, Emitted.declarations("carries.helper"), "SoutherModule"),
+                        "invariantHelpers"));
+    }
+
+    /**
+     * What is carried is what the model declares.
+     *
+     * <p>An attached file's values join the module its rows join, so the module as resolved holds
+     * `let`s an {@code examples for} file wrote. An attached file adds nothing to what the model
+     * compiles to and there is nothing of it in a jar of the model, so a `let` only it declares is
+     * not the module's to publish.
+     *
+     * <p>Asked of the definition, which says what it was made as. Answered by whether a slice of
+     * its text happened to be kept, the set would come out right for a reason that is about how a
+     * jar is written — and a definition of the module's own that some other pass had not kept a
+     * slice for would drop out of what is published without anything saying so.
+     *
+     * <p>Nothing the model writes reaches such a value — that is refused where a name is answered
+     * (spec §an-attached-files-values-are-for-its-rows) — so what this holds is the walk's own
+     * domain rather than a second gate on the same mistake: a rule whose text is not the module's
+     * is not published, whatever reaches it.
+     */
+    @Test
+    void aValueOnlyAnAttachedFileDeclaresIsNotCarried() {
+        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+                module beside.rows exposing ( Amount, echo )
+
+                data Amount = { n: Int }
+                    invariant n >= 0
+
+                behavior echo : (x: Amount) -> Amount
+                let echo (x) = x
+                """, """
+                examples for beside.rows
+
+                let floor = Amount { n = 0 }
+
+                example echo
+                    | "unchanged" : (floor) -> floor
+                """));
+
+        assertEquals(List.of(),
+                strings(annotation(classes, Emitted.declarations("beside.rows"), "SoutherModule"),
+                        "invariantHelpers"),
+                "the attached file's source is not in this module's jar, so it has none to carry");
+    }
+
     /** A composition declares stages, not a signature. The importing module reads a signature, so
      * the computed one is written out and the stages stay behind. */
     @Test

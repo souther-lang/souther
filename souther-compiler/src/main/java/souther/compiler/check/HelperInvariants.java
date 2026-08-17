@@ -103,7 +103,27 @@ public final class HelperInvariants {
                 defs.add(def);
             }
         }
-        return m.withDefs(defs);
+        List<Hir.BehaviorDef> behaviors = new ArrayList<>();
+        for (Hir.BehaviorDef behavior : m.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
+                BindingOwner owner = new BindingOwner.OfSignature(
+                        new souther.compiler.types.ValueName.Behavior(m.name(), spec.name()));
+                List<Hir.EnsuresClause> clauses = new ArrayList<>();
+                for (Hir.EnsuresClause clause : spec.ensures()) {
+                    List<Hir.EnsuresArm> arms = new ArrayList<>();
+                    for (Hir.EnsuresArm arm : clause.arms()) {
+                        arms.add(arm.with(inliner.inline(arm.expr(), owner)));
+                    }
+                    clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
+                            clause.pos(), clause.region()));
+                }
+                behaviors.add(new Hir.SpecBehavior(spec.written(), spec.params(), spec.ret(),
+                        spec.constructs(), spec.dependsOn(), List.copyOf(clauses), spec.pos()));
+            } else {
+                behaviors.add(behavior);
+            }
+        }
+        return m.withDefs(defs).withBehaviors(behaviors);
     }
 
     /** The conjuncts of an invariant expression, flattened, in the order they are written — what a

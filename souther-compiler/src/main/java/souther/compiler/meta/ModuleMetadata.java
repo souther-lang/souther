@@ -1,10 +1,12 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.types.ValueName;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.jvm.GeneratedClass;
@@ -70,7 +72,8 @@ public final class ModuleMetadata {
      * behaviors this module leaves to be injected (spec §injected-behavior), which is the compiler's rule to state
      * and not a fact about any one class.
      */
-    public static void stamp(Emissions out, Ast.Module module, CstFrontend.Slices slices,
+    public static void stamp(Emissions out, Ast.Module module, Hir.Module resolved,
+                             CstFrontend.Slices slices,
                              Map<String, Sig> sigs, Set<String> injected) {
         List<String> types = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
@@ -92,7 +95,7 @@ public final class ModuleMetadata {
                             AnnotationElement.ofBoolean("injected", injected.contains(b.name()))));
         }
         out.put(new GeneratedClass.ModuleDeclarations(module.name()),
-                Backend.moduleClass(module.name(), moduleAnnotation(module, slices, types, behaviors)));
+                Backend.moduleClass(module.name(), moduleAnnotation(module, resolved, slices, types, behaviors)));
     }
 
     /**
@@ -139,7 +142,8 @@ public final class ModuleMetadata {
         });
     }
 
-    private static Annotation moduleAnnotation(Ast.Module module, CstFrontend.Slices slices,
+    private static Annotation moduleAnnotation(Ast.Module module, Hir.Module resolved,
+            CstFrontend.Slices slices,
                                                List<String> types, List<String> behaviors) {
         return Annotation.of(MODULE_ANN,
                 AnnotationElement.ofInt("compat", Backend.BOUNDARY_VERSION),
@@ -149,7 +153,7 @@ public final class ModuleMetadata {
                 strings("imports", slices.imports()),
                 strings("types", types),
                 strings("behaviors", behaviors),
-                strings("invariantHelpers", invariantHelpers(module, slices)));
+                strings("invariantHelpers", invariantHelpers(module, resolved, slices)));
     }
 
     private static AnnotationElement strings(String name, List<String> values) {
@@ -174,29 +178,46 @@ public final class ModuleMetadata {
      * the meaning of a carried body part of what a jar promises, and it is {@link
      * Backend#BOUNDARY_VERSION} that the promise is recorded under.
      */
-    private static List<String> invariantHelpers(Ast.Module module, CstFrontend.Slices slices) {
-        Map<String, Ast.FnDef> own = new LinkedHashMap<>();
-        for (Ast.FnDef fn : module.fns()) {
-            own.put(fn.name(), fn);
+    private static List<String> invariantHelpers(Ast.Module module, Hir.Module resolved,
+                                                 CstFrontend.Slices slices) {
+        // A behavior's body is not published — a reader has its signature and calls it — so a
+        // behavior's own `let` is not among what may be carried, whatever reaches its spelling.
+        Set<String> behaviorNames = new LinkedHashSet<>();
+        for (Hir.BehaviorDef b : resolved.behaviors()) {
+            behaviorNames.add(b.name());
         }
+        // What may be carried is what the model declares. The resolved module is wider than that:
+        // an attached file's values join the module its rows join, and an attached file does not
+        // add to what the model compiles to — so a `let` only it declares has no source here to
+        // carry. Asked of the definition, which is where that is recorded: whether a slice of its
+        // text was kept is how the jar is written, and would answer this by accident.
+        Map<String, Hir.FnDef> own = new LinkedHashMap<>();
+        for (Hir.FnDef fn : resolved.fns()) {
+            if (HelperInliner.isHelperName(behaviorNames, fn.name()) && fn.role().isTheModels()) {
+                own.put(fn.name(), fn);
+            }
+        }
+
         Set<String> reached = new LinkedHashSet<>();
-        for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data d) {
-                for (Ast.InvariantClause clause : d.invariants()) {
+        for (Hir.Def def : resolved.defs()) {
+            if (def instanceof Hir.Data d) {
+                for (Hir.InvariantClause clause : d.invariants()) {
                     reach(clause.expr(), own, reached);
                 }
             }
         }
-        Set<String> exposed = new java.util.HashSet<>(module.exposing());
-        // A behavior's body is not published — a reader has its signature and calls it — so a
-        // behavior's own `let` is not carried whatever its shape.
-        Set<String> behaviorNames = new LinkedHashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            behaviorNames.add(b.name());
+        for (Hir.BehaviorDef behavior : resolved.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec) {
+                for (Hir.EnsuresClause clause : spec.ensures()) {
+                    for (Hir.EnsuresArm arm : clause.arms()) {
+                        reach(arm.expr(), own, reached);
+                    }
+                }
+            }
         }
-        for (Ast.FnDef fn : own.values()) {
-            if (HelperInliner.isHelperName(behaviorNames, fn.name())
-                    && exposed.contains(fn.name()) && fn.body() instanceof Ast.FnBody.Written w) {
+        Set<String> exposed = new java.util.HashSet<>(module.exposing());
+        for (Hir.FnDef fn : own.values()) {
+            if (exposed.contains(fn.name()) && fn.body() instanceof Hir.FnBody.Written w) {
                 reached.add(fn.name());
                 reach(w.expr(), own, reached);
             }
@@ -215,18 +236,20 @@ public final class ModuleMetadata {
      * <p>One set does for both visited and reached: a helper is added the first time it is seen, and
      * nothing is ever taken out, so a second sighting stops the walk by itself.
      */
-    private static void reach(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> reached) {
-        String named = switch (e) {
-            case Ast.Apply call -> call.written();
-            case Ast.Var var -> var.name();
-            default -> null;
-        };
+    private static void reach(Hir.Expr e, Map<String, Hir.FnDef> own, Set<String> reached) {
+        // What a name reaches, read off the name rather than off its spelling. A clause is written
+        // among bindings — a data's fields, a behavior's parameters, `value` — and one of those
+        // spelled like a helper is not a use of that helper. Answered by spelling, a parameter
+        // called `positive` carried the module's `positive` across the boundary, and one called
+        // like a behavior carried that behavior's implementation.
+        String named = e instanceof Hir.Var.Denoting var
+                && var.denotes() instanceof ValueName.Helper helper ? helper.name() : null;
         if (named != null && own.containsKey(named) && reached.add(named)) {
             // an `intrinsic` helper is a name with nothing to walk into
-            if (own.get(named).body() instanceof Ast.FnBody.Written w) {
+            if (own.get(named).body() instanceof Hir.FnBody.Written w) {
                 reach(w.expr(), own, reached);
             }
         }
-        Ast.forEachChild(e, c -> reach(c, own, reached));
+        Hir.forEachChild(e, c -> reach(c, own, reached));
     }
 }

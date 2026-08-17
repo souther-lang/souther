@@ -82,6 +82,14 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1906)
     record TheNameIsAlreadyDeclared(String name, String module) implements ExampleMessage, Reported {}
 
+    /** A declaration of the model names a value an attached file declares. */
+    @Code(DiagnosticCode.E1928)
+    record TheModelNamesAValueAnAttachedFileDeclares(String name)
+            implements ExampleMessage, Reported {}
+
+    /** Where such a value belongs if the model is to name it. */
+    record MoveTheValueIntoTheModuleItself(String name) implements ExampleMessage, Supporting {}
+
     // --- the fakes ---
 
     /** A dependency has no fake. */

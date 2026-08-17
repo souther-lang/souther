@@ -503,6 +503,7 @@ The full formal grammar (BNF) is deferred (<<future-work>>).
 !a behavior's signature !production !<<behavior-io>>
 !a `+constructs+` clause !production !<<constructs>>
 !a `+depends on+` clause !production !<<depends-on>>
+!an `+ensures+` clause !production !<<ensures>>
 !a definition (`+let+` at the top level) !production !<<fn-declaration>>
 !a binding (`+let+` in a block) !production !<<let>>
 !a lambda and a block !production !<<blocks>>
@@ -540,7 +541,7 @@ The full formal grammar (BNF) is deferred (<<future-work>>).
 ----
 module   import    exposing
 data     invariant
-behavior constructs depends
+behavior constructs depends  ensures
 match    with      as
 let      if        then     else
 guard    unreachable
@@ -583,7 +584,7 @@ The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and 
 What a text MUST be for the compiler to read it is stated with each construct, and a text that is not is refused where the reading stops. Where the reading can stop is kept apart, because a reader looking one up is asking about a different part of the language, and each place names where the forms it is about are given (<<grammar>> indexes them all):
 
 [role="reading-stops"]
-* [[declaration-syntax]]a declaration MUST be written in the form given for it: the module header (<<modules>>), a top-level `+data+` (<<product-data>>, <<sum-data>>, <<unit-data>>, <<newtype>>), a behavior's signature (<<behavior-io>>), a top-level `+let+` (<<fn-declaration>>), a `+constructs+` clause (<<constructs>>), a `+depends on+` clause (<<depends-on>>);
+* [[declaration-syntax]]a declaration MUST be written in the form given for it: the module header (<<modules>>), a top-level `+data+` (<<product-data>>, <<sum-data>>, <<unit-data>>, <<newtype>>), a behavior's signature (<<behavior-io>>), a top-level `+let+` (<<fn-declaration>>), a `+constructs+` clause (<<constructs>>), a `+depends on+` clause (<<depends-on>>), an `+ensures+` clause (<<ensures>>);
 * [[expression-syntax]]an expression MUST be written in the form given for it, and a block MUST end in one (<<blocks>>, <<block-expression>>): a literal below, a record literal (<<record-literal>>), a list (<<stdlib-list>>), a tuple (<<tuple>>), an `+if+` (<<if>>), a `+match+` (<<match>>), a `+guard+` (<<guard>>), an `+unreachable+` (<<unreachable>>), an application (<<fn>>), a pipe (<<pipe>>);
 * [[pattern-syntax]]a pattern MUST be written in the form given for the thing it destructures (<<binding-patterns>>, <<match>>);
 * [[examples-syntax]]an `+example+`, a `+fake+` and an `+examples for+` file MUST be written in the form given for them (<<examples>>, <<example-fakes>>, <<example-placement>>);
@@ -1710,7 +1711,7 @@ The answer carries the clause's name where it has one (<<invariant-clause-name>>
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
-The check does not cross behaviors: a relation established in one behavior is not assumed in another (<<sequential-composition>>). Inferring such a precondition would be an implicit cross-unit contract, which the language declines — `+depends on+` and an exposed composition's output are always declared, not inferred (<<depends-on>>). The consistent way to carry a relation is to *reify it as a type invariant*, which the seeding then assumes downstream for free.
+The check does not infer relations across behaviors: an implicit relation would be an implicit cross-unit contract, which the language declines — `+depends on+` and an exposed composition's output are always declared, not inferred (<<depends-on>>). The consistent way to carry a relation that fits in one value is to *reify it as a type invariant*, which the seeding then assumes downstream for free. A relation between a behavior's parameters and its answer, which cannot fit in the answer without changing the model's shape, is declared with `+ensures+` (<<ensures>>).
 
 [,souther]
 ----
@@ -2313,6 +2314,44 @@ The set of behaviors with a non-empty requirement set that a `+let+` uses and th
 * [[depends-on-names-no-more]]every behavior the clause names MUST actually be reached by the implementation (<<e1603>>).
 
 [[depends-on-names-a-dependency]]An entry MUST name something there is to inject: a behavior in scope whose own requirement set is not empty (<<e1607>>). A behavior that requires nothing is reached by name, and a `+>->+` composition infers its requirements from its stages rather than being handed them.
+
+[#ensures]
+=== `ensures`
+
+An `+ensures+` clause declares the relation between a behavior's named parameters and the value it answers. It is a clause of the behavior signature, beside `+constructs+` and `+depends on+`, and travels with the published declaration.
+
+[,souther]
+----
+behavior findBuildings : (cond: SearchCriteria) -> List<Building>
+    ensures inTheAreaAsked = List.all(b -> b.area == cond.area, value)
+
+behavior findTodo : (id: TodoId) -> Todo | NotFound
+    ensures Todo | NotFound -> value.id == id
+----
+
+The answer is named `+value+`.
+
+A rule states a relation, so it refers to both sides of one. [[an-ensures-clause-names-the-answer]]A rule MUST refer to the answer, which it does through the arm it is written under or through `+value+`; where it names no arm there is nothing else to refer to the answer by, so its expression MUST name `+value+`. [[an-ensures-clause-names-a-parameter]]And it MUST name at least one parameter. A property of the answer alone belongs on the answer type's invariant; a property of the inputs alone is a precondition and is modelled as ADR-0003 decides. [[a-behavior-with-a-clause-has-no-parameter-named-value]]A behavior carrying a clause MUST NOT have a parameter named `+value+`.
+
+An arm is a reference to the answer, so `+ensures Missing -> id == tag+` states a relation: where the answer is `+Missing+`, the inputs stood so. Asking for the word `+value+` in every expression would read the text for the relation rather than the rule, and would refuse a rule that states one.
+
+What a rule refers to is not what it is about, and only the first is decided here. `+value == value && id > 0+` refers to the answer and says nothing about it, and an arm of an answer with one case holds of everything it answers. Telling those apart is a proof; what this rule holds is that a relation is written with both of its sides in it.
+
+An answer that can be more than one thing has cases, and they are the ones a `+match+` over that answer opens: the members of an anonymous sum, or the cases declared with a named one. A case of a case is not one of them — a caller opens the outer case and only then what is inside it — so a rule naming one would be a rule the caller has no arm to assume it at. What `+value+` is read as in an arm is what that case holds, which for a case named by a primitive (<<unmarked-output>>) is that primitive.
+
+Where the answer has cases the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the answer. Several cases MAY share an expression, and [[an-ensures-arm-names-each-case-once]]one arm MUST NOT name a case twice: a case named twice under one arrow says nothing the once did not. Where the answer has none the form is `+ensures [name =] expression+`, and [[an-ensures-clause-over-a-single-type-names-no-arm]]it MUST name no arm. A case no rule names carries no stated postcondition, and there is no wildcard arm.
+
+Two arms of one clause MAY name the same case, and both of their rules then hold of it. That is the same reading as two clauses naming it, which is what makes an arm a statement rather than a choice.
+
+A behavior MAY carry more than one `+ensures+`, and every rule of every one of them holds. Where the answer is a case, the rules whose arms name that case are the rules it is held to — all of them, and not the first — so writing two clauses and writing their rules under one are the same statement about the model. What differs is where a violation is reported: a clause is what a failure is reported by, and its name is what a reader is given. Where more than one does not hold, the first that does not is the one reported, as a data's clauses are (<<invariant-declaration>>).
+
+Cases may overlap. A data may be a case of two sums declared in its module, so one answer can be named by an arm of each, and both of their rules hold of it. This is what makes a rule's arms a statement rather than a dispatch: `+match+` takes the first arm that answers, which is a control-flow reading, and a declaration has no order to read.
+
+A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are distinct within the behavior, and [[an-ensures-clause-name-is-not-underscore]]`+_+` is not a clause name. A name here says which clause is meant and nothing more: unlike a data's clause name, it names nothing a departure arm can be written for (<<attempt-departures>>), an `+ensures+` having no such form. The expression fragment is the invariant fragment unchanged: it is total, constructs nothing and contains no `+unreachable+` (<<invariant-expressions>>).
+
+[[a-composition-carries-no-ensures]]A `+>->+` composition MUST NOT carry `+ensures+`: it writes no parameter list whose names a clause could relate to its answer, and a stage's relation is not inferred as the composition's.
+
+A clause travels with the published declaration, as a data's does and for the same reason: a reader that cannot read it cannot assume it.
 
 [#calling-a-behavior]
 === Calling a behavior
@@ -3011,7 +3050,11 @@ How many rows are waiting is what `+souther examples+` reports; it is not a comp
 
 [[examples-file-names-a-compiled-module]]An `+examples for <module>+` file MUST name a module among those being compiled.
 
+[[an-attached-files-values-are-for-its-rows]]A value an attached file declares MAY be named by a row, by a `+fake+` and by another value of an attached file, and MUST NOT be named by the model: not by a `+data+`'s `+invariant+`, a `+behavior+`'s `+ensures+`, a `+let+`'s body, or the module's `+exposing+` list.
+
 The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
+
+The merge makes those values reachable under the same names as the module's own, and the direction they may be reached in is one way. A row is what the file is for, and a row written inline in the model source is a row too, so it names them as freely as one written beside them. The model is the other way: a module that named one would not compile without a file of fixtures, and a clause that named one would travel to an importer under <<a-published-module-carries-what-it-says-it-declares>> spelling a name the jar has no source for — the module's own source is what is published, and an attached file adds nothing to it. Naming one from the model is <<e1928>>. A value the model needs is declared in the model.
 
 [#example-adequacy]
 === What the rows establish
@@ -4256,7 +4299,7 @@ DecoderDef  EncoderDef  SpecBehavior  PipeBehavior  FnDef  Import
 Construct  FieldInit  Expression  Case  RawExpr  DecRef  Block
 ----
 
-Behavior definition nodes are two, corresponding to the two right-hand sides of <<behavior>>. `+SpecBehavior+` holds only input type, output type, and `+constructs+`, with no body. If a same-named `+FnDef+` exists it is the implementation; otherwise it is subject to Java injection (<<injected-behavior>>). `+PipeBehavior+` holds the sequence of stage names. It is itself the implementation, so it takes no `+FnDef+` and is not injected; its type is computed from the stages (<<type-routing>>). Composition vs. simple is distinguished by these two nodes, so later stages need not re-read the right-hand side to tell them apart.
+Behavior definition nodes are two, corresponding to the two right-hand sides of <<behavior>>. `+SpecBehavior+` holds input type, output type, `+constructs+`, `+depends on+`, and its `+ensures+` clauses, with no body. If a same-named `+FnDef+` exists it is the implementation; otherwise it is subject to Java injection (<<injected-behavior>>). `+PipeBehavior+` holds the sequence of stage names and no `+ensures+` slot. It is itself the implementation, so it takes no `+FnDef+` and is not injected; its type is computed from the stages (<<type-routing>>). Composition vs. simple is distinguished by these two nodes, so later stages need not re-read the right-hand side to tell them apart.
 
 `+FnDef+` holds argument names and a body. If a same-named `+SpecBehavior+` exists the type comes from it; otherwise it is a helper `+let+` and holds its own argument types, except for a parameter its body determines (<<fn-declaration>>).
 
@@ -5192,6 +5235,56 @@ parameters, in declared order.
 
 Reported at the `+let+` (<<an-implementing-let-takes-its-shape-from-the-behavior>>). The behavior states the shape — how many parameters, what they are, the order the injected ones arrive in, what it answers with — so the `+let+` writes none of them again, and the same code says whichever of the four was written or was wrong.
 
+[#e1616]
+=== An `ensures` clause does not name the answer
+
+Reported at the rule when it refers to the answer neither through an arm nor through `+value+` (<<an-ensures-clause-names-the-answer>>).
+
+[#e1617]
+=== An `ensures` clause does not name a parameter
+
+Reported at the clause when an arm expression names no parameter (<<an-ensures-clause-names-a-parameter>>).
+
+[#e1618]
+=== A behavior with `ensures` has a parameter named `value`
+
+Reported at the parameter (<<a-behavior-with-a-clause-has-no-parameter-named-value>>).
+
+[#e1619]
+=== An `ensures` arm is not an output case
+
+Reported at the arm name (<<an-ensures-arm-is-an-output-case>>).
+
+[#e1620]
+=== An `ensures` clause over a sum names no arm
+
+Reported at the clause (<<an-ensures-clause-over-a-sum-names-arms>>).
+
+[#e1621]
+=== An `ensures` clause over one type names an arm
+
+Reported at the clause (<<an-ensures-clause-over-a-single-type-names-no-arm>>).
+
+[#e1622]
+=== Two `ensures` clauses share one name
+
+Reported at the second name (<<ensures-clause-names-are-distinct>>).
+
+[#e1623]
+=== `_` names an `ensures` clause
+
+Reported at the name (<<an-ensures-clause-name-is-not-underscore>>).
+
+[#e1624]
+=== A composition carries `ensures`
+
+Reported at the clause (<<a-composition-carries-no-ensures>>).
+
+[#e1625]
+=== An `ensures` arm names a case twice
+
+Reported at the second naming of it (<<an-ensures-arm-names-each-case-once>>).
+
 [#e1701]
 === behavior composition type mismatch
 
@@ -5823,6 +5916,25 @@ Emitted at an `+example+` whose behavior is answered by an implementation suppli
 Said once for the behavior in each source its rows are written in, however many rows those are: one answer and one model disagreeing is one fact, and the rows did not stop for reasons of their own. Not once for the behavior outright, because a diagnostic is said where it can be quoted — a behavior whose rows are written in the module and in an attached `+examples for+` file has rows in two files, and a reader of the second one would otherwise be shown rows that stopped and nothing saying why. Each row is recorded as undecided, with its inputs and its expectation already built and held to their invariants.
 
 Two things are reported under this code, and they are not the same finding. Where both sides were read and one declares something else, the declaration is named and the fix is to build again. Where the declarations could not be read at all — classes carrying none, or declarations this compiler cannot read back (<<a-published-module-can-be-read-back>>) — nothing has been established about either build, and saying a build was stale would be saying it on evidence nobody has.
+
+[#e1928]
+=== The model names a value an attached file declares
+
+[,text]
+----
+`floor` is declared in an attached `examples for` file, which holds the rows, the fakes
+they run against and the values those rows name. A declaration of the model cannot name
+one: the module would not compile without that file, and a clause carrying the name
+travels to an importer that has no source for it.
+----
+
+Emitted where a declaration of the model reaches a value an attached file declares (<<an-attached-files-values-are-for-its-rows>>). Two things follow from naming one and either is enough: the module no longer compiles from its own source, because the name it writes is declared in a file of fixtures; and a `+data+`'s `+invariant+` or a `+behavior+`'s `+ensures+` is published as the text that was written (<<a-published-module-carries-what-it-says-it-declares>>), so an importer reads a clause spelling a name it has no source for.
+
+Said where the name is written, once for each occurrence, and the module is not emitted. The `+exposing+` list is reported at the module header, because a name in it is written nowhere else.
+
+What is not reported is the other direction. A row names such a value wherever the row is written — beside the values in the attached file, or inline in the model source — because the values join the module the rows join and a row is what the file is for. A `+fake+` names one as a row does, and one attached value names another. An attached value naming the model's own `+let+` is a fixture reading the model, which is what a fixture is.
+
+The fix is to declare the value in the module's own source. A value the model is written against is part of the model, and the attached file goes on reaching it from there.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

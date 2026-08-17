@@ -108,7 +108,31 @@ public final class HelperNames {
      */
     static Hir.Module withQualifiedInvariants(Hir.Module m) {
         List<Hir.Def> defs = qualifiedInvariants(m);
-        return defs.equals(m.defs()) ? m : m.withDefs(defs);
+        List<Hir.BehaviorDef> behaviors = qualifiedEnsures(m);
+        Hir.Module out = defs.equals(m.defs()) ? m : m.withDefs(defs);
+        return behaviors.equals(m.behaviors()) ? out : out.withBehaviors(behaviors);
+    }
+
+    private static List<Hir.BehaviorDef> qualifiedEnsures(Hir.Module m) {
+        List<Hir.BehaviorDef> out = new ArrayList<>();
+        for (Hir.BehaviorDef behavior : m.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
+                List<Hir.EnsuresClause> clauses = new ArrayList<>();
+                for (Hir.EnsuresClause clause : spec.ensures()) {
+                    List<Hir.EnsuresArm> arms = new ArrayList<>();
+                    for (Hir.EnsuresArm arm : clause.arms()) {
+                        arms.add(arm.with(qualifyForeign(arm.expr(), m.name())));
+                    }
+                    clauses.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
+                            clause.pos(), clause.region()));
+                }
+                out.add(new Hir.SpecBehavior(spec.written(), spec.params(), spec.ret(),
+                        spec.constructs(), spec.dependsOn(), List.copyOf(clauses), spec.pos()));
+            } else {
+                out.add(behavior);
+            }
+        }
+        return out;
     }
 
     /** {@code m}'s declarations with every name in an invariant that denotes another module's

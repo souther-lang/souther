@@ -22,6 +22,7 @@ import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Placement;
@@ -193,7 +194,11 @@ public final class AstBuilder {
                     if (!fn.params().isEmpty()) {
                         throw onlyExamples(n);
                     }
-                    values.add(fn);
+                    // Read as what this file wrote it as. Its values join the module its rows join,
+                    // so from here on it sits among the module's own definitions under one set of
+                    // names, and nothing about the definition would say which of the two files
+                    // wrote it. Everything that turns on that reads this.
+                    values.add(fn.asAnAttachedValue());
                 }
                 case IMPORT_DECL, DATA_DEF, BEHAVIOR_DEF -> throw onlyExamples(n);
                 default -> { /* ERROR nodes already reported */ }
@@ -427,6 +432,8 @@ public final class AstBuilder {
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
             List<Ast.Name> constructs = new ArrayList<>();
             List<Ast.Var> dependsOn = new ArrayList<>();
+            List<Ast.EnsuresClause> ensures = new ArrayList<>();
+            Set<String> namedEnsures = new HashSet<>();
             for (SyntaxNode clause : s.childNodes()) {
                 // either clause may name through a module, so the idents of one name are joined and
                 // a comma starts the next
@@ -438,17 +445,59 @@ public final class AstBuilder {
                     for (Ast.Name dep : dottedNames(clause, 1)) {
                         dependsOn.add(Ast.Var.written(dep.name()));
                     }
+                } else if (clause.kind() == SyntaxKind.ENSURES_CLAUSE) {
+                    // Reported at the name, which is what the rule is about — as a data's clause
+                    // name is (see `invariants`). The clause's own position is the `ensures`, and
+                    // underlining that would leave a reader to find which word was meant.
+                    if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
+                        SyntaxToken label = identTokens(clause).get(0);
+                        if (ident(label).equals("_")) {
+                            throw CompileException.of(Diagnostic.at(posOf(label))
+                                    .say(new BehaviorMessage.UnderscoreCannotNameAnEnsuresClause(
+                                            declared.canonical())).build());
+                        }
+                        if (!namedEnsures.add(ident(label))) {
+                            throw CompileException.of(Diagnostic.at(posOf(label))
+                                    .say(new BehaviorMessage.TwoEnsuresClausesShareOneName(
+                                            ident(label), declared.canonical())).build());
+                        }
+                    }
+                    ensures.add(ensuresClause(clause));
                 }
             }
-            return new Ast.SpecBehavior(declared, params, ret, constructs, dependsOn, pos);
+            return new Ast.SpecBehavior(declared, params, ret, constructs, dependsOn, ensures, pos);
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
+        if (n.child(SyntaxKind.ENSURES_CLAUSE).isPresent()) {
+            throw CompileException.of(Diagnostic.at(pos(n.child(SyntaxKind.ENSURES_CLAUSE).orElseThrow()))
+                    .say(new BehaviorMessage.ACompositionCarriesAnEnsures(declared.canonical())).build());
+        }
         List<Ast.Var> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
             stages.add(Ast.Var.written(qualifiedNameOf(st)));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         return new Ast.PipeBehavior(declared, stages, declaredOut, pos);
+    }
+
+    private Ast.EnsuresClause ensuresClause(SyntaxNode clause) {
+        Optional<String> name = Optional.empty();
+        if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
+            name = Optional.of(ident(identTokens(clause).get(0)));
+        }
+        List<Ast.EnsuresArm> arms = new ArrayList<>();
+        for (SyntaxNode arm : childNodes(clause, SyntaxKind.ENSURES_ARM)) {
+            List<Ast.Name> cases = new ArrayList<>();
+            for (SyntaxNode qn : childNodes(arm, SyntaxKind.QUALIFIED_NAME)) {
+                cases.add(Ast.Name.written(qualifiedNameOf(qn)));
+            }
+            arms.add(new Ast.EnsuresArm(cases, expr(onlyExpr(arm)), pos(arm), region(arm)));
+        }
+        if (arms.isEmpty()) {
+            Ast.Expr condition = expr(onlyExpr(clause));
+            arms.add(new Ast.EnsuresArm(List.of(), condition, pos(clause), region(clause)));
+        }
+        return new Ast.EnsuresClause(name, List.copyOf(arms), pos(clause), region(clause));
     }
 
     // --- fn ---

@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -235,6 +236,21 @@ public final class TypeChecker {
                 }
             }
         }
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
+            if (behavior instanceof Hir.SpecBehavior spec) {
+                for (Hir.EnsuresClause clause : spec.ensures()) {
+                    for (Hir.EnsuresArm arm : clause.arms()) {
+                        collect(errors, abandoned, () -> {
+                            HelperTyping.rejectPartialHelperInEnsures(
+                                    arm.expr(), spec.name(), reachability);
+                            HelperTyping.rejectConstructionInEnsures(
+                                    arm.expr(), spec.name(), clause);
+                            HelperTyping.rejectUnreachableInEnsures(arm.expr(), spec.name());
+                        });
+                    }
+                }
+            }
+        }
         // Only a declaration whose meaning was settled is checked, and `settled` is what says which
         // those are. What a check over one of the others would find is the mistake that stopped it
         // being settled, said again from further down — that the type it is made of has no decoder,
@@ -325,7 +341,19 @@ public final class TypeChecker {
                 // written against, and the rule itself. A behavior's own `let` is not — what a reader
                 // reaches there is the behavior, which it calls, and the module publishes its
                 // specification rather than the body it was given (ADR-0005).
-                if (HelperInliner.helpersOf(module).containsKey(e)) {
+                Hir.FnDef helper = HelperInliner.helpersOf(module).get(e);
+                if (helper != null) {
+                    // The same rule a body is held to (spec §an-attached-files-values-are-for-its-rows),
+                    // read here because an `exposing` list is a list of names and not an expression, so
+                    // it is not answered where a name written in one is. A value an attached file
+                    // declares is there for the rows beside it; published, it would be a name an
+                    // importer reaches with no source of it in the jar.
+                    if (!helper.role().isTheModels()) {
+                        throw CompileException.of(Diagnostic.at(module.pos())
+                                .say(new ExampleMessage.TheModelNamesAValueAnAttachedFileDeclares(e))
+                                .hint(new ExampleMessage.MoveTheValueIntoTheModuleItself(e))
+                                .build());
+                    }
                     exposed.add(e);
                     continue;
                 }
@@ -377,6 +405,15 @@ public final class TypeChecker {
         // declaration, an `exposing` line, a stage's arity — still say what they found.
         if (sigs == null) {
             throw new Unanswerable(module.pos());
+        }
+        for (Hir.BehaviorDef behavior : module.behaviors()) {
+            // A behavior declaring nothing about its answer is asked nothing. Reading it would want
+            // a signature this does not need for it, and one that could not be made is a mistake
+            // reported where it happened.
+            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
+                collect(errors, abandoned, () -> BehaviorChecker.contractOf(spec, module.name(),
+                        sigs.get(spec.name()), symbols, recursiveHelperFns));
+            }
         }
         // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1023).

@@ -52,11 +52,20 @@ final class NamesFromElsewhere {
      * Those are the document's to answer for, every time, so that a definition being written now is
      * offered before it compiles; they are kept out of what is remembered rather than filtered on
      * the way out, so a name deleted while the file will not parse does not come back.
+     *
+     * <p>{@code writesRows} says whether this document is an attached file. A value an attached file
+     * declares may be written by the rows and not by the model (spec
+     * §an-attached-files-values-are-for-its-rows), so offering one in the model source would be
+     * offering a name the compiler refuses. It is answered per document and not per position, which
+     * is the grain this list has at all — an inline {@code example} row in the model source may
+     * write such a value and is not offered it. Under-offering is the direction to be wrong in: a
+     * name that is not suggested can still be typed, and one that is suggested and then refused sends
+     * an author to write something the language does not have.
      */
     List<CompletionItem> of(Compilation compilation, String uri, String module,
-                            Set<String> declaredHere) {
-        List<CompletionItem> answered =
-                byDocument.of(uri, module, () -> ask(compilation, module, declaredHere));
+                            Set<String> declaredHere, boolean writesRows) {
+        List<CompletionItem> answered = byDocument.of(uri, module,
+                () -> ask(compilation, module, declaredHere, writesRows));
         return answered == null ? List.of() : answered;
     }
 
@@ -70,7 +79,7 @@ final class NamesFromElsewhere {
      * about. That is the same absence and takes the same answer.
      */
     private static List<CompletionItem> ask(Compilation compilation, String module,
-                                            Set<String> declaredHere) {
+                                            Set<String> declaredHere, boolean writesRows) {
         if (module == null) {
             return null;
         }
@@ -87,9 +96,11 @@ final class NamesFromElsewhere {
                 found.add(new CompletionItem(spelling, kindOf(def), def.declaredIn()));
             }
         });
+        Set<String> theRowsOwn = writesRows ? Set.of() : scope.value().reachable().attachedValues();
         scope.value().reachable().byName().forEach((spelling, name) -> {
             CompletionItem item = itemOf(spelling, name);
-            if (item != null && !declaredHere.contains(spelling)) {
+            if (item != null && !declaredHere.contains(spelling)
+                    && !theRowsOwn.contains(spelling)) {
                 found.add(item);
             }
         });

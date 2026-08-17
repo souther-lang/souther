@@ -6,6 +6,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -94,6 +95,8 @@ public final class Resolve {
      * reads a type.
      */
     private boolean inARow;
+    /** Whether the definition being read is a value an attached file declares. */
+    private boolean readingAnAttachedValue;
     /**
      * The behaviors this module named through another module's name, by that module.
      *
@@ -168,11 +171,19 @@ public final class Resolve {
      * not be asked again, which is what lets a reader that only wants to know what is in scope —
      * an editor offering completions — hold one: it is a value, it is equal to the next one that
      * says the same thing, and holding it reaches nothing.
+     *
+     * <p>{@code attachedValues} names which of the helpers an attached file declares, which is not
+     * a second table: those spellings are in {@code helpers} and mean what they mean, and this says
+     * which of them only the rows may write (spec §an-attached-files-values-are-for-its-rows).
+     * Here rather than worked out again by each reader, because two readers ask it — resolution
+     * refuses one written in the model, and an editor does not offer one where it would be refused
+     * — and two walks over the definitions would be that rule written twice.
      */
     public record Reachable(String module, Map<String, ValueName.Helper> helpers,
                             Map<String, ValueName.Behavior> behaviors,
                             Set<String> standingForNothing, boolean behaviorsWhole,
-                            Map<String, ValueName.Stdlib> exposed) {
+                            Map<String, ValueName.Stdlib> exposed,
+                            Set<String> attachedValues) {
 
         /** Copied, because a reader holds this. A table something else can still write to is not a
          *  value, and the reader that held one would find what it read had changed under it — the
@@ -185,6 +196,8 @@ public final class Resolve {
             standingForNothing =
                     Collections.unmodifiableSet(new LinkedHashSet<>(standingForNothing));
             exposed = Collections.unmodifiableMap(new LinkedHashMap<>(exposed));
+            attachedValues =
+                    Collections.unmodifiableSet(new LinkedHashSet<>(attachedValues));
         }
 
         /**
@@ -251,12 +264,16 @@ public final class Resolve {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));
             }
             Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
+            Set<String> attached = new LinkedHashSet<>();
             for (Ast.FnDef fn : m.fns()) {
                 if (HelperInliner.isHelperName(behaviors.keySet(), fn.name())) {
                     helpers.put(fn.name(), new ValueName.Helper(m.name(), fn.name()));
+                    if (!fn.role().isTheModels()) {
+                        attached.add(fn.name());
+                    }
                 }
             }
-            return new Reachable(m.name(), helpers, behaviors, Set.of(), true, Map.of());
+            return new Reachable(m.name(), helpers, behaviors, Set.of(), true, Map.of(), attached);
         }
     }
 
@@ -560,7 +577,7 @@ public final class Resolve {
             behaviors.add(switch (b) {
                 case Ast.SpecBehavior spec -> new Hir.SpecBehavior(spec.written(), r.params(spec.params()),
                         r.retType(spec.ret()), r.names(spec.constructs()),
-                        r.required(spec.dependsOn(), spec.name()), spec.pos());
+                        r.required(spec.dependsOn(), spec.name()), r.ensures(spec), spec.pos());
                 case Ast.PipeBehavior pipe -> new Hir.PipeBehavior(pipe.written(),
                         r.stages(pipe.stages()), r.retType(pipe.declaredOut()), pipe.pos());
             });
@@ -823,6 +840,7 @@ public final class Resolve {
 
     private Hir.FnDef fn(Ast.FnDef f) {
         owner = ownerOfValue(f.name());
+        readingAnAttachedValue = !f.role().isTheModels();
         List<Hir.FnParam> params = new ArrayList<>();
         Bindings bound = Bindings.NONE;
         for (Ast.FnParam p : f.params()) {
@@ -835,7 +853,8 @@ public final class Resolve {
             case Ast.FnBody.Intrinsic i -> new Hir.FnBody.Intrinsic(i.key());
         };
         return new Hir.FnDef(f.written(), f.declaredIn(), params, retType(f.declaredReturn()), body,
-                new Hir.Modifiers(f.modifiers().partial(), f.modifiers().isPrivate()), f.pos());
+                new Hir.Modifiers(f.modifiers().partial(), f.modifiers().isPrivate()), f.role(),
+                f.pos());
     }
 
     // --- written types ---
@@ -846,6 +865,31 @@ public final class Resolve {
             out.add(new Hir.Param(p.written(), retType(p.type())));
         }
         return out;
+    }
+
+    private List<Hir.EnsuresClause> ensures(Ast.SpecBehavior behavior) {
+        owner = new BindingOwner.OfSignature(
+                new ValueName.Behavior(reachable.module(), behavior.name()));
+        Bindings params = Bindings.NONE;
+        for (Ast.Param p : behavior.params()) {
+            params = bind(params, Ast.Binder.of(Ast.Name.written(p.written()))).bound();
+        }
+        List<Hir.EnsuresClause> out = new ArrayList<>();
+        for (Ast.EnsuresClause clause : behavior.ensures()) {
+            List<Hir.EnsuresArm> arms = new ArrayList<>();
+            for (Ast.EnsuresArm arm : clause.arms()) {
+                Answered answer = bind(params, Ast.Binder.desugared("value", arm.pos()));
+                // Resolved as the case names they are, through what a `match` arm reads them with.
+                // A case is not always a type name — `Int` stands as a case of `Int |
+                // DivisionByZero`, and an optional's two carriers name no type at all — so reading
+                // them as types admits a narrower set than the answer actually has cases.
+                arms.add(new Hir.EnsuresArm(caseNames(arm.cases()), expr(arm.expr(), answer.bound()),
+                        arm.pos(), arm.region()));
+            }
+            out.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),
+                    clause.pos(), clause.region()));
+        }
+        return List.copyOf(out);
     }
 
     /** A declaration's invariant clauses, each read against the fields it constrains. */
@@ -1390,6 +1434,7 @@ public final class Resolve {
         // definitions and what the import lines were left with.
         Reach reached = reachable.reachIn(reaches, written);
         if (!(reached instanceof Reach.NotInScope)) {
+            refuseAnAttachedValueOutsideTheRows(name, reached);
             return reached;
         }
         // A type written as a value, which is the construction of what it denotes. Read after the
@@ -1404,6 +1449,41 @@ public final class Resolve {
                     applied ? null : ConstructionOrigin.own()));
         }
         return reached;
+    }
+
+    /**
+     * Refuses a value an attached file declares where what is being read is the model.
+     *
+     * <p>An attached file holds the rows, the fakes they run against, and the values those rows
+     * name (spec §example-placement). Its values join the module its rows join, so from resolution
+     * onwards they are reachable under the same names as the model's own — and the model reaching
+     * one is a model whose invariants, clauses and bodies are held up by a file of fixtures. The
+     * module then does not compile without it, and a clause carrying such a name travels to an
+     * importer naming something the jar has no source for.
+     *
+     * <p>Here rather than in a walk over the declarations that can name a value, because this is
+     * the one place a name written anywhere in an expression is answered. Written as a list of the
+     * positions the model can write — an invariant, an {@code ensures}, a body — it would be a
+     * rule the next position to be added has to be remembered into. The {@code exposing} list is
+     * the one thing this does not cover, because it is a list of names and not an expression, and
+     * it is held to the same rule where it is read.
+     *
+     * <p>Reported and answered with all the same. What the name means is what it means, and a
+     * reader told a second time that it reaches nothing would be sent after a spelling that is
+     * right; the module is one whose names did not all come out, which is what stops it being
+     * emitted.
+     */
+    private void refuseAnAttachedValueOutsideTheRows(WrittenName written, Reach reached) {
+        if (inARow || readingAnAttachedValue
+                || !(reached instanceof Reach.Reaches(ValueName.Helper helper))
+                || !reachable.attachedValues().contains(helper.name())) {
+            return;
+        }
+        unresolved.add(CompileException.of(Diagnostic.at(written.reportedAt())
+                .say(new ExampleMessage.TheModelNamesAValueAnAttachedFileDeclares(helper.name()))
+                .hint(new ExampleMessage.MoveTheValueIntoTheModuleItself(helper.name()))
+                .build()));
+        failed++;
     }
 
     /**

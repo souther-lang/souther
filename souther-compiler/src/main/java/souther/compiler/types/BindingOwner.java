@@ -19,6 +19,7 @@ public sealed interface BindingOwner {
     default String module() {
         return switch (this) {
             case OfValue v -> v.module();
+            case OfSignature s -> s.behavior().module();
             case OfData d -> d.declared().module();
             case OfFields f -> f.declared().module();
             case Expansion e -> e.within().module();
@@ -45,6 +46,14 @@ public sealed interface BindingOwner {
         @Override
         public String toString() {
             return module + "." + name;
+        }
+    }
+
+    /** The parameter and answer bindings written by a behavior declaration. */
+    record OfSignature(ValueName.Behavior behavior) implements BindingOwner {
+        @Override
+        public String toString() {
+            return behavior + ".signature";
         }
     }
 

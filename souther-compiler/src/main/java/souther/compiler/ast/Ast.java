@@ -341,12 +341,24 @@ public interface Ast {
                         RetType ret,
                         List<Name> constructs,
                         List<Var> dependsOn,
+                        List<EnsuresClause> ensures,
                         SourcePos pos) implements BehaviorDef {
 
         /** A behavior a pass wrote, named but written nowhere. */
         public SpecBehavior(String name, List<Param> params, RetType ret, List<Name> constructs,
-                            List<Var> dependsOn, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, pos);
+                            List<Var> dependsOn, List<EnsuresClause> ensures, SourcePos pos) {
+            this(WrittenName.synthetic(name, pos), params, ret, constructs, dependsOn, ensures, pos);
+        }
+    }
+
+    /** One postcondition on a behavior. A single-output clause has one arm with no cases; a sum
+     * clause names the output cases for which each expression is stated. */
+    record EnsuresClause(Optional<String> name, List<EnsuresArm> arms, SourcePos pos, Region region)
+            implements Written {}
+
+    record EnsuresArm(List<Name> cases, Expr expr, SourcePos pos, Region region) implements Written {
+        public EnsuresArm with(Expr rewritten) {
+            return new EnsuresArm(cases, rewritten, pos, region);
         }
     }
 
@@ -430,14 +442,38 @@ public interface Ast {
      * "from somewhere else": a helper this module took on to emit was written by some module and says
      * which, and every rule here reads that rather than the absence. Anything a later pass mints that
      * <em>is</em> a declaration says which module it belongs to, so that these stay one question.
+     *
+     * <p>{@code role} is what the definition was made as, and it is a second question from the one
+     * {@code declaredIn} answers: an attached file's value is declared in the target module and is
+     * not something that module's own source wrote. See {@link DefinitionRole}.
      */
     record FnDef(WrittenName written, String declaredIn, List<FnParam> params,
-                 RetType declaredReturn, FnBody body, Modifiers modifiers, SourcePos pos)
+                 RetType declaredReturn, FnBody body, Modifiers modifiers, DefinitionRole role,
+                 SourcePos pos)
             implements Ast {
+
+        public FnDef {
+            Objects.requireNonNull(role, "a definition says what it was made as");
+        }
+
+        /** A fn read as a definition, which is every one a module's own source wrote. */
+        public FnDef(WrittenName written, String declaredIn, List<FnParam> params,
+                     RetType declaredReturn, FnBody body, Modifiers modifiers, SourcePos pos) {
+            this(written, declaredIn, params, declaredReturn, body, modifiers,
+                    DefinitionRole.Ordinary.INSTANCE, pos);
+        }
+
         /** A fn with no modifier (the common case; totality-checked if recursive, published). */
         public FnDef(WrittenName written, String declaredIn, List<FnParam> params,
                      RetType declaredReturn, FnBody body, SourcePos pos) {
             this(written, declaredIn, params, declaredReturn, body, Modifiers.NONE, pos);
+        }
+
+        /** The same declaration read as what an attached file wrote it as: a value for the rows
+         *  beside it to name, which the model neither publishes nor may reach. */
+        public FnDef asAnAttachedValue() {
+            return new FnDef(written, declaredIn, params, declaredReturn, body, modifiers,
+                    DefinitionRole.AttachedValue.INSTANCE, pos);
         }
 
         /** A block standing where a function goes, which no module declares: a lambda a binding
@@ -463,13 +499,13 @@ public interface Ast {
          */
         public FnDef reachedAs(String name) {
             return new FnDef(WrittenName.synthetic(name, pos), declaredIn, params, declaredReturn,
-                    body, modifiers, pos);
+                    body, modifiers, role, pos);
         }
 
         /** The same declaration with {@code replacement} in place of its body. */
         public FnDef withBody(FnBody replacement) {
             return new FnDef(written, declaredIn, params, declaredReturn, replacement, modifiers,
-                    pos);
+                    role, pos);
         }
 
         /** What the fn is called. */

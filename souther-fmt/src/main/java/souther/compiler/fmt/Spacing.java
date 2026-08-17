@@ -312,6 +312,7 @@ final class Spacing {
             ELSE_KW LBRACKET
             ELSE_KW LPAREN
             ELSE_KW TRUE_KW
+            ENSURES_KW IDENT
             EQ IDENT
             EQ INT_LIT
             EXPOSING_KW LPAREN
@@ -460,6 +461,10 @@ final class Spacing {
             CONSTRUCTS_CLAUSE  DOT  *       tight
             DEPENDS_CLAUSE  *       DOT     tight
             DEPENDS_CLAUSE  DOT     *       tight
+            ENSURES_ARM     *       DOT     tight
+            ENSURES_ARM     DOT     *       tight
+            ENSURES_CLAUSE  *       *       spaced
+            ENSURES_ARM     *       *       spaced
             # What is applied, opened or negated is written against it.
             APPLY_EXPR      *       LPAREN  tight
             UNARY_EXPR      MINUS   *       tight
@@ -625,6 +630,9 @@ final class Spacing {
             INVARIANT_CLAUSE INVARIANT_KW * spaced
             INVARIANT_CLAUSE *      ASSIGN  spaced
             INVARIANT_CLAUSE ASSIGN *       spaced
+            ENSURES_CLAUSE ENSURES_KW *     spaced
+            ENSURES_CLAUSE *       ASSIGN   spaced
+            ENSURES_CLAUSE ASSIGN  *        spaced
             EXAMPLE_ROW     *       COLON   spaced
             EXAMPLE_ROW     COLON   *       spaced
             EXAMPLE_ROW     *       ARROW   spaced

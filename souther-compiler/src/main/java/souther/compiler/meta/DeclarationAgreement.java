@@ -335,7 +335,7 @@ public final class DeclarationAgreement {
     private static List<Object> crossingParts(Hir.BehaviorDef behavior) {
         return switch (behavior) {
             case Hir.SpecBehavior b -> List.of(shaped(b.params()), b.ret(), b.constructs(),
-                    b.dependsOn());
+                    b.dependsOn(), b.ensures());
             // A composition does not arrive here. What a module publishes for one is the signature
             // its stages compute (`ModuleMetadata.signatureOf`), so what comes back from a jar is a
             // declared behavior like any other, and its stages are the module's own business. Said

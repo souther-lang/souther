@@ -24,7 +24,7 @@ public enum SyntaxKind {
     // package/module names): the parser recognizes them by text at top-level position, like the
     // contextual `intrinsic` / `decoder` / `from`. `on`, the second word of `depends on`, is read
     // the same way, so a field or parameter may still be named on.
-    MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW, ELSE_KW,
+    MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW, ELSE_KW,
     TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW, MATCH_KW, WITH_KW,
     UNREACHABLE_KW,
 
@@ -70,6 +70,8 @@ public enum SyntaxKind {
     PARAM,
     CONSTRUCTS_CLAUSE,
     DEPENDS_CLAUSE,
+    ENSURES_CLAUSE,
+    ENSURES_ARM,
     STAGE,
 
     // --- nodes: fn ---
@@ -167,7 +169,7 @@ public enum SyntaxKind {
             case WHITESPACE, LINE_COMMENT, IDENT, INT_LIT, DECIMAL_LIT, STRING_LIT, TYPEVAR, EOF,
                  ERROR_TOKEN -> Lexis.OPEN_TOKEN;
 
-            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW,
+            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, ENSURES_KW, AS_KW, LET_KW, GUARD_KW,
                  ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
                  MATCH_KW, WITH_KW, UNREACHABLE_KW,
                  LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT, SPREAD,
@@ -179,7 +181,7 @@ public enum SyntaxKind {
                  DATA_DEF, PRODUCT_BODY, FIELD, SPREAD_MEMBER, SUM_BODY, NEWTYPE_BODY,
                  INVARIANT_CLAUSE,
                  BEHAVIOR_DEF, BEHAVIOR_SIG, PIPE_BEHAVIOR, PARAM_LIST, PARAM, CONSTRUCTS_CLAUSE,
-                 DEPENDS_CLAUSE, STAGE,
+                 DEPENDS_CLAUSE, ENSURES_CLAUSE, ENSURES_ARM, STAGE,
                  FN_DEF, FN_PARAM_LIST, FN_PARAM, INTRINSIC_BODY, PARTIAL_MODIFIER,
                  PRIVATE_MODIFIER,
                  EXAMPLE_DEF, EXAMPLE_ROW, EXAMPLES_FILE_HEADER, WITH_CLAUSE, WITH_BINDING,
@@ -249,6 +251,7 @@ public enum SyntaxKind {
             case EXPOSING_KW -> "exposing";
             case DATA_KW -> "data";
             case INVARIANT_KW -> "invariant";
+            case ENSURES_KW -> "ensures";
             case AS_KW -> "as";
             case LET_KW -> "let";
             case GUARD_KW -> "guard";
