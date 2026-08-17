@@ -21,15 +21,23 @@ import java.util.List;
  *
  * <p>Neither says anything about how much a module imports, because a module in either imports one
  * thing or none. A walk that re-reads a module's imports once per import is quadratic in that number
- * and flat at one, so {@link #narrow} and {@link #wide} vary it and nothing else: same modules, same
- * declarations, a type that holds nothing across a boundary, and one import against {@link #LINKS}.
- * {@link Values} asks this of a module's values and has had the fan-out shape from the start.
+ * and flat at one, so {@link #imports} varies that number itself — {@link #WIDTHS}, at one size — and
+ * holds everything else still. {@link Values} asks this of a module's values and has had the fan-out
+ * shape from the start.
  *
- * <p>Widening the chain instead does not answer it. Each of its types contains the one before it, so
- * a module importing four would contain four, and each of those four — the type grows as a tree
- * rather than the imports as a list. Measured at fourteen modules that shape already cost four times
- * a chain of the same length and was doubling every two, which is a number about the type and not
- * about the imports.
+ * <p>Held still means every module of every width declaring the same data, the same behavior and the
+ * same body, down to the text. An import with no name list is what makes that possible: the module is
+ * resolved and read, and nothing in the body has to mention it, so what separates two widths is the
+ * imports and not the expressions written to justify them. The figure to read is the cost per import
+ * — per module, a wider module doing more is what widening means, and the question is whether each
+ * import costs the same as the last.
+ *
+ * <p>Two shapes this is not. Widening the chain does not answer it: each of its types contains the
+ * one before it, so a module importing four contains four and each of those four, and what grows is
+ * the type as a tree — measured, that cost four times a chain of the same length at fourteen modules
+ * and was doubling every two. Nor does importing a name and using it: the use is a construction, a
+ * call, a field read and an addition, so four imports carry four of each and the difference between
+ * two widths is mostly the bodies.
  */
 final class Scale {
 
@@ -37,16 +45,26 @@ final class Scale {
 
     private static final int[] SIZES = {10, 25, 50, 100, 200};
 
-    /** How many modules a wide link imports. Enough that a term in the square of it is visible
-     *  against the linear one, and small enough to be an arrangement someone writes. */
-    static final int LINKS = 4;
+    /** Imports per module, doubling, so the ratio between two lines names the exponent the way the
+     *  doubling sizes do. */
+    static final int[] WIDTHS = {1, 2, 4, 8};
+
+    /** The size the widths are measured at: the largest, where the fixed cost of a compile is
+     *  smallest against the rest and a difference between widths is least buried in it. */
+    private static final int WIDTH_MODULES = 200;
 
     static void measure(Report report) {
         for (int modules : SIZES) {
             line(report, modules, "independent", independent(modules));
             line(report, modules, "chain", chain(modules));
-            line(report, modules, "narrow (1 import)", narrow(modules));
-            line(report, modules, "wide (%d imports)".formatted(LINKS), wide(modules));
+        }
+        for (int width : WIDTHS) {
+            Timing timing = timeOf(imports(WIDTH_MODULES, width));
+            report.line("SCALE n=%-4d imports=%-2d      %7.1f ms (%5.3f ms/module, "
+                            + "%6.4f ms/import)",
+                    WIDTH_MODULES, width, timing.medianMillis(),
+                    timing.medianMillis() / WIDTH_MODULES,
+                    timing.medianMillis() / ((double) WIDTH_MODULES * width));
         }
     }
 
@@ -67,59 +85,30 @@ final class Scale {
     }
 
     /**
-     * A chain whose modules import one another and hold nothing of one another.
+     * {@code modules} modules, each importing the {@code width} written just before it.
      *
-     * <p>This exists to be read against {@link #wide}, and the two differ in one thing. It cannot be
-     * read against {@link #chain}, whose data nests: there each module's type contains the one
-     * before it, so widening those links would multiply the type as well as the imports and the
-     * difference between the two lines would be neither.
-     */
-    static List<String> narrow(int modules) {
-        return flat("p", modules, 1);
-    }
-
-    /**
-     * The same, with each module importing the {@link #LINKS} before it.
+     * <p>Every module is the same module. It declares the same data under a different number, the
+     * same behavior over it and the same body, and the import lines are the only text that differs
+     * between one width and another — so are the only thing a difference between two of these can be
+     * about.
      *
-     * <p>Read against {@link #narrow} at the same size, what is between the two lines is what the
-     * imports cost, because that is all there is between the two workspaces: the same modules, the
-     * same declarations, the same flat type, and every body doing the same thing to each module it
-     * names.
+     * <p>The first {@code width} modules import fewer, there being fewer written before them. At the
+     * sizes this is measured at that is a fixed handful against the rest and it is the same handful
+     * at every width.
      */
-    static List<String> wide(int modules) {
-        return flat("q", modules, LINKS);
-    }
-
-    /**
-     * {@code modules} modules, each importing up to {@code links} of those before it and calling
-     * every one of them.
-     *
-     * <p>Nothing is held across a module boundary. A module's data is one {@code Int} whatever it
-     * imports, so what a compile walks grows with the number of modules and not with what they name
-     * — which is what lets the number of imports be varied on its own.
-     */
-    private static List<String> flat(String prefix, int modules, int links) {
+    static List<String> imports(int modules, int width) {
         List<String> sources = new ArrayList<>();
-        sources.add("""
-                module %s0 exposing ( D0, f0 )
-                data D0 = { v: Int }
-                behavior f0 : (d: D0) -> D0
-                let f0 (d) = D0 { v = d.v + 1 }
-                """.formatted(prefix));
-        for (int i = 1; i < modules; i++) {
-            StringBuilder imports = new StringBuilder();
-            StringBuilder sum = new StringBuilder();
-            for (int j = Math.max(0, i - links); j < i; j++) {
-                imports.append("import %s%d ( D%d, f%d )%n".formatted(prefix, j, j, j));
-                sum.append(sum.isEmpty() ? "" : " + ")
-                        .append("f%d(D%d { v = d.v }).v".formatted(j, j));
+        for (int i = 0; i < modules; i++) {
+            StringBuilder imported = new StringBuilder();
+            for (int j = Math.max(0, i - width); j < i; j++) {
+                imported.append("import i%d%n".formatted(j));
             }
             sources.add("""
-                    module %s%d exposing ( D%d, f%d )
+                    module i%d exposing ( D%d, f%d )
                     %sdata D%d = { v: Int }
                     behavior f%d : (d: D%d) -> D%d
-                    let f%d (d) = D%d { v = %s }
-                    """.formatted(prefix, i, i, i, imports, i, i, i, i, i, i, sum));
+                    let f%d (d) = D%d { v = d.v + 1 }
+                    """.formatted(i, i, i, imported, i, i, i, i, i, i));
         }
         return sources;
     }

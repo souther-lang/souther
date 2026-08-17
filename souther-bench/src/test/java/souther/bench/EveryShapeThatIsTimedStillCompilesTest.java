@@ -27,9 +27,9 @@ import java.util.List;
  */
 class EveryShapeThatIsTimedStillCompilesTest {
 
-    /** Enough of each shape to be that shape: a chain of four has a middle, and a wide link at four
-     *  imports {@link Scale#LINKS} modules rather than however many there are. */
-    private static final int MODULES = Scale.LINKS + 2;
+    /** Enough of each shape to be that shape: a chain has a middle, and the widest module imports
+     *  its full width rather than however many happen to be written before it. */
+    private static final int MODULES = 2 * Scale.WIDTHS[Scale.WIDTHS.length - 1];
 
     /** Enough values that a fan-out fans and a chain has links that are not its ends. */
     private static final int VALUES = 8;
@@ -38,8 +38,9 @@ class EveryShapeThatIsTimedStillCompilesTest {
     void everyWorkspaceShapeCompiles() {
         compiles("independent", Scale.independent(MODULES));
         compiles("chain", Scale.chain(MODULES));
-        compiles("narrow", Scale.narrow(MODULES));
-        compiles("wide", Scale.wide(MODULES));
+        for (int width : Scale.WIDTHS) {
+            compiles("imports=" + width, Scale.imports(MODULES, width));
+        }
     }
 
     @Test
@@ -53,20 +54,34 @@ class EveryShapeThatIsTimedStillCompilesTest {
     }
 
     /**
-     * That the wide link is wide.
+     * That each width is that width, and that widths are all that separate them.
      *
-     * <p>The shape is written by a loop over what a module imports, and a loop that produced one
-     * import would still compile, still be timed, and still be reported under a name saying it was
-     * several. What the measurement is for is the difference between this and {@code narrow}, and
-     * there is no difference to measure if the two are the same arrangement.
+     * <p>Both halves, because either alone passes on a shape that measures nothing. A loop that
+     * produced one import at every width would still compile, still be timed, and still be reported
+     * under a number saying it was eight. And a shape whose bodies grew with its imports would
+     * differ by width in what it declares as well as in what it imports, so a difference between two
+     * lines would be about both and attributable to neither — which is what the first attempt at
+     * this did, importing a name and using it in a construction, a call, a field read and an
+     * addition.
      */
     @Test
-    void aWideLinkImportsSeveralModules() {
-        String last = Scale.wide(MODULES).getLast();
-        long imports = last.lines().filter(line -> line.startsWith("import ")).count();
-        if (imports != Scale.LINKS) {
-            throw new AssertionError("a wide link imports " + imports + " module(s), not "
-                    + Scale.LINKS + ":\n" + last);
+    void aWidthIsItsImportsAndNothingElse() {
+        String previous = null;
+        for (int width : Scale.WIDTHS) {
+            String last = Scale.imports(MODULES, width).getLast();
+            long imports = last.lines().filter(line -> line.startsWith("import ")).count();
+            if (imports != width) {
+                throw new AssertionError("a module at width " + width + " imports " + imports
+                        + " module(s):\n" + last);
+            }
+            String body = last.lines().filter(line -> !line.startsWith("import "))
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            if (previous != null && !previous.equals(body)) {
+                throw new AssertionError("what a module declares changes with its width, so a"
+                        + " difference between two widths is not about the imports:\n" + previous
+                        + "\n--- against ---\n" + body);
+            }
+            previous = body;
         }
     }
 
