@@ -245,7 +245,7 @@ public final class Runner {
      */
     private static String named(Hir.Var name) {
         return switch (name) {
-            case Hir.Var.Denoting d -> d.bare();
+            case Hir.Var.Denoting d -> d.denotes().name();
             case Hir.Var.Unanswered u -> throw u.unexpectedHere();
         };
     }
@@ -276,7 +276,8 @@ public final class Runner {
         String requested = Reserved.name(requestedSpelling);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
-        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
+        Map<souther.compiler.types.ValueName.Behavior, List<Hir.Var>> pipeStages =
+                PipelineSigs.pipelineStages(module.name(), module.behaviors());
         Map<String, Hir.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!exposes(module, b.name())) {
@@ -323,7 +324,8 @@ public final class Runner {
      * dependencies would make that constructor take those behaviors, which {@code run} cannot supply.
      */
     private static Blocker pipelineBlocker(Prepared module, Hir.PipeBehavior pipe,
-            java.util.Set<String> implemented, Map<String, List<Hir.Var>> pipeStages) {
+            java.util.Set<String> implemented,
+            Map<souther.compiler.types.ValueName.Behavior, List<Hir.Var>> pipeStages) {
         Map<String, Hir.SpecBehavior> specs = new java.util.HashMap<>();
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (b instanceof Hir.SpecBehavior spec) {
@@ -363,7 +365,8 @@ public final class Runner {
         String available = drivable.isEmpty() ? "none" : String.join(", ", drivable);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(souther.compiler.check.Desugared.Fn::name).collect(Collectors.toSet());
-        Map<String, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module.behaviors());
+        Map<souther.compiler.types.ValueName.Behavior, List<Hir.Var>> pipeStages =
+                PipelineSigs.pipelineStages(module.name(), module.behaviors());
         for (Hir.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;

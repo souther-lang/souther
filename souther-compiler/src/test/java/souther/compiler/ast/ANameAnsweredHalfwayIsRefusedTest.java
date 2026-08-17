@@ -91,7 +91,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
         Hir.Var resolved = new Hir.Var.Denoting(spin, DECLARED,
                 new ReachName.OfModule("demo", "spin"), spin.region());
 
-        assertEquals("spin", resolved.answered().bare());
+        assertEquals("spin", resolved.answered().denotes().name());
         assertEquals("demo.spin", resolved.answered().reaches());
     }
 }

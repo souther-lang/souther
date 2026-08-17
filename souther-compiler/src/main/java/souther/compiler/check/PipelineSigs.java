@@ -8,6 +8,7 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,9 +35,11 @@ public final class PipelineSigs {
      * {@code imported} map seeds the resolvable behaviors with those imported from other modules
      * (spec §modules, §composition), so a stage naming an imported behavior resolves through {@link #stageSig}.
      */
-    public static Map<String, Sig> signatures(List<Hir.BehaviorDef> behaviors, Symbols symbols,
-                                              Map<String, Sig> imported) {
-        Map<String, Sig> sigs = new HashMap<>(imported);
+    public static Map<ValueName.Behavior, Sig> signatures(String module,
+                                                         List<Hir.BehaviorDef> behaviors,
+                                                         Symbols symbols,
+                                                         Map<ValueName.Behavior, Sig> imported) {
+        Map<ValueName.Behavior, Sig> sigs = new HashMap<>(imported);
         for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec) {
                 // A behavior's signature is what it declares, whether a `let` implements it here or the Java
@@ -48,17 +51,19 @@ public final class PipelineSigs {
                 // and there is no other way to make one. A behavior resting on a name that denotes nothing
                 // has no signature to build and is left out: the name was reported where it was written.
                 try {
-                    sigs.put(spec.name(), SignatureBoundary.of(spec, symbols));
+                    sigs.put(new ValueName.Behavior(module, spec.name()),
+                            SignatureBoundary.of(spec, symbols));
                 } catch (Unanswerable _) {
                     // deliberately empty: see above
                 }
             }
         }
-        Map<String, List<Hir.Var>> pipeStages = pipelineStages(behaviors);
+        Map<ValueName.Behavior, List<Hir.Var>> pipeStages = pipelineStages(module, behaviors);
         for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.PipeBehavior pipe) {
                 try {
-                    sigs.put(pipe.name(), pipeSig(pipe, sigs, symbols, pipeStages));
+                    sigs.put(new ValueName.Behavior(module, pipe.name()),
+                            pipeSig(pipe, sigs, symbols, pipeStages));
                 } catch (Unanswerable _) {
                     // A stage that names nothing was reported where it was written, and this
                     // composition has no signature to work out. It is one behavior: the others keep
@@ -71,17 +76,18 @@ public final class PipelineSigs {
     }
 
     /** Maps each pipeline behavior's name to its declared stages (for flattening, spec §type-routing). */
-    public static Map<String, List<Hir.Var>> pipelineStages(Hir.Module module) {
-        return pipelineStages(module.behaviors());
+    public static Map<ValueName.Behavior, List<Hir.Var>> pipelineStages(Hir.Module module) {
+        return pipelineStages(module.name(), module.behaviors());
     }
 
     /** The same, of the behaviors themselves — what a reader holding them rather than a module
      * asks. */
-    public static Map<String, List<Hir.Var>> pipelineStages(List<Hir.BehaviorDef> behaviors) {
-        Map<String, List<Hir.Var>> stages = new HashMap<>();
+    public static Map<ValueName.Behavior, List<Hir.Var>> pipelineStages(
+            String module, List<Hir.BehaviorDef> behaviors) {
+        Map<ValueName.Behavior, List<Hir.Var>> stages = new HashMap<>();
         for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.PipeBehavior pipe) {
-                stages.put(pipe.name(), pipe.stages());
+                stages.put(new ValueName.Behavior(module, pipe.name()), pipe.stages());
             }
         }
         return stages;
@@ -95,7 +101,7 @@ public final class PipelineSigs {
      * intermediate. A pipeline viewed on its own still has the merged output its own stages produce.
      */
     public static List<Hir.Var> flattenStages(List<Hir.Var> stages,
-                                                   Map<String, List<Hir.Var>> pipeStages,
+                                                   Map<ValueName.Behavior, List<Hir.Var>> pipeStages,
                                                    SourcePos pos) {
         List<Hir.Var> out = new ArrayList<>();
         flattenInto(stages, pipeStages, out, new LinkedHashSet<>(), pos);
@@ -103,19 +109,19 @@ public final class PipelineSigs {
     }
 
     private static void flattenInto(List<Hir.Var> stages,
-                                    Map<String, List<Hir.Var>> pipeStages,
-                                    List<Hir.Var> out, Set<String> inProgress, SourcePos pos) {
+                                    Map<ValueName.Behavior, List<Hir.Var>> pipeStages,
+                                    List<Hir.Var> out, Set<ValueName.Behavior> inProgress,
+                                    SourcePos pos) {
         for (Hir.Var s : stages) {
             // A stage that names nothing was reported where it is written. It is no pipeline to
             // splice in, and the composition it is part of is abandoned where its signature is
             // asked for rather than here.
-            List<Hir.Var> sub = s.answered() instanceof Hir.Var.Denoting named
-                    ? pipeStages.get(named.bare()) : null;
+            ValueName.Behavior named = reaches(s);
+            List<Hir.Var> sub = named == null ? null : pipeStages.get(named);
             if (sub == null) {
                 out.add(s);
                 continue;
             }
-            String named = s.answered().bare();
             if (!inProgress.add(named)) {
                 throw CompileException.of(Diagnostic
                                 .at(pos).say(new BehaviorMessage.APipelineComposesWithItself(s.name())).build());
@@ -126,6 +132,20 @@ public final class PipelineSigs {
     }
 
     /**
+     * The behavior {@code stage} names, or null where resolution found none.
+     *
+     * <p>The declaration and not the name it is written under. Two modules may declare a behavior
+     * of one name and a stage says which of them it reaches, so a table asked with the spelling
+     * answers whichever entry was written last — which is a different behavior, typed and emitted
+     * as though the author had named it.
+     */
+    private static ValueName.Behavior reaches(Hir.Var stage) {
+        return stage.answered() != null
+                && stage.answered().denotes() instanceof ValueName.Behavior behavior
+                ? behavior : null;
+    }
+
+    /**
      * The signature of a pipeline stage.
      *
      * <p>Which behavior a stage names was answered when the module's names were resolved, so there
@@ -133,12 +153,13 @@ public final class PipelineSigs {
      * composition has no meaning to work out: the behavior it belongs to is abandoned, and the
      * definitions around it are checked as they would be without it.
      */
-    public static Sig stageSig(Hir.Var stage, Map<String, Sig> sigs, Symbols symbols,
+    public static Sig stageSig(Hir.Var stage, Map<ValueName.Behavior, Sig> sigs, Symbols symbols,
                                SourcePos pos) {
-        if (!(stage.answered() instanceof Hir.Var.Denoting named)) {
+        ValueName.Behavior named = reaches(stage);
+        if (named == null) {
             throw new Unanswerable(stage.pos());
         }
-        Sig s = sigs.get(named.bare());
+        Sig s = sigs.get(named);
         if (s == null) {
             // The behavior is declared by a module this compilation could not work out — reported
             // on that module, whose author is the one who can act on it.
@@ -147,8 +168,9 @@ public final class PipelineSigs {
         return s;
     }
 
-    private static Sig pipeSig(Hir.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
-                               Map<String, List<Hir.Var>> pipeStages) {
+    private static Sig pipeSig(Hir.PipeBehavior pipe, Map<ValueName.Behavior, Sig> sigs,
+                               Symbols symbols,
+                               Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
         List<Hir.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());

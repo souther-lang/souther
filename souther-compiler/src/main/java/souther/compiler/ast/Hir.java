@@ -1744,11 +1744,6 @@ public interface Hir {
                 heldBy(written, region);
             }
 
-            /** As {@link #denotes()}, by the bare name of what it names. */
-            public String bare() {
-                return denotes().name();
-            }
-
             /**
              * As {@link #reachedAs()}, rendered — what a table keyed by a declaration's name is
              * looked up with.

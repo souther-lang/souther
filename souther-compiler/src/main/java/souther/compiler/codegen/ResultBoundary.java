@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.check.MatchElaborator;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
@@ -64,7 +65,8 @@ final class ResultBoundary {
     }
 
     /** Reads the Souther value out of the union member on the stack, leaving it boxed. */
-    static void project(CodeBuilder code, CodegenContext ctx, String callee, List<TypeSymbol> bridged,
+    static void project(CodeBuilder code, CodegenContext ctx, ValueName.Behavior callee,
+                        List<TypeSymbol> bridged,
                         int slot) {
         if (bridged.isEmpty()) {
             return;

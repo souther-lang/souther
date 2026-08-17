@@ -2,9 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,13 +23,17 @@ public final class InjectionSigs {
 
     /**
      * Builds the map. Whether a behavior is an injection target is decided the same way in both
-     * callers — it is a {@code SpecBehavior} this module writes no {@code let} for. A local behavior
-     * of the same name as an imported one wins; the imported signature only fills a name this module
-     * does not declare.
+     * callers — it is a {@code SpecBehavior} this module writes no {@code let} for.
+     *
+     * <p>Keyed by the declaration each signature belongs to. A behavior this module declares and one
+     * it borrows may share a name, and they are two behaviors: under the spelling, one of them
+     * silently answered for the other and which it was fell to the order the two were written in.
      */
-    public static Map<String, ReqSig> of(List<Hir.BehaviorDef> behaviors, List<Hir.FnDef> fns,
-                                         Symbols symbols, Map<String, Sig> importedSigs,
-                                         Set<String> importedInjected) {
+    public static Map<ValueName.Behavior, ReqSig> of(String module, List<Hir.BehaviorDef> behaviors,
+                                                     List<Hir.FnDef> fns,
+                                                     Symbols symbols,
+                                                     Map<ValueName.Behavior, Sig> importedSigs,
+                                                     Set<ValueName.Behavior> importedInjected) {
         Set<String> own = new HashSet<>();
         for (Hir.BehaviorDef b : behaviors) {
             if (b instanceof Hir.SpecBehavior spec
@@ -37,7 +41,7 @@ public final class InjectionSigs {
                 own.add(spec.name());
             }
         }
-        return dependencies(behaviors, symbols, own, importedSigs, importedInjected);
+        return dependencies(module, behaviors, symbols, own, importedSigs, importedInjected);
     }
 
     /** Whether {@code spec} is written with no {@code let} of its own, so something else supplies
@@ -57,27 +61,12 @@ public final class InjectionSigs {
      * caller so a module read from the path, which publishes no {@code let}, is decided the same way
      * as one being compiled.
      */
-    public static Map<String, ReqSig> dependencies(List<Hir.BehaviorDef> behaviors, Symbols symbols,
-                                                   Set<String> dependencies,
-                                                   Map<String, Sig> importedSigs,
-                                                   Set<String> importedInjected) {
-        Map<String, ReqSig> sigs = new HashMap<>();
-        for (Hir.BehaviorDef b : behaviors) {
-            if (b instanceof Hir.SpecBehavior spec && dependencies.contains(spec.name())) {
-                List<Type> params = new ArrayList<>();
-                for (Hir.Param p : spec.params()) {
-                    params.add(TypeOps.successType(p.type()));
-                }
-                sigs.put(spec.name(), new ReqSig(params, TypeOps.successType(spec.ret())));
-            }
-        }
-        for (String name : importedInjected) {
-            Sig sig = importedSigs.get(name);
-            if (sig != null) {
-                sigs.putIfAbsent(name, new ReqSig(sig.inputTypes(), sig.outputType()));
-            }
-        }
-        return sigs;
+    public static Map<ValueName.Behavior, ReqSig> dependencies(
+            String module, List<Hir.BehaviorDef> behaviors, Symbols symbols,
+            Set<String> dependencies,
+            Map<ValueName.Behavior, Sig> importedSigs,
+            Set<ValueName.Behavior> importedInjected) {
+        return sigsOf(module, behaviors, dependencies, importedSigs, importedInjected);
     }
 
     /**
@@ -89,24 +78,36 @@ public final class InjectionSigs {
      * <p>{@code callable} names this module's own; {@code importedCallable} the ones it borrows. A
      * local behavior of the same name as an imported one wins, as it does for an injection target.
      */
-    public static Map<String, ReqSig> callable(List<Hir.BehaviorDef> behaviors, Symbols symbols,
-                                               Set<String> callable,
-                                               Map<String, Sig> importedSigs,
-                                               Set<String> importedCallable) {
-        Map<String, ReqSig> sigs = new HashMap<>();
+    public static Map<ValueName.Behavior, ReqSig> callable(
+            String module, List<Hir.BehaviorDef> behaviors, Symbols symbols,
+            Set<String> callable,
+            Map<ValueName.Behavior, Sig> importedSigs,
+            Set<ValueName.Behavior> importedCallable) {
+        return sigsOf(module, behaviors, callable, importedSigs, importedCallable);
+    }
+
+    /**
+     * The two questions above, which differ only in which behaviors are named — one walk, so that a
+     * borrowed declaration and a declared one are read the same way whichever question is asked.
+     */
+    private static Map<ValueName.Behavior, ReqSig> sigsOf(
+            String module, List<Hir.BehaviorDef> behaviors, Set<String> own,
+            Map<ValueName.Behavior, Sig> importedSigs, Set<ValueName.Behavior> borrowed) {
+        Map<ValueName.Behavior, ReqSig> sigs = new LinkedHashMap<>();
         for (Hir.BehaviorDef b : behaviors) {
-            if (b instanceof Hir.SpecBehavior spec && callable.contains(spec.name())) {
+            if (b instanceof Hir.SpecBehavior spec && own.contains(spec.name())) {
                 List<Type> params = new ArrayList<>();
                 for (Hir.Param p : spec.params()) {
                     params.add(TypeOps.successType(p.type()));
                 }
-                sigs.put(spec.name(), new ReqSig(params, TypeOps.successType(spec.ret())));
+                sigs.put(new ValueName.Behavior(module, spec.name()),
+                        new ReqSig(params, TypeOps.successType(spec.ret())));
             }
         }
-        for (String name : importedCallable) {
-            Sig sig = importedSigs.get(name);
+        for (ValueName.Behavior each : borrowed) {
+            Sig sig = importedSigs.get(each);
             if (sig != null) {
-                sigs.putIfAbsent(name, new ReqSig(sig.inputTypes(), sig.outputType()));
+                sigs.put(each, new ReqSig(sig.inputTypes(), sig.outputType()));
             }
         }
         return sigs;
@@ -120,8 +121,8 @@ public final class InjectionSigs {
      * signature. One projection rather than one per caller, so a body expanded for the backend and a
      * helper expanded for its own check answer the same about the same name.
      */
-    public static Map<String, Integer> arities(Map<String, ReqSig> sigs) {
-        Map<String, Integer> arities = new LinkedHashMap<>();
+    public static Map<ValueName.Behavior, Integer> arities(Map<ValueName.Behavior, ReqSig> sigs) {
+        Map<ValueName.Behavior, Integer> arities = new LinkedHashMap<>();
         sigs.forEach((name, sig) -> arities.put(name, sig.params().size()));
         return arities;
     }

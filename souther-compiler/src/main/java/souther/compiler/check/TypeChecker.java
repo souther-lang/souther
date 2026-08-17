@@ -9,6 +9,7 @@ import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -71,9 +72,10 @@ public final class TypeChecker {
      * because the body check reads the same two and they must be the same two.
      */
     public static Reported checkModule(Hir.Module module, Symbols symbols,
-                                       Map<String, Sig> sigs, Set<String> importedInjected,
-                                       Hir.Module lowered, Map<String, ReqSig> reqSigs,
-                                       Map<String, ReqSig> calleeSigs,
+                                       Map<String, Sig> sigs,
+                                       Set<ValueName.Behavior> importedInjected,
+                                       Hir.Module lowered, Map<ValueName.Behavior, ReqSig> reqSigs,
+                                       Map<ValueName.Behavior, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
                                        Map<String, Hir.FnDef> imported, Set<String> settled) {
         Elaborated elaborated = new Elaborated();
@@ -106,8 +108,8 @@ public final class TypeChecker {
      */
     public static Core checkBehavior(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr loweredBody,
                                      InvariantChecker.Source discharge,
-                                     Symbols symbols, Map<String, ReqSig> calleeSigs,
-                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
+                                     Symbols symbols, Map<ValueName.Behavior, ReqSig> calleeSigs,
+                                     Map<ValueName.Behavior, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      List<Diagnostic> warnings) {
@@ -172,11 +174,12 @@ public final class TypeChecker {
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
     static void checkRecovering(Hir.Module module, Symbols symbols,
-                                        Map<String, Sig> sigs, Set<String> importedInjected,
-                                        Hir.Module lowered, Map<String, ReqSig> calleeSigs,
+                                        Map<String, Sig> sigs,
+                                       Set<ValueName.Behavior> importedInjected,
+                                        Hir.Module lowered, Map<ValueName.Behavior, ReqSig> calleeSigs,
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
-                                        Map<String, ReqSig> reqSigs,
+                                        Map<ValueName.Behavior, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<String, Hir.FnDef> publishedToHere,
                                         Set<String> settled) {
@@ -288,7 +291,7 @@ public final class TypeChecker {
                     // A name nothing answered is no name for another to be a duplicate of, and it
                     // was reported where it is written.
                     if (req.answered() instanceof Hir.Var.Denoting named) {
-                        required.add(named.bare());
+                        required.add(named.denotes().name());
                     }
                 }
                 DataChecker.rejectDuplicateNames(required, "`depends on`", spec.pos());

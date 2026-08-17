@@ -102,7 +102,7 @@ class ANameUsedAsAValueHasTwoAnswersTest {
     void anAnsweredNameIsAnsweredOnBothCounts() {
         Hir.Var.Denoting answered = denoting(WrittenName.of("spin", POS));
 
-        assertEquals("spin", answered.bare());
+        assertEquals("spin", answered.denotes().name());
         assertEquals("demo.spin", answered.reaches());
         assertFalse(answered.unresolved());
 

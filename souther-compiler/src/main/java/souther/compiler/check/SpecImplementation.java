@@ -63,7 +63,7 @@ public final class SpecImplementation {
             Hir.Var.Denoting named = dependency.answered();
             required.add(named == null
                     ? new Parameter.Unanswered()
-                    : new Parameter.Injected(named.bare()));
+                    : new Parameter.Injected(named.denotes().name()));
         }
         return List.copyOf(required);
     }
