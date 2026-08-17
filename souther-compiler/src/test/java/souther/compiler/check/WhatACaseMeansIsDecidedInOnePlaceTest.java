@@ -31,16 +31,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatACaseMeansIsDecidedInOnePlaceTest {
 
     /**
-     * Where reading a subject as an optional is still part of the answer.
+     * Where reading a subject as an optional is part of the answer: where the forms are told apart,
+     * which is the point of it, and nowhere else.
      *
-     * <p>{@code CaseSpace} is where the three forms are told apart, which is the point of it. The
-     * elaborator reads it once more, and that one is not the same question: an optional's
-     * <em>surface</em> rules differ — an or-pattern is refused over one, {@code Some(x)} opens the
-     * element rather than a newtype layer, and an arm naming neither carrier is reported as not a
-     * case of an optional. Which rules the text is held to is decided there; what a case means is not.
+     * <p>A reader that needs the form reads the form. An optional's <em>surface</em> rules do differ
+     * — an or-pattern is refused over one, {@code Some(x)} opens the element rather than a newtype
+     * layer, an arm naming neither carrier is reported as not a case of an optional — and choosing
+     * those rules is a second question, not a second answer to this one. It is asked of the space's
+     * own arms, so a form the space gains has to be answered by every reader that decides by form
+     * rather than falling into whichever reading is written last.
      */
     private static final List<String> MAY_READ_AN_OPTIONAL_SUBJECT =
-            List.of("check/CaseSpace.java", "check/MatchElaborator.java");
+            List.of("check/CaseSpace.java");
 
     /**
      * Files that take a {@code match} apart. Anything reading a subject's shape here would be

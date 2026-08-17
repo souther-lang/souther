@@ -40,13 +40,17 @@ public final class MatchElaborator {
                                        Type expected) {
         Core scrutinee = Elaborator.elaborate(m.scrutinee(), env, ctx);
         Type st = scrutinee.type();
-        CaseSpace space = CaseSpace.of(st, ctx.symbols());
-        if (space instanceof CaseSpace.Plain) {
-            throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
-        }
-        return st instanceof Type.OptionOf
-                ? elaborateOptionMatch(m, scrutinee, space, env, ctx, expected)
-                : elaborateCasesMatch(m, scrutinee, space, st, env, ctx, expected);
+        // Which form the subject is was answered where its cases were worked out. Read as a form
+        // rather than by asking the type again, so a form the space gains has to be answered here
+        // too rather than falling into the general reading with nobody the wiser.
+        return switch (CaseSpace.of(st, ctx.symbols())) {
+            case CaseSpace.Plain ignored -> throw CompileException.of(Diagnostic.at(m.pos(), 5)
+                    .say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
+            case CaseSpace.Optional option ->
+                    elaborateOptionMatch(m, scrutinee, option, env, ctx, expected);
+            case CaseSpace.Cases cases ->
+                    elaborateCasesMatch(m, scrutinee, cases, st, env, ctx, expected);
+        };
     }
 
     /**
@@ -86,7 +90,7 @@ public final class MatchElaborator {
      * A single-case case binds that case's type; an or-pattern ({@code A | B}) binds {@code scrutinee}
      * (the sum type), since no one case type fits all its alternatives. Every case must be covered
      * exactly once (E1201; a second cover is an overlap error). */
-    static Core elaborateCasesMatch(Hir.Match m, Core scrutineeCore, CaseSpace space,
+    static Core elaborateCasesMatch(Hir.Match m, Core scrutineeCore, CaseSpace.Cases space,
                                         Type scrutinee,
                                         Scope env, CheckContext ctx, Type expected) {
         Set<TypeSymbol> cases = new HashSet<>(space.names());
@@ -112,7 +116,7 @@ public final class MatchElaborator {
             // One case binds what that case refines the value to; an or-pattern binds the subject,
             // no single case type fitting all of its alternatives.
             Refinement binding = selected.size() == 1
-                    ? selected.get(0).refinement() : new Refinement.Itself(scrutinee);
+                    ? selected.get(0).refinement() : new Refinement.Direct(scrutinee);
             Type bindType = binding.bound();
             if (c.unwrapAsserts() != null) {
                 if (selected.size() != 1) {
@@ -145,7 +149,7 @@ public final class MatchElaborator {
 
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
      * {@code None}; both must be present (spec §match). */
-    static Core elaborateOptionMatch(Hir.Match m, Core scrutineeCore, CaseSpace space,
+    static Core elaborateOptionMatch(Hir.Match m, Core scrutineeCore, CaseSpace.Optional space,
                                           Scope env, CheckContext ctx, Type expected) {
         Set<TypeSymbol> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
@@ -164,7 +168,7 @@ public final class MatchElaborator {
             Type bind = selector.bound();
             if (c.unwrapAsserts() != null) {
                 // Only the carrier that holds something has something to open.
-                if (!(selector.refinement() instanceof Refinement.Wrapped wrapped)) {
+                if (!(selector.refinement() instanceof Refinement.OptionPresent wrapped)) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.TheCaseHasNoValueToOpen(caseType)).build());
                 }
                 checkOptionUnwrapAsserts(c, wrapped.bound(), ctx.symbols());

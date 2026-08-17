@@ -318,6 +318,12 @@ public sealed interface Core {
             if (selectors == null || selectors.isEmpty()) {
                 throw new IllegalArgumentException("an arm selects at least one case");
             }
+            if (binding == null) {
+                // A carrier with nothing under it is a refinement of its own, so there is no arm
+                // that binds nothing and no null to stand for one. Resolved means resolved.
+                throw new IllegalArgumentException("an arm binds what its carrier holds, which a"
+                        + " carrier holding nothing says as much as any other");
+            }
             selectors = List.copyOf(selectors);
         }
 
@@ -332,7 +338,7 @@ public sealed interface Core {
 
         /** The type the binding takes inside the arm, or null where the arm binds nothing readable. */
         public Type bindType() {
-            return binding == null ? null : binding.bound();
+            return binding.bound();
         }
     }
 

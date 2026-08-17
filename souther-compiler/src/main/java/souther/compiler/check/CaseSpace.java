@@ -39,7 +39,15 @@ sealed interface CaseSpace {
      *  {@code Option}. Written here beside the cases so a diagnostic never spells it a second way. */
     String described();
 
-    /** The cases, in the order the subject states them; empty for a subject that has none. */
+    /**
+     * The cases, in the order the subject states them; empty for a subject that has none.
+     *
+     * <p>The order is the subject's own — a union's members as written, a sum's cases as declared,
+     * an optional's present carrier before its absent one. It is what a report listing what a match
+     * left out is stable against, and what a reader walking the cases gets. It is not the order arms
+     * are tried in: which arm of a {@code match} takes a value is decided by the order the arms are
+     * written, which is the match's and not the subject's.
+     */
     List<CaseSelector> selectors();
 
     /** A subject with no cases: nothing selects from it and nothing opens it. */
@@ -56,7 +64,27 @@ sealed interface CaseSpace {
         }
     }
 
-    /** A subject something can be selected from. */
+    /**
+     * An optional, whose two carriers are the present one and the absent one.
+     *
+     * <p>Its own arm because what may be <em>written</em> over one differs, and a reader choosing
+     * those rules reads this rather than asking the subject's type a second time. Every form that
+     * admits a different surface is an arm here, so gaining one is a compile error at each reader
+     * that decides by form rather than a silent fall into the general reading.
+     */
+    record Optional(Type subject, List<CaseSelector> selectors) implements CaseSpace {
+
+        public Optional {
+            selectors = List.copyOf(selectors);
+        }
+
+        @Override
+        public String described() {
+            return "Option";
+        }
+    }
+
+    /** A subject whose cases are named data: a union's members, or a sum's declared cases. */
     record Cases(Type subject, String described, List<CaseSelector> selectors) implements CaseSpace {
 
         public Cases {
@@ -67,22 +95,21 @@ sealed interface CaseSpace {
     /**
      * What {@code subject} can be selected as.
      *
-     * <p>The one place the three forms are told apart. An optional is read before a name is, because
+     * <p>The one place the forms are told apart. An optional is read before a name is, because
      * {@code Option} is not a declaration a module holds; a union is read before a name because it
      * has no name to look up.
      */
     static CaseSpace of(Type subject, Symbols symbols) {
         if (subject instanceof Type.OptionOf option) {
-            return new Cases(subject, "Option", List.of(
-                    new CaseSelector(TypeSymbol.SOME, new Refinement.Wrapped(option.element())),
-                    new CaseSelector(TypeSymbol.NONE, new Refinement.Absent())));
+            return new Optional(subject, List.of(
+                    CaseSelector.optionPresent(option.element()), CaseSelector.optionAbsent()));
         }
         if (subject instanceof Type.Union union) {
-            return new Cases(subject, "union `" + Type.show(union) + "`", itself(union.members()));
+            return new Cases(subject, "union `" + Type.show(union) + "`", direct(union.members()));
         }
         if (subject instanceof Type.Ref ref
                 && symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum) {
-            return new Cases(subject, "data `" + sum.name() + "`", itself(TypeOps.caseNames(sum)));
+            return new Cases(subject, "data `" + sum.name() + "`", direct(TypeOps.caseNames(sum)));
         }
         return new Plain(subject);
     }
@@ -113,14 +140,14 @@ sealed interface CaseSpace {
 
     /** Cases whose carrier is the value itself, de-duplicated the way the subject states them: a
      *  member written twice is one case, and the first spelling is the one the order keeps. */
-    private static List<CaseSelector> itself(Iterable<TypeSymbol> members) {
+    private static List<CaseSelector> direct(Iterable<TypeSymbol> members) {
         Set<TypeSymbol> seen = new LinkedHashSet<>();
         for (TypeSymbol member : members) {
             seen.add(member);
         }
         List<CaseSelector> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            out.add(new CaseSelector(member, new Refinement.Itself(TypeOps.caseBindType(member))));
+            out.add(CaseSelector.direct(member, TypeOps.caseBindType(member)));
         }
         return out;
     }

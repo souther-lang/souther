@@ -901,7 +901,7 @@ final class BodyGen {
          *  under it is reached at all. */
         private void bindArm(Core.Case c, int sSlot, Type st) {
             switch (c.pattern().binding()) {
-                case Refinement.Wrapped wrapped -> {
+                case Refinement.OptionPresent wrapped -> {
                     Type element = wrapped.bound();
                     CaseGen.pushBound(code, wrapped, sSlot);
                     int bslot = slot(element);
@@ -910,7 +910,7 @@ final class BodyGen {
                         bind(c.binding(), bslot, element);
                     }
                 }
-                case Refinement.Itself itself -> {
+                case Refinement.Direct itself -> {
                     Type bound = itself.bound();
                     if (c.binding() == null || bound == null) {
                         return;
@@ -926,7 +926,7 @@ final class BodyGen {
                     unbox(code, bound, bslot);
                     bind(c.binding(), bslot, bound);
                 }
-                case Refinement.Absent ignored -> { }
+                case Refinement.OptionAbsent ignored -> { }
             }
         }
 
