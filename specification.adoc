@@ -1708,8 +1708,6 @@ The classification is the clause's own, read with the construction assumed to na
 
 The answer carries the clause's name where it has one (<<invariant-clause-name>>), so what the LSP shows on a clause says both how it can be discharged and what an attempt departs by. The unit is the conjunct, as it is for the rest of the check, so a named clause written as `+a && b+` is classified twice under that one name — what discharges each half is what an author acts on, and the name is what a caller reads.
 
-An `+ensures+` clause is classified by the same three answers and the same conjunct unit (<<ensures>>). Its locations are the parameters and `+value+` rather than a data's fields; a relation no domain can represent is checked at run time and reported as runtime only rather than silently treated as an assumption.
-
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
@@ -2347,11 +2345,11 @@ A behavior MAY carry more than one `+ensures+`, and every rule of every one of t
 
 Cases may overlap. A data may be a case of two sums declared in its module, so one answer can be named by an arm of each, and both of their rules hold of it. This is what makes a rule's arms a statement rather than a dispatch: `+match+` takes the first arm that answers, which is a control-flow reading, and a declaration has no order to read.
 
-A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are distinct within the behavior, and [[an-ensures-clause-name-is-not-underscore]]`+_+` is not a clause name. Unlike a data's clause name, it names nothing a departure arm can be written for (<<attempt-departures>>) — an `+ensures+` has no such form — so a name here is read in the violation and nowhere else. The expression fragment is the invariant fragment unchanged: it is total, constructs nothing and contains no `+unreachable+` (<<invariant-expressions>>).
+A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are distinct within the behavior, and [[an-ensures-clause-name-is-not-underscore]]`+_+` is not a clause name. A name here says which clause is meant and nothing more: unlike a data's clause name, it names nothing a departure arm can be written for (<<attempt-departures>>), an `+ensures+` having no such form. The expression fragment is the invariant fragment unchanged: it is total, constructs nothing and contains no `+unreachable+` (<<invariant-expressions>>).
 
 [[a-composition-carries-no-ensures]]A `+>->+` composition MUST NOT carry `+ensures+`: it writes no parameter list whose names a clause could relate to its answer, and a stage's relation is not inferred as the composition's.
 
-A violation aborts as a `+ConstraintViolation+`, naming the module, behavior and optional clause. A behavior implemented in Souther checks at the exit of its generated `+$Impl.apply+`; an injected behavior is checked where its answer crosses into generated code. One generated `+$Ensures.check(parameters..., value)+` implements the clause and every checking site calls it. A caller assumes a clause only after the output arm is known, and only when the existing constraint domain can represent the relation (<<invariant-discharge-capability>>).
+A clause travels with the published declaration, as a data's does and for the same reason: a reader that cannot read it cannot assume it.
 
 [#calling-a-behavior]
 === Calling a behavior
