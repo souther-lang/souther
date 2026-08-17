@@ -141,6 +141,12 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
             new Vocabulary("branch.reason", List.of("$defs", "branch", "properties", "reason"),
                     Adequacy.BranchEvidence.Reason.class),
+            new Vocabulary("findings[].kind",
+                    List.of("$defs", "findings", "items", "properties", "kind"),
+                    Adequacy.Kind.class),
+            new Vocabulary("findings[].disposition",
+                    List.of("$defs", "findings", "items", "properties", "disposition"),
+                    Adequacy.Finding.Disposition.class),
             // The arms, which is fewer than the kinds a site has. A comparison of a guard's condition
             // is a site and not a fork a row is in or out of, so it never reaches this field —
             // projected off the same predicate the measure uses rather than listed here, so that an

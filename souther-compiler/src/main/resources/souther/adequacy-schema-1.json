@@ -78,7 +78,40 @@
         "status": { "$ref": "#/$defs/status" },
         "signature": { "$ref": "#/$defs/signature" },
         "partition": { "$ref": "#/$defs/partition" },
-        "branch": { "$ref": "#/$defs/branch" }
+        "branch": { "$ref": "#/$defs/branch" },
+        "findings": { "$ref": "#/$defs/findings" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Everything the measures found about this behavior and nothing filled, and what a build does about each. The measures above each say what they measured; this says which findings came out of them and which of those a build refuses over, which no measure's own object can say. Not in `required`: a document written before this array existed is still a document of this version.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "disposition", "subject"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read` and `partition_omitted` are positions the model divides no way, positions this could not read, and positions past the axis limit.",
+            "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered", "partition_not_derivable", "partition_not_read", "partition_omitted"]
+          },
+          "disposition": {
+            "description": "What a build does about this one. `refused` is a gap `--strict` and a warned build refuse over; `reported` is a kind neither refuses over, whatever its measurement managed; `undecided` is a kind they would refuse over, from a measurement that came to no answer — telling an author to write a row they may already have written is worse than saying nothing, so it is named and not refused.",
+            "enum": ["refused", "undecided", "reported"]
+          },
+          "subject": {
+            "type": "string",
+            "description": "What the finding is about, written to name what is already in this document: a class name is one of an axis's `classes`, an arm's label one in `branch.unreached`, and `axis = value` names a `boundaries` entry. An input's case carries its position — `C (in #1)` — because two parameters of one type give two findings a class name alone cannot tell apart."
+          },
+          "code": {
+            "type": "string",
+            "description": "The code a build is told this under, present exactly where the kind has one. A kind a build is never told about carries no code rather than an empty one.",
+            "pattern": "^E[0-9]{4}$"
+          },
+          "at": {
+            "description": "Where the finding is, present exactly where its place is its own rather than the declaration it sits under — `arm_unreached` and nothing else. A behavior with two `guard`s has two arms labelled `else`, so the place is what tells two of these apart, and it is the same place under the same key as the matching `branch.unreached` entry. The other kinds are cited at the behavior's own declaration, which the entry above already names.",
+            "$ref": "#/$defs/at"
+          }
+        }
       }
     },
     "branch": {

@@ -301,7 +301,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         assertTrue(report.contains("out specified 1/5"),
                 () -> "`Beta` is answered only where nothing reaches:\n" + report);
         List<String> named = report.lines().map(String::trim)
-                .filter(line -> line.startsWith("· no row expects"))
+                .filter(line -> line.contains("no row expects"))
                 .map(line -> line.substring(line.indexOf('`') + 1, line.lastIndexOf('`')))
                 .toList();
         assertEquals(List.of("Gamma", "Delta", "Epsilon", "Zeta"), named,
