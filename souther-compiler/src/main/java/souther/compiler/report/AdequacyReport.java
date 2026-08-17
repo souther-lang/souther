@@ -447,6 +447,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // other question, and the two were one word until they disagreed in front of a reader.
         out.append(String.format("adequacy: %s%n",
                 adequacy().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ')));
+        // What the mark above means, said by the report that wrote it. The count was said only by
+        // `--strict`, on standard error, in a run a reader had to ask for — so a reader of the report
+        // alone had a mark with nothing to read it by, and one who did ask got a number pointing at a
+        // list with more entries in it than the number.
+        //
+        // What the mark means and not what a refusal decided. The two are printed one under the other
+        // where a build asked to be strict and got a human report, and a legend repeating the verdict
+        // would be the same sentence twice with nothing to tell a reader which surface said it.
+        List<Adequacy.Finding> refused = adequacyGaps();
+        if (!refused.isEmpty()) {
+            out.append(String.format("%d %s marked `!`: what a strict build refuses over.%n",
+                    refused.size(), refused.size() == 1 ? "gap" : "gaps"));
+        }
         return out.toString();
     }
 
@@ -493,10 +506,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     output.verified().size(), output.declared().size(),
                     decided ? "" : "   (partial)"));
             for (Adequacy.Finding f : behavior.of(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)) {
-                out.append(String.format("      · %sexpects `%s`%n", noRow(f), f.args().get(0)));
+                out.append(String.format("      %s %sexpects `%s`%n",
+                        mark(f), noRow(f), f.args().get(0)));
             }
             for (Adequacy.Finding f : behavior.of(Adequacy.Kind.OUTPUT_CASE_UNVERIFIED)) {
-                out.append(String.format("      · %sconfirms `%s`%n", noRow(f), f.args().get(0)));
+                out.append(String.format("      %s %sconfirms `%s`%n",
+                        mark(f), noRow(f), f.args().get(0)));
             }
         }
         for (int i = 0; i < signature.inputs().size(); i++) {
@@ -514,13 +529,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             int position = i + 1;
             for (Adequacy.Finding f : behavior.of(Adequacy.Kind.INPUT_CASE_UNSPECIFIED)) {
                 if (f.args().get(1).equals(position)) {
-                    out.append(String.format("      · %suses `%s`%n", noRow(f), f.args().get(0)));
+                    out.append(String.format("      %s %suses `%s`%n",
+                            mark(f), noRow(f), f.args().get(0)));
                 }
             }
             for (TypeSymbol ruled : input.excluded()) {
                 out.append(String.format("      · `%s` is declared unreachable%n", ruled.name()));
             }
         }
+    }
+
+    /**
+     * The mark a finding is printed under, which says what a build does about it.
+     *
+     * <p>The one thing separating the two kinds of bullet a report prints. Without it four findings
+     * of one shape were printed and three of them failed a build, and a reader deciding what to write
+     * next either wrote rows for all four — more than the build asks, on a measure the language
+     * deliberately chose not to gate — or wrote one and ran again to find out which.
+     *
+     * <p>Read off the finding's own answer. Reading the kinds again here would be a second
+     * classification to keep in step with the one a build refuses on, and the two would agree until
+     * a kind changed sides.
+     */
+    private static String mark(Adequacy.Finding finding) {
+        return finding.isAdequacyGap() ? "!" : "·";
     }
 
     /**
@@ -599,7 +631,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             a -> whyNoAxis(a.reason())),
                     pairs(partition.pairs())));
             for (Adequacy.Finding f : behavior.of(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
-                out.append(String.format("      · %s `%s`%n",
+                out.append(String.format("      %s %s `%s`%n", mark(f),
                         f.status() == MeasurementStatus.PARTIAL
                                 ? "undecided whether a row is in" : "no row is in", f.args().get(0)));
             }
@@ -664,8 +696,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The rule as this report writes it. The finding carries the rule and not words about
             // it, because what to say differs between here — where a file has a name — and the
             // warning built from the same finding, where nothing knows what to call one.
-            out.append(String.format("      · no row is at %s = %s (%s)%n",
-                    f.args().get(0), f.args().get(1),
+            out.append(String.format("      %s no row is at %s = %s (%s)%n",
+                    mark(f), f.args().get(0), f.args().get(1),
                     ((souther.compiler.partition.OriginRef) f.args().get(2))
                             .describe(names, declaredIn)));
         }
@@ -694,17 +726,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static void undivided(StringBuilder out, BehaviorReport behavior) {
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
-            out.append(String.format("      · not derivable: %s%n", f.args().get(0)));
+            out.append(String.format("      %s not derivable: %s%n", mark(f), f.args().get(0)));
         }
         // Said apart from the line above it, which is the whole of what this pair is for: one names
         // a position the model divides no way, and this one a position nobody has established
         // anything about.
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_READ)) {
-            out.append(String.format("      · not read: %s (%s)%n",
-                    f.args().get(0), f.args().get(1)));
+            out.append(String.format("      %s not read: %s (%s)%n",
+                    mark(f), f.args().get(0), f.args().get(1)));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
-            out.append(String.format("      · omitted: %s (axis limit)%n", f.args().get(0)));
+            out.append(String.format("      %s omitted: %s (axis limit)%n",
+                    mark(f), f.args().get(0)));
         }
     }
 
@@ -753,8 +786,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return;
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.ARM_UNREACHED)) {
-            out.append(String.format("      · no row goes through `%s` (%s)%n",
-                    f.args().get(0), f.at().said(names, declaredIn)));
+            out.append(String.format("      %s no row goes through `%s` (%s)%n",
+                    mark(f), f.args().get(0), f.at().said(names, declaredIn)));
         }
     }
 
@@ -935,6 +968,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 signature(b, behavior.signature());
                 partition(b, behavior.partition(), behavior.claimed(), sources);
                 branch(b, behavior.branch(), sources);
+                findings(b, behavior);
             }
         }
         // Last, because what it explains is what was written above it. Where a field sits in an
@@ -1157,6 +1191,66 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             a.put("kind", word(arm.kind()));
             at(a, arm.at(), sources);
         }
+    }
+
+    /**
+     * Everything the measures found about one behavior, and what a build does about each of it.
+     *
+     * <p>One array and not a field on each measure. Of the kinds a build refuses over, one was
+     * already written here under a name of its own and the other three were left to be worked out
+     * from the arrays — a case out of {@code declared} and not out of {@code specified}, a boundary
+     * whose {@code hit} is false — so a consumer wanting the ones a build refuses over had to
+     * reimplement the classification the compiler had already made. Marking each of those in its own
+     * place would be the same field written in five, and a sixth kind would have been written the way
+     * the five were.
+     *
+     * <p>Nothing here is a second reading of what is above it. {@code branch.unreached} and
+     * {@code boundaries} keep saying what they say, in their own words and about their own measure;
+     * this says which findings there are and what a build does about each, which is neither
+     * measure's question and was nobody's.
+     *
+     * <p>No place is written. Every one of these is cited at the behavior's own declaration except an
+     * arm's, so a place written here would be the same coordinate repeated under each finding of a
+     * behavior the entry already names — and where the finding is about a line or a class, that
+     * coordinate is not where the reader would go.
+     */
+    private static void findings(ObjectNode behavior, BehaviorReport of) {
+        ArrayNode out = behavior.putArray("findings");
+        for (Adequacy.Finding finding : of.findings()) {
+            ObjectNode f = out.addObject();
+            f.put("kind", word(finding.kind()));
+            f.put("disposition", word(finding.disposition()));
+            f.put("subject", subject(finding));
+            // Present where the kind has one. A finding a build is not told about under any code is
+            // not one with an empty code, and a consumer joining these to the diagnostics a build
+            // printed reads the difference.
+            finding.code().ifPresent(code -> f.put("code", code.name()));
+        }
+    }
+
+    /**
+     * What one finding is about, in the one field every kind writes it in.
+     *
+     * <p>Spelled here per kind rather than taken from the arguments in order. The arguments are the
+     * message's, and a document handing a consumer a positional list of them would publish the shape
+     * of a sentence — which changes when the sentence is reworded, and says nothing about which of
+     * the entries is the subject.
+     *
+     * <p>Written to join what is already in the document: a class name is one of an axis's
+     * {@code classes}, an arm's label is one in {@code branch.unreached}, and an axis and a value
+     * name a {@code boundaries} entry. An input's case carries its position with it, because two
+     * parameters of one type give two findings a class name alone cannot tell apart.
+     */
+    private static String subject(Adequacy.Finding finding) {
+        List<Object> args = finding.args();
+        return switch (finding.kind()) {
+            case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
+                    ARM_UNREACHED, PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ, PARTITION_OMITTED ->
+                    String.valueOf(args.get(0));
+            case INPUT_CASE_UNSPECIFIED ->
+                    String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
+            case BOUNDARY_UNMET -> args.get(0) + " = " + args.get(1);
+        };
     }
 
     /**

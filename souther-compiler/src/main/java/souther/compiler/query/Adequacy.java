@@ -1467,6 +1467,25 @@ public final class Adequacy {
     public record Finding(Kind kind, String behavior, MeasurementStatus status,
                           Citation at, List<Object> args) {
 
+        /**
+         * What a build does about a finding, which is what neither surface used to say.
+         *
+         * <p>Three answers and not two, because the question is decided by two facts. Collapsing the
+         * middle one into {@link #REPORTED} would say a measure decided something it did not: a kind
+         * a build refuses over, from a measurement that came to no answer, is not a gap and is not a
+         * kind nobody gates on either. A report already tells that one apart in words — "undecided
+         * whether a row" against "no row" — and a document that had only two words would have put
+         * them under one.
+         */
+        public enum Disposition {
+            /** A gap a build refuses over. */
+            REFUSED,
+            /** A kind a build refuses over, from a measurement that came to no answer. */
+            UNDECIDED,
+            /** Not a kind a build refuses over, whatever its measurement managed. */
+            REPORTED
+        }
+
         public Finding {
             // A finding is about somewhere. A place-less one used to become a warning with no
             // caret, which nothing produced and nothing wanted; now the reading of the citation
@@ -1475,10 +1494,24 @@ public final class Adequacy {
             args = List.copyOf(args);
         }
 
-        /** Whether this is a gap a build is entitled to refuse: the kind is one, and the measurement
-         *  behind it came to an answer. */
+        /**
+         * What a build does about this one: the kind and the measurement behind it, together.
+         *
+         * <p>The one statement of it. Both surfaces of a report write this word rather than reading
+         * the kinds a second time, so what a report marks and what a build refuses over cannot come
+         * apart.
+         */
+        public Disposition disposition() {
+            if (!kind.isAdequacyGap()) {
+                return Disposition.REPORTED;
+            }
+            return status == MeasurementStatus.COMPLETE
+                    ? Disposition.REFUSED : Disposition.UNDECIDED;
+        }
+
+        /** Whether this is a gap a build is entitled to refuse. */
         public boolean isAdequacyGap() {
-            return kind.isAdequacyGap() && status == MeasurementStatus.COMPLETE;
+            return disposition() == Disposition.REFUSED;
         }
 
         public Optional<DiagnosticCode> code() {

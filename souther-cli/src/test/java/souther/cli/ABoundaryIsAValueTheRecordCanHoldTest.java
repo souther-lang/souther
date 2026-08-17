@@ -80,7 +80,9 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     private static List<String> boundariesOf(String model) throws Exception {
         return reportOn(model).lines()
                 .map(String::trim)
-                .filter(line -> line.startsWith("· no row is at"))
+                // The sentence, whichever mark it is printed under. What a build does about a finding
+                // is said by the mark and held by the test that owns it.
+                .filter(line -> line.contains("no row is at"))
                 .toList();
     }
 

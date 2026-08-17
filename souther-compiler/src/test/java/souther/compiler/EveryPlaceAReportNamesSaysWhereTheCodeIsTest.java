@@ -429,10 +429,13 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         List<String> human = report.human(SourceNameResolver.identity()).lines()
                 .map(String::strip).toList();
         List<String> armLines = human.stream()
-                .filter(line -> line.startsWith("· no row goes through")).toList();
+                // The sentence and not the mark it is printed under. What a build does about a
+                // finding is written down now and is somebody else's test; this one is about the
+                // place the sentence names, and reading the mark here would be a second holder of it.
+                .filter(line -> line.contains("no row goes through")).toList();
         assertEquals(1, armLines.size(), () -> "one arm is unreached: " + armLines);
         List<String> boundaryLines = human.stream()
-                .filter(line -> line.startsWith("· no row is at")).toList();
+                .filter(line -> line.contains("no row is at")).toList();
 
         JsonNode document = JSON.readTree(report.json(SourceNameResolver.identity()));
         JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);
@@ -475,7 +478,10 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         AdequacyReport report = AdequacyReport.of(compilation);
 
         List<String> lines = report.human(names).lines().map(String::strip)
-                .filter(line -> line.startsWith("· no row goes through")).toList();
+                // The sentence and not the mark it is printed under. What a build does about a
+                // finding is written down now and is somebody else's test; this one is about the
+                // place the sentence names, and reading the mark here would be a second holder of it.
+                .filter(line -> line.contains("no row goes through")).toList();
         assertEquals(1, lines.size(), () -> "one arm is unreached: " + lines);
 
         JsonNode document = JSON.readTree(report.json(names));
@@ -490,7 +496,7 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
         assertEquals(1, unreached.size(), () -> "one arm is unreached: " + unreached);
         JsonNode at = unreached.get(0).get("at");
         List<String> edges = report.human(names).lines().map(String::strip)
-                .filter(line -> line.startsWith("· no row is at")).toList();
+                .filter(line -> line.contains("no row is at")).toList();
         List<String> jsonOrigins = new ArrayList<>();
         down.get("behaviors").get(0).get("partition").get("boundaries")
                 .forEach(each -> jsonOrigins.add(each.get("origin").asString()));

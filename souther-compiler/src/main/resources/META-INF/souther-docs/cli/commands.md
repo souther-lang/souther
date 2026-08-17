@@ -282,7 +282,17 @@ where nothing that could find a gap was asked about, or one of those measures co
 measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
 asked nor missing, and does not hold the answer open. `--strict`
 refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy all
---warnings error` refuses. How many rows are waiting for a `let` is reported and never gated on:
+--warnings error` refuses.
+
+The report prints more findings than a build refuses over, and says which is which. A line under `!`
+is one of them; a line under `·` is something measured and named and not gated on — a class no row is
+in, a position the model divides no way. The two read alike and are a sentence apart: `no row uses
+`C`` is refused over and `no row is in `C`` is not, and writing a row for `C` closes both. The count
+under `adequacy` is how many are marked. In the JSON each behavior carries `findings`, where every
+one of them says its `kind` and what a build does about it under `disposition` — `refused`,
+`reported`, or `undecided` where the measure behind it came to no answer.
+
+How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the
 record of what that behavior owes.
 
