@@ -31,22 +31,22 @@ import java.util.Optional;
  * once is the resolving, the typing and the specialization; which tree a reader gets is that
  * reader's own question and is answered from the same rule.
  */
-record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> params, Type output,
+public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> params, Type output,
                         List<Clause> clauses) {
 
-    BehaviorContract {
+    public BehaviorContract {
         params = List.copyOf(params);
         clauses = List.copyOf(clauses);
     }
 
     /** A parameter as a rule names it: where it is bound, what it holds, and which one it is. */
-    record ContractParam(BindingId binding, Type type, int index) {}
+    public record ContractParam(BindingId binding, Type type, int index) {}
 
     /** One `ensures`, with the rules its arms state. A violation is reported by the clause, so this
      *  is what carries the name a reader is given. */
-    record Clause(Optional<String> name, List<Rule> rules, SourcePos pos, Region region) {
+    public record Clause(Optional<String> name, List<Rule> rules, SourcePos pos, Region region) {
 
-        Clause {
+        public Clause {
             rules = List.copyOf(rules);
         }
     }
@@ -58,11 +58,11 @@ record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> params,
      * is read as what that case holds and the cases hold different things. So a reader does not
      * specialize again, and the identity of what it is reading is the rule's own.
      */
-    record Rule(Guard guard, BindingId value, Hir.Expr statement, RuleId id, SourcePos pos) {
+    public record Rule(Guard guard, BindingId value, Hir.Expr statement, RuleId id, SourcePos pos) {
 
         /** What {@code value} is read as here: what the case holds, or the whole answer where the
          *  rule applies to every answer. */
-        Type valueType(Type output) {
+        public Type valueType(Type output) {
             return guard instanceof Guard.Case c ? c.selector().bound() : output;
         }
     }
@@ -75,13 +75,13 @@ record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> params,
      * is held to. That is what a declaration says; taking the first is what a {@code match} does,
      * and a declaration has no order to read.
      */
-    sealed interface Guard {
+    public sealed interface Guard {
 
         /** The rule applies to every answer: the form written where the answer has no cases. */
-        record Always() implements Guard {}
+        public record Always() implements Guard {}
 
         /** The rule applies where the answer is this case. */
-        record Case(CaseSelector selector) implements Guard {}
+        public record Case(CaseSelector selector) implements Guard {}
     }
 
     /**
@@ -91,10 +91,10 @@ record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> params,
      * and a report all have to agree that they are talking about the same rule, and an identity that
      * came from the order something was visited in would move when an unrelated declaration moved.
      */
-    record RuleId(ValueName.Behavior behavior, int clause, int arm, TypeSymbol selector) {}
+    public record RuleId(ValueName.Behavior behavior, int clause, int arm, TypeSymbol selector) {}
 
     /** Every rule, in the order the clauses and their arms are written. */
-    List<Rule> rules() {
+    public List<Rule> rules() {
         List<Rule> out = new ArrayList<>();
         for (Clause clause : clauses) {
             out.addAll(clause.rules());
@@ -103,17 +103,17 @@ record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> params,
     }
 
     /** The clause a rule was written under, which is what a violation of it is reported by. */
-    Clause clauseOf(Rule rule) {
+    public Clause clauseOf(Rule rule) {
         return clauses.get(rule.id().clause());
     }
 
     /** Whether this behavior states anything at all. */
-    boolean isEmpty() {
+    public boolean isEmpty() {
         return clauses.isEmpty();
     }
 
     /** The names a rule reads its parameters and its answer under. */
-    static BindingOwner ownerOf(ValueName.Behavior behavior) {
+    public static BindingOwner ownerOf(ValueName.Behavior behavior) {
         return new BindingOwner.OfSignature(behavior);
     }
 }
