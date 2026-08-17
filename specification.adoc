@@ -434,15 +434,17 @@ behavior notify : (order: PlacedOrder) -> Notified
     depends on messaging.sendMail
 ----
 
-Unlike a type, a behavior's name is also a member name in what is generated: an injected behavior is a field of the implementing class, and its name is that field's name (<<jvm-behavior>>). So one module cannot reach two behaviors of the same name, whether written bare or qualified — qualifying them does not separate the fields. Naming both is a compile error.
-
-Two same-named types meet in one module because both values exist there; two same-named behaviors meet because the module chose to call both, which is the module not having named what it is doing. A module that genuinely depends on two of them — the same operation offered by two providers, say — declares two behaviors of its own, under names that tell them apart. Each is an injection target (<<injected-behavior>>), and which upstream behavior goes into each is the Java side's to decide.
+A behavior is the module that declares it and its name, so two modules declaring one name declare two behaviors. A qualified reference says which of them is meant, and a module may reach both — as a type of one name from two modules is reached, and for the same reason. A behavior this module declares is one of the two: `+inventory.allocate+` and an `+allocate+` written here are different stages, and each is held to its own declaration.
 
 [,souther]
 ----
-behavior allocateFromPrimary : (line: Line) -> Allocated | OutOfStock
-behavior allocateFromSecondary : (line: Line) -> Allocated | OutOfStock
+behavior fromPrimary = primary.allocate >-> confirm
+behavior fromSecondary = secondary.allocate >-> confirm
 ----
+
+What cannot be told apart is a bare spelling two `+import+` lines both claim: written here, the name has two answers and neither line is the one to prefer, which is a compile error (<<e1508>>). Qualifying one of them is what says which is meant, and is the fix that error names.
+
+A behavior injected into a construction is held in a field of the generated class (<<jvm-behavior>>), and what that field is called is the class's own — not the behavior's name. So one construction may require two behaviors of one name, from two modules, and the two are two fields.
 
 A dependency is a dependency however it is written, so a cycle closed by a qualified reference is the same compile error (<<e1501>>) as one closed by an `+import+`.
 
