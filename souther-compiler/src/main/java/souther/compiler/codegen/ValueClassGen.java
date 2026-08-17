@@ -315,7 +315,7 @@ final class ValueClassGen {
      */
     byte[] generateBridgeCase(TypeSymbol member, List<GeneratedClass.BehaviorResult> unions) {
         ClassDesc cdB = ctx.bridgeCaseClass(member);
-        Map<String, Type> held = Map.of("value", MatchElaborator.caseBindType(member));
+        Map<String, Type> held = Map.of("value", TypeOps.caseBindType(member));
         List<ClassDesc> ifaces = new ArrayList<>();
         for (GeneratedClass.BehaviorResult union : unions) {
             ifaces.add(cd(union));

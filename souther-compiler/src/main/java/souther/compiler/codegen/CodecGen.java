@@ -1993,7 +1993,7 @@ final class CodecGen {
             return;
         }
         ClassDesc bridge = ctx.bridgeCaseClass(member);
-        Type held = MatchElaborator.caseBindType(member);
+        Type held = TypeOps.caseBindType(member);
         code.checkcast(bridge);
         code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
         JvmTypes.box(code, held);

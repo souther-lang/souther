@@ -1,7 +1,9 @@
 package souther.compiler.core;
 
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -297,14 +299,114 @@ public sealed interface Core {
     record Construct(TypeSymbol typeName, List<FieldValue> values, Type type,
                      SourcePos pos) implements Core {}
 
-    /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
-     * narrows to, or the element a {@code Some x} opens. */
-    record Case(List<TypeSymbol> caseTypes, Hir.Binder binding, Core body, Type bindType,
-                SourcePos pos) {
+    /**
+     * What an arm selects and what it binds, both decided by the checker.
+     *
+     * <p>{@code selectors} are the cases the arm answers for, in the order they are written; more
+     * than one is an or-pattern. {@code binding} is what the value is read as once the arm is taken,
+     * and it is the arm's own rather than any one selector's: an or-pattern binds the subject,
+     * because no single case type fits all of its alternatives.
+     *
+     * <p>Nothing here is worked out again downstream. A reader emitting this tests each selector's
+     * {@link Refinement} and reads the binding through {@code binding}, and never asks whether the
+     * subject was an optional, whether the arm named one case or several, or whether a case is a
+     * primitive. Those are the questions {@code Core} exists to have answered already.
+     */
+    sealed interface ResolvedPattern {
+
+        /** The cases the arm answers for, in the order they are written. */
+        List<CaseSelector> selectors();
+
+        /**
+         * What the value is read as once the arm is taken.
+         *
+         * <p>Derived rather than carried. What an arm binds follows from what it selects — one case
+         * binds what that case's carrier holds, several bind the subject — so holding the two apart
+         * would be holding one fact in two places, and a pattern selecting an optional's absent
+         * carrier while binding its present one would be a Core the emitter has no meaning for: it
+         * would test one carrier and read the value out of the other.
+         */
+        Refinement binding();
+
+        /** The cases this answers for. */
+        default List<TypeSymbol> caseTypes() {
+            List<TypeSymbol> out = new java.util.ArrayList<>();
+            for (CaseSelector selector : selectors()) {
+                out.add(selector.name());
+            }
+            return out;
+        }
+
+        /** The type the binding takes inside the arm, or null where the arm binds nothing readable. */
+        default Type bindType() {
+            return binding().bound();
+        }
+
+        /** An arm answering for one case, which binds what that case's carrier holds. */
+        record Single(CaseSelector selector) implements ResolvedPattern {
+
+            public Single {
+                if (selector == null) {
+                    throw new IllegalArgumentException("an arm selects a case");
+                }
+            }
+
+            @Override
+            public List<CaseSelector> selectors() {
+                return List.of(selector);
+            }
+
+            @Override
+            public Refinement binding() {
+                return selector.refinement();
+            }
+        }
+
+        /**
+         * An arm answering for several, which binds the subject: no one case type fits all of its
+         * alternatives, and every alternative is already the subject.
+         */
+        record AnyOf(List<CaseSelector> selectors, Type subject) implements ResolvedPattern {
+
+            public AnyOf {
+                if (selectors == null || selectors.size() < 2) {
+                    throw new IllegalArgumentException("an arm answering for several names several");
+                }
+                if (subject == null) {
+                    throw new IllegalArgumentException("what such an arm binds is the subject");
+                }
+                selectors = List.copyOf(selectors);
+            }
+
+            @Override
+            public Refinement binding() {
+                return new Refinement.Direct(subject);
+            }
+        }
+    }
+
+    /** One arm of a {@code match}: what it selects, what it calls the value, and what it answers. */
+    record Case(ResolvedPattern pattern, Hir.Binder binding, Core body, SourcePos pos) {
 
         /** How the binding was written, or null where the arm binds nothing. */
         public String bindingName() {
             return binding == null ? null : binding.name();
+        }
+
+        /** The cases this arm answers for. */
+        public List<TypeSymbol> caseTypes() {
+            return pattern.caseTypes();
+        }
+
+        /** The type the binding takes inside this arm. */
+        public Type bindType() {
+            return pattern.bindType();
+        }
+
+        /** The same arm answering a rewritten body — what a pass rewriting expressions produces, so
+         * a rewrite carries what the arm selects and binds rather than restating it. */
+        public Case answering(Core rewritten) {
+            return rewritten == body ? this : new Case(pattern, binding, rewritten, pos);
         }
     }
 
@@ -430,11 +532,7 @@ public sealed interface Core {
             case Construct nd -> atSlots(nd, atExpr);
             case Match m -> {
                 Core scrutinee = atExpr.apply(m.scrutinee());
-                List<Case> cases = each(m.cases(), c -> {
-                    Core body = atExpr.apply(c.body());
-                    return body == c.body() ? c
-                            : new Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos());
-                });
+                List<Case> cases = each(m.cases(), c -> c.answering(atExpr.apply(c.body())));
                 yield scrutinee == m.scrutinee() && cases == m.cases() ? m
                         : new Match(scrutinee, cases, m.origin(), m.type(), m.pos());
             }

@@ -11,6 +11,7 @@ import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseShape;
@@ -417,6 +418,12 @@ public final class TypeOps {
             }
         }
         return names;
+    }
+
+    /** The type a case holds when a value turns out to be it — {@link CaseSelector#heldBy}, which is
+     * where a selector reads it, under the name the callers outside a match know it by. */
+    public static Type caseBindType(TypeSymbol caseName) {
+        return CaseSelector.heldBy(caseName);
     }
 
     /**

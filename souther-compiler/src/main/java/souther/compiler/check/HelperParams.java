@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -875,8 +876,10 @@ final class HelperParams {
                 return env;   // it names no case, so it binds nothing this can say the type of
             }
             TypeSymbol arm = c.caseTypes().get(0).answered().type();
-            Type bound = scrutinee instanceof Type.OptionOf opt && TypeSymbol.SOME.equals(arm)
-                    ? opt.element() : MatchElaborator.caseBindType(arm);
+            // What the case refines the value to, asked of the subject's cases rather than worked
+            // out from the subject's shape a second time.
+            CaseSelector selector = CaseSpace.of(scrutinee, symbols).selector(arm);
+            Type bound = selector == null ? null : selector.bound();
             return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
         }
 
