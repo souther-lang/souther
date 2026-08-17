@@ -64,10 +64,6 @@ public sealed interface BehaviorMessage extends Message {
     @Code(DiagnosticCode.E1624)
     record ACompositionCarriesAnEnsures(String behavior) implements BehaviorMessage, Reported {}
 
-    @Code(DiagnosticCode.E1625)
-    record AnEnsuresArmNamesACaseTwice(String arm, String behavior)
-            implements BehaviorMessage, Reported {}
-
     @Code(DiagnosticCode.E1106)
     record TheEnsuresReachesAPartialHelper(String behavior, String partial, String through)
             implements BehaviorMessage, Reported {}

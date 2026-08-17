@@ -200,12 +200,19 @@ class EnsuresDeclarationTest {
     }
 
     /**
-     * A case named twice under one arrow says nothing the once did not, and the two would be one
-     * rule written twice: what a rule is about is which case it applies to, so a reader keeping
-     * rules by that would hold one where a reader keeping them in order held two.
+     * A case named twice under one arrow is one rule, not a mistake.
+     *
+     * <p>What a clause states is a conjunction — every rule whose guard holds applies — so naming a
+     * case twice states what naming it once stated. Redundant, and not ambiguous: there is no
+     * reading under which the second naming means something the first did not, so there is nothing
+     * to tell an author about. It was E1625, which is retired.
+     *
+     * <p>Collapsed rather than kept, because a rule is which case it is about: two rules under one
+     * {@link souther.compiler.check.BehaviorContract.RuleId} would leave the readers that agree on a
+     * rule by its identity each holding a different number of them.
      */
-    @Test void anArmNamesEachCaseOnce() {
-        refused(SUM.replace("Found | Missing ->", "Found | Found ->"), "E1625");
+    @Test void aCaseNamedTwiceUnderOneArrowIsOneRule() {
+        assertDoesNotThrow(() -> Compiler.compile(SUM.replace("Found | Missing ->", "Found | Found ->")));
     }
 
     /** Two arms naming one case is another matter: every rule whose arm names the case applies, so

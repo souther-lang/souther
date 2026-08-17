@@ -83,7 +83,7 @@ public sealed interface ExampleMessage extends Message {
     record TheNameIsAlreadyDeclared(String name, String module) implements ExampleMessage, Reported {}
 
     /** A declaration of the model names a value an attached file declares. */
-    @Code(DiagnosticCode.E1928)
+    @Code(DiagnosticCode.E1626)
     record TheModelNamesAValueAnAttachedFileDeclares(String name)
             implements ExampleMessage, Reported {}
 

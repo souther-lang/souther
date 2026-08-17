@@ -152,15 +152,16 @@ final class BehaviorChecker {
                         .say(new BehaviorMessage.AnEnsuresArmIsNotAnOutputCase(
                                 armCase.written(), behavior.name())).build());
             }
-            // Once per arm. A case named twice under one arrow says nothing the once did not, and
-            // the two would be one rule written twice: a rule is which case it is about, so a
-            // reader keeping them by that would hold one and a reader keeping them in order two.
-            // Two arms naming one case is another matter — every rule whose guard holds applies,
-            // so `Found -> p | Found -> q` states both.
+            // A case named twice under one arrow is one rule, not two. What a clause states is a
+            // conjunction — every rule whose guard holds applies — so `Found | Found -> p` states
+            // `p` and `p`, which is `p`. Kept as two, they would be two rules under one
+            // {@link RuleId}, and the readers that agree on a rule by its identity would each hold
+            // a different number of them.
+            //
+            // Redundant and not ambiguous, so it is collapsed rather than refused. `Found -> p |
+            // Found -> q` is another matter and is two rules: the arms differ, so the ids do.
             if (!seen.add(selector.name())) {
-                throw CompileException.of(Diagnostic.at(armCase.pos())
-                        .say(new BehaviorMessage.AnEnsuresArmNamesACaseTwice(
-                                armCase.written(), behavior.name())).build());
+                continue;
             }
             rules.add(new Rule(new Guard.Case(selector), value, arm.expr(),
                     new RuleId(named, clause, ordinal, selector.name()), arm.pos()));

@@ -2339,7 +2339,7 @@ What a rule refers to is not what it is about, and only the first is decided her
 
 An answer that can be more than one thing has cases, and they are the ones a `+match+` over that answer opens: the members of an anonymous sum, or the cases declared with a named one. A case of a case is not one of them — a caller opens the outer case and only then what is inside it — so a rule naming one would be a rule the caller has no arm to assume it at. What `+value+` is read as in an arm is what that case holds, which for a case named by a primitive (<<unmarked-output>>) is that primitive.
 
-Where the answer has cases the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the answer. Several cases MAY share an expression, and [[an-ensures-arm-names-each-case-once]]one arm MUST NOT name a case twice: a case named twice under one arrow says nothing the once did not. Where the answer has none the form is `+ensures [name =] expression+`, and [[an-ensures-clause-over-a-single-type-names-no-arm]]it MUST name no arm. A case no rule names carries no stated postcondition, and there is no wildcard arm.
+Where the answer has cases the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the answer. Several cases MAY share an expression, and a case named twice under one arrow states one rule: what a clause states is a conjunction, so naming a case twice says what naming it once said. Where the answer has none the form is `+ensures [name =] expression+`, and [[an-ensures-clause-over-a-single-type-names-no-arm]]it MUST name no arm. A case no rule names carries no stated postcondition, and there is no wildcard arm.
 
 Two arms of one clause MAY name the same case, and both of their rules then hold of it. That is the same reading as two clauses naming it, which is what makes an arm a statement rather than a choice.
 
@@ -3054,7 +3054,7 @@ How many rows are waiting is what `+souther examples+` reports; it is not a comp
 
 The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
 
-The merge makes those values reachable under the same names as the module's own, and the direction they may be reached in is one way. A row is what the file is for, and a row written inline in the model source is a row too, so it names them as freely as one written beside them. The model is the other way: a module that named one would not compile without a file of fixtures, and a clause that named one would travel to an importer under <<a-published-module-carries-what-it-says-it-declares>> spelling a name the jar has no source for — the module's own source is what is published, and an attached file adds nothing to it. Naming one from the model is <<e1928>>. A value the model needs is declared in the model.
+The merge makes those values reachable under the same names as the module's own, and the direction they may be reached in is one way. A row is what the file is for, and a row written inline in the model source is a row too, so it names them as freely as one written beside them. The model is the other way: a module that named one would not compile without a file of fixtures, and a clause that named one would travel to an importer under <<a-published-module-carries-what-it-says-it-declares>> spelling a name the jar has no source for — the module's own source is what is published, and an attached file adds nothing to it. Naming one from the model is <<e1626>>. A value the model needs is declared in the model.
 
 [#example-adequacy]
 === What the rows establish
@@ -5280,10 +5280,29 @@ Reported at the name (<<an-ensures-clause-name-is-not-underscore>>).
 
 Reported at the clause (<<a-composition-carries-no-ensures>>).
 
-[#e1625]
-=== An `ensures` arm names a case twice
+[#e1625-removed]
+=== (retired)
 
-Reported at the second naming of it (<<an-ensures-arm-names-each-case-once>>).
+E1625 is retired. It refused a case named twice under one arrow, on the reading that a test selecting one branch would leave the second naming unread. What a clause states is a conjunction — every rule whose guard holds applies — so the second naming states what the first did, which is redundant and not ambiguous. The two collapse to one rule (<<ensures>>).
+
+[#e1626]
+=== The model names a value an attached file declares
+
+[,text]
+----
+`floor` is declared in an attached `examples for` file, which holds the rows, the fakes
+they run against and the values those rows name. A declaration of the model cannot name
+one: the module would not compile without that file, and a clause carrying the name
+travels to an importer that has no source for it.
+----
+
+Emitted where a declaration of the model reaches a value an attached file declares (<<an-attached-files-values-are-for-its-rows>>). Two things follow from naming one and either is enough: the module no longer compiles from its own source, because the name it writes is declared in a file of fixtures; and a `+data+`'s `+invariant+` or a `+behavior+`'s `+ensures+` is published as the text that was written (<<a-published-module-carries-what-it-says-it-declares>>), so an importer reads a clause spelling a name it has no source for.
+
+Said where the name is written, once for each occurrence, and the module is not emitted. The `+exposing+` list is reported at the module header, because a name in it is written nowhere else.
+
+What is not reported is the other direction. A row names such a value wherever the row is written — beside the values in the attached file, or inline in the model source — because the values join the module the rows join and a row is what the file is for. A `+fake+` names one as a row does, and one attached value names another. An attached value naming the model's own `+let+` is a fixture reading the model, which is what a fixture is.
+
+The fix is to declare the value in the module's own source. A value the model is written against is part of the model, and the attached file goes on reaching it from there.
 
 [#e1701]
 === behavior composition type mismatch
@@ -5916,25 +5935,6 @@ Emitted at an `+example+` whose behavior is answered by an implementation suppli
 Said once for the behavior in each source its rows are written in, however many rows those are: one answer and one model disagreeing is one fact, and the rows did not stop for reasons of their own. Not once for the behavior outright, because a diagnostic is said where it can be quoted — a behavior whose rows are written in the module and in an attached `+examples for+` file has rows in two files, and a reader of the second one would otherwise be shown rows that stopped and nothing saying why. Each row is recorded as undecided, with its inputs and its expectation already built and held to their invariants.
 
 Two things are reported under this code, and they are not the same finding. Where both sides were read and one declares something else, the declaration is named and the fix is to build again. Where the declarations could not be read at all — classes carrying none, or declarations this compiler cannot read back (<<a-published-module-can-be-read-back>>) — nothing has been established about either build, and saying a build was stale would be saying it on evidence nobody has.
-
-[#e1928]
-=== The model names a value an attached file declares
-
-[,text]
-----
-`floor` is declared in an attached `examples for` file, which holds the rows, the fakes
-they run against and the values those rows name. A declaration of the model cannot name
-one: the module would not compile without that file, and a clause carrying the name
-travels to an importer that has no source for it.
-----
-
-Emitted where a declaration of the model reaches a value an attached file declares (<<an-attached-files-values-are-for-its-rows>>). Two things follow from naming one and either is enough: the module no longer compiles from its own source, because the name it writes is declared in a file of fixtures; and a `+data+`'s `+invariant+` or a `+behavior+`'s `+ensures+` is published as the text that was written (<<a-published-module-carries-what-it-says-it-declares>>), so an importer reads a clause spelling a name it has no source for.
-
-Said where the name is written, once for each occurrence, and the module is not emitted. The `+exposing+` list is reported at the module header, because a name in it is written nowhere else.
-
-What is not reported is the other direction. A row names such a value wherever the row is written — beside the values in the attached file, or inline in the model source — because the values join the module the rows join and a row is what the file is for. A `+fake+` names one as a row does, and one attached value names another. An attached value naming the model's own `+let+` is a fixture reading the model, which is what a fixture is.
-
-The fix is to declare the value in the module's own source. A value the model is written against is part of the model, and the attached file goes on reaching it from there.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

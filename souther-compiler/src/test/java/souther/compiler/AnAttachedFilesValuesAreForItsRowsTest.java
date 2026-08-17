@@ -41,7 +41,7 @@ class AnAttachedFilesValuesAreForItsRowsTest {
     private static CompileException refused(String model) {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(model, COMPANION)));
-        assertEquals("E1928", e.diagnostic().code());
+        assertEquals("E1626", e.diagnostic().code());
         assertInstanceOf(ExampleMessage.TheModelNamesAValueAnAttachedFileDeclares.class,
                 e.diagnostic().said());
         return e;
