@@ -28,6 +28,13 @@ import java.util.Map;
  * <p>Every corpus must compile without an error. A language change that leaves one behind is caught
  * by {@link #check()} before any timing is reported — a compile that stops early is faster and would
  * read as an improvement.
+ *
+ * <p>Compiling is all that is asked of these. What the compiler <em>answers</em> about a model of
+ * this size is held by the conformance corpus in {@code souther-compiler}, against documents written
+ * down beside it. These two were one thing once, and asking both of one corpus pulls it two ways: a
+ * corpus a number is compared against must not move, and a corpus an answer is checked against grows
+ * whenever a rule is tightened. So what is here is chosen for its size and shape, and it is not
+ * where a change of answer is found.
  */
 public record Corpus(String name, List<String> sources, int lines) {
 

@@ -63,7 +63,7 @@ final class Values {
 
     /** {@code n} values, each naming the one before it — {@code bottomUp} writing the one that
      * names before the one it names. */
-    private static String chain(int n, boolean bottomUp) {
+    static String chain(int n, boolean bottomUp) {
         List<String> declarations = new ArrayList<>();
         declarations.add("let v0 = 1");
         for (int i = 1; i < n; i++) {
@@ -74,7 +74,7 @@ final class Values {
 
     /** The same reaching with none of the names: each value calls a helper, and the helper is what
      * names the value before it. */
-    private static String throughHelpers(int n, boolean bottomUp) {
+    static String throughHelpers(int n, boolean bottomUp) {
         List<String> declarations = new ArrayList<>();
         declarations.add("let v0 = 1");
         for (int i = 1; i < n; i++) {
@@ -86,7 +86,7 @@ final class Values {
 
     /** One value reaching every other, written as a list so that reaching many is not also nesting
      * deeply. */
-    private static String fanOut(int n) {
+    static String fanOut(int n) {
         List<String> declarations = new ArrayList<>();
         StringBuilder hub = new StringBuilder("let hub = [ ");
         for (int i = 0; i < n; i++) {
@@ -98,7 +98,7 @@ final class Values {
     }
 
     /** {@code n} values reaching none of them. */
-    private static String flat(int n) {
+    static String flat(int n) {
         List<String> declarations = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             declarations.add("let v" + i + " = " + i + " + 1");
