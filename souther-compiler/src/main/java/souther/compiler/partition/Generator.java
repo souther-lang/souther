@@ -37,12 +37,12 @@ import java.util.TreeSet;
  * a legacy system or in someone's head, and a generator that guessed would turn a question into an
  * assertion nobody made.
  *
- * <p>What it reports is not only the rows. A combination it could produce nothing for is said out loud,
- * with which of the three things happened — nothing here composed a value, every value tried was
- * refused at construction, or the search stopped before deciding. A generator that returned only the
- * rows it managed would read as though the rest were covered, and one that gave the same answer to all
- * three would send an author looking for a value that does not exist while a row they could write in a
- * line went unwritten.
+ * <p>What it reports is not only the rows. A combination it could produce nothing for is said out
+ * loud, with which of {@link UnresolvedCombination.Reason} it was — the list is that enum's to keep,
+ * and naming it here would be a second copy going stale. A generator that returned only the rows it
+ * managed would read as though the rest were covered, and one that gave the same answer to every kind
+ * would send an author looking for a value that does not exist while a row they could write in a line
+ * went unwritten.
  */
 public final class Generator {
 

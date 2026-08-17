@@ -581,15 +581,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         } else {
             // Counted over the positions that were measured. A position nothing was measured at
             // contributes no classes to the denominator: nought out of two reads as two gaps, and a
-            // measure that was never made found none. What the body ruled out is counted over all of
-            // them — that is what the model says, and no row has to exist for it to be so.
+            // measure that was never made found none.
             List<PartitionEvidence.AxisCoverage> measuredAxes = partition.axes().stream()
                     .filter(a -> a.status().counted()).toList();
             int classes = measuredAxes.stream().mapToInt(a -> a.classes().size()).sum();
             int covered = measuredAxes.stream().mapToInt(a -> a.covered().size()).sum();
-            // Over the positions this line counts and no others. A claim about a position past the
-            // axis limit is said further down, under its own name — counted here it would be a
-            // number taken out of a denominator that never held it.
             // Over the positions this line counts and no others. A claim about a position past the
             // axis limit is said further down, under its own name — counted here it would be a
             // number taken out of a denominator that never held it.
