@@ -241,14 +241,24 @@ public final class InvariantChecker {
 
     private List<ClauseDischarge> capabilitiesOf(ClausesForDischarge.ClauseReading clause,
                                          Typing typing, Denotations locations, String describing) {
-        SourcePos at = clause.at();
-        Core stated;
+        return capabilitiesOf(typed(typing, clause.read(), describing), clause.at(), locations,
+                describing);
+    }
+
+    /**
+     * {@code read} as its reader types it, or null where it could not be typed there.
+     *
+     * <p>Fail-open, as the walk is, and recorded for the reason the reading below is: a clause this
+     * compiler could not type and an analysis that fell over typing it both come out
+     * {@code runtimeOnly}, and only one of them is something the model says.
+     */
+    private Core typed(Typing typing, Hir.Expr read, String describing) {
         try {
-            stated = typing.type(clause.read());
-        } catch (RuntimeException _) {
-            stated = null;
+            return typing.type(read);
+        } catch (RuntimeException why) {
+            gaveUp("typing " + describing, why);
+            return null;
         }
-        return capabilitiesOf(stated, at, locations, describing);
     }
 
     private List<ClauseDischarge> capabilitiesOf(Core stated, SourcePos at, Denotations locations,
@@ -837,17 +847,13 @@ public final class InvariantChecker {
     }
 
     /**
-     * Whether every rule reaching a value of {@code data} is one the numeric domain reasons over.
+     * Whether every rule that can refuse a value of {@code data} was read as a bound.
      *
      * <p>{@link ClauseDischarge.Kind#DERIVABLE} is the same classification a construction is judged
      * by, asked here of the declaration rather than of a site. A clause that is only nameable — a
      * pattern, a membership — narrows no bound, and a clause outside the fragment narrows none
-     * either; both leave a way the record refuses a value that the bounds do not express.
-     *
-     * <p>The same reach the seeding has, so what this classifies is what that took in.
-     */
-    /**
-     * Whether every rule that can refuse a value of {@code data} was read as a bound.
+     * either; both leave a way the record refuses a value that the bounds do not express. The same
+     * reach the seeding has, so what this classifies is what that took in.
      *
      * <p>Asked over the values a construction has to produce, which is not the depth a report takes a
      * value apart to. {@code FIELDS_SEEDED} and {@code MAX_DEPTH} are limits on how far a measurement
@@ -858,6 +864,10 @@ public final class InvariantChecker {
      * empty, so a rule inside it is a rule about a value the construction need not make. A type
      * already met is not entered again, which is what stops a record that holds itself.
      */
+    static boolean everyRuleRead(TypeSymbol named, Hir.Data data, Symbols symbols) {
+        return everyRuleRead(named, data, symbols, new HashSet<>());
+    }
+
     /**
      * Whether every reading of {@code clause} is a bound.
      *
@@ -869,7 +879,8 @@ public final class InvariantChecker {
     private static boolean readOnlyAsBounds(Hir.Expr clause, TypeSymbol named, Hir.Data data,
                                             Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
-        for (ClauseDischarge.Kind read : c.kindsRead(c.clauses.typed(clause, named, data),
+        Core stated = c.typed(read -> c.clauses.typed(read, named, data), clause, data.name());
+        for (ClauseDischarge.Kind read : c.kindsRead(stated,
                 Denotations.none().locations(c.clauses.bindingsOf(named, data).values()),
                 data.name())) {
             if (read != ClauseDischarge.Kind.DERIVABLE) {
@@ -877,10 +888,6 @@ public final class InvariantChecker {
             }
         }
         return true;
-    }
-
-    static boolean everyRuleRead(TypeSymbol named, Hir.Data data, Symbols symbols) {
-        return everyRuleRead(named, data, symbols, new HashSet<>());
     }
 
     private static boolean everyRuleRead(TypeSymbol named, Hir.Data data, Symbols symbols,
