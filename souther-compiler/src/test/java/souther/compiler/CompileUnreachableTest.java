@@ -99,18 +99,23 @@ class CompileUnreachableTest {
     void anUnreachableInAPrimitivePositionAborts() throws Throwable {
         // The position holds an Int, which is a long on the JVM, so the abort has to leave the stack
         // in the shape the arm beside it leaves: a verified method, not one the verifier rejects.
+        //
+        // Matched on a field of a pair whose rule relates its two fields. The premise is one nothing
+        // here settles (spec §unreachable-is-for-what-the-model-rules-out), which is what leaves a
+        // `B` both writable at the boundary and able to reach the abort.
         String module = """
                 module demo
 
                 data A
                 data B
                 data AB = A | B
+                data Pair = { l: AB, r: AB } invariant l /= r
                 data Out = Int
 
-                behavior run : (v: AB) -> Out constructs Out
+                behavior run : (v: Pair) -> Out constructs Out
 
                 let run (v) = Out(
-                    match v with
+                    match v.l with
                         | A -> 1
                         | B -> unreachable "a B never reaches this rule"
                 )
@@ -118,10 +123,11 @@ class CompileUnreachableTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
-        assertEquals(1L, Codecs.encode(loader, "demo.Out",
-                Codecs.apply(impl, Codecs.decoded(loader, "demo.AB", "A"))));
+        assertEquals(1L, Codecs.encode(loader, "demo.Out", Codecs.apply(impl,
+                Codecs.decoded(loader, "demo.Pair", java.util.Map.of("l", "A", "r", "B")))));
         UnreachableReached aborted = assertThrows(UnreachableReached.class,
-                () -> Codecs.apply(impl, Codecs.decoded(loader, "demo.AB", "B")));
+                () -> Codecs.apply(impl, Codecs.decoded(loader, "demo.Pair",
+                        java.util.Map.of("l", "B", "r", "A"))));
         assertTrue(aborted.getMessage().contains("a B never reaches this rule"), aborted.getMessage());
     }
 
@@ -200,18 +206,20 @@ class CompileUnreachableTest {
     @Test
     void anUnreachableBoundByALetAborts() throws Throwable {
         // Nothing states a type here, so the binding takes the one thing `unreachable` has: no value.
+        // The premise is one nothing settles, as above, which is what keeps the `B` writable.
         String module = """
                 module demo
 
                 data A
                 data B
                 data AB = A | B
+                data Pair = { l: AB, r: AB } invariant l /= r
                 data Out = Int
 
-                behavior run : (v: AB) -> Out constructs Out
+                behavior run : (v: Pair) -> Out constructs Out
 
                 let run (v) = {
-                    let n = match v with
+                    let n = match v.l with
                         | A -> 1
                         | B -> unreachable "a B never reaches this rule"
                     Out(n)
@@ -220,10 +228,11 @@ class CompileUnreachableTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(module), getClass().getClassLoader());
         Object impl = Emitted.behavior(loader, "demo", "run").getConstructor().newInstance();
 
-        assertEquals(1L, Codecs.encode(loader, "demo.Out",
-                Codecs.apply(impl, Codecs.decoded(loader, "demo.AB", "A"))));
+        assertEquals(1L, Codecs.encode(loader, "demo.Out", Codecs.apply(impl,
+                Codecs.decoded(loader, "demo.Pair", java.util.Map.of("l", "A", "r", "B")))));
         assertThrows(UnreachableReached.class,
-                () -> Codecs.apply(impl, Codecs.decoded(loader, "demo.AB", "B")));
+                () -> Codecs.apply(impl, Codecs.decoded(loader, "demo.Pair",
+                        java.util.Map.of("l", "B", "r", "A"))));
     }
 
     @Test

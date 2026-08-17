@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -92,9 +93,9 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         Core body = checked.behaviorBodies().get(spec.name());
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         GuardThresholds.Guards guards = GuardThresholds.of(spec.name(), body, plan,
-                spec.params().stream().map(Hir.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name()), symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec, sigs.get(spec.name()), symbols, Exclusions.NONE),
+                Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(spec.name()), symbols), symbols),
                 guards.thresholds(), symbols);
 
         List<String> names = new ArrayList<>();

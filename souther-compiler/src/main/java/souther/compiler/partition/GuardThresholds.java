@@ -4,6 +4,12 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.UnreadRule;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
@@ -86,29 +92,30 @@ public final class GuardThresholds {
      * comparison. {@code plan} supplies the guard each one belongs to, so a boundary can later ask
      * whether the comparison ran and an arm can be found by the probe that counts it. */
     public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
-                            List<String> parameters, Symbols symbols) {
+                            InputDomain inputs, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<GuardEdge> edges = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         List<BoundaryObligation> between = new ArrayList<>();
-        walk(behavior, body, plan, parameters, symbols, found, edges, unread, singled, between);
+        walk(behavior, body, plan, InputReads.of(inputs), symbols, found, edges, unread,
+                singled, between);
         return new Guards(found, edges, unread, singled, between);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
-                             List<String> parameters, Symbols symbols, List<Threshold> out,
+                             InputReads reads, Symbols symbols, List<Threshold> out,
                              List<GuardEdge> edges, List<UnreadRule> unread,
                              List<Guards.Singled> singled, List<BoundaryObligation> between) {
         if (e instanceof Core.If iff) {
             List<Core> read =
-                    read(behavior, iff, plan, parameters, symbols, out, edges, singled, between);
+                    read(behavior, iff, plan, reads, symbols, out, edges, singled, between);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
             // `x` swallowed the comparison beside it that nothing could read, which is "a result
             // exists, so the reading is complete".
-            for (UnreadRule compared : comparedIn(iff.cond(), read, parameters, symbols)) {
+            for (UnreadRule compared : comparedIn(iff.cond(), read, reads, symbols)) {
                 if (unread.stream().noneMatch(had -> had.equals(compared))) {
                     unread.add(compared);
                 }
@@ -117,7 +124,12 @@ public final class GuardThresholds {
         // A match case's body and an attempted construction's departure are expression slots, so the
         // generic walk reaches them; only the arms themselves are not children, and this walk does not
         // number arms.
-        Core.forEachChild(e, child -> walk(behavior, child, plan, parameters, symbols, out, edges,
+        // Inside what a `let` binds, since that is where a name standing for an argument is read
+        // as the argument: an expanded helper binds the call's argument to its own parameter, and a
+        // walk that did not follow the binding would find its comparisons about nothing.
+        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
+                : reads;
+        Core.forEachChild(e, child -> walk(behavior, child, plan, inside, symbols, out, edges,
                 unread, singled, between));
     }
 
@@ -128,14 +140,14 @@ public final class GuardThresholds {
      * question, and this establishes only that the model draws something at this position — which is
      * exactly what {@code not derivable} would otherwise deny.
      */
-    private static List<UnreadRule> comparedIn(Core e, List<Core> read, List<String> parameters,
+    private static List<UnreadRule> comparedIn(Core e, List<Core> read, InputReads reads,
                                                Symbols symbols) {
         List<UnreadRule> out = new ArrayList<>();
-        compared(e, read, parameters, symbols, out);
+        compared(e, read, reads, symbols, out);
         return out;
     }
 
-    private static void compared(Core e, List<Core> read, List<String> parameters, Symbols symbols,
+    private static void compared(Core e, List<Core> read, InputReads reads, Symbols symbols,
                                  List<UnreadRule> out) {
         // By the comparison it is, and not by what it was about: two comparisons at one position are
         // two statements, and this one having been read is no answer about the other.
@@ -145,16 +157,22 @@ public final class GuardThresholds {
         }
         if (e instanceof Core.Binary binary && orders(binary.op())) {
             List<TermPath> named = new ArrayList<>();
-            mentioned(binary.left(), parameters, symbols, named);
-            mentioned(binary.right(), parameters, symbols, named);
-            BlockReason why = why(binary, parameters, symbols);
+            mentioned(binary.left(), reads, symbols, named);
+            mentioned(binary.right(), reads, symbols, named);
+            BlockReason why = why(binary, reads, symbols);
             for (TermPath each : named) {
                 if (out.stream().noneMatch(had -> had.at().equals(each))) {
                     out.add(new UnreadRule(each, why));
                 }
             }
         }
-        Core.forEachChild(e, child -> compared(child, read, parameters, symbols, out));
+        // Inside what a `let` binds, wherever one is met. A helper expanded into a condition binds
+        // the call's arguments there — inside the condition, not above the `if` — so a walk that
+        // extended its scope only on the way down the body would read every comparison in an
+        // expansion as being about nothing.
+        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
+                : reads;
+        Core.forEachChild(e, child -> compared(child, read, inside, symbols, out));
     }
 
     /**
@@ -166,10 +184,10 @@ public final class GuardThresholds {
      * the derivation does not model into a position nothing compares: {@code p.x + 1 < 10} named no
      * position, and came back as one the model divides no way two tokens from a comparison about it.
      */
-    private static void mentioned(Core e, List<String> parameters, Symbols symbols,
+    private static void mentioned(Core e, InputReads reads, Symbols symbols,
                                   List<TermPath> out) {
         if (!(e instanceof Core.PreservedCall)) {
-            TermPath here = pathOf(e, parameters, symbols);
+            TermPath here = reads.pathOf(e, symbols);
             if (here != null) {
                 if (!out.contains(here)) {
                     out.add(here);
@@ -177,7 +195,9 @@ public final class GuardThresholds {
                 return;   // what is under it is the same position, named once
             }
         }
-        Core.forEachChild(e, child -> mentioned(child, parameters, symbols, out));
+        InputReads inside = e instanceof Core.LetIn let ? reads.and(let.binder(), let.value())
+                : reads;
+        Core.forEachChild(e, child -> mentioned(child, inside, symbols, out));
     }
 
     /**
@@ -190,10 +210,10 @@ public final class GuardThresholds {
      * expression the terms do not name, or a threshold written as something other than a constant —
      * and each of the three is a different piece of work.
      */
-    private static BlockReason why(Core.Binary comparison, List<String> parameters,
+    private static BlockReason why(Core.Binary comparison, InputReads reads,
                                    Symbols symbols) {
-        boolean leftNames = !mentionedIn(comparison.left(), parameters, symbols).isEmpty();
-        boolean rightNames = !mentionedIn(comparison.right(), parameters, symbols).isEmpty();
+        boolean leftNames = !mentionedIn(comparison.left(), reads, symbols).isEmpty();
+        boolean rightNames = !mentionedIn(comparison.right(), reads, symbols).isEmpty();
         // Which limit stopped this is asked of what the sides name, not of how far the derivation
         // got. Two positions against each other is a rule about both of them and a class here is a
         // set of values of one — and that is as true of `x < y + 1` as of `x < y`, where reading it
@@ -202,7 +222,7 @@ public final class GuardThresholds {
             return new BlockReason.ComparisonBetweenPositions();
         }
         Core named = leftNames ? comparison.left() : comparison.right();
-        if (termOf(named, parameters, symbols) == null) {
+        if (termOf(named, reads, symbols) == null) {
             return new BlockReason.UnreadComparisonForm();   // the position is inside something
         }
         // The carrier, asked of the carrier. `at < DateTime(...)` stops because nothing draws a line
@@ -215,9 +235,9 @@ public final class GuardThresholds {
                 : new BlockReason.UnreadComparisonDomain();
     }
 
-    private static List<TermPath> mentionedIn(Core e, List<String> parameters, Symbols symbols) {
+    private static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
         List<TermPath> out = new ArrayList<>();
-        mentioned(e, parameters, symbols, out);
+        mentioned(e, reads, symbols, out);
         return out;
     }
 
@@ -238,7 +258,7 @@ public final class GuardThresholds {
      * belong to.
      */
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
-                                   List<String> parameters, Symbols symbols,
+                                   InputReads reads, Symbols symbols,
                                    List<Threshold> out, List<GuardEdge> edges,
                                    List<Guards.Singled> singled, List<BoundaryObligation> between) {
         // The comparisons a line came of, and not the positions they were about. A position carries
@@ -258,7 +278,7 @@ public final class GuardThresholds {
             // comparison has no site is this reader and the plan disagreeing about what a condition
             // is made of.
             int site = plan.requireComparisonSiteOf(each.comparison());
-            TermPath here = readOne(behavior, iff, each, plan, guard, site, parameters, symbols,
+            TermPath here = readOne(behavior, iff, each, plan, guard, site, reads, symbols,
                     out, edges, singled);
             if (here != null) {
                 made.add(each.comparison());
@@ -267,7 +287,7 @@ public final class GuardThresholds {
             // A line this could not read as a count of one position may still be one between two.
             // Not added to `made`: what the partition could not read here it still could not read,
             // and a boundary answering does not answer for it (spec §example-partition).
-            between(behavior, iff, each, plan, guard, site, parameters, symbols, between);
+            between(behavior, iff, each, plan, guard, site, reads, symbols, between);
         }
         return made;
     }
@@ -291,14 +311,14 @@ public final class GuardThresholds {
      * that arm is already a row the branch measure asks for.
      */
     private static void between(String behavior, Core.If iff, Placed placed, CoverageSites.Plan plan,
-                                CoverageSites.GuardRef guard, int site, List<String> parameters,
+                                CoverageSites.GuardRef guard, int site, InputReads reads,
                                 Symbols symbols, List<BoundaryObligation> out) {
         Core.Binary comparison = placed.comparison();
         if (!ordersStrictly(comparison.op())) {
             return;
         }
-        NumericTerm on = termOf(comparison.left(), parameters, symbols);
-        NumericTerm against = termOf(comparison.right(), parameters, symbols);
+        NumericTerm on = termOf(comparison.left(), reads, symbols);
+        NumericTerm against = termOf(comparison.right(), reads, symbols);
         if (on == null || against == null) {
             return;   // a position inside an expression is not a place a row can be written at
         }
@@ -428,7 +448,7 @@ public final class GuardThresholds {
     /** The position a line was drawn on by one comparison, or null where none was. */
     private static TermPath readOne(String behavior, Core.If iff, Placed placed,
                                     CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
-                                    List<String> parameters,
+                                    InputReads reads,
                                     Symbols symbols, List<Threshold> out, List<GuardEdge> edges,
                                     List<Guards.Singled> singled) {
         Core.Binary comparison = placed.comparison();
@@ -437,12 +457,12 @@ public final class GuardThresholds {
         // is read on the carrier the line is being drawn on. A size call is an `Int` there, which is
         // the whole-number carrier, and a position holding dates is a day count — the same answer
         // `Carrier` gives everywhere else.
-        NumericTerm term = termOf(comparison.left(), parameters, symbols);
+        NumericTerm term = termOf(comparison.left(), reads, symbols);
         Place value = constantOf(comparison.right(),
                 Carrier.ofValue(comparison.left().type(), symbols), symbols);
         if (term == null || value == null) {
             // `100000 >= cost` says what `cost <= 100000` says; read the position-bearing side first.
-            term = termOf(comparison.right(), parameters, symbols);
+            term = termOf(comparison.right(), reads, symbols);
             value = constantOf(comparison.left(),
                     Carrier.ofValue(comparison.right().type(), symbols), symbols);
             op = mirrored(op);
@@ -532,18 +552,6 @@ public final class GuardThresholds {
     }
 
     /**
-     * The input position a comparison names, spelled the way a parameter's own path is spelled.
-     *
-     * <p>Which fields are steps is {@link Location}'s rule, asked here rather than restated: a
-     * newtype's {@code value} is not one, so {@code request.cost} and {@code request.cost.value} are
-     * one position, and if the two spellings disagreed the same position would become two axes, one
-     * of which no row would ever cover.
-     *
-     * <p>The root is not that rule's. A partition is derived from what a behavior declares, and a
-     * declared parameter is not a binding — a behavior with no implementation has axes all the same —
-     * so this path is rooted at the parameter and {@link Location} at the binding a body gave it.
-     */
-    /**
      * The number a comparison names, which is a location's content or something taken of it.
      *
      * <p>Which of the standard library's calls count is asked of {@link NumericMeasures} rather than
@@ -551,35 +559,17 @@ public final class GuardThresholds {
      * argument has to be a location: {@code List.length(List.map(f, xs))} counts something no path
      * names, and a boundary on it could not be looked for in a row.
      */
-    static NumericTerm termOf(Core e, List<String> parameters, Symbols symbols) {
+    static NumericTerm termOf(Core e, InputReads reads, Symbols symbols) {
         if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
                 && reached.name() instanceof ReachName.OfLibrary library
                 && NumericMeasures.isMeasure(library.target()) && call.args().size() == 1) {
-            TermPath of = pathOf(call.args().get(0), parameters, symbols);
+            TermPath of = reads.pathOf(call.args().get(0), symbols);
             return of == null ? null : new NumericTerm.SizeOf(library.target(), of);
         }
-        TermPath path = pathOf(e, parameters, symbols);
+        TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
     }
 
-    static TermPath pathOf(Core e, List<String> parameters, Symbols symbols) {
-        return switch (e) {
-            case Core.Read r -> parameters.contains(r.name()) ? TermPath.of(r.name()) : null;
-            case Core.FieldAccess fa -> {
-                TermPath base = pathOf(fa.target(), parameters, symbols);
-                if (base == null) {
-                    yield null;
-                }
-                yield Location.isStep(fa.target().type(), fa.field(), symbols)
-                        ? base.then(fa.field()) : base;
-            }
-            // A call kept standing names no location, and its presence says this walk was handed a
-            // representation it does not read. Said rather than answered with "no path", which would
-            // be the same answer a number gives.
-            case Core.PreservedCall p -> throw p.unexpectedIn("guard thresholds");
-            case null, default -> null;
-        };
-    }
 
     /**
      * The count a comparison is against, or null where the other side is not a value on

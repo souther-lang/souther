@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;

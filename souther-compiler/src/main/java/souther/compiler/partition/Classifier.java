@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeSymbol;
 

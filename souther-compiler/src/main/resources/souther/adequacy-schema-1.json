@@ -151,11 +151,11 @@
             "properties": {
               "axis": { "type": "string" },
               "path": { "type": "string", "description": "The input position, as a parameter and the fields read off it. A newtype's `value` is never a step." },
-              "classes": { "type": "array", "items": { "type": "string" }, "description": "The classes a row can be written at: what the model divides this position into, less what the body declares unreachable." },
+              "classes": { "type": "array", "items": { "type": "string" }, "description": "The classes a row can be written at: what the model divides this position into, less what its own rules refuse." },
               "covered": { "type": "array", "items": { "type": "string" } },
               "excluded": {
                 "type": "array",
-                "description": "Classes the body answers `unreachable` for. Out of `classes` because a row naming one would reach the `unreachable` and be refused, and named here because the type still has them.",
+                "description": "Classes the position's own rules refuse, that the body also answers `unreachable` for. Out of `classes` because no value of one can be constructed, and named here because the type still has them.",
                 "items": {
                   "type": "object",
                   "required": ["class", "reasons"],
@@ -166,6 +166,27 @@
                       "type": "array",
                       "items": { "type": "string" },
                       "description": "The reasons written at the `unreachable`s this class leads to — one, unless several paths abort for different reasons."
+                    }
+                  }
+                }
+              },
+              "unprovenClaims": {
+                "type": "array",
+                "description": "Classes the body answers `unreachable` for that nothing settled. Still in `classes` and still owed a row: what removes an obligation is a proof, and a row written at one may reach the `unreachable` and be refused.",
+                "items": {
+                  "type": "object",
+                  "required": ["class", "reasons", "why"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "class": { "type": "string" },
+                    "reasons": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "The reasons written at the `unreachable`s this class leads to."
+                    },
+                    "why": {
+                      "description": "What stopped the answer.",
+                      "enum": ["a_rule_went_unread", "the_rules_leave_the_position_nothing", "nothing_was_read_about_the_case", "the_fork_is_not_known_to_be_reached"]
                     }
                   }
                 }
@@ -235,6 +256,24 @@
             "enum": ["no_rows"]
           },
           "truncated": { "type": "boolean" }
+          }
+        },
+        "claimsOffAxis": {
+          "type": "array",
+          "description": "Claims about positions this report has no axis for — past the axis limit, or deeper than the walk goes. Named by position, and carrying `why` exactly where nothing settled the claim.",
+          "items": {
+            "type": "object",
+            "required": ["at", "class", "reasons"],
+            "additionalProperties": false,
+            "properties": {
+              "at": { "type": "string" },
+              "class": { "type": "string" },
+              "reasons": { "type": "array", "items": { "type": "string" } },
+              "why": {
+                "description": "What stopped the answer, present exactly where nothing settled the claim.",
+                "enum": ["a_rule_went_unread", "the_rules_leave_the_position_nothing", "nothing_was_read_about_the_case", "the_fork_is_not_known_to_be_reached"]
+              }
+            }
           }
         },
         "notDerivable": {
@@ -318,7 +357,7 @@
               "verified": { "$ref": "#/$defs/caseNames" },
               "excluded": {
                 "$ref": "#/$defs/caseNames",
-                "description": "Cases the body answers `unreachable` for. Declared and not coverable: a row naming one would reach the `unreachable` and be refused, so they are counted out of what the rows are held to."
+                "description": "Cases the position's own rules refuse. Declared and not coverable: no value of one can be constructed, so they are counted out of what the rows are held to."
               },
               "unclassifiedRows": { "type": "integer", "minimum": 0 }
             }

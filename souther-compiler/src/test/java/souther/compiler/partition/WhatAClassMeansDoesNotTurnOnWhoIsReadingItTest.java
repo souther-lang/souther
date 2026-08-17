@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
@@ -74,7 +75,7 @@ class WhatAClassMeansDoesNotTurnOnWhoIsReadingItTest {
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE).axes().stream()
+        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols), symbols).axes().stream()
                 .filter(each -> each.path().toString().equals(path))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path))

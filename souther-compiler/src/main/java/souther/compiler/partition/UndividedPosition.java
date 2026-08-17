@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.TermPath;
+
 /**
  * A position no class came back for, and which of the two that is.
  *

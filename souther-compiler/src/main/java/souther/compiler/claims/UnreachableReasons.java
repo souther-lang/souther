@@ -1,12 +1,9 @@
-package souther.compiler.partition;
+package souther.compiler.claims;
 
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Why an expression answers nothing, in the words the model wrote.
@@ -22,28 +19,37 @@ import java.util.Set;
  * reason this value did not arrive — it is text that never runs. Paths that a fork keeps apart are
  * all read, because each of them is a way this expression fails to answer.
  *
- * <p>Which of them is first is the order the values are <em>evaluated</em> in, and for a construction
- * that is the order the fields are declared rather than the order the initializers are written: the
- * emitter walks the declared fields and picks each one's initializer out. {@code Core.forEachChild}
- * hands over the slots of a node and is not an account of evaluation, so nothing here takes it for
- * one where the two can differ.
+ * <p>Which of them is first is the order the values are <em>evaluated</em> in, which is
+ * {@link Evaluated}'s to say — for a construction that is the order the fields are declared rather
+ * than the order the initializers are written, and asking it there is what keeps this reader and the
+ * one that finds a body's first fork from disagreeing about what runs before what.
  */
 public final class UnreachableReasons {
 
-    /** Every reason reached along the paths that answer nothing, in the order they are evaluated and
-     * without repeats. Empty where the expression answers a value. */
-    public static List<String> of(Core e) {
-        Set<String> found = new LinkedHashSet<>();
+    /** One {@code unreachable} an expression reaches: what it says, and where it says it. */
+    public record Said(String reason, souther.compiler.diag.SourcePos at) {}
+
+    /**
+     * Every {@code unreachable} reached along the paths that answer nothing, in the order they are
+     * evaluated. Empty where the expression answers a value.
+     *
+     * <p>The words and the places come off one walk, since they are one reading: a reader wanting
+     * the words and a reader wanting the place would otherwise walk the arm twice and could come to
+     * disagree about which paths answer nothing. Repeats are kept, so that two arms aborting with
+     * the same words still have two places between them; a caller wanting the reasons drops them.
+     */
+    public static List<Said> said(Core e) {
+        List<Said> found = new java.util.ArrayList<>();
         collect(e, found);
         return List.copyOf(found);
     }
 
-    private static void collect(Core e, Set<String> into) {
+    private static void collect(Core e, List<Said> into) {
         if (NormalReturn.of(e)) {
             return;
         }
         switch (e) {
-            case Core.Unreachable u -> into.add(u.reason());
+            case Core.Unreachable u -> into.add(new Said(u.reason(), u.pos()));
             case Core.LetIn li -> collect(
                     NormalReturn.of(li.value()) ? li.body() : li.value(), into);
             case Core.If iff -> {
@@ -79,7 +85,7 @@ public final class UnreachableReasons {
             // Anything else answers nothing because something it evaluates first does, and the rest
             // of what is written in it never runs.
             default -> {
-                Core stops = firstThatAborts(children(e));
+                Core stops = firstThatAborts(Evaluated.inOrder(e));
                 if (stops != null) {
                     collect(stops, into);
                 }
@@ -95,7 +101,7 @@ public final class UnreachableReasons {
      * worked out again from how the fields were written.
      */
     private static Core evaluated(Core.Construct nd) {
-        return firstThatAborts(nd.values().stream().map(Core.FieldValue::value).toList());
+        return firstThatAborts(Evaluated.inOrder(nd));
     }
 
     /** The first of a run of strict positions that does not answer, which is where evaluation stops
@@ -109,13 +115,6 @@ public final class UnreachableReasons {
         return null;
     }
 
-    /** The slots of a node, which for everything reaching here is a run of strict positions in the
-     * order they are evaluated. */
-    private static List<Core> children(Core e) {
-        List<Core> out = new ArrayList<>();
-        Core.forEachChild(e, out::add);
-        return out;
-    }
 
     private UnreachableReasons() {}
 }

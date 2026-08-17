@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;

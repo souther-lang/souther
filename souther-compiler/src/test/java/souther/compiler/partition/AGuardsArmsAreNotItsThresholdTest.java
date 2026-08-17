@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.ast.Hir;
@@ -67,7 +70,7 @@ class AGuardsArmsAreNotItsThresholdTest {
         assertNotNull(body);
         CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies());
         return GuardThresholds.of("pick", body, plan,
-                spec.params().stream().map(Hir.Param::name).toList(), symbols);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
     }
 
     /** The arm taken when the condition holds, which the plan numbers first. */
@@ -218,11 +221,41 @@ class AGuardsArmsAreNotItsThresholdTest {
         assertFalse(below(-1, true).provenDisjoint(holds(null, 10L)));
     }
 
+    /** The reading of the input a behavior takes, which is where an arm's proof comes from. */
+    private static InputDomain domainOf(String type) {
+        String source = """
+                module example.guarded
+
+                data Count = Int
+                    invariant range = value >= 0 && value <= 10
+
+                data Low
+                data High
+
+                behavior pick : (n: TYPE) -> Low | High
+                    constructs Low, High
+
+                let pick (n) = Low
+                """.replace("TYPE", type);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
+        return InputDomain.of(spec,
+                compilation.db().ask(new Bodies.Signatures(module)).value().get("pick"), symbols);
+    }
+
+    /** Held against a reading of nothing, which is what the two arms are proven with. */
+    private static ArmReachability reaching(List<GuardEdge> edges, InputDomain read) {
+        return ArmReachability.of(edges, null, CoverageSites.of(Map.of()), read, null);
+    }
+
     @Test
     void reachabilityNamesTheArmsItProvesAndNoOthers() {
         List<GuardEdge> edges = List.of(above(50, true), below(50, false));
-        GuardReachability reach = GuardReachability.of(edges,
-                Map.of(new NumericTerm.ValueOf(TermPath.of("n")), holds(0L, 10L)));
+        ArmReachability reach = reaching(edges, domainOf("Count"));
 
         assertTrue(reach.provenUnreachable(0), "the arm above 50 is unreachable");
         assertFalse(reach.provenUnreachable(1), "the arm below it is the whole of the range");
@@ -231,8 +264,8 @@ class AGuardsArmsAreNotItsThresholdTest {
 
     @Test
     void aPositionWithNoBoundsProvesNothingAboutEitherArm() {
-        GuardReachability reach = GuardReachability.of(
-                List.of(above(50, true), below(50, false)), Map.of());
+        ArmReachability reach = reaching(List.of(above(50, true), below(50, false)),
+                domainOf("Int"));
 
         assertTrue(reach.isEmpty(), () -> "proved " + reach.unreachableSites());
     }

@@ -8,6 +8,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -65,7 +66,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** The classes of the one position, off the declarations alone. */
     private static List<String> declared(String source, String behavior) {
         Read read = of(source, behavior);
-        return classesOf(Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE));
+        return classesOf(Partitions.of(read.spec().name(), InputDomain.of(read.spec(), read.sig(), read.symbols()), read.symbols()));
     }
 
     /** And the same with what the behavior's own body draws taken in. */
@@ -76,11 +77,13 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, "the behavior under test has a body");
+        InputDomain inputs = read.compilation().db()
+                .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
+                .get(behavior);
         GuardThresholds.Guards guards = GuardThresholds.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies()),
-                read.spec().params().stream().map(Hir.Param::name).toList(), read.symbols());
+                CoverageSites.of(checked.behaviorBodies()), inputs, read.symbols());
         Partitions.Partitioning base =
-                Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE);
+                Partitions.of(read.spec().name(), inputs, read.symbols());
         return classesOf(Partitions.withThresholds(base, guards.thresholds(), read.symbols(),
                 guards.unread(), guards.singled(), guards.between()));
     }
@@ -109,7 +112,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** The classes at {@code path}, off the declarations alone. */
     private static List<String> declaredAt(String source, String behavior, String path) {
         Read read = of(source, behavior);
-        return classesAt(Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE),
+        return classesAt(Partitions.of(read.spec().name(), InputDomain.of(read.spec(), read.sig(), read.symbols()), read.symbols()),
                 path);
     }
 
@@ -322,7 +325,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     private static List<String> declaredAt(List<String> sources, String behavior, int nth,
                                            String path) {
         Read read = of(sources, behavior, nth);
-        return classesAt(Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE),
+        return classesAt(Partitions.of(read.spec().name(), InputDomain.of(read.spec(), read.sig(), read.symbols()), read.symbols()),
                 path);
     }
 
@@ -375,7 +378,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 """;
         Read read = of(model, "classify");
         Partitions.Partitioning base =
-                Partitions.of(read.spec(), read.sig(), read.symbols(), Exclusions.NONE);
+                Partitions.of(read.spec().name(), InputDomain.of(read.spec(), read.sig(), read.symbols()), read.symbols());
 
         assertInstanceOf(AdmissibleSet.Completeness.Partial.class, only(base).read(),
                 "a rule about this position went unread, and the classes were made anyway");
@@ -393,7 +396,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         assertNotNull(body, "the behavior under test has a body");
         GuardThresholds.Guards guards = GuardThresholds.of(read.spec().name(), body,
                 CoverageSites.of(checked.behaviorBodies()),
-                read.spec().params().stream().map(Hir.Param::name).toList(), read.symbols());
+                read.compilation().db()
+                        .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
+                        .get(read.spec().name()),
+                read.symbols());
         return Partitions.withThresholds(base, guards.thresholds(), read.symbols(),
                 guards.unread(), guards.singled(), guards.between());
     }

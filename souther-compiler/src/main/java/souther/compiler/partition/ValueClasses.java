@@ -10,65 +10,36 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The classes a position has where its rules name the values it may hold.
+ * How a value a rule named is recognised in a row and written back.
  *
- * <p>The same division a sum states, written another way. {@code data Gender = A | B} and
- * {@code data Gender = String invariant value == "A" || value == "B"} divide their position exactly
- * alike — every value of it is one or the other, and a row sits in one of them — and the second was
- * read by nothing, so a report said the model draws no distinction there.
- *
- * <p>One class per value and no complement. Everything outside what an invariant admits is refused
- * at construction (E1903), so there is no class on the other side to cover — the same restraint a
- * bounded newtype gets, where the bound is a line and not a pair of classes. A {@code guard} that
- * singles a value out is the other case and does have a complement ({@code Partitions#singledClasses}):
- * there the values on the far side exist and a row can be written at one.
- *
- * <p>Only where the values are named. {@link ValueSet.Cofinite} says which values are refused and
- * names none of the ones left, so it divides nothing here — {@code value /= "A"} leaves one class
- * of everything else, which is the position undivided.
- *
- * <p>Nothing here reads how much of the rules was taken in. A set arrived at from part of them is
- * still a set of values the model singled out, and the classes are the same classes; what the
- * completeness beside it decides is what may be concluded from the <em>absence</em> of a set, which
- * is {@link LocalPartition}'s to say.
+ * <p>Which values those are, and whether they stand at the position at all, is the reading's
+ * ({@code Distinctions#ofValues}). What is here is the other half: a class asking whether an
+ * observation is that value, and a fixture writing one.
  */
 final class ValueClasses {
 
     /**
-     * The classes {@code admitted} gives the position, or nothing where it gives none.
+     * One named value's class.
+     *
+     * <p>The reading has already settled that the value stands at this position, so a value this
+     * cannot write is the two of them disagreeing rather than a division to give up on — said
+     * loudly, because a class quietly missing here is a distinction the model states going missing
+     * from every measure at once.
      *
      * @param view the position as it is written, so that a value is classified under the names it
      *             wears and written back under them
      */
-    static List<PartitionClass> of(ValueSet admitted, TypeView view, Symbols symbols) {
-        if (!(admitted instanceof ValueSet.Finite finite) || finite.values().isEmpty()) {
-            return List.of();
-        }
-        List<TypeSymbol> worn = view.wrappers().stream().map(TypeOps.Layer::named).toList();
-        List<PartitionClass> classes = new ArrayList<>();
-        for (Value value : finite.values()) {
-            PartitionClass here = classAt(value, view, worn, symbols);
-            if (here == null) {
-                // A value this producer has no way to write down. Nothing is dropped by leaving it
-                // out: the reading that named it is the one that divides the position, so a
-                // division this can only half describe is one it does not make.
-                return List.of();
-            }
-            classes.add(here);
-        }
-        return List.copyOf(classes);
-    }
-
-    /** One value's class, or null where nothing here can turn the value into one. */
-    private static PartitionClass classAt(Value value, TypeView view, List<TypeSymbol> worn,
-                                          Symbols symbols) {
+    static PartitionClass classAt(Value value, TypeView view, List<TypeSymbol> worn,
+                                  Symbols symbols) {
         FixtureTemplate bare = written(value, view.declared(), symbols);
         if (bare == null) {
-            return null;
+            throw new IllegalStateException(
+                    "the reading of `" + Type.show(view.declared()) + "` states a distinction at a"
+                            + " value this cannot write; the two readings of one position disagree"
+                            + " about what stands at it");
         }
         Classifier is = Classifier.under(worn, Classifier.byShape(seen -> holds(seen, value)));
         FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, symbols);
@@ -87,11 +58,6 @@ final class ValueClasses {
     /**
      * The value as a row writes it, or null where this does not write values of that kind.
      *
-     * <p>A case of an enumeration is not one of these. What tells two cases apart is which
-     * declaration each is, and the reading that names the cases of a position is the one that reads
-     * its type ({@link PartitionClasses}) — so a case arriving here is a value the declared reading
-     * has already made a class of, and a second class for it would be the same class twice.
-     *
      * <p>Which of {@code Int} and {@code Decimal} a number is written as is the position's own type
      * to say. The two are never compared with each other (E1319), so a position is written about in
      * one of them and never in both.
@@ -107,9 +73,7 @@ final class ValueClasses {
         };
     }
 
-    /** A whole number, or null where the number the rules name is not one. A rule naming a value an
-     *  {@code Int} cannot hold admits nothing, which is a refusal of the declaration rather than a
-     *  class here. */
+    /** A whole number, or null where the number the rules name is not one. */
     private static FixtureTemplate whole(BigDecimal value) {
         try {
             return FixtureTemplate.integer(value.longValueExact());
@@ -119,27 +83,12 @@ final class ValueClasses {
     }
 
     /**
-     * The value as a row would be seen to carry it, or null where nothing here observes one.
+     * Whether an observed value is the one this class is of.
      *
-     * <p>What a class is asked with. A class knows what it holds and answers about an observation,
-     * so crossing a set of values with a list of classes is putting each value to each class — and
-     * the alternative, matching a value against what a class is called, would be a second copy of
-     * how a class is named.
-     *
-     * <p>Bare, without the names the position wears. A classifier that reads through names takes
-     * off the ones that are there and answers about the rest, so a value handed over as it stands
-     * is answered by the same classifier a row is.
+     * <p>Bare, without the names the position wears: a classifier that reads through names takes off
+     * the ones that are there and answers about the rest, so a value handed over as it stands is
+     * answered by the same classifier a row is.
      */
-    static ObservedValue observed(Value value) {
-        return switch (value) {
-            case Value.Text text -> new ObservedValue.Text(text.value());
-            case Value.Truth truth -> new ObservedValue.Bool(truth.value());
-            case Value.Number number -> new ObservedValue.Decimal(number.value());
-            case Value.Case one -> new ObservedValue.Unit(one.data());
-        };
-    }
-
-    /** Whether an observed value is the one this class is of. */
     private static boolean holds(ObservedValue seen, Value value) {
         return switch (value) {
             case Value.Text text ->

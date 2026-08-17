@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 /**
  * Why a derivation did not finish, in this compiler's own terms.

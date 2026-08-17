@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.inputs;
 
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
@@ -30,7 +30,7 @@ import souther.compiler.types.Type;
  * measured over here. Written out, a boundary that starts admitting a new shape stops this compiling
  * until the partition semantics of that shape have been decided.
  */
-record PartitionInput(TypeView view, Shape.PartitionInputShape shape) {
+record ReadablePosition(TypeView view, Shape.ReadablePositionShape shape) {
 
     /**
      * How {@code type} is read at a position the derivation is about.
@@ -38,20 +38,20 @@ record PartitionInput(TypeView view, Shape.PartitionInputShape shape) {
      * <p>Exhaustive over {@link Shape}, with no {@code default}: a sixteenth case stops this
      * compiling rather than arriving somewhere further down as a position nothing divides.
      */
-    static PartitionInput of(Type type, Symbols symbols) {
+    static ReadablePosition of(Type type, Symbols symbols) {
         return of(TypeView.of(type, symbols));
     }
 
     /** The same, of a position already read. The reading is the expensive half and the walk has one
      *  of them per position, so what asks about the shape and what asks about the names it is
      *  written under ask of the same reading. */
-    static PartitionInput of(TypeView view) {
-        return new PartitionInput(view, admitted(view));
+    static ReadablePosition of(TypeView view) {
+        return new ReadablePosition(view, admitted(view));
     }
 
-    private static Shape.PartitionInputShape admitted(TypeView view) {
+    private static Shape.ReadablePositionShape admitted(TypeView view) {
         return switch (view.shape()) {
-            case Shape.PartitionInputShape admissible -> admissible;
+            case Shape.ReadablePositionShape admissible -> admissible;
             // Refused where a signature or a field is read, each by an exhaustive switch of its own
             // (SignatureBoundary, CodecShape), so a value of one reaching here is this compiler
             // disagreeing with itself about what a position can be — not a model to report on.

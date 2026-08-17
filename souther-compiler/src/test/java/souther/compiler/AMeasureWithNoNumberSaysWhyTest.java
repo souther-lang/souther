@@ -493,8 +493,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 List.of(), java.util.Set.of(), java.util.Set.of(),
                 MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY));
         assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
-                "a", "a", List.of(), java.util.Set.of(), List.of(), 0,
-                MeasurementStatus.NOT_MEASURED, null));
+                "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.NOT_MEASURED, null));
 
         // The kinds are held against each other and not only for presence. A measure carrying a
         // reason of the other kind is the confusion the two words were split to prevent: it says its
