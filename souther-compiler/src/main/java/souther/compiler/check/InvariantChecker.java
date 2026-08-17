@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
+import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
@@ -150,11 +151,11 @@ public final class InvariantChecker {
      * protecting against so much as what it declines to spend the time on. */
     private static final int BRANCHES_OPENED = 3;
 
-    /** How far into a value's fields the seeding reads. A type's own invariant is what its fields
-     * guarantee, and a field's type carries its own; past a couple of levels what a clause could be
-     * read against is a value the body would have had to name, and it names it by reading it. */
-    private static final int FIELDS_SEEDED = 2;
-
+    /** The rules this check reads a program by: entering a binding, taking a condition as holding,
+     * and reading what a type guarantees. Held apart from the check ({@link PathEngine}) because the
+     * question they add up to — can anything stand here — has more than this one reader, and a
+     * second walk deriving it again would be a second set of rules. */
+    private final PathEngine engine;
     private final Symbols symbols;
     /** The declarations' invariants, typed where they are declared and read where a value is built. */
     private final Clauses clauses;
@@ -167,10 +168,13 @@ public final class InvariantChecker {
 
     private InvariantChecker(Symbols symbols,
                              Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
-        this.symbols = symbols;
-        this.clauses = new Clauses(symbols, dischargeInvariants);
-        this.terms = new Terms(symbols);
-        this.predicates = new Predicates(terms);
+        this.engine = new PathEngine(symbols, dischargeInvariants);
+        // Named here because this check reads them directly and often. They are the engine's, not a
+        // second copy: one engine builds them once and everything below sees those.
+        this.symbols = engine.symbols();
+        this.clauses = engine.clauses();
+        this.terms = engine.terms();
+        this.predicates = engine.predicates();
     }
 
     /**
@@ -432,7 +436,7 @@ public final class InvariantChecker {
                 if (type != null) {
                     // No depth limit here: this is the reading a boundary is derived from, and a
                     // rule the construction must satisfy is a rule wherever in the value it sits.
-                    k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                    k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             data.newtype() ? FieldDomains.THE_VALUE : field.getKey(),
                             k, at, 1, Integer.MAX_VALUE, new HashSet<>(), gathering, reach);
                 }
@@ -541,13 +545,13 @@ public final class InvariantChecker {
             inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
             worn = under;
         }
-        if (depth > FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
+        if (depth > PathEngine.FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
                 || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || data.newtype()) {
             return;
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
-                    under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
+                    PathEngine.under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
     }
@@ -1680,7 +1684,7 @@ public final class InvariantChecker {
 
         /** One binder the conditional stands inside, as the environment its body is read in. */
         private interface Binder {
-            Entered entering(InvariantChecker c, Known k, Denotations at);
+            Entered entering(PathEngine engine, Known k, Denotations at);
         }
 
         /** The same site, read from outside {@code binder} — so {@code binder} is the outermost of
@@ -1694,20 +1698,21 @@ public final class InvariantChecker {
 
         /** A {@code let}'s body, read with the name standing for what it was given. */
         static Binder of(Core.LetIn li) {
-            return (c, k, at) -> c.bindLet(li, k, at);
+            return (engine, k, at) -> engine.bindLet(li, k, at);
         }
 
         /** A {@code match} arm's body, read with what the arm binds standing for a value of the
          * case's type — a location this arm introduces, carrying what that type guarantees. */
         static Binder of(Core.Case arm) {
-            return (c, k, at) -> c.enter(Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+            return (engine, k, at) ->
+                    engine.enter(Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
         }
 
         /** An attempted construction's success branch, read with the binding carrying the invariant
          * the attempt established. */
         static Binder of(Core.IfConstructed ic) {
-            return (c, k, at) ->
-                    c.enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
+            return (engine, k, at) ->
+                    engine.enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
         }
     }
 
@@ -2015,220 +2020,21 @@ public final class InvariantChecker {
 
     // --- introducing a binding -----------------------------------------------------------------
 
-    /**
-     * What entering a binding leaves the walk holding. Two environments, updated by one transition:
-     * a value's place and what is known of it are separate questions with separate readers, and
-     * introducing a location answers both at once. Returning only one of them is what let a binding
-     * be named without being seeded.
-     */
-    private record Entered(Known known, Denotations at) {}
-
-    /**
-     * The environment a binding's body is read in. Both places a body is read reach it through here:
-     * the walk on its way into one, and a conditional hoisted out of one. The bug this answers came
-     * from those two working the scope rule out separately, so there is one of it.
-     *
-     * <p>The initializer is not read here. The walk reads it before it gets here, and a hoisted
-     * conditional was found past it.
-     *
-     * <p>The name is an alias for what its initializer denotes, so what is recorded about it is
-     * recorded under that denotation and not under the binding. Recording it under the binding is
-     * what made a named subexpression a term of its own, answering differently from the very
-     * expression it was given.
-     *
-     * <p>Nothing is recorded of the name itself. A name is read as the expression it was given —
-     * {@link Terms#affine} reads through it, and reads through a field taken off it the same way —
-     * so there is no second reading for a fact about the name to be needed by. Recording one meant
-     * giving the name's own atom the bounds of the form it was given, which is what a guard read one
-     * way and a construction read the other had between them, and a bound is not a relation: it left
-     * the guard settling nothing about the construction (#676).
-     */
-    private Entered bindLet(Core.LetIn li, Known k, Denotations at) {
-        // Entering a binding the walk is already inside is not a second binding of it. A branch is
-        // read from where its conditional stood, which is inside these, over a tree that still holds
-        // them.
-        if (at.valueOf(li.binder().id()) == li.value()) {
-            return new Entered(k, at);
-        }
-        Denotes what = terms.denotationOf(li.value(), at, k);
-        return new Entered(k, at.binding(li.binder().id(), li.value(), what));
-    }
-
     /** Where {@code site}'s conditional stands: {@code k} and {@code at} with every binder it is
      * inside entered, outermost first. */
     private Entered scopeOf(ConditionalSite site, Known k, Denotations at) {
         Entered in = new Entered(k, at);
         for (ConditionalSite.Binder binder : site.scope()) {
-            in = binder.entering(this, in.known(), in.at());
+            in = binder.entering(engine, in.known(), in.at());
         }
         return in;
     }
 
-    /**
-     * Introduces {@code root} as a location: somewhere nothing else names, holding a value of its
-     * type. Entering it and seeding it are one act, so there is no state where the check names a
-     * place it knows nothing about — which is a clause owed with nothing to establish it, and a
-     * warning an author cannot clear.
-     *
-     * <p>Every value the walk reaches this way was built through its type's checked constructor, so
-     * what that type guarantees holds of it. That is the same argument for a behavior's parameter,
-     * for what a {@code match} arm binds, and for what a combinator hands its closure — one rule,
-     * asked here.
-     */
+    private Entered bindLet(Core.LetIn li, Known k, Denotations at) {
+        return engine.bindLet(li, k, at);
+    }
+
     private Entered enter(Core.Read root, Known known, Denotations at) {
-        Denotations next = at.location(root.binding());
-        return new Entered(seedAt(root, known, next, 0), next);
+        return engine.enter(root, known, at);
     }
-
-    // --- seeding -------------------------------------------------------------------------------
-
-    /**
-     * Seeds the check with what the type of the value at {@code root} guarantees: a numeric newtype's
-     * own invariant on its value, a predicate its invariant states of it, or a product data's
-     * invariant over its fields (and one level of fields), each read at that very value. Sound by
-     * closed construction — a value of type T was built through T's checked constructor.
-     *
-     * <p>Which is the same reading a construction gets, over field reads instead of field values: the
-     * clause is the declaration's either way, and where it is established and where it is owed differ
-     * only in direction.
-     */
-    Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, FieldDomains.THE_VALUE, k, at, depth, FIELDS_SEEDED, new HashSet<>(),
-                null, Reach.EVERYTHING);
-    }
-
-    /**
-     * The same, as far as {@code limit} levels down, with the types on the way recorded.
-     *
-     * <p>How far to seed is not one number. What a walk over a body can afford to read of a
-     * parameter is a cost bound and stops at {@code FIELDS_SEEDED}; what a construction has to
-     * satisfy has no depth at all, since a rule four records down refuses the outermost value
-     * exactly as one on the top does. A projection that stopped at two and was then classified by a
-     * walk that did not would call a bound complete that a rule below it moves.
-     *
-     * <p>{@code onPath} is the types entered on the way here, so a record that holds another of its
-     * own kind stops rather than descending for ever. Kept per path and not for the whole walk: two
-     * fields of one type are two positions and both are seeded.
-     *
-     * @param gathering told what this walk gathers, or null where nobody is collecting. A clause
-     *                  governs a position from wherever it is written — the record the position is a
-     *                  field of, and the declarations under that record it sits inside — and this
-     *                  walk is where it is rebased onto the position it governs. A reader wanting
-     *                  that list has to be told here or walk the same descent again and rebase it a
-     *                  second way.
-     */
-    /**
-     * {@code k} as it stands, with the reading told where it is leaving rules unread.
-     *
-     * <p>Every way this walk stops short comes here: past the depth it reads to, at a value the
-     * caller supposed holds values, at a type it has no declaration for, and at a name already on
-     * the path. What a stop costs is not the same at each of them — most of them stop where there
-     * was nothing to read — so what is asked is whether any rule stands under what is being left,
-     * and only then is anything said. A walk that reported every stop would have a record with one
-     * plain string field speaking for none of its positions.
-     */
-    private Known declining(Type type, String path, Gathering gathering, Known k) {
-        if (gathering != null && type != null && anyRuleUnder(type, new HashSet<>())) {
-            gathering.missed(path);
-        }
-        return k;
-    }
-
-    /**
-     * Whether any rule is written anywhere under {@code type}.
-     *
-     * <p>A question about the model and not about the walk, which is what makes it the right one to
-     * ask at a stop: the walk's own reach is what is being decided, so reading it would answer that
-     * whatever was not read had nothing in it.
-     *
-     * <p>{@code seen} stops a type that holds its own kind. A name met on the way here was read
-     * where it was met, so what it holds is accounted for and reaching it again adds nothing.
-     */
-    private boolean anyRuleUnder(Type type, Set<TypeSymbol> seen) {
-        if (type instanceof Type.Ref ref) {
-            if (!seen.add(ref.name())) {
-                return false;
-            }
-            return switch (symbols.declarations().declaration(ref.name().key())) {
-                // A unit data holds nothing and may write no rule about it (spec §unit-data), so a
-                // sum of them is a type nothing is written under — which is what makes an
-                // enumeration a position this still speaks for.
-                case Hir.UnitData _ -> false;
-                case Hir.SumData sum -> TypeOps.leafCases(sum, symbols).stream()
-                        .anyMatch(each -> anyRuleUnder(Type.ref(each), seen));
-                case Hir.Data data -> !clauses.declared(ref.name(), data).isEmpty()
-                        || TypeOps.fieldTypes(data, symbols).values().stream()
-                                .anyMatch(each -> anyRuleUnder(each, seen));
-                case null, default -> false;
-            };
-        }
-        boolean[] found = {false};
-        Type.forEachChild(type, child -> found[0] |= anyRuleUnder(child, seen));
-        return found[0];
-    }
-
-    private Known seedAt(Core root, String path, Known k, Denotations at, int depth, int limit,
-                         Set<TypeSymbol> onPath, Gathering gathering, Reach reach) {
-        // Read before the path is entered, so that the one name and the other stay paired: a stop
-        // taken after entering would leave the name on the path with nothing to take it off, and the
-        // next field of the same type would be passed over as one already read. Supposed to hold
-        // values, so nothing written under it is read: what is under it is what would say it holds
-        // none, and reading it here is the supposing undone one step in.
-        if (depth > limit || !(root.type() instanceof Type.Ref ref)
-                || reach.stopAt().test(ref.name())) {
-            return declining(root.type(), path, gathering, k);
-        }
-        if (!(symbols.declarations().declaration(ref.name().key()) instanceof Hir.Data data) || !onPath.add(ref.name())) {
-            return declining(root.type(), path, gathering, k);
-        }
-        Map<String, Type> fields = clauses.fieldsOf(data);
-        Map<String, BindingId> bindings = clauses.bindingsOf(ref.name(), data);
-        Map<BindingId, Core> given = new HashMap<>();
-        fields.forEach((name, type) -> {
-            BindingId field = bindings.get(name);
-            if (field != null) {
-                given.put(field, new Core.FieldAccess(root, name, type, root.pos()));
-            }
-        });
-        Known out = k;
-        List<Quantified> quantified = new ArrayList<>();
-        Clauses.StatedClauses stated = reach.withoutClauses().test(ref.name())
-                ? Clauses.StatedClauses.NONE_ASKED_FOR : clauses.statedAt(ref.name(), data, given);
-        // A clause of a declaration under here that states nothing this can read is gone before any
-        // reading sees it, and which position it was about goes with it. Said as it happens: a
-        // reader collecting the clauses would otherwise take the ones it was handed for every
-        // clause there is, and answer for a rule it never saw.
-        if (gathering != null && !stated.everyClauseStated()) {
-            gathering.missed(path);
-        }
-        for (Clauses.Stated one : stated.clauses()) {
-            if (gathering != null) {
-                gathering.gathered(ref.name(), one.expr());
-            }
-            predicates.quantifiedBy(one.expr(), at, true, quantified);
-            out = predicates.assume(predicates.obligations(one.expr(), out, at, false), out,
-                    Known.Held.OF_THE_VALUE);
-        }
-        out = out.and(quantified);
-        if (data.newtype()) {
-            // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
-            // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
-            // A newtype's `.value` is at no path of its own, which is the rule `name` walks by:
-            // wearing a name is not being somewhere else.
-            Core value = given.get(bindings.get("value"));
-            out = value == null ? declining(fields.get("value"), path, gathering, out)
-                    : seedAt(value, path, out, at, depth + 1, limit, onPath, gathering, reach);
-        } else {
-            for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
-                Core value = given.get(field.getValue());
-                if (value != null) {
-                    out = seedAt(value, under(path, field.getKey()), out, at, depth + 1, limit,
-                            onPath, gathering, reach);
-                }
-            }
-        }
-        onPath.remove(ref.name());
-        return out;
-    }
-
 }
