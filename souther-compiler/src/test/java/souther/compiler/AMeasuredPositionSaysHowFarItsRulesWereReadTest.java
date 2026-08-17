@@ -1,0 +1,115 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A position the axes measure says how far its rules were read.
+ *
+ * <p>The classes beside a position mean one thing on a reading that ran to the end and another on
+ * one that did not: a class arrived at from part of the rules is a value the model singled out, and
+ * a rule that went unread may yet refuse it. The axis has carried that since it was measured, with
+ * nothing reading it — so two classes were offered and neither surface said what they rested on.
+ *
+ * <p>Said apart from a position with no axis at all. Both are readings that did not finish, and
+ * they are not the same thing to act on: reading the same sentence about a position with three
+ * classes as about one with none says the numbers beside it are not to be believed.
+ */
+class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
+
+    /**
+     * A position the axes measure whose rules were not read in full.
+     *
+     * <p>The option divides `i.assignee` into `None` and `Some`, so the position is measured. What
+     * `Assignee` says about the value inside is behind the option, and this reading does not go
+     * there.
+     */
+    private static final String MEASURED_IN_PART = """
+            module o
+
+            data Assignee = String
+                invariant String.length(value) >= 1
+
+            data Issue = { assignee: Assignee? }
+            data Accepted = { at: Int }
+
+            behavior classify : (i: Issue) -> Accepted
+            """;
+
+    /** The control: the same shape with nothing left unread. */
+    private static final String READ_IN_FULL = """
+            module u
+
+            data Low
+            data Accepted = { at: Int }
+
+            behavior classify : (n: Int) -> Accepted | Low
+                constructs Accepted, Low
+
+            let classify (n) = {
+                guard n >= 60 else Low
+                Accepted { at = n }
+            }
+            """;
+
+    private static AdequacyReport reportOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation);
+    }
+
+    private static String humanOf(String source) {
+        return reportOf(source).human(SourceNameResolver.identity());
+    }
+
+    private static JsonNode partitionOf(String source) {
+        JsonNode document = JsonMapper.builder().build()
+                .readTree(reportOf(source).json(SourceNameResolver.identity()));
+        return document.get("modules").get(0).get("behaviors").get(0).get("partition");
+    }
+
+    @Test
+    void aMeasuredPositionIsToldApartFromOneWithNoAxis() {
+        JsonNode axis = partitionOf(MEASURED_IN_PART).get("axes").get(0);
+        assertEquals("i.assignee", axis.get("path").asText());
+        assertEquals(2, axis.get("classes").size(), axis.toString());
+        assertEquals("partial", axis.get("read").get("extent").asText(),
+                "the axis says how much of what its position's rules say was read");
+        // The word, and not only that there is one. What stopped this reading is that it never
+        // reached the rules behind the option — which is not a rule it read and could not use, and
+        // saying so would publish a cause this was not observed to have.
+        assertEquals("rules_not_read_at_all", axis.get("read").get("stoppedBy").asText(),
+                axis.toString());
+
+        String human = humanOf(MEASURED_IN_PART);
+        assertTrue(human.contains(
+                        "read in part: i.assignee (the rules written about it were not reached"),
+                "a measured position says it is read in part, which a position with no axis"
+                        + " does not: " + human);
+        assertFalse(human.contains("not read: i.assignee"),
+                "and is not said as one nothing divided: " + human);
+    }
+
+    /** Nothing is invented: a position whose rules were read in full gains no line either way. */
+    @Test
+    void aPositionWhoseRulesWereReadInFullGainsNoLine() {
+        String human = humanOf(READ_IN_FULL);
+        assertFalse(human.contains("read in part"), human);
+
+        JsonNode read = partitionOf(READ_IN_FULL).get("axes").get(0).get("read");
+        assertEquals("complete", read.get("extent").asText());
+        assertFalse(read.has("stoppedBy"), "nothing stopped it, so nothing says what did: " + read);
+    }
+}

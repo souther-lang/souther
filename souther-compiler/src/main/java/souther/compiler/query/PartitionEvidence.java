@@ -56,6 +56,59 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
         whyUnclassified = List.copyOf(whyUnclassified);
     }
 
+    /**
+     * A position something is written about that this reading did not turn into a line, and what
+     * stopped it.
+     *
+     * <p>The reason in the vocabulary a document promises its reader, not the one this compiler
+     * records for itself: which capability was missing is this compiler's own business, and which
+     * kind of thing stopped the derivation is what a reader can act on.
+     */
+    public record UnreadPosition(String at,
+                                 souther.compiler.partition.UndividedPosition.Reason reason) {}
+
+    /**
+     * Every position this reading carries an unread finding about: a rule it did not turn into a
+     * line, and a position it divided no way and said why.
+     *
+     * <p>Not every position whose rules this reading is short of. How far the reading of a position
+     * ran is what its axis carries ({@link AxisCoverage#read()}), and a position measured on a
+     * reading that did not run to the end need have no entry here — these are findings about rules
+     * and that is an account of a position. Read as the whole of what was left unread, this would
+     * be the very thing it was written to stop: one question answered by a list that answers
+     * another.
+     *
+     * <p>One reading, and the two surfaces write from it. It used to be assembled twice — a person
+     * was shown the rules no line came from together with the positions divided no way, and the
+     * document was written from the second alone — so a rule left unread at a position the axes
+     * went on to measure reached one reader and stopped there. Nothing was wrong with either list;
+     * what was wrong is that one question was answered by reading two of them in one place and one
+     * of them in the other.
+     *
+     * <p>The rules come first and the undivided positions after, deduplicated: a position can be
+     * in both, and it is one thing that was found about it either way.
+     */
+    public List<UnreadPosition> notRead() {
+        List<UnreadPosition> out = new java.util.ArrayList<>();
+        for (souther.compiler.inputs.UnreadRule each : unread) {
+            add(out, new UnreadPosition(each.at().toString(),
+                    souther.compiler.partition.ReportedReason.of(each.why())));
+        }
+        for (souther.compiler.partition.UndividedPosition position : notDerivable) {
+            if (position.why() instanceof souther.compiler.partition.UndividedPosition.Why
+                    .CannotDerive stopped) {
+                add(out, new UnreadPosition(position.at().toString(), stopped.reason()));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    private static void add(List<UnreadPosition> out, UnreadPosition said) {
+        if (!out.contains(said)) {
+            out.add(said);
+        }
+    }
+
     /** The positions, for a reader that wants them and not what the measure made of itself. */
     public List<AxisCoverage> axes() {
         return partitioned.at();
@@ -231,7 +284,40 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      *                         unreached class is undecided rather than unreached.
      */
     public record AxisCoverage(String axis, String path, List<String> classes, Set<String> covered,
-                               int unclassifiedRows, MeasurementStatus status, Reason reason) {
+                               int unclassifiedRows, MeasurementStatus status, Reason reason,
+                               Reading read) {
+
+        /**
+         * How much of what this position's rules say was read.
+         *
+         * <p>It qualifies the classes and nothing else says it. A class arrived at from part of the
+         * rules is a value the model singled out, and a rule that went unread may yet refuse it —
+         * so the classes are the denominator the model states and not one every class of which is
+         * known to be inhabited.
+         *
+         * <p>Said in the vocabulary the document promises, and taken from what the axis already
+         * carries rather than worked out a second time from the lists beside it. Those answer about
+         * rules; this answers about a position.
+         */
+        public sealed interface Reading {
+
+            /** Every rule about the position was read. */
+            record InFull() implements Reading {}
+
+            /** Something about the position was left unread, and what stopped it. */
+            record InPart(souther.compiler.partition.UndividedPosition.Reason why) implements Reading {
+
+                public InPart {
+                    if (why == null) {
+                        throw new IllegalArgumentException(
+                                "a reading short of the rules says what stopped it");
+                    }
+                }
+            }
+        }
+
+        /** Every rule read, which is what a caller holding no account of its own says. */
+        public static final Reading READ_IN_FULL = new Reading.InFull();
 
         /** Why a position has no coverage numbers. */
         public enum Reason implements souther.compiler.observe.MeasureReason {
@@ -254,13 +340,17 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
         /** Which classes there are is a fact about the model, and no row has to exist for it to be
          *  so — which is why a position nothing was measured at still names them. */
         public static AxisCoverage unavailable(String axis, String path, List<String> classes,
-                                               Reason reason) {
-            return new AxisCoverage(axis, path, classes, Set.of(), 0, reason.status(), reason);
+                                               Reason reason, Reading read) {
+            return new AxisCoverage(axis, path, classes, Set.of(), 0, reason.status(), reason, read);
         }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
             covered = Set.copyOf(covered);
+            if (read == null) {
+                throw new IllegalArgumentException(
+                        "a position with no account of what was read about its values: " + path);
+            }
             Unavailable.check(status, reason);
         }
 

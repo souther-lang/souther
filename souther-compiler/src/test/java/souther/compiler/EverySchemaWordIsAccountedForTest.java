@@ -159,9 +159,11 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
                     PartitionEvidence.Partitioned.Reason.class),
-            new Vocabulary("partition.notRead[].reason",
-                    List.of("$defs", "partition", "properties", "notRead", "items", "properties",
-                            "reason"),
+            // Written once and referred to twice: a position's reading and a rule left unread are
+            // the same question asked of two things, and two copies of the words would be two
+            // places for one of them to gain a word the other does not have.
+            new Vocabulary("notReadReason",
+                    List.of("$defs", "notReadReason"),
                     souther.compiler.partition.UndividedPosition.Reason.class),
             new Vocabulary("partition.boundariesMeasure.reason",
                     List.of("$defs", "partition", "properties", "boundariesMeasure", "properties",
@@ -258,6 +260,22 @@ class EverySchemaWordIsAccountedForTest {
                 allowedAt(schema(), List.of("$defs", "behavior", "properties", "implementation")));
     }
 
+    /**
+     * And the other field with no enum behind it: how far a position's rules were read, which is
+     * two arms of a sealed type rather than an enumeration.
+     */
+    @Test
+    void theOtherFieldWithNoEnumBehindItIsWrittenFromTheArmsOfAReading() {
+        assertEquals(Set.of(AdequacyReport.readingWord(
+                        new PartitionEvidence.AxisCoverage.Reading.InFull()),
+                        AdequacyReport.readingWord(
+                                new PartitionEvidence.AxisCoverage.Reading.InPart(
+                                        souther.compiler.partition.UndividedPosition.Reason
+                                                .DEPTH_LIMIT))),
+                allowedAt(schema(), List.of("$defs", "partition", "properties", "axes", "items",
+                        "properties", "read", "properties", "extent")));
+    }
+
     /** Every enumerated field of the schema is either held above or named as the exception. */
     @Test
     void noEnumeratedFieldIsUnaccountedFor() {
@@ -268,6 +286,7 @@ class EverySchemaWordIsAccountedForTest {
             held.add("/" + String.join("/", each.at()));
         }
         held.add("/$defs/behavior/properties/implementation");
+        held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
 
         List<String> unaccounted = paths.stream().filter(p -> !held.contains(p)).toList();
         assertEquals(List.of(), unaccounted,

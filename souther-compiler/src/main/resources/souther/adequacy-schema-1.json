@@ -34,6 +34,10 @@
     }
   },
   "$defs": {
+    "notReadReason": {
+      "description": "Why a reading is short of the rules. `unsupported_syntax` is a rule that was read and could not be used — an expression the terms do not name; `rules_not_read_at_all` is a rule the reading never arrived at, with which limit stopped the walk neither recorded nor promised; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position; `type_unresolved` is a type at the position that could not be worked out; `unsupported_traversal` is values held inside something the walk does not reach into. Every one of them is a fact about the compiler and none is a fact about the model.",
+      "enum": ["unsupported_syntax", "rules_not_read_at_all", "unsupported_domain", "unsupported_partition_shape", "depth_limit", "type_unresolved", "unsupported_traversal"]
+    },
     "status": {
       "description": "Whether a measure has a number. `unavailable` says only that it has none; the `reason` beside it says why, and the two are not read off one another.",
       "enum": ["complete", "partial", "unavailable"]
@@ -91,8 +95,8 @@
         "additionalProperties": false,
         "properties": {
           "kind": {
-            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read` and `partition_omitted` are positions the model divides no way, positions this could not read, and positions past the axis limit.",
-            "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered", "partition_not_derivable", "partition_not_read", "partition_omitted"]
+            "description": "What the measure established. `output_case_unspecified` is a case of the output no row expects and `output_case_unverified` is one some row expects and nothing was seen to produce; `input_case_unspecified` is a case of an input no row applies the behavior to and `axis_class_uncovered` is a class of a derived position no row is in — the two read alike about one class and only one of them is refused over. `boundary_unmet` is a line some rule draws that no row sits on, `arm_unreached` an arm of the body no row goes through. `partition_not_derivable`, `partition_not_read`, `partition_read_in_part` and `partition_omitted` are positions the model divides no way, positions some rule about which was not read, positions the axes did measure on a reading short of their rules, and positions past the axis limit.",
+            "enum": ["output_case_unspecified", "input_case_unspecified", "boundary_unmet", "arm_unreached", "output_case_unverified", "axis_class_uncovered", "partition_not_derivable", "partition_not_read", "partition_read_in_part", "partition_omitted"]
           },
           "disposition": {
             "description": "What a build does about this one. `refused` is a gap `--strict` and a warned build refuse over; `reported` is a kind neither refuses over, whatever its measurement managed; `undecided` is a kind they would refuse over, from a measurement that came to no answer — telling an author to write a row they may already have written is worse than saying nothing, so it is named and not refused.",
@@ -184,6 +188,16 @@
             "properties": {
               "axis": { "type": "string" },
               "path": { "type": "string", "description": "The input position, as a parameter and the fields read off it. A newtype's `value` is never a step." },
+              "read": {
+                "type": "object",
+                "description": "How much of what this position's rules say was read. It qualifies `classes` and nothing else says it: a class arrived at from part of the rules is a value the model singled out, and a rule that went unread may yet refuse it — so `classes` is the denominator the model states and not one every member of which is known to stand. Its own words rather than the `status` and `reason` a measure carries: those say whether a number was arrived at and why there is none, and this says how far a reading got at a position that has numbers. Not in `required`: a document written before this field existed is still a document of this version.",
+                "required": ["extent"],
+                "additionalProperties": false,
+                "properties": {
+                  "extent": { "enum": ["complete", "partial"], "description": "Whether every rule about this position was read." },
+                  "stoppedBy": { "description": "What stopped the reading, present exactly where `extent` is `partial`. The same words `notRead` writes, because it is the same question asked of a position rather than of a rule.", "$ref": "#/$defs/notReadReason" }
+                }
+              },
               "classes": { "type": "array", "items": { "type": "string" }, "description": "The classes a row can be written at: what the model divides this position into, less what its own rules refuse." },
               "covered": { "type": "array", "items": { "type": "string" } },
               "excluded": {
@@ -316,17 +330,14 @@
         },
         "notRead": {
           "type": "array",
-          "description": "Positions something in the body names that this reading did not turn into a line, each with what stopped it. Nothing is established about these either way, which is what separates them from `notDerivable` — and which limit stopped each one is what says whose work it is to lift. Not in `required`: a document written before this field existed is still a document of this version.",
+          "description": "Positions some rule about which this reading did not turn into a line, each with what stopped it. What separates them from `notDerivable` is that the model does state something here — which limit stopped each one is what says whose work it is to lift. Not a statement that the position was not measured: a position with an axis and classes can carry a rule nothing read, and whether the reading of a position ran to the end is what that axis's `read` says. Not in `required`: a document written before this field existed is still a document of this version.",
           "items": {
             "type": "object",
             "required": ["position", "reason"],
             "additionalProperties": false,
             "properties": {
               "position": { "type": "string" },
-              "reason": {
-                "description": "`unsupported_syntax` is an expression the terms do not name; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position; `type_unresolved` is a type at the position that could not be worked out; `unsupported_traversal` is values held inside something the walk does not reach into. Every one of them is a fact about the compiler and none is a fact about the model.",
-                "enum": ["unsupported_syntax", "unsupported_domain", "unsupported_partition_shape", "depth_limit", "type_unresolved", "unsupported_traversal"]
-              }
+              "reason": { "$ref": "#/$defs/notReadReason" }
             }
           }
         },

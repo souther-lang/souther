@@ -251,6 +251,16 @@ final class Coverages {
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
         List<String> classes = axis.classes().stream().map(PartitionClass::id).toList();
+        // What the axis already says about how far the rules were read, in the word a document
+        // promises. Read off the axis rather than worked out here: the reading that made the
+        // classes is the one that knows what it was short of.
+        PartitionEvidence.AxisCoverage.Reading read =
+                axis.read() instanceof souther.compiler.values.AdmissibleSet.Completeness.Partial
+                        partial
+                        ? new PartitionEvidence.AxisCoverage.Reading.InPart(
+                                souther.compiler.partition.ReportedReason.of(
+                                        souther.compiler.inputs.BlockReason.of(partial.why())))
+                        : PartitionEvidence.AxisCoverage.READ_IN_FULL;
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being
@@ -258,7 +268,7 @@ final class Coverages {
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.unavailable(axis.id().toString(),
                     axis.term().toString(), classes,
-                    PartitionEvidence.AxisCoverage.Reason.NO_ROWS);
+                    PartitionEvidence.AxisCoverage.Reason.NO_ROWS, read);
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
@@ -268,7 +278,8 @@ final class Coverages {
             }
         }
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
-                classes, covered, readings.couldNotSay(axis), readings.status(List.of(axis)), null);
+                classes, covered, readings.couldNotSay(axis), readings.status(List.of(axis)), null,
+                read);
     }
 
     /**

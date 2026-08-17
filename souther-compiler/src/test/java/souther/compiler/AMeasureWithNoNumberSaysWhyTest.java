@@ -493,7 +493,14 @@ class AMeasureWithNoNumberSaysWhyTest {
                 List.of(), java.util.Set.of(), java.util.Set.of(),
                 MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY));
         assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
-                "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.NOT_MEASURED, null));
+                "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.NOT_MEASURED, null,
+                PartitionEvidence.AxisCoverage.READ_IN_FULL));
+        // And a position handed over with no account of what was read about its values. The classes
+        // beside it mean one thing on a reading that ran to the end and another on one that did
+        // not, so a coverage that does not say which is a set of classes nobody can read.
+        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
+                "a", "a", List.of(), java.util.Set.of(), 0, MeasurementStatus.COMPLETE, null,
+                null));
 
         // The kinds are held against each other and not only for presence. A measure carrying a
         // reason of the other kind is the confusion the two words were split to prevent: it says its

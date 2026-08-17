@@ -22,6 +22,24 @@ package souther.compiler.inputs;
 public sealed interface BlockReason {
 
     /**
+     * What a value reading's account of what it left unread comes to here.
+     *
+     * <p>The one place the two vocabularies meet, so a reader holding a reading's completeness and
+     * one holding a block reason cannot come to different words for one stop. A relation between
+     * two positions is what {@link ComparisonBetweenPositions} already says, whichever rule wrote
+     * it: a {@code guard} comparing two inputs and an {@code invariant} relating two fields leave a
+     * reader the same thing to know. The other two are their own, because what would lift each is
+     * different work — one wants a reader for a form, and one wants the gathering to reach further.
+     */
+    static BlockReason of(souther.compiler.values.UnreadReason why) {
+        return switch (why) {
+            case RELATES_TWO_POSITIONS -> new ComparisonBetweenPositions();
+            case FORM_NOT_READ, ALTERNATIVE_NOT_READ -> new UnreadValueRule();
+            case NOT_REACHED -> new ValueRulesNotReached();
+        };
+    }
+
+    /**
      * The type at the position could not be interpreted: a name denoting no declaration, or a
      * declaration reachable from itself. Such a model compiles, so this is a position a report is
      * asked about and cannot be answered for.

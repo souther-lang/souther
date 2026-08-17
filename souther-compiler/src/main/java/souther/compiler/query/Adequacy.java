@@ -1341,7 +1341,7 @@ public final class Adequacy {
                     // that the switch stays exhaustive over the kinds rather than over the ones
                     // thought of here.
                     case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                            PARTITION_NOT_READ, PARTITION_OMITTED ->
+                            PARTITION_NOT_READ, PARTITION_READ_IN_PART, PARTITION_OMITTED ->
                             throw new IllegalStateException("not a gap a build refuses: " + gap);
                 }));
             }
@@ -1603,6 +1603,16 @@ public final class Adequacy {
         PARTITION_NOT_DERIVABLE(null, false),
         /** A position something is written about that this did not read, with what stopped it. */
         PARTITION_NOT_READ(null, false),
+        /**
+         * A position the axes measure whose rules this reading is short of, with what stopped it.
+         *
+         * <p>Told apart from {@link #PARTITION_NOT_READ} because they are different things to act
+         * on. Nothing was established about a position this could not read; here the classes are
+         * what the model was read to say, and what went unread may yet refuse one of them — so a
+         * reader is told that the numbers beside it rest on a reading that did not run to the end,
+         * rather than that there are none.
+         */
+        PARTITION_READ_IN_PART(null, false),
         /** A position left out because the axis limit was reached. */
         PARTITION_OMITTED(null, false);
 
@@ -1826,28 +1836,26 @@ public final class Adequacy {
                             List.of(position.at().toString())));
                 }
             }
-            // And what this could not read, which is asked of the comparisons. A position with
-            // classes can still carry a statement nothing read, so this is not filtered by the list
-            // above — and the walk stopping short is the one reason that comes from neither.
-            List<List<Object>> unread = new ArrayList<>();
-            for (souther.compiler.inputs.UnreadRule each : partition.unread()) {
-                unread.add(List.<Object>of(each.at().toString(),
-                        said(souther.compiler.partition.ReportedReason.of(each.why()))));
-            }
-            for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
-                if (position.why() instanceof souther.compiler.partition.UndividedPosition.Why
-                        .CannotDerive stopped) {
-                    List<Object> said =
-                            List.<Object>of(position.at().toString(), said(stopped.reason()));
-                    if (!unread.contains(said)) {
-                        unread.add(said);
-                    }
-                }
-            }
-            for (List<Object> each : unread) {
+            // And what this could not read, asked of the one reading that answers it. A position
+            // with classes can still carry a statement nothing read, so this is not filtered by the
+            // list above.
+            for (PartitionEvidence.UnreadPosition each : partition.notRead()) {
                 // Not measured, because nothing here established anything either way about it.
                 out.add(new Finding(Kind.PARTITION_NOT_READ, behavior.name(),
-                        MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()), each));
+                        MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
+                        List.of(each.at(), said(each.reason()))));
+            }
+            // A position the axes did measure, whose rules this reading is short of. A different
+            // thing to act on from one nothing divided: the classes beside it are what the model
+            // was read to say, and what was left unread may yet refuse one of them. What says how
+            // much was read is what the axis carries — asked here rather than worked out a second
+            // time from the lists above, which answer about rules and not about positions.
+            for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+                if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.InPart short_) {
+                    out.add(new Finding(Kind.PARTITION_READ_IN_PART, behavior.name(),
+                            MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
+                            List.of(axis.path(), said(short_.why()))));
+                }
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
@@ -1860,6 +1868,8 @@ public final class Adequacy {
         private static String said(souther.compiler.partition.UndividedPosition.Reason reason) {
             return switch (reason) {
                 case UNSUPPORTED_SYNTAX -> "a rule about it is one this compiler did not read";
+                case RULES_NOT_READ_AT_ALL ->
+                        "the rules written about it were not reached at all";
                 case UNSUPPORTED_DOMAIN ->
                         "it is compared against values no line can be drawn on here";
                 case UNSUPPORTED_PARTITION_SHAPE ->

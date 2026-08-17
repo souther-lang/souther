@@ -48,6 +48,9 @@
         "axes" : [ {
           "axis" : "discount/item.note",
           "path" : "item.note",
+          "read" : {
+            "extent" : "complete"
+          },
           "classes" : [ "None", "Some" ],
           "covered" : [ "None", "Some" ],
           "excluded" : [ ],
@@ -143,6 +146,9 @@
         "axes" : [ {
           "axis" : "台帳へ書く/指示.区分",
           "path" : "指示.区分",
+          "read" : {
+            "extent" : "complete"
+          },
           "classes" : [ "通常", "速達", "冷蔵" ],
           "covered" : [ "冷蔵", "通常", "速達" ],
           "excluded" : [ ],
@@ -248,6 +254,10 @@
         "axes" : [ {
           "axis" : "出荷する/指示.重量",
           "path" : "指示.重量",
+          "read" : {
+            "extent" : "partial",
+            "stoppedBy" : "unsupported_syntax"
+          },
           "classes" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
           "covered" : [ "指示.重量/1 <= x <= 30000", "指示.重量/30000 < x" ],
           "excluded" : [ ],
@@ -257,6 +267,9 @@
         }, {
           "axis" : "出荷する/指示.区分",
           "path" : "指示.区分",
+          "read" : {
+            "extent" : "complete"
+          },
           "classes" : [ "通常", "速達", "冷蔵" ],
           "covered" : [ "冷蔵", "通常", "速達" ],
           "excluded" : [ ],
@@ -313,9 +326,6 @@
         },
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {
-          "position" : "指示.品目",
-          "reason" : "unsupported_traversal"
-        }, {
           "position" : "指示.受付日",
           "reason" : "unsupported_syntax"
         }, {
@@ -324,6 +334,9 @@
         }, {
           "position" : "指示.集荷時刻",
           "reason" : "unsupported_syntax"
+        }, {
+          "position" : "指示.品目",
+          "reason" : "unsupported_traversal"
         } ],
         "omitted" : [ ]
       },
@@ -353,6 +366,10 @@
         "kind" : "partition_not_read",
         "disposition" : "reported",
         "subject" : "指示.品目"
+      }, {
+        "kind" : "partition_read_in_part",
+        "disposition" : "reported",
+        "subject" : "指示.重量"
       } ]
     } ]
   } ],
