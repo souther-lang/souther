@@ -166,6 +166,45 @@ class ModuleMetadataTest {
                         "invariantHelpers"));
     }
 
+    /**
+     * What is carried is what this module's own source declares.
+     *
+     * <p>An {@code examples for} file's values join the module its rows join, so the module as
+     * resolved holds `let`s whose source is in the companion file. A companion does not add to what
+     * the model compiles to, and there is nothing of it in a jar of the model, so a `let` only it
+     * declares is not the module's to publish.
+     *
+     * <p>What this leaves open, and does not decide: a declaration written to reach such a value
+     * compiles, and the clause travels naming something the jar does not carry. Refusing that is a
+     * rule about what a model declaration may depend on — an `examples for` file being for the rows
+     * and the values they name — and it is not this walk's to make. Held here so that the reading is
+     * what someone decides against rather than what they discover.
+     */
+    @Test
+    void aValueOnlyACompanionFileDeclaresIsNotCarried() {
+        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+                module beside.rows exposing ( Amount, echo )
+
+                data Amount = { n: Int }
+                    invariant n >= floor
+
+                behavior echo : (x: Amount) -> Amount
+                let echo (x) = x
+                """, """
+                examples for beside.rows
+
+                let floor = 0
+
+                example echo
+                    | "unchanged" : (Amount { n = 1 }) -> Amount { n = 1 }
+                """));
+
+        assertEquals(List.of(),
+                strings(annotation(classes, Emitted.declarations("beside.rows"), "SoutherModule"),
+                        "invariantHelpers"),
+                "the companion's source is not in this module's jar, so it has none to carry");
+    }
+
     /** A composition declares stages, not a signature. The importing module reads a signature, so
      * the computed one is written out and the stages stay behind. */
     @Test
