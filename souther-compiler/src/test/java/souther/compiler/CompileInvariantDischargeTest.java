@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import java.util.List;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Severity;
 
@@ -92,6 +93,16 @@ class CompileInvariantDischargeTest {
     private static long warnings(Compiler.Compiled c) {
         return c.warnings().stream()
                 .filter(d -> d.severity() == Severity.WARNING).count();
+    }
+
+    /** Every warning code a compile answered with, in order. Asked for by code where a model has
+     *  something other than a construction to be told about, so that the silence this check is
+     *  about is measured rather than the silence of every check at once. */
+    private static List<String> warningCodes(Compiler.Compiled c) {
+        return c.warnings().stream()
+                .filter(d -> d.severity() == Severity.WARNING)
+                .map(souther.compiler.diag.Diagnostic::code)
+                .toList();
     }
 
     private static boolean hasWarning(Compiler.Compiled c, String code) {
@@ -1250,7 +1261,10 @@ class CompileInvariantDischargeTest {
                     AtLeastTwo(a)
                 }
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+        // The guards contradict, so the construction under them is not a value the model builds
+        // and nothing is said about it. What is said is that the branch is dead, which is the other
+        // reading of the same contradiction and the thing an author can act on.
+        assertEquals(List.of("E1327"), warningCodes(Compiler.compileWithWarnings(m)),
                 "an unreachable construction is neither violated nor possibly violated");
     }
 
@@ -1272,7 +1286,7 @@ class CompileInvariantDischargeTest {
                     AtLeastTwo(a)
                 }
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+        assertEquals(List.of("E1327"), warningCodes(Compiler.compileWithWarnings(m)),
                 "the difference asserted last closes the same contradiction");
     }
 

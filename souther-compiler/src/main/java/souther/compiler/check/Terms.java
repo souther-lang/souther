@@ -69,8 +69,32 @@ final class Terms {
     }
 
     Terms(Symbols symbols) {
-        this.symbols = symbols;
+        this(symbols, Of.THE_DISCHARGE_TREE);
     }
+
+    Terms(Symbols symbols, Of reading) {
+        this.symbols = symbols;
+        this.reading = reading;
+    }
+
+    /**
+     * Which tree a reading is over, which decides whether a shape with no term says anything about
+     * this compiler.
+     *
+     * <p>The discharge reader is handed a tree where the language's own operations are still
+     * operations, so a shape it has no term for is a shape nothing here has got round to. The tree
+     * that runs has those operations expanded into the folds they are, and meeting one of those is
+     * the representation rather than a gap — recorded as a gap it would say this compiler cannot
+     * name {@code List.map} when what it cannot name is a fold nobody wrote.
+     */
+    enum Of {
+        /** The tree the invariant-discharge analysis reads. */
+        THE_DISCHARGE_TREE,
+        /** The tree the backend emits, which every measure is taken over. */
+        THE_TREE_THAT_RUNS
+    }
+
+    private final Of reading;
 
     /**
      * Where a test in this package reads the shapes this had no term for, and null everywhere else.
@@ -781,8 +805,8 @@ final class Terms {
     }
 
     /** A shape this has no term for, recorded where a test can read that it happened. */
-    private static Naming unsupported(String form) {
-        List<String> watching = UNSUPPORTED;
+    private Naming unsupported(String form) {
+        List<String> watching = reading == Of.THE_DISCHARGE_TREE ? UNSUPPORTED : null;
         if (watching != null) {
             watching.add(form);
         }

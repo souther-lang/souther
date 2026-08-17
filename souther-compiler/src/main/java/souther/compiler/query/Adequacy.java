@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -348,6 +349,92 @@ public final class Adequacy {
                         body, spec, fn, plan, scope.value()));
             }
             return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * The branches of one module that the model's own rules make dead.
+     *
+     * <p>The other half of the proof {@link PathReached} makes. One reading, two readers, and they
+     * are not the same reader: taking an obligation away leaves an author with less to do, and
+     * saying a branch is dead tells them something is wrong. What keeps them apart is that both act
+     * on {@link Reachability.Unreachable} and neither acts on anything else — an unsettled place
+     * keeps its rows and is said nothing about.
+     *
+     * <p>Not gated on what the build asked to measure. A dead branch is a defect in the model and
+     * not a gap in its rows, so it is said whether or not anybody asked for a coverage report.
+     */
+    public record DeadBranches(String name) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Answer<Map<String, souther.compiler.check.PathReachability.Answers>> arrives =
+                    db.ask(new PathReached(name));
+            if (!arrives.present()) {
+                return Answer.absent();
+            }
+            List<Report> reports = new ArrayList<>();
+            arrives.value().forEach((behavior, answers) -> answers.found()
+                    .forEach((where, said) -> {
+                        // Only the forks this module's own source wrote. A call into another
+                        // module splices that module's forks in here, and an argument this call
+                        // site hands them can leave one of their arms unreachable — which is true,
+                        // and is a fact about the call rather than a defect in either module. The
+                        // author cannot take that branch out; it is not theirs.
+                        if (where instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence
+                                arm && arm.writtenBy(name)
+                                && said instanceof souther.compiler.reach.Reachability.Unreachable
+                                        dead) {
+                            reports.add(warning(arm, dead.proof()));
+                        }
+                    }));
+            return Answer.of(true, reports);
+        }
+
+        /**
+         * One dead branch as the warning a build reads.
+         *
+         * <p><b>The one place a proof is taken apart.</b> The switch is exhaustive with no default,
+         * so a proof added to the reading stops here and is given words, rather than falling into a
+         * sentence written for something else. Everything that decides anything reads the three
+         * answers and never this.
+         */
+        private static Report warning(
+                souther.compiler.coverage.ControlPointId.ArmOccurrence arm,
+                souther.compiler.reach.Proof proof) {
+            souther.compiler.diag.Diagnostic.Builder said = Warnings.pointedAt(arm.at())
+                    .say(new DeadBranchMessage.NothingReachesThisBranch());
+            // Exhaustive with no default. A proof added to the reading stops here and is given
+            // words of its own, rather than falling into a sentence written for something else.
+            souther.compiler.diag.Diagnostic.Builder why = switch (proof) {
+                case souther.compiler.reach.Proof.ConflictingPathConditions conflicting ->
+                        said.hint(new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold(
+                                said(conflicting)));
+                case souther.compiler.reach.Proof.OutsideWhatThePositionHolds outside ->
+                        said.hint(new DeadBranchMessage.ThePositionStopsShortOfIt(
+                                outside.position(), outside.admits()));
+                case souther.compiler.reach.Proof.EveryCaseRefused refused ->
+                        said.hint(new DeadBranchMessage.EveryCaseItIsWrittenForIsRefused(
+                                refused.position(),
+                                refused.cases().stream()
+                                        .map(souther.compiler.types.TypeSymbol::name)
+                                        .collect(java.util.stream.Collectors.joining(", "))));
+            };
+            return Report.of(why.hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
+                    .build());
+        }
+
+        /** The conditions on the way, as an author reads them: where each is written and which way
+         *  it went. */
+        private static String said(souther.compiler.reach.Proof.ConflictingPathConditions why) {
+            return why.decisions().stream()
+                    .map(each -> "line " + each.at().line() + (each.held() ? " holding" : " failing"))
+                    .collect(java.util.stream.Collectors.joining(", "));
         }
     }
 

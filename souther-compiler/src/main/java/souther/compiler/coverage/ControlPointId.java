@@ -1,5 +1,8 @@
 package souther.compiler.coverage;
 
+import souther.compiler.diag.Citation;
+import souther.compiler.types.CoverageOrigin;
+
 import java.util.OptionalInt;
 
 /**
@@ -34,8 +37,31 @@ public sealed interface ControlPointId {
      * @param probe where a run is recorded, or empty where no row that stands can be in this arm.
      *              Empty is an ordinary answer and not a gap: the arm is still an arm, still
      *              written, and still something a reading can prove nothing arrives at
+     * @param at     the fork this is an arm of, as a report may say it. Minted here with the rest
+     *               of the arm and not looked up afterwards: a report about an arm has to point at
+     *               the arm, and the only other place carrying one is the
+     *               {@link CoverageSites.Site}, which the arms this is for do not have
+     * @param origin what wrote the fork, and which module's source that was. Carried because a
+     *               fork spliced in from another module is not this module's to be told about:
+     *               {@code Int.max} has a fork of its own, and a call handing it an argument one
+     *               side of it can never take makes that side dead <em>here</em> while it is alive
+     *               wherever else the library is used
      */
-    record ArmOccurrence(int controlId, OptionalInt probe) implements ControlPointId {
+    record ArmOccurrence(int controlId, OptionalInt probe, Citation at, CoverageOrigin origin)
+            implements ControlPointId {
+
+        /**
+         * Whether {@code module}'s own source wrote the fork this is an arm of.
+         *
+         * <p>What a report about the arm turns on. A fork reached through a call into another
+         * module is that module's construct standing here: nothing about it is this author's to
+         * change, and a proof that nothing takes one of its arms is a fact about this call site
+         * rather than a defect in either module. What a denominator does with such an arm is the
+         * other question — nobody can write a row through it wherever it was written, so it goes.
+         */
+        public boolean writtenBy(String module) {
+            return origin != null && origin.isWritten() && origin.module().equals(module);
+        }
 
         public ArmOccurrence {
             if (probe == null) {

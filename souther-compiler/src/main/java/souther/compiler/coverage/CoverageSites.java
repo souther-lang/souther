@@ -306,7 +306,11 @@ public final class CoverageSites {
             int probe = reachable && NormalReturn.of(arm)
                     ? site(kind, label, owner, origin, part) : NO_SITE;
             return new ControlPointId.ArmOccurrence(controls++,
-                    probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe));
+                    probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
+                    // The fork's own coordinate, as a site takes it: an arm's body is what lowering
+                    // rewrites and carries whatever position it was built from, so quoting it sends
+                    // an author somewhere else in the file.
+                    Citation.of(owner.pos()), origin);
         }
 
         /** The probe numbers of {@code arms}, in their order, {@link #NO_SITE} where an arm has

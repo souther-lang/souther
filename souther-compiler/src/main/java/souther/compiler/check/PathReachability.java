@@ -118,7 +118,7 @@ public final class PathReachability {
         if (body == null || plan.isEmpty()) {
             return Answers.NONE;
         }
-        PathEngine engine = new PathEngine(symbols, Map.of());
+        PathEngine engine = new PathEngine(symbols, Map.of(), Terms.Of.THE_TREE_THAT_RUNS);
         Map<ControlPointId, Reachability> out = new LinkedHashMap<>();
         try {
             PathEngine.Entered in = PathEngine.Entered.nothing();

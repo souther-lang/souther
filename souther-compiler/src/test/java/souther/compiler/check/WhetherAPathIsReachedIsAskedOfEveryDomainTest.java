@@ -72,7 +72,9 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
      */
     @Test
     void aPathTheNumbersRuleOutIsNotWalked() {
-        assertEquals(List.of(), warnedAbout(NEL + """
+        // The construction is said nothing about; the branch holding it is said to be one nothing
+        // reaches, which is the same contradiction read for the other question.
+        assertEquals(List.of("E1327"), warnedAbout(NEL + """
                 let f (a, b) =
                     if List.length(a) >= 5 then
                         Bad
@@ -85,7 +87,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     /** The same guards as a predicate, which reaches no number at all. */
     @Test
     void aPathThePredicatesRuleOutIsNotWalked() {
-        assertEquals(List.of(), warnedAbout(NEL + """
+        assertEquals(List.of("E1327"), warnedAbout(NEL + """
                 let f (a, b) =
                     if List.contains(1, a) then
                         Bad

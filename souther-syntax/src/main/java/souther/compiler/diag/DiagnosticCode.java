@@ -93,6 +93,7 @@ public enum DiagnosticCode {
     E1324("newtype-arithmetic-follows-the-units", "check.type.mismatch.title"),
     E1325("a-boundary-carries-the-models-own-vocabulary", "check.boundary.title"),
     E1326("unreachable-is-for-what-the-model-rules-out", "check.unreachable.title"),
+    E1327("a-branch-the-rules-make-dead-is-said-so", "check.dead.branch.title"),
     E1402("core-privileges-stay-in-the-core", "parse.title"),
 
     // --- modules, requirements, composition ---
@@ -247,8 +248,8 @@ public enum DiagnosticCode {
 
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
-            java.util.EnumSet.of(E1913, E1915, E1916, E1918, E1919, E1920, E1921, E1922,
-                    E2011);
+            java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1918, E1919, E1920, E1921,
+                    E1922, E2011);
 
     public String titleKey() {
         return titleKey;

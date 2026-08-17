@@ -48,9 +48,22 @@ final class PathEngine {
     private final Predicates predicates;
 
     PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
+        this(symbols, dischargeInvariants, Terms.Of.THE_DISCHARGE_TREE);
+    }
+
+    /**
+     * The same rules, told which tree they are being read over.
+     *
+     * <p>The rules do not change with the tree; what changes is what a shape they cannot name means.
+     * Over the tree that runs, {@code List.map} is the fold it lowers to, and a reading that
+     * recorded the fold as a shape this compiler has no term for would be answering about the
+     * representation under the name of a gap.
+     */
+    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+               Terms.Of reading) {
         this.symbols = symbols;
         this.clauses = new Clauses(symbols, dischargeInvariants);
-        this.terms = new Terms(symbols);
+        this.terms = new Terms(symbols, reading);
         this.predicates = new Predicates(terms);
     }
 
