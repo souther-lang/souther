@@ -11,6 +11,7 @@ import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseShape;
@@ -419,19 +420,10 @@ public final class TypeOps {
         return names;
     }
 
-    /** The type a case holds when a value turns out to be it. A primitive-named case (the
-     * {@code Int} of {@code Int | DivisionByZero}) holds that primitive; a data-named case holds its
-     * data type. Null where the name denotes no type — {@code Some} and {@code None} are
-     * primitive-module names that denote none, and neither does {@code Raw}, which no stage
-     * produces. An optional's carriers are read through {@link CaseSpace} instead, which knows the
-     * element this cannot. */
+    /** The type a case holds when a value turns out to be it — {@link CaseSelector#heldBy}, which is
+     * where a selector reads it, under the name the callers outside a match know it by. */
     public static Type caseBindType(TypeSymbol caseName) {
-        if (!caseName.isPrimitive()) {
-            return Type.ref(caseName);
-        }
-        // Read back through the one spelling table rather than repeating it here.
-        Type.Prim prim = caseName.primitiveKind();
-        return prim == null || prim == Type.Prim.RAW ? null : prim;
+        return CaseSelector.heldBy(caseName);
     }
 
     /**

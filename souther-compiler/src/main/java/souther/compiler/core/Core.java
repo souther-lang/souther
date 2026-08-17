@@ -312,33 +312,76 @@ public sealed interface Core {
      * subject was an optional, whether the arm named one case or several, or whether a case is a
      * primitive. Those are the questions {@code Core} exists to have answered already.
      */
-    record ResolvedPattern(List<CaseSelector> selectors, Refinement binding) {
+    sealed interface ResolvedPattern {
 
-        public ResolvedPattern {
-            if (selectors == null || selectors.isEmpty()) {
-                throw new IllegalArgumentException("an arm selects at least one case");
-            }
-            if (binding == null) {
-                // A carrier with nothing under it is a refinement of its own, so there is no arm
-                // that binds nothing and no null to stand for one. Resolved means resolved.
-                throw new IllegalArgumentException("an arm binds what its carrier holds, which a"
-                        + " carrier holding nothing says as much as any other");
-            }
-            selectors = List.copyOf(selectors);
-        }
+        /** The cases the arm answers for, in the order they are written. */
+        List<CaseSelector> selectors();
+
+        /**
+         * What the value is read as once the arm is taken.
+         *
+         * <p>Derived rather than carried. What an arm binds follows from what it selects — one case
+         * binds what that case's carrier holds, several bind the subject — so holding the two apart
+         * would be holding one fact in two places, and a pattern selecting an optional's absent
+         * carrier while binding its present one would be a Core the emitter has no meaning for: it
+         * would test one carrier and read the value out of the other.
+         */
+        Refinement binding();
 
         /** The cases this answers for. */
-        public List<TypeSymbol> caseTypes() {
+        default List<TypeSymbol> caseTypes() {
             List<TypeSymbol> out = new java.util.ArrayList<>();
-            for (CaseSelector selector : selectors) {
+            for (CaseSelector selector : selectors()) {
                 out.add(selector.name());
             }
             return out;
         }
 
         /** The type the binding takes inside the arm, or null where the arm binds nothing readable. */
-        public Type bindType() {
-            return binding.bound();
+        default Type bindType() {
+            return binding().bound();
+        }
+
+        /** An arm answering for one case, which binds what that case's carrier holds. */
+        record Single(CaseSelector selector) implements ResolvedPattern {
+
+            public Single {
+                if (selector == null) {
+                    throw new IllegalArgumentException("an arm selects a case");
+                }
+            }
+
+            @Override
+            public List<CaseSelector> selectors() {
+                return List.of(selector);
+            }
+
+            @Override
+            public Refinement binding() {
+                return selector.refinement();
+            }
+        }
+
+        /**
+         * An arm answering for several, which binds the subject: no one case type fits all of its
+         * alternatives, and every alternative is already the subject.
+         */
+        record AnyOf(List<CaseSelector> selectors, Type subject) implements ResolvedPattern {
+
+            public AnyOf {
+                if (selectors == null || selectors.size() < 2) {
+                    throw new IllegalArgumentException("an arm answering for several names several");
+                }
+                if (subject == null) {
+                    throw new IllegalArgumentException("what such an arm binds is the subject");
+                }
+                selectors = List.copyOf(selectors);
+            }
+
+            @Override
+            public Refinement binding() {
+                return new Refinement.Direct(subject);
+            }
         }
     }
 

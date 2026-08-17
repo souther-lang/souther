@@ -26,9 +26,6 @@ import java.util.Set;
  * arity and or-pattern-ness while emitting, which is what {@code Core}'s own contract says it must
  * not do.
  *
- * <p>The selectors are ordered, in the order the subject states them. A {@code match} reads that
- * order as the order its arms are tried against, and a report reads it to list what is missing, so
- * the sequence is part of the answer and not an artefact of how it was collected.
  */
 sealed interface CaseSpace {
 
@@ -40,13 +37,16 @@ sealed interface CaseSpace {
     String described();
 
     /**
-     * The cases, in the order the subject states them; empty for a subject that has none.
+     * The cases; empty for a subject that has none.
      *
-     * <p>The order is the subject's own — a union's members as written, a sum's cases as declared,
-     * an optional's present carrier before its absent one. It is what a report listing what a match
-     * left out is stable against, and what a reader walking the cases gets. It is not the order arms
-     * are tried in: which arm of a {@code match} takes a value is decided by the order the arms are
-     * written, which is the match's and not the subject's.
+     * <p>Ordered so that two readings of one subject list them alike — a report saying what a match
+     * left out reads this, and an order that came out differently each time would move a message
+     * nothing about the program had changed. A sum's cases come as declared and an optional's
+     * present carrier before its absent one; a union's members are a set, so what comes out is that
+     * set's iteration order and no claim is made about which member was written first.
+     *
+     * <p>It is not the order arms are tried in. Which arm of a {@code match} takes a value is
+     * decided by the order the arms are written, which is the match's and not the subject's.
      */
     List<CaseSelector> selectors();
 
@@ -147,7 +147,7 @@ sealed interface CaseSpace {
         }
         List<CaseSelector> out = new ArrayList<>();
         for (TypeSymbol member : seen) {
-            out.add(CaseSelector.direct(member, TypeOps.caseBindType(member)));
+            out.add(CaseSelector.direct(member));
         }
         return out;
     }

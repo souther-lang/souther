@@ -113,13 +113,12 @@ public final class MatchElaborator {
                 }
                 selected.add(selector);
             }
-            // One case binds what that case refines the value to; an or-pattern binds the subject,
-            // no single case type fitting all of its alternatives.
-            Refinement binding = selected.size() == 1
-                    ? selected.get(0).refinement() : new Refinement.Direct(scrutinee);
-            Type bindType = binding.bound();
+            Core.ResolvedPattern pattern = selected.size() == 1
+                    ? new Core.ResolvedPattern.Single(selected.get(0))
+                    : new Core.ResolvedPattern.AnyOf(selected, scrutinee);
+            Type bindType = pattern.bindType();
             if (c.unwrapAsserts() != null) {
-                if (selected.size() != 1) {
+                if (!(pattern instanceof Core.ResolvedPattern.Single)) {
                     throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOrPatternOpensNothing()).build());
                 }
                 checkUnwrapAsserts(c, ctx.symbols());
@@ -127,8 +126,7 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(new Core.ResolvedPattern(selected, binding), c.binding(), body,
-                    c.pos()));
+            arms.add(new Core.Case(pattern, c.binding(), body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
@@ -179,8 +177,7 @@ public final class MatchElaborator {
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(new Core.ResolvedPattern(List.of(selector), selector.refinement()),
-                    c.binding(), body, c.pos()));
+            arms.add(new Core.Case(new Core.ResolvedPattern.Single(selector), c.binding(), body, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
