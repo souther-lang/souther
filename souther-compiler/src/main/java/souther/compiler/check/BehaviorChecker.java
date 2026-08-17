@@ -14,6 +14,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -137,6 +138,7 @@ final class BehaviorChecker {
         }
 
         List<Rule> rules = new ArrayList<>();
+        Set<TypeSymbol> seen = new LinkedHashSet<>();
         for (Hir.Name armCase : arm.cases()) {
             if (armCase.answered() == null) {
                 // Nothing declares it, which is reported where it is written. That this is not an
@@ -148,6 +150,16 @@ final class BehaviorChecker {
             if (selector == null) {
                 throw CompileException.of(Diagnostic.at(armCase.pos())
                         .say(new BehaviorMessage.AnEnsuresArmIsNotAnOutputCase(
+                                armCase.written(), behavior.name())).build());
+            }
+            // Once per arm. A case named twice under one arrow says nothing the once did not, and
+            // the two would be one rule written twice: a rule is which case it is about, so a
+            // reader keeping them by that would hold one and a reader keeping them in order two.
+            // Two arms naming one case is another matter — every rule whose guard holds applies,
+            // so `Found -> p | Found -> q` states both.
+            if (!seen.add(selector.name())) {
+                throw CompileException.of(Diagnostic.at(armCase.pos())
+                        .say(new BehaviorMessage.AnEnsuresArmNamesACaseTwice(
                                 armCase.written(), behavior.name())).build());
             }
             rules.add(new Rule(new Guard.Case(selector), value, arm.expr(),

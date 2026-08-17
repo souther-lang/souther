@@ -442,21 +442,23 @@ public final class AstBuilder {
                         dependsOn.add(Ast.Var.written(dep.name()));
                     }
                 } else if (clause.kind() == SyntaxKind.ENSURES_CLAUSE) {
-                    Ast.EnsuresClause read = ensuresClause(clause);
-                    if (read.name().isPresent()) {
-                        String clauseName = read.name().orElseThrow();
-                        if (clauseName.equals("_")) {
-                            throw CompileException.of(Diagnostic.at(read.pos())
+                    // Reported at the name, which is what the rule is about — as a data's clause
+                    // name is (see `invariants`). The clause's own position is the `ensures`, and
+                    // underlining that would leave a reader to find which word was meant.
+                    if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
+                        SyntaxToken label = identTokens(clause).get(0);
+                        if (ident(label).equals("_")) {
+                            throw CompileException.of(Diagnostic.at(posOf(label))
                                     .say(new BehaviorMessage.UnderscoreCannotNameAnEnsuresClause(
                                             declared.canonical())).build());
                         }
-                        if (!namedEnsures.add(clauseName)) {
-                            throw CompileException.of(Diagnostic.at(read.pos())
+                        if (!namedEnsures.add(ident(label))) {
+                            throw CompileException.of(Diagnostic.at(posOf(label))
                                     .say(new BehaviorMessage.TwoEnsuresClausesShareOneName(
-                                            clauseName, declared.canonical())).build());
+                                            ident(label), declared.canonical())).build());
                         }
                     }
-                    ensures.add(read);
+                    ensures.add(ensuresClause(clause));
                 }
             }
             return new Ast.SpecBehavior(declared, params, ret, constructs, dependsOn, ensures, pos);

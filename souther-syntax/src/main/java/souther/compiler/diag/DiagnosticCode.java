@@ -128,6 +128,7 @@ public enum DiagnosticCode {
     E1622("ensures-clause-names-are-distinct", "check.boundary.title"),
     E1623("an-ensures-clause-name-is-not-underscore", "check.boundary.title"),
     E1624("a-composition-carries-no-ensures", "check.pipe.title"),
+    E1625("an-ensures-arm-names-each-case-once", "check.boundary.title"),
     E1701("composition-stages-type-route", "e1701.title"),
     E1702("a-stage-after-the-first-takes-one-input", "check.pipe.title"),
     E1703("a-pipeline-composes-behaviors", "check.pipe.title"),

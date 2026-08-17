@@ -2339,7 +2339,9 @@ What a rule refers to is not what it is about, and only the first is decided her
 
 An answer that can be more than one thing has cases, and they are the ones a `+match+` over that answer opens: the members of an anonymous sum, or the cases declared with a named one. A case of a case is not one of them — a caller opens the outer case and only then what is inside it — so a rule naming one would be a rule the caller has no arm to assume it at. What `+value+` is read as in an arm is what that case holds, which for a case named by a primitive (<<unmarked-output>>) is that primitive.
 
-Where the answer has cases the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the answer. Several cases MAY share an expression. Where the answer has none the form is `+ensures [name =] expression+`, and [[an-ensures-clause-over-a-single-type-names-no-arm]]it MUST name no arm. A case no rule names carries no stated postcondition, and there is no wildcard arm.
+Where the answer has cases the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the answer. Several cases MAY share an expression, and [[an-ensures-arm-names-each-case-once]]one arm MUST NOT name a case twice: a case named twice under one arrow says nothing the once did not. Where the answer has none the form is `+ensures [name =] expression+`, and [[an-ensures-clause-over-a-single-type-names-no-arm]]it MUST name no arm. A case no rule names carries no stated postcondition, and there is no wildcard arm.
+
+Two arms of one clause MAY name the same case, and both of their rules then hold of it. That is the same reading as two clauses naming it, which is what makes an arm a statement rather than a choice.
 
 A behavior MAY carry more than one `+ensures+`, and every rule of every one of them holds. Where the answer is a case, the rules whose arms name that case are the rules it is held to — all of them, and not the first — so writing two clauses and writing their rules under one are the same statement about the model. What differs is where a violation is reported: a clause is what a failure is reported by, and its name is what a reader is given. Where more than one does not hold, the first that does not is the one reported, as a data's clauses are (<<invariant-declaration>>).
 
@@ -5273,6 +5275,11 @@ Reported at the name (<<an-ensures-clause-name-is-not-underscore>>).
 === A composition carries `ensures`
 
 Reported at the clause (<<a-composition-carries-no-ensures>>).
+
+[#e1625]
+=== An `ensures` arm names a case twice
+
+Reported at the second naming of it (<<an-ensures-arm-names-each-case-once>>).
 
 [#e1701]
 === behavior composition type mismatch

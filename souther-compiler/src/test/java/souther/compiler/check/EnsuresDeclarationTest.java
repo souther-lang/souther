@@ -73,6 +73,24 @@ class EnsuresDeclarationTest {
         refused(SINGLE.replace("same =", "_ ="), "E1623");
     }
 
+    /**
+     * Both rules are about the name, so both are reported at it. The clause's own position is the
+     * `ensures`, and pointing there leaves a reader to work out which word was meant — a data's
+     * clause name is reported at the name for the same reason.
+     */
+    @Test void aClauseNameIsReportedWhereItIsWritten() {
+        // column 13 is where the name begins: four of indent, then `ensures `
+        assertEquals("8:13", where(SINGLE.replace(
+                "let echo", "    ensures same = value == id\n\nlet echo")));
+        assertEquals("6:13", where(SINGLE.replace("same =", "_ =")));
+    }
+
+    /** Where a refusal of {@code source} points, as a reader is told it. */
+    private static String where(String source) {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(source));
+        return e.getMessage().split(" ")[0];
+    }
+
     @Test void aCompositionCarriesNoClause() {
         refused("""
                 module example.pipe
@@ -179,6 +197,32 @@ class EnsuresDeclarationTest {
     /** With no arm there is nothing else to refer to the answer by, so the predicate names it. */
     @Test void anArmlessRuleNamesTheAnswer() {
         refused(SINGLE.replace("value == id", "id == id"), "E1616");
+    }
+
+    /**
+     * A case named twice under one arrow says nothing the once did not, and the two would be one
+     * rule written twice: what a rule is about is which case it applies to, so a reader keeping
+     * rules by that would hold one where a reader keeping them in order held two.
+     */
+    @Test void anArmNamesEachCaseOnce() {
+        refused(SUM.replace("Found | Missing ->", "Found | Found ->"), "E1625");
+    }
+
+    /** Two arms naming one case is another matter: every rule whose arm names the case applies, so
+     *  both are stated, and they are two rules because they are written as two. */
+    @Test void twoArmsMayNameOneCase() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module example.both
+
+                data Id = Int
+                data Found = { id: Id }
+                data Missing = { id: Id }
+
+                behavior find : (id: Id, tag: Id) -> Found | Missing
+                    ensures Found -> value.id == id
+                          | Found -> value.id /= tag
+                          | Missing -> value.id == id
+                """));
     }
 
     /** A name nothing declares is reported where it is written, once. That it is therefore not an
