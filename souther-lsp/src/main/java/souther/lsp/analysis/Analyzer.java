@@ -16,6 +16,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
 import souther.compiler.check.ClauseDischarge;
+import souther.compiler.check.ContractDischarge;
+import souther.compiler.check.ContractDischarge.RuleDischarge;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.Reserved;
@@ -1838,7 +1840,119 @@ public final class Analyzer {
      */
     public Optional<Hover> hover(String uri, String text, Position pos, ModuleGraph graph) {
         Optional<Hover> clause = invariantClauseHover(uri, text, pos, graph);
-        return clause.isPresent() ? clause : hover(text, pos);
+        if (clause.isPresent()) {
+            return clause;
+        }
+        Optional<Hover> rule = ensuresClauseHover(uri, text, pos, graph);
+        return rule.isPresent() ? rule
+                : hover(text, pos).map(shown -> withWhatIsNotStated(shown, uri, text, pos, graph));
+    }
+
+    /**
+     * The same hover, and on a behavior that states something, which of its cases nothing is said
+     * about.
+     *
+     * <p>There is no wildcard arm, so a case no rule names is one the behavior promises nothing of.
+     * That is the declaration speaking and not a mistake in it, which is why a reader is shown it
+     * where they are reading the declaration rather than told about it as a problem.
+     */
+    private Hover withWhatIsNotStated(Hover shown, String uri, String text, Position pos,
+                                      ModuleGraph graph) {
+        LineIndex lines = new LineIndex(text);
+        SyntaxNode root = CstParser.parse(text).root();
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines,
+                lines.offsetOf(pos.line(), pos.character()));
+        // The name of a behavior this document declares, and nothing else. What a behavior states is
+        // asked of it by name, so a name that declares something else would be asked about under a
+        // spelling that means something else here.
+        SyntaxNode def = ident == null ? null : declaringDef(root, nameOf(ident));
+        ContractDischarge discharge = def != null && def.kind() == SyntaxKind.BEHAVIOR_DEF
+                ? contractOf(uri, graph, ident.text()) : null;
+        if (discharge == null || discharge.casesNothingIsSaidAbout().isEmpty()) {
+            return shown;
+        }
+        List<String> unstated = new ArrayList<>();
+        for (TypeSymbol each : discharge.casesNothingIsSaidAbout()) {
+            unstated.add("`" + each.name() + "`");
+        }
+        return new Hover(shown.contents() + "\n\nNothing is stated about "
+                + String.join(", ", unstated) + ".", shown.range());
+    }
+
+    /**
+     * What the check reads of the {@code ensures} clause the cursor is in, rule by rule, or empty
+     * when it is not in one.
+     *
+     * <p>Rule by rule and not clause by clause. One arrow may be written over several cases, and what
+     * {@code value} is differs between them, so the same words can be read to different depths — a
+     * single answer on the clause would be one of those readings shown as if it were the clause's.
+     */
+    private Optional<Hover> ensuresClauseHover(String uri, String text, Position pos,
+                                               ModuleGraph graph) {
+        LineIndex lines = new LineIndex(text);
+        SyntaxNode root = CstParser.parse(text).root();
+        int offset = lines.offsetOf(pos.line(), pos.character());
+        SyntaxNode clause = enclosing(root, offset, SyntaxKind.ENSURES_CLAUSE);
+        SyntaxNode behavior = enclosing(root, offset, SyntaxKind.BEHAVIOR_DEF);
+        SyntaxToken name = behavior == null ? null : nameToken(behavior);
+        if (clause == null || name == null) {
+            return Optional.empty();
+        }
+        ContractDischarge discharge = contractOf(uri, graph, name.text());
+        if (discharge == null) {
+            return Optional.empty();
+        }
+        // The rules of this clause are the ones written inside it. A behavior may carry several
+        // clauses, and each of them is classified on its own.
+        List<RuleDischarge> here = new ArrayList<>();
+        for (RuleDischarge rule : discharge.rules()) {
+            int at = lines.offsetOf(rule.capability().clause().line() - 1,
+                    rule.capability().clause().column() - 1);
+            if (at >= clause.start() && at < clause.end()) {
+                here.add(rule);
+            }
+        }
+        return here.isEmpty() ? Optional.empty()
+                : Optional.of(new Hover(ruleContents(here), nodeRange(lines, clause)));
+    }
+
+    /** What the compiler says about the behavior {@code named} declares, or null where the document
+     * belongs to no module this compile has, or the behavior states nothing. */
+    private ContractDischarge contractOf(String uri, ModuleGraph graph, String named) {
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, graph, uri);
+        if (module == null) {
+            return null;
+        }
+        Map<String, ContractDischarge> byName =
+                compilation.db().ask(new Bodies.ContractCapabilities(module)).value();
+        return byName == null ? null : byName.get(named);
+    }
+
+    /**
+     * What the check reads of each rule, in the terms an author acts on.
+     *
+     * <p>What the check reads is not what the run-time check holds. Every rule is held when the
+     * behavior answers, whatever this says; what this says is how much of the relation is written in
+     * a form the check can carry.
+     */
+    private String ruleContents(List<RuleDischarge> rules) {
+        StringBuilder out = new StringBuilder("**What the check reads of this**\n");
+        for (RuleDischarge rule : rules) {
+            ClauseDischarge capability = rule.capability();
+            String read = switch (capability.kind()) {
+                case DERIVABLE -> "**derivable** — read as a relation the numeric domain reasons over";
+                case EXACT_MATCH -> "**exact match** — read as a term the check can name and compare, "
+                        + "and nothing weaker states it";
+                case RUNTIME_ONLY -> "**runtime only** — not read at all, so the check the behavior "
+                        + "runs on its answer is the whole of it";
+            };
+            String about = rule.rule().selector() == null ? ""
+                    : "`" + rule.rule().selector().name() + "`: ";
+            out.append("\n- ").append(about).append(read)
+                    .append(capability.reason().map(why -> "; " + why).orElse("")).append(".");
+        }
+        return out.toString();
     }
 
     /** The discharge classification of the invariant clause the cursor is in, or empty when it is not
