@@ -1,14 +1,22 @@
-package souther.compiler;
+package souther.compiler.query;
+
+import souther.compiler.Compiler;
+import souther.compiler.check.EnsuresEnforcement;
+import souther.compiler.meta.ModulePath;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,20 +83,49 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
                 "the clause is `up`'s, so the class holding it is: " + classes.keySet());
     }
 
+    /** The decisions `down`'s compilation reached, as the emitter was handed them. */
+    private static EnsuresEnforcement decidedByDown(ValueName.Behavior about) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("up.sou", DECLARING);
+        byId.put("down.sou", CALLING);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Output.Classes.Inputs in = Output.Classes.inputs(c.db(), "down");
+        return EnsuresEnforcement.in(in.checks(), about);
+    }
+
     /**
-     * And the module calling it emits no crossing check for it.
+     * What `down` decided about `up.fetch` is that it did not decide.
      *
-     * <p>This is the boundary, stated as what it is. A compilation is the checker of the behaviors it
-     * declares; `down` declares none, so `down` enforces none — not because the lookup is missing,
-     * but because whether `down` may rely on `up`'s published clause, and under what boundary
-     * revision, is not something this stage decides.
+     * <p>The subject of this test is the classification and not the count. A count of zero is what
+     * the decision comes to today, and on its own it says the same thing a behavior with no clause at
+     * all says — so fixing the count would fix an observation while leaving what produced it unsaid,
+     * and the reason would be gone the first time somebody read it back.
+     *
+     * <p>`up.fetch` declares a clause and has no body, so its own module cannot check it where it
+     * answers, and `down` is where the crossing is. Whether `down` may run `up`'s published check —
+     * under which boundary revision, on what basis that artifact's clause is an executable guarantee
+     * at all — is an ownership model this stage has not got. So `down` answers that it has not
+     * decided, which is a different answer from there being nothing to check, and the day the model
+     * exists this is the answer that changes.
      */
     @Test
-    void aCallingModuleIsNotTheCheckerOfAnotherModulesContract() {
-        Map<String, byte[]> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
+    void aCallingModuleHasNotDecidedAboutAnotherModulesContract() {
+        assertInstanceOf(EnsuresEnforcement.NotDecidedHere.class,
+                decidedByDown(new ValueName.Behavior("up", "fetch")),
+                "`down` has not decided about `up.fetch`, rather than decided there is no check");
 
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
         assertEquals(0, checksOf(classes.get("down.Use$Impl"), "up/Fetch$Ensures"),
-                "`down` is not the checker of `up.fetch`");
+                "and so emits nothing for it — which follows from the decision above");
+    }
+
+    /** A behavior of its own that states nothing is the other answer: decided, and there is no
+     *  check. The two would be one value if absence stood for both. */
+    @Test
+    void aBehaviorOfItsOwnThatStatesNothingIsDecided() {
+        assertInstanceOf(EnsuresEnforcement.NoContract.class,
+                decidedByDown(new ValueName.Behavior("down", "use")),
+                "`down` read `use` and found no clause");
     }
 
     /** The same behavior, declared and called in one module, is checked at the crossing — which is

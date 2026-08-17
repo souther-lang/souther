@@ -20,7 +20,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
-import souther.compiler.check.WhereTheCheckIs;
+import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
@@ -1563,7 +1563,7 @@ final class BodyGen {
             // an answer enters the domain. What the arguments were has to survive the call to be
             // handed to the check, so they are put in slots first — the call consumes what it is
             // pushed.
-            List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof WhereTheCheckIs.AtEachCrossing
+            List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof EnsuresEnforcement.AtEachCrossing
                     ? new ArrayList<>() : null;
             if (ctx.isStandaloneRequired(callee)) {
                 // other than one input: the required behavior is its own base class, called with a

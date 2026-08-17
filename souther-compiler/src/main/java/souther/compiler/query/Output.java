@@ -19,7 +19,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.WhereTheCheckIs;
+import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
@@ -122,7 +122,7 @@ public final class Output {
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
-                      Map<ValueName.Behavior, WhereTheCheckIs> checks,
+                      Map<ValueName.Behavior, EnsuresEnforcement> checks,
                       Set<String> rowMethods) {}
 
         static Inputs inputs(Db db, String name) {
@@ -174,16 +174,16 @@ public final class Output {
          * <p>{@link Requirements#injectedNames} is the set as the requirements pass answered it,
          * which is the reading the decision is owed.
          */
-        private static Map<ValueName.Behavior, WhereTheCheckIs> checksOf(
+        private static Map<ValueName.Behavior, EnsuresEnforcement> checksOf(
                 Hir.Module lowered, Set<ValueName.Behavior> importedInjected,
                 Map<String, BehaviorContract> contracts) {
             Set<ValueName.Behavior> injected =
                     Requirements.injectedNames(lowered, importedInjected);
-            Map<ValueName.Behavior, WhereTheCheckIs> checks = new LinkedHashMap<>();
+            Map<ValueName.Behavior, EnsuresEnforcement> checks = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : lowered.behaviors()) {
                 ValueName.Behavior named =
                         new ValueName.Behavior(lowered.name(), behavior.name());
-                checks.put(named, WhereTheCheckIs.of(named, contracts, injected));
+                checks.put(named, EnsuresEnforcement.of(named, contracts, injected));
             }
             return Map.copyOf(checks);
         }

@@ -16,7 +16,7 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Sig;
-import souther.compiler.check.WhereTheCheckIs;
+import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeChecker;
@@ -104,7 +104,7 @@ public final class Backend {
      * point of there being one value is that there is one reading of it — a later change setting one
      * and not the other is a check emitted in a place the other half disagrees with.
      */
-    private WhereTheCheckIs checkOf(ValueName.Behavior behavior) {
+    private EnsuresEnforcement checkOf(ValueName.Behavior behavior) {
         return ctx.ensuresCheckOf(behavior);
     }
 
@@ -144,7 +144,7 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-                                               Map<ValueName.Behavior, WhereTheCheckIs> checks) {
+                                               Map<ValueName.Behavior, EnsuresEnforcement> checks) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
                 requirements, checked, dischargeInvariants, checks, Instrumentation.NONE);
     }
@@ -171,7 +171,7 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-                                               Map<ValueName.Behavior, WhereTheCheckIs> checks,
+                                               Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
@@ -193,7 +193,7 @@ public final class Backend {
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
                                                   Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
-                                                  Map<ValueName.Behavior, WhereTheCheckIs> checks,
+                                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
@@ -1209,16 +1209,16 @@ public final class Backend {
         // it is checked here, the body moves under a name of its own and `apply` becomes the wrapper
         // that runs it and then holds its answer to the contract — so every way in goes through the
         // check, including the typed bridge a multi-input interface is satisfied by.
-        WhereTheCheckIs where = checkOf(new ValueName.Behavior(ctx.pkg, spec.name()));
-        String bodyMethod = where instanceof WhereTheCheckIs.AtTheCallee ? "apply$body" : "apply";
-        int bodyFlags = where instanceof WhereTheCheckIs.AtTheCallee
+        EnsuresEnforcement where = checkOf(new ValueName.Behavior(ctx.pkg, spec.name()));
+        String bodyMethod = where instanceof EnsuresEnforcement.AtTheCallee ? "apply$body" : "apply";
+        int bodyFlags = where instanceof EnsuresEnforcement.AtTheCallee
                 ? ClassFile.ACC_PRIVATE : ClassFile.ACC_PUBLIC;
         return build(cdB, cb -> {
             cb.withFlags(pub(spec.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
             emitInjection(cb, cdB, injected);
-            if (where instanceof WhereTheCheckIs.AtTheCallee(BehaviorContract contract)) {
+            if (where instanceof EnsuresEnforcement.AtTheCallee(BehaviorContract contract)) {
                 emitCheckingApply(cb, cdB, spec, contract, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
@@ -1515,7 +1515,7 @@ public final class Backend {
      */
     private void checkStageAtCrossing(CodeBuilder code, ValueName.Behavior stage, int arity,
                                       int carrier) {
-        if (!(ctx.ensuresCheckOf(stage) instanceof WhereTheCheckIs.AtEachCrossing)) {
+        if (!(ctx.ensuresCheckOf(stage) instanceof EnsuresEnforcement.AtEachCrossing)) {
             return;
         }
         code.astore(carrier);

@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.ReqSig;
-import souther.compiler.check.WhereTheCheckIs;
+import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
@@ -79,23 +79,22 @@ final class CodegenContext {
      * emitter is adding to a set of injected names while it runs, so a reader here would be reading
      * that set at whatever point it happened to be at.
      */
-    private Map<ValueName.Behavior, WhereTheCheckIs> ensuresChecks = Map.of();
+    private Map<ValueName.Behavior, EnsuresEnforcement> ensuresChecks = Map.of();
 
-    void setEnsuresChecks(Map<ValueName.Behavior, WhereTheCheckIs> checks) {
+    void setEnsuresChecks(Map<ValueName.Behavior, EnsuresEnforcement> checks) {
         this.ensuresChecks = Map.copyOf(checks);
     }
 
     /**
-     * Where {@code behavior}'s declared relation is checked.
+     * What is being done about {@code behavior}'s clause.
      *
-     * <p>{@code Nowhere} for a behavior nothing here decided about, which is every behavior another
-     * module declared. A clause of theirs is checked where their module says it is, and reaching it
-     * from here is a question about who owns a contract across a module boundary — which this
-     * compilation stage does not answer, and which answering by module name would be deciding it by
-     * a spelling.
+     * <p>{@link EnsuresEnforcement.NotDecidedHere} for a behavior another module declared, which the
+     * lookup answers rather than this: a table of this compilation's decisions holds one for every
+     * behavior it declares, so a name it has nothing under is a name from somewhere else — which is
+     * not the same answer as having decided there is no check.
      */
-    WhereTheCheckIs ensuresCheckOf(ValueName.Behavior behavior) {
-        return ensuresChecks.getOrDefault(behavior, WhereTheCheckIs.Nowhere.INSTANCE);
+    EnsuresEnforcement ensuresCheckOf(ValueName.Behavior behavior) {
+        return EnsuresEnforcement.in(ensuresChecks, behavior);
     }
 
     void setDischargeInvariants(Map<TypeSymbol, List<Hir.InvariantClause>> clauses) {
