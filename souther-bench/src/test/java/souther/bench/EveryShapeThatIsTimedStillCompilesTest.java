@@ -68,6 +68,9 @@ class EveryShapeThatIsTimedStillCompilesTest {
     void aWidthIsItsImportsAndNothingElse() {
         String previous = null;
         for (int width : Scale.WIDTHS) {
+            if (width == 0) {
+                continue;
+            }
             String last = Scale.imports(MODULES, width).getLast();
             long imports = last.lines().filter(line -> line.startsWith("import ")).count();
             if (imports != width) {
@@ -82,6 +85,29 @@ class EveryShapeThatIsTimedStillCompilesTest {
                         + "\n--- against ---\n" + body);
             }
             previous = body;
+        }
+    }
+
+    /**
+     * That the number of imports reported beside a time is the number there are.
+     *
+     * <p>Counted rather than multiplied out, and this says why it has to be: the first modules
+     * import what is written before them and there is less of it, so {@code modules * width} is over
+     * by a widening amount. A run reporting that number would say a workspace held more links than
+     * it does, and anyone reading a cost out of a time and a count would read it against the wrong
+     * one.
+     */
+    @Test
+    void theLinksReportedAreTheLinksThereAre() {
+        for (int width : Scale.WIDTHS) {
+            long written = Scale.imports(MODULES, width).stream()
+                    .flatMap(String::lines)
+                    .filter(line -> line.startsWith("import "))
+                    .count();
+            if (written != Scale.links(MODULES, width)) {
+                throw new AssertionError("at width " + width + " the shape writes " + written
+                        + " import(s) and reports " + Scale.links(MODULES, width));
+            }
         }
     }
 

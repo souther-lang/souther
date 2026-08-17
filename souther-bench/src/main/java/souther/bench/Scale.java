@@ -46,8 +46,9 @@ final class Scale {
     private static final int[] SIZES = {10, 25, 50, 100, 200};
 
     /** Imports per module, doubling, so the ratio between two lines names the exponent the way the
-     *  doubling sizes do. */
-    static final int[] WIDTHS = {1, 2, 4, 8};
+     *  doubling sizes do. Zero is among them and is the floor the rest are read against: what an
+     *  import costs is what a line has above that one. */
+    static final int[] WIDTHS = {0, 1, 2, 4, 8};
 
     /** The size the widths are measured at: the largest, where the fixed cost of a compile is
      *  smallest against the rest and a difference between widths is least buried in it. */
@@ -60,11 +61,8 @@ final class Scale {
         }
         for (int width : WIDTHS) {
             Timing timing = timeOf(imports(WIDTH_MODULES, width));
-            report.line("SCALE n=%-4d imports=%-2d      %7.1f ms (%5.3f ms/module, "
-                            + "%6.4f ms/import)",
-                    WIDTH_MODULES, width, timing.medianMillis(),
-                    timing.medianMillis() / WIDTH_MODULES,
-                    timing.medianMillis() / ((double) WIDTH_MODULES * width));
+            report.line("SCALE n=%-4d imports=%-2d  %5d links  %7.1f ms",
+                    WIDTH_MODULES, width, links(WIDTH_MODULES, width), timing.medianMillis());
         }
     }
 
@@ -96,6 +94,18 @@ final class Scale {
      * sizes this is measured at that is a fixed handful against the rest and it is the same handful
      * at every width.
      */
+    /**
+     * How many imports {@link #imports} writes, which is not {@code modules * width}: the first
+     * {@code width} modules import what is written before them and there is less of it.
+     */
+    static int links(int modules, int width) {
+        int total = 0;
+        for (int i = 0; i < modules; i++) {
+            total += Math.min(i, width);
+        }
+        return total;
+    }
+
     static List<String> imports(int modules, int width) {
         List<String> sources = new ArrayList<>();
         for (int i = 0; i < modules; i++) {
