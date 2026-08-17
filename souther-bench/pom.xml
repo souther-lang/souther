@@ -37,6 +37,12 @@
             <groupId>net.unit8.raoh</groupId>
             <artifactId>raoh</artifactId>
         </dependency>
+        <!-- Called from here: the report measurement asks the formatter what a source has against
+             its canonical form, which is a cost this module times like any other. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-fmt</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -49,11 +55,6 @@
              so every one of them is named here — saying so as dependencies is what makes `-am`
              build them, and what makes the checks cover what they claim to whichever way the tree
              was built. -->
-        <dependency>
-            <groupId>org.souther-lang</groupId>
-            <artifactId>souther-fmt</artifactId>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-build-driver</artifactId>
