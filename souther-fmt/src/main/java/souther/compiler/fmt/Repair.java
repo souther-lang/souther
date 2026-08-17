@@ -256,19 +256,15 @@ final class Repair {
      */
     private static List<Integer> opportunitiesOf(String source, Formatter.CanonicalForm canonical,
             Witnesses.Pairing pairing, Doc.GroupRef group) {
-        List<SyntaxToken> had = pairing.hadCode();
-        List<SyntaxToken> writes = pairing.writesCode();
         List<Integer> out = new ArrayList<>();
         for (Opportunity o : canonical.layout().opportunities()) {
             if (o.settledBy() != group
-                    || Witnesses.brokeInSource(source, had, writes, o.at()) == o.broke()) {
+                    || Witnesses.brokeInSource(source, pairing, o.at()) == o.broke()) {
                 continue;
             }
-            for (int i = 0; i + 1 < writes.size(); i++) {
-                if (writes.get(i).end() <= o.at() && o.at() <= writes.get(i + 1).start()) {
-                    out.add(i);
-                    break;
-                }
+            int i = pairing.adjacencyAt(o.at());
+            if (i >= 0) {
+                out.add(i);
             }
         }
         out.sort(null);
@@ -316,8 +312,10 @@ final class Repair {
     private static Edit aboveTheLastComment(String source, Formatter.CanonicalForm canonical,
             Witnesses.Pairing pairing) {
         String text = canonical.layout().text();
-        String has = Witnesses.aboveTheLastComment(source);
-        String wrote = Witnesses.aboveTheLastComment(text);
+        String has = Witnesses.aboveTheLastComment(source, pairing.hadCode(),
+                pairing.hadComments());
+        String wrote = Witnesses.aboveTheLastComment(text, pairing.writesCode(),
+                pairing.writesComments());
         List<SyntaxToken> code = pairing.hadCode();
         int from = code.isEmpty() ? 0 : code.get(code.size() - 1).end();
         return new Edit(from, from + has.length(), wrote);
