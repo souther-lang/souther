@@ -381,68 +381,76 @@ public final class Adequacy {
         private static Report warning(
                 souther.compiler.coverage.ControlPointId.ArmOccurrence arm,
                 souther.compiler.reach.Proof proof) {
-            // The one place a proof is turned into words, and it says a word for every arm or
-            // does not compile. Handed over rather than taken apart: the arms are not types this
-            // package can name, so a reader added later cannot decide anything by which one it got.
-            souther.compiler.diag.Diagnostic.Builder said = Warnings.pointedAt(arm.at())
-                    .say(new DeadBranchMessage.NothingReachesThisBranch());
-            souther.compiler.diag.Diagnostic.Builder why = proof.said(
-                    new souther.compiler.reach.Proof.Words<
-                            souther.compiler.diag.Diagnostic.Builder>() {
-
-                        @Override
-                        public souther.compiler.diag.Diagnostic.Builder
-                                conditionsThatCannotAllHold(
-                                        List<souther.compiler.reach.PathDecision> decisions) {
-                            return said.hint(
-                                    new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold(
-                                            decisions.stream()
-                                                    .map(each -> "line " + each.at().line()
-                                                            + (each.held() ? " holding" : " failing"))
-                                                    .collect(java.util.stream.Collectors
-                                                            .joining(", "))));
-                        }
-
-                        @Override
-                        public souther.compiler.diag.Diagnostic.Builder outsideInputDomain(
-                                souther.compiler.inputs.TermPath position,
-                                souther.compiler.numeric.NumericDomain.Bounds admits,
-                                souther.compiler.reach.PathDecision departure) {
-                            return said.hint(new DeadBranchMessage.ThePositionStopsShortOfIt(
-                                    position.toString(), shown(admits)));
-                        }
-
-                        @Override
-                        public souther.compiler.diag.Diagnostic.Builder everyCaseRefused(
-                                String position,
-                                List<souther.compiler.types.TypeSymbol> cases) {
-                            return said.hint(
-                                    new DeadBranchMessage.EveryCaseItIsWrittenForIsRefused(
-                                            position,
-                                            cases.stream()
-                                                    .map(souther.compiler.types.TypeSymbol::name)
-                                                    .collect(java.util.stream.Collectors
-                                                            .joining(", "))));
-                        }
-                    });
-            return Report.of(why.hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
+            return Report.of(new DeadBranchProofWords(
+                    Warnings.pointedAt(arm.at())
+                            .say(new DeadBranchMessage.NothingReachesThisBranch()))
+                    .of(proof)
+                    .hint(new DeadBranchMessage.TakeItOutOrLetSomethingReachIt())
                     .build());
         }
 
         /**
-         * What a position's values come to, as an author reads them.
+         * The one place a proof is turned into words.
          *
-         * <p>In the shape a generated row's name is written in, so that the sentence about a branch
-         * and the row a report offers beside it say a range the same way. An end nothing bounds is
-         * left out rather than written as an infinity nobody typed.
+         * <p>Named rather than written where it is used, so that what may ask a proof what it says
+         * is one class and can be held to being one: the check that fixes this reads the compiled
+         * calls, and a class with a name is what it can name.
+         *
+         * <p>It says a word for every arm or does not compile. A proof's arms are not types this
+         * package can name, so there is no switch to fall through and no default to write.
          */
-        private static String shown(souther.compiler.numeric.NumericDomain.Bounds admits) {
-            String low = admits.min() == null ? null
-                    : admits.min().at() + (admits.min().inclusive() ? " <= " : " < ");
-            String high = admits.max() == null ? null
-                    : (admits.max().inclusive() ? " <= " : " < ") + admits.max().at();
-            return low == null && high == null ? "any number"
-                    : (low == null ? "x" : low + "x") + (high == null ? "" : high);
+        private record DeadBranchProofWords(souther.compiler.diag.Diagnostic.Builder said)
+                implements souther.compiler.reach.Proof.Words<
+                        souther.compiler.diag.Diagnostic.Builder> {
+
+            /** What {@code proof} says, in these words. */
+            souther.compiler.diag.Diagnostic.Builder of(souther.compiler.reach.Proof proof) {
+                return proof.said(this);
+            }
+
+            @Override
+            public souther.compiler.diag.Diagnostic.Builder conditionsThatCannotAllHold(
+                    List<souther.compiler.reach.PathDecision> decisions) {
+                return said.hint(new DeadBranchMessage.TheConditionsOnTheWayHereCannotAllHold(
+                        decisions.stream()
+                                .map(each -> "line " + each.at().line()
+                                        + (each.held() ? " holding" : " failing"))
+                                .collect(java.util.stream.Collectors.joining(", "))));
+            }
+
+            @Override
+            public souther.compiler.diag.Diagnostic.Builder outsideInputDomain(
+                    souther.compiler.inputs.TermPath position,
+                    souther.compiler.numeric.NumericDomain.Bounds admits,
+                    souther.compiler.reach.PathDecision departure) {
+                return said.hint(new DeadBranchMessage.ThePositionStopsShortOfIt(
+                        position.toString(), shown(admits)));
+            }
+
+            /**
+             * What a position's values come to, as an author reads them.
+             *
+             * <p>In the shape a generated row's name is written in, so that the sentence about a
+             * branch and the row a report offers beside it say a range the same way. An end nothing
+             * bounds is left out rather than written as an infinity nobody typed.
+             */
+            private static String shown(souther.compiler.numeric.NumericDomain.Bounds admits) {
+                String low = admits.min() == null ? null
+                        : admits.min().at() + (admits.min().inclusive() ? " <= " : " < ");
+                String high = admits.max() == null ? null
+                        : (admits.max().inclusive() ? " <= " : " < ") + admits.max().at();
+                return low == null && high == null ? "any number"
+                        : (low == null ? "x" : low + "x") + (high == null ? "" : high);
+            }
+
+            @Override
+            public souther.compiler.diag.Diagnostic.Builder everyCaseRefused(
+                    String position, List<souther.compiler.types.TypeSymbol> cases) {
+                return said.hint(new DeadBranchMessage.EveryCaseItIsWrittenForIsRefused(
+                        position,
+                        cases.stream().map(souther.compiler.types.TypeSymbol::name)
+                                .collect(java.util.stream.Collectors.joining(", "))));
+            }
         }
 
         /** One dead branch and how it was shown, before either is turned into words. */

@@ -95,7 +95,7 @@ public record ClaimAnnotations(List<Said> all) {
                 continue;
             }
             Why why = judged.verdict() instanceof ClaimVerdict.Unproven unproven
-                    ? said(unproven.why()) : null;
+                    ? new UnsettledWords().of(unproven.why()) : null;
             String at = judged.claim().at().toString();
             String named = judged.claim().named().name();
             byCase.merge(at + " " + named,
@@ -120,33 +120,44 @@ public record ClaimAnnotations(List<Said> all) {
     /** What a reader is told about a claim nothing settled. One projection, so that a distinction
      *  this compiler learns to make later is a word the report chooses to add rather than one it
      *  gains by accident. */
-    private static Why said(souther.compiler.reach.WhyUnsettled why) {
-        // The one place a reason is turned into a word, and it says one for every arm or does not
-        // compile. A distinction this compiler learns to make later is a word this chooses to add
-        // rather than one it gains by accident.
-        return why.said(new souther.compiler.reach.WhyUnsettled.Words<Why>() {
+    /**
+     * The one place a reason is turned into a word.
+     *
+     * <p>Named rather than written where it is used, so that what may ask a reason what it says is
+     * one class and can be held to being one: the check that fixes this reads the compiled calls,
+     * and a class with a name is what it can name.
+     *
+     * <p>One projection, so that a distinction this compiler learns to make later is a word the
+     * report chooses to add rather than one it gains by accident — and it says a word for every arm
+     * or does not compile.
+     */
+    private record UnsettledWords() implements souther.compiler.reach.WhyUnsettled.Words<Why> {
 
-            @Override
-            public Why noWitness() {
-                return Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
-            }
+        /** What {@code why} says, in these words. */
+        Why of(souther.compiler.reach.WhyUnsettled why) {
+            return why.said(this);
+        }
 
-            @Override
-            public Why aConditionWasNotRead(souther.compiler.diag.SourcePos at) {
-                return Why.A_RULE_WENT_UNREAD;
-            }
+        @Override
+        public Why noWitness() {
+            return Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
+        }
 
-            @Override
-            public Why thePositionDidNotSettleIt(Unsettlement position) {
-                // What the position said about its own cases, in the words it said it in.
-                return said(position);
-            }
+        @Override
+        public Why aConditionWasNotRead(souther.compiler.diag.SourcePos at) {
+            return Why.A_RULE_WENT_UNREAD;
+        }
 
-            @Override
-            public Why theWalkDidNotReachIt() {
-                return Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
-            }
-        });
+        @Override
+        public Why thePositionDidNotSettleIt(Unsettlement position) {
+            // What the position said about its own cases, in the words it said it in.
+            return said(position);
+        }
+
+        @Override
+        public Why theWalkDidNotReachIt() {
+            return Why.THE_FORK_IS_NOT_KNOWN_TO_BE_REACHED;
+        }
     }
 
     /** The same, for what a position answers about a case standing at it. */
