@@ -13,6 +13,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,13 +56,26 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
         }
     }
 
+    /**
+     * What the rules have against each source, taken once.
+     *
+     * <p>{@link Deviations#of} is a function of its text and the two checks here ask about the same
+     * files, so a source that departs from the canonical form had its report written twice — once
+     * to hold it against the formatter, once to count what it said.
+     */
+    private static final Map<Path, Deviations.Report> REPORTS = new ConcurrentHashMap<>();
+
+    private static Deviations.Report reportOn(Path path) {
+        return REPORTS.computeIfAbsent(path, p -> Deviations.of(read(p)));
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("sources")
     void everySourceIsWhollyNamed(Path path) {
         String source = read(path);
         assertEquals(List.of(), CstParser.parse(source).errors(), "this source does not parse");
 
-        Deviations.Report report = Deviations.of(source);
+        Deviations.Report report = reportOn(path);
 
         assertTrue(report.whole(),
                 "repairing what the rules say does not write the canonical form of " + path
@@ -81,7 +96,7 @@ class RepairingWhatTheRulesSayWritesTheCanonicalFormTest {
             String source = read(path);
             if (!Formatter.format(source).equals(source)) {
                 differ.add(path);
-                deviations += Deviations.of(source).deviations().size();
+                deviations += reportOn(path).deviations().size();
             }
         }
 
