@@ -1,7 +1,6 @@
 package souther.compiler.fmt;
 
 import souther.compiler.cst.CstParser;
-import souther.compiler.cst.SyntaxNode;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -56,14 +55,16 @@ public final class Deviations {
      * that one leaves nine more.
      */
     public static Report of(String source) {
-        SyntaxNode root = CstParser.parse(source).root();
-        String canonical = Formatter.canonicalize(root).text();
+        // The canonical form the report is held against at the end is the first round's own, and
+        // each round after a repair writes the one for the text that repair produced. Asked for
+        // separately, the first two are the same text written twice from the same source.
+        Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(source).root());
+        String canonical = form.text();
         List<Deviation> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         List<List<Repair.Edit>> repaired = new ArrayList<>();
         String text = source;
         for (int round = 0; round < 8; round++) {
-            Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(text).root());
             Witnesses.Pairing pairing = new Witnesses.Pairing(text, form);
             List<Witness> witnesses = all(text, form, pairing);
             for (Witness w : witnesses) {
@@ -96,6 +97,7 @@ public final class Deviations {
             }
             repaired.add(edits);
             text = next;
+            form = Formatter.canonicalize(CstParser.parse(text).root());
         }
         return new Report(sorted(out), text.equals(canonical));
     }

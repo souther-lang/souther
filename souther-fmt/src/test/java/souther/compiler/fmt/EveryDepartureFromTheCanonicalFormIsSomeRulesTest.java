@@ -45,6 +45,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * — it would put a boundary an obligation broke, one a group settled and one a comment stands at
  * under one name, which is this check's own mistake made one level up.
  *
+ * <p>What admits a candidate is the whole file it was found in, and what it is then asked about is
+ * the declaration that line stands in, where that declaration can answer for it. Both are a
+ * canonical form with one line of it written differently, and the smaller one is a seventh of the
+ * text: 357 of these 500 are cut to their declaration, and 2,445,251 characters come to 345,778.
+ *
  * <p>Over this corpus that comes to a few hundred candidates of a few thousand lines. Every line of
  * every source, written every way, was run against these rules and named: 3823 of 3823. It is not
  * run that way here because it takes three minutes, and what the reduction rests on is the sentence
@@ -52,8 +57,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
 
-    /** A canonical form with one line of it written differently. */
-    record Departure(String kind, String shape, String text, String canonical) {
+    /**
+     * A canonical form with one line of it written differently, and what the rules said about it.
+     *
+     * <p>The report is here rather than taken again by each check: {@link Deviations#of} is a
+     * function of its text, and three checks over these rows asked for the same few hundred reports
+     * three times.
+     */
+    record Departure(String kind, String shape, String text, String canonical,
+            Deviations.Report report) {
 
         @Override
         public String toString() {
@@ -98,8 +110,9 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                             || seen.contains(m.getKey() + " of " + shape)) {
                         continue;   // this shape is already among them, written this way
                     }
-                    if (locally != null
-                            && !standing.admits(m.getKey(), locally.get(m.getKey()), i)) {
+                    Locally says = locally == null ? new Locally.NotAsked()
+                            : standing.says(m.getKey(), locally.get(m.getKey()), i);
+                    if (says instanceof Locally.Refused) {
                         continue;   // the declaration this line is in already answers no
                     }
                     // The parse is what says the grammar still admits it, and the formatter takes
@@ -114,7 +127,13 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                                     // out of the sweep.
                     }
                     seen.add(m.getKey() + " of " + shape);
-                    out.add(new Departure(m.getKey(), shape, text, canonical));
+                    // What is carried is the smallest text the departure was answered for. Where
+                    // the declaration answered, that is the declaration; where it did not, the
+                    // whole file is what was asked and is what is handed on.
+                    Locally.Answered asked = says instanceof Locally.Answered a ? a
+                            : new Locally.Answered(text, canonical);
+                    out.add(new Departure(m.getKey(), shape, asked.text(), asked.canonical(),
+                            Deviations.of(asked.text())));
                 }
             }
         }
@@ -131,9 +150,11 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
      * form the change did not survive is a change the whole file will not survive either, and that
      * is a smaller question — for the longest source here, one twenty-first of the text.
      *
-     * <p>It is used to refuse and never to admit. What is kept is still decided by the whole file,
-     * so nothing here decides what a departure is; the only thing a mistake in it can do is drop a
-     * candidate, which the number of rows says.
+     * <p>What is kept is still decided by the whole file, so nothing here decides what a departure
+     * is; the only thing a mistake in it can do is drop a candidate, which the rows say. What it
+     * decides is how much text the departure is then asked about: a declaration that answered is
+     * one whose canonical form was checked here, so it is a source in its own right and every
+     * property is asked of it as of any other.
      */
     private record Declarations(String header, List<List<String>> pieces, List<String> canonical,
             List<Integer> opensAt) {
@@ -219,17 +240,46 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                     .written(piece, i - opensAt.get(d));
         }
 
-        /** Whether {@code local} is still the declaration's canonical form, written that way. */
-        boolean admits(String kind, String local, int i) {
+        /**
+         * What this says about writing line {@code i} that way, {@code local} being the
+         * declaration it stands in written that way.
+         */
+        Locally says(String kind, String local, int i) {
             int d = at(i);
             if (d < 0 || local == null || reachesTheNextOne(kind, i, d)) {
-                return true;   // nothing was asked, so nothing is refused
+                return new Locally.NotAsked();
             }
             String alone = header + "\n" + local;
             CstParser.Result parsed = CstParser.parse(alone);
             return parsed.errors().isEmpty()
-                    && Formatter.format(parsed.root()).equals(canonical.get(d));
+                    && Formatter.format(parsed.root()).equals(canonical.get(d))
+                    ? new Locally.Answered(alone, canonical.get(d))
+                    : new Locally.Refused();
         }
+    }
+
+    /**
+     * What the declaration a line stands in has to say about writing it that way.
+     *
+     * <p>Three answers rather than two. A declaration that refuses takes the candidate out; one
+     * that answers hands back the same question asked of a twenty-first of the text; one that was
+     * not asked leaves both to the whole file. Read as a yes and a no, the last would either drop a
+     * candidate the whole file admits or carry a text nothing here checked the canonical form of.
+     */
+    private sealed interface Locally {
+
+        /**
+         * Nothing was asked, so the whole file answers both: the header, a declaration that does
+         * not stand on its own, and the ways of writing a line that reach the declaration next
+         * door.
+         */
+        record NotAsked() implements Locally {}
+
+        /** The declaration is not written that way either, so neither is the file. */
+        record Refused() implements Locally {}
+
+        /** The candidate cut to the declaration it is in, and that declaration's canonical form. */
+        record Answered(String text, String canonical) implements Locally {}
     }
 
     /**
@@ -336,7 +386,7 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("departures")
     void aDepartureIsNamedByARule(Departure departure) {
-        Deviations.Report report = Deviations.of(departure.text());
+        Deviations.Report report = departure.report();
 
         assertTrue(!report.deviations().isEmpty(),
                 "no rule names it:\n" + departure.text());
