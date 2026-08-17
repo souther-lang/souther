@@ -6,19 +6,13 @@ import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.GuardEdge;
 import souther.compiler.check.PathReachability;
-import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
