@@ -2,9 +2,6 @@ package souther.runtime;
 
 import org.jspecify.annotations.Nullable;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 /**
  * Which {@code ensures} clause of which behavior did not hold, and for which of its answer's cases.
  *
@@ -32,52 +29,10 @@ import java.util.Map;
 public record EnsuresFailure(String module, String behavior, @Nullable String clause,
                              @Nullable String answeredCase) implements ConstraintFailure {
 
-    /** The failure of a clause written over one case of the answer. */
-    public static EnsuresFailure of(String module, String behavior, String clause,
-                                    String answeredCase) {
-        return new EnsuresFailure(module, behavior, clause, answeredCase);
-    }
-
-    /** The failure of a clause declared without a name, written over one case of the answer. */
-    public static EnsuresFailure unnamed(String module, String behavior, String answeredCase) {
-        return new EnsuresFailure(module, behavior, null, answeredCase);
-    }
-
-    /** The failure of a clause over an answer that has no cases to speak of. */
-    public static EnsuresFailure ofWholeAnswer(String module, String behavior, String clause) {
-        return new EnsuresFailure(module, behavior, clause, null);
-    }
-
-    /** The same, declared without a name. */
-    public static EnsuresFailure unnamedOverWholeAnswer(String module, String behavior) {
-        return new EnsuresFailure(module, behavior, null, null);
-    }
-
     /** The behavior as Souther identifies it: a behavior is its module and its name, and two modules
      *  may each declare a {@code find}. */
     public String qualifiedBehavior() {
         return module + "." + behavior;
-    }
-
-    /**
-     * What a boundary reporting this has to switch on, beside the shared code.
-     *
-     * <p>Each part is its own entry rather than folded into a name, for the reason
-     * {@link InvariantFailure#meta()} keeps a module out of a type's name: a resolver keyed on
-     * {@code find} alone would answer for two behaviors, and one that wants to act on a particular
-     * case should not have to parse a sentence to find it.
-     */
-    public Map<String, Object> meta() {
-        Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("module", module);
-        meta.put("behavior", behavior);
-        if (clause != null) {
-            meta.put("clause", clause);
-        }
-        if (answeredCase != null) {
-            meta.put("case", answeredCase);
-        }
-        return Map.copyOf(meta);
     }
 
     /** The abort's message. */

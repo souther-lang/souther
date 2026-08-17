@@ -51,13 +51,15 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
             let use (a, fetch) = fetch(a)
             """;
 
-    private static int invocationsOf(byte[] classBytes, String method, String name) {
+    /** How many times {@code classBytes} calls {@code owner}'s {@code check}, over every method it
+     *  has. The owner is counted, so a call to some other behavior's check is not read as this one. */
+    private static int checksOf(byte[] classBytes, String owner) {
         List<String> found = new ArrayList<>();
-        ClassFile.of().parse(classBytes).methods().stream()
-                .filter(m -> m.methodName().stringValue().equals(method))
+        ClassFile.of().parse(classBytes).methods()
                 .forEach(m -> m.code().ifPresent(code -> code.forEach(e -> {
                     if (e instanceof InvokeInstruction inv
-                            && inv.name().stringValue().equals(name)) {
+                            && inv.name().stringValue().equals("check")
+                            && inv.owner().name().stringValue().equals(owner)) {
                         found.add(inv.owner().name().stringValue());
                     }
                 })));
@@ -85,7 +87,7 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
     void aCallingModuleIsNotTheCheckerOfAnotherModulesContract() {
         Map<String, byte[]> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
 
-        assertEquals(0, invocationsOf(classes.get("down.Use$Impl"), "apply", "check"),
+        assertEquals(0, checksOf(classes.get("down.Use$Impl"), "up/Fetch$Ensures"),
                 "`down` is not the checker of `up.fetch`");
     }
 
@@ -106,7 +108,7 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
                 let use (a, fetch) = fetch(a)
                 """);
 
-        assertEquals(1, invocationsOf(classes.get("up.Use$Impl"), "apply", "check"),
+        assertEquals(1, checksOf(classes.get("up.Use$Impl"), "up/Fetch$Ensures"),
                 "one module, one checker, one crossing");
     }
 }

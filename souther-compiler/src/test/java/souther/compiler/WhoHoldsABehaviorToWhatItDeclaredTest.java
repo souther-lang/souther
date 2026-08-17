@@ -28,14 +28,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhoHoldsABehaviorToWhatItDeclaredTest {
 
-    /** How many times {@code method} of {@code classBytes} invokes something called {@code name}. */
-    private static int invocationsOf(byte[] classBytes, String method, String name) {
+    /**
+     * How many times {@code classBytes} calls {@code owner}'s {@code check}, over every method it
+     * has.
+     *
+     * <p>The owner is what is counted and not merely the name, because a class calling some other
+     * behavior's check is not this class holding that one. And every method rather than
+     * {@code apply}, because which method the call sits in is what this change moves: a caller that
+     * gains a clause of its own has its body moved under {@code apply$body} and takes the crossing
+     * with it, so a count over {@code apply} alone would quietly go to zero and read as "nothing is
+     * checked here".
+     */
+    private static int checksOf(byte[] classBytes, String owner) {
+        List<String> found = new ArrayList<>();
+        ClassFile.of().parse(classBytes).methods()
+                .forEach(m -> m.code().ifPresent(code -> code.forEach(e -> {
+                    if (e instanceof InvokeInstruction inv
+                            && inv.name().stringValue().equals("check")
+                            && inv.owner().name().stringValue().equals(owner)) {
+                        found.add(inv.owner().name().stringValue());
+                    }
+                })));
+        return found.size();
+    }
+
+    /** The same, said of one method — for the two places that are about which method holds it. */
+    private static int checksIn(byte[] classBytes, String method, String owner) {
         List<String> found = new ArrayList<>();
         ClassFile.of().parse(classBytes).methods().stream()
                 .filter(m -> m.methodName().stringValue().equals(method))
                 .forEach(m -> m.code().ifPresent(code -> code.forEach(e -> {
                     if (e instanceof InvokeInstruction inv
-                            && inv.name().stringValue().equals(name)) {
+                            && inv.name().stringValue().equals("check")
+                            && inv.owner().name().stringValue().equals(owner)) {
                         found.add(inv.owner().name().stringValue());
                     }
                 })));
@@ -76,9 +101,9 @@ class WhoHoldsABehaviorToWhatItDeclaredTest {
     void aBodiedBehaviorChecksItselfOnceWhereItAnswers() {
         Map<String, byte[]> classes = Compiler.compile(BODIED);
 
-        assertEquals(1, invocationsOf(classes.get("demo.Twice$Impl"), "apply", "check"),
+        assertEquals(1, checksIn(classes.get("demo.Twice$Impl"), "apply", "demo/Twice$Ensures"),
                 "its own `apply` is the door every application goes through");
-        assertEquals(0, invocationsOf(classes.get("demo.Twice$Impl"), "apply$body", "check"),
+        assertEquals(0, checksIn(classes.get("demo.Twice$Impl"), "apply$body", "demo/Twice$Ensures"),
                 "and the body is what is being held, not where the holding is written");
     }
 
@@ -87,15 +112,15 @@ class WhoHoldsABehaviorToWhatItDeclaredTest {
     void acallerOfABodiedBehaviorEmitsNoCheck() {
         Map<String, byte[]> classes = Compiler.compile(BODIED);
 
-        assertEquals(0, invocationsOf(classes.get("demo.TwiceOver$Impl"), "apply", "check"),
-                "`twice` is checked by `twice`");
+        assertEquals(0, checksOf(classes.get("demo.TwiceOver$Impl"), "demo/Twice$Ensures"),
+                "`twice` is checked by `twice`, in none of this class's methods");
     }
 
     @Test
     void anInjectedBehaviorIsCheckedAtTheCrossingByWhoeverCallsIt() {
         Map<String, byte[]> classes = Compiler.compile(INJECTED);
 
-        assertEquals(1, invocationsOf(classes.get("demo.Use$Impl"), "apply", "check"),
+        assertEquals(1, checksOf(classes.get("demo.Use$Impl"), "demo/Fetch$Ensures"),
                 "the answer enters the domain here, so this is where it is held");
     }
 
@@ -124,6 +149,6 @@ class WhoHoldsABehaviorToWhatItDeclaredTest {
                 """);
 
         assertFalse(classes.containsKey("demo.Echo$Ensures"));
-        assertEquals(0, invocationsOf(classes.get("demo.Echo$Impl"), "apply", "check"));
+        assertEquals(0, checksOf(classes.get("demo.Echo$Impl"), "demo/Echo$Ensures"));
     }
 }

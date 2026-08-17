@@ -69,15 +69,6 @@ public final class Backend {
     private final ValueClassGen value;
     /** The checker's elaborated bodies: what this emits from (issue #81). */
     private final Bodies.Elaborated checked;
-    /**
-     * Where each behavior's declared relation is checked, decided before this ran.
-     *
-     * <p>The decision and not the facts it was made from. Whether a behavior's body comes from
-     * outside is read here from a set this class goes on adding to — a behavior it gives a body to
-     * but reaches as a dependency joins the injected names below — so working the decision out here
-     * would read that set at whatever point the reader happened to be at.
-     */
-    private final Map<ValueName.Behavior, WhereTheCheckIs> checks;
     private final EnsuresGen ensures;
 
     /**
@@ -95,22 +86,26 @@ public final class Backend {
         return all;
     }
 
-    private Backend(CodegenContext ctx, Bodies.Elaborated checked,
-                    Map<ValueName.Behavior, WhereTheCheckIs> checks) {
+    private Backend(CodegenContext ctx, Bodies.Elaborated checked) {
         this.ctx = ctx;
         this.pkg = ctx.pkg;
         this.symbols = ctx.symbols;
         this.codec = new CodecGen(ctx);
         this.value = new ValueClassGen(ctx, codec);
         this.checked = checked;
-        this.checks = Map.copyOf(checks);
         this.ensures = new EnsuresGen(ctx);
     }
 
-    /** Where {@code behavior}'s declared relation is checked. A behavior nothing decided about
-     *  states nothing, which is what a module with no clause at all answers for every one of its. */
+    /**
+     * Where {@code behavior}'s declared relation is checked.
+     *
+     * <p>Asked of the context, which is where the decision was put for the emitters to read. Kept
+     * here as well it would be one decision in two fields filled from one argument, and the whole
+     * point of there being one value is that there is one reading of it — a later change setting one
+     * and not the other is a check emitted in a place the other half disagrees with.
+     */
     private WhereTheCheckIs checkOf(ValueName.Behavior behavior) {
-        return checks.getOrDefault(behavior, WhereTheCheckIs.Nowhere.INSTANCE);
+        return ctx.ensuresCheckOf(behavior);
     }
 
     /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
@@ -232,7 +227,7 @@ public final class Backend {
         ctx.setEnsuresChecks(checks);
         ctx.setCoveragePlan(instrumentation.coverage());
         ctx.setCounting(instrumentation.counting());
-        Backend b = new Backend(ctx, checked, checks);
+        Backend b = new Backend(ctx, checked);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
         // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.
         JvmLimits.checkParameterSlots(module, ctx, recHelpers, sigs, requirements);
@@ -1130,6 +1125,20 @@ public final class Backend {
      * (spec §collections). A signature is admitted again when it is read back out of a jar, and an
      * older compiler asked about {@code Map<LoanDate, Int>} would refuse a declaration this one
      * publishes.
+     *
+     * <p>Version 16 widens what a behavior's published declaration may say: it may carry an
+     * {@code ensures}, relating what the behavior is given to what it answers. A signature is read
+     * back out of a jar as the text that was written, so a declaration this compiler publishes is
+     * one an older compiler's reader has no production for and refuses.
+     *
+     * <p>What that number does not cover, and does not need to: where such a clause is checked.
+     * Enforcement is not read back — a caller reaches an imported behavior through its signature and
+     * its class, and nothing it reads says which of the two places the check was emitted in. A jar
+     * published earlier in this same version carries clauses nothing runs, and one published now
+     * carries clauses its own module runs, and a reader of either reads the same declaration. It
+     * becomes a question the day a caller may assume a clause it did not check itself, and what has
+     * to be decided then is which jars an assumption may rest on — the version being one way to
+     * answer that, and this note being where the question was left.
      */
     public static final int BOUNDARY_VERSION = 16;
 
