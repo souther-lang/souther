@@ -53,7 +53,10 @@ public final class PathReachability {
         public static final Answers NONE = new Answers(Map.of());
 
         public Answers {
-            found = Map.copyOf(found);
+            // The order the walk found them in. `Map.copyOf` is unordered and its iteration is
+            // salted per run, so the warnings read off this came out in a different order on every
+            // JVM — a diagnostic whose place in the output is not a function of the source.
+            found = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(found));
         }
 
         /**
@@ -83,6 +86,66 @@ public final class PathReachability {
                 }
             }
             return Reachability.notSettled(new WhyUnsettled.TheWalkDidNotReachIt());
+        }
+
+        /**
+         * These answers with what the rows actually did taken in, and the proofs they took back.
+         *
+         * <p>A row that went through an arm went through it. So a run is a witness — the plainest
+         * of them — and it settles an arm this reading had proven nothing arrives at: what happened
+         * happened, and the proof was wrong rather than the row. Both come out of one act because
+         * neither is derivable from the other afterwards: the corrected answers no longer say which
+         * arms were corrected, and the corrections do not say what everything else came to.
+         *
+         * @param lit the probes a row was recorded at
+         */
+        public AsRun asRunWith(java.util.Set<Integer> lit) {
+            Map<ControlPointId, Reachability> out = new LinkedHashMap<>(found);
+            java.util.Set<Integer> provedWrong = new java.util.LinkedHashSet<>();
+            found.forEach((where, said) -> {
+                if (!(where instanceof ControlPointId.ArmOccurrence arm)
+                        || arm.probe().isEmpty() || !lit.contains(arm.probe().getAsInt())) {
+                    return;
+                }
+                if (said instanceof Reachability.Unreachable) {
+                    provedWrong.add(arm.probe().getAsInt());
+                }
+                out.put(where, new Reachability.Reachable(
+                        new Witness.ARunWentThrough(arm.probe().getAsInt())));
+            });
+            return new AsRun(new Answers(out), provedWrong);
+        }
+
+        /**
+         * What arrives once the rows have run, and where this reading was shown wrong.
+         *
+         * @param provedWrong arms proven unreachable that a row went through anyway. Nothing about
+         *                    the model is wrong then — this reading is — and a measure says so
+         *                    rather than quietly counting the arm again
+         */
+        public record AsRun(Answers answers, java.util.Set<Integer> provedWrong) {
+
+            public AsRun {
+                provedWrong = java.util.Set.copyOf(provedWrong);
+            }
+        }
+
+        /** Whether this reading proved nothing arrives anywhere, which is what a walk that would
+         *  only ever answer "keep everything" can skip on. */
+        public boolean provesNothingUnreached() {
+            return found.values().stream().noneMatch(Reachability.Unreachable.class::isInstance);
+        }
+
+        /** Whether nothing arrives at the arm recorded at {@code probe}. What every denominator
+         *  takes an arm out by, and the one arm of the answer that takes anything out. */
+        public boolean nothingArrivesAt(int probe) {
+            for (Map.Entry<ControlPointId, Reachability> each : found.entrySet()) {
+                if (each.getKey() instanceof ControlPointId.ArmOccurrence arm
+                        && arm.probe().isPresent() && arm.probe().getAsInt() == probe) {
+                    return each.getValue() instanceof Reachability.Unreachable;
+                }
+            }
+            return false;
         }
 
         /** Whether the comparison at {@code probe} divides nothing that gets to it — one of its two
@@ -199,11 +262,24 @@ public final class PathReachability {
             case Core.Match match -> {
                 walk(match.scrutinee(), k, at, reads, decided, nothingAbove);
                 cases(match, reads, nothingAbove);
+                // The scrutinee once and then the arms, written out rather than left to the generic
+                // walk. A `Match`'s children are its scrutinee as well as its arm bodies, so
+                // walking them all reads the scrutinee a second time — under a fork this time,
+                // which takes back what was answered about anything in it.
+                //
+                // Each arm binds a value of the case it matched, which is a location holding
+                // whatever that type guarantees: an arm of `| Paid p ->` reads `p`'s invariant, and
+                // a guard inside it settles against that. Entering it is how the arm gets it, the
+                // same act a parameter gets it by.
+                //
                 // Under an arm, this fork stands above whatever is inside it. Which arm was taken
                 // is not recorded as a decision: nothing was assumed from it, and a proof naming it
                 // would claim work the domains did not do.
-                InputReads inside = reads;
-                Core.forEachChild(e, child -> walk(child, k, at, inside, decided, false));
+                for (Core.Case arm : match.cases()) {
+                    PathEngine.Entered in = engine.enter(
+                            Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+                    walk(arm.body(), in.known(), in.at(), reads, decided, false);
+                }
             }
             default -> {
                 Core.forEachChild(e, child -> walk(child, k, at, reads, decided, nothingAbove));

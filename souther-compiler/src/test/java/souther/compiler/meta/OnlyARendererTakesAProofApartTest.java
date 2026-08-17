@@ -71,7 +71,7 @@ class OnlyARendererTakesAProofApartTest {
             while (m.find()) {
                 // A javadoc link is a reference and not a reading. What is being looked for is code
                 // that branches on which arm it got.
-                if (!text.startsWith("{@link", Math.max(0, m.start() - 6))) {
+                if (!text.startsWith("{@link ", Math.max(0, m.start() - "{@link ".length()))) {
                     offenders.add(name + ": " + m.group());
                 }
             }

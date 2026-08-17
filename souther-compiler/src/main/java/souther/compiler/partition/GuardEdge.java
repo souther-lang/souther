@@ -49,31 +49,6 @@ public record GuardEdge(CoverageSites.GuardRef guard, int site, NumericTerm term
         return term.path();
     }
 
-    /**
-     * Whether nothing this edge admits is a value the position can hold.
-     *
-     * <p>The one place the two are compared, so that what changes when a bound learns its own openness
-     * changes here and nowhere else.
-     *
-     * <p>Sound while {@code admissible} is as wide as or wider than the values that can really be
-     * written: an edge disjoint from a superset is disjoint from the set. The other direction is not
-     * claimed — an edge that meets these bounds is not thereby reachable, because a rule they could
-     * not hold can still refuse every value in the overlap. So only this answer excludes anything,
-     * and being unable to prove disjointness costs a report nothing but an obligation nobody can
-     * meet.
-     */
-    public boolean provenDisjoint(NumericDomain.Bounds admissible) {
-        if (admissible == null) {
-            return false;
-        }
-        // Two half-lines meeting at one number share it only where both hold it, and either side may
-        // be the one that does not. Asked of the pair rather than of the edge, because reading the
-        // arm's openness alone would call an arm at the top of a range reachable in a position whose
-        // rules stop short of it.
-        return !Endpoint.someValueLiesBetween(end(low, lowInclusive), admissible.max())
-                || !Endpoint.someValueLiesBetween(admissible.min(), end(high, highInclusive));
-    }
-
     /** An end of this edge, or no end at all where the edge is open in that direction. */
     private static Endpoint end(Place at, boolean inclusive) {
         return at == null ? null : new Endpoint(at, inclusive);
