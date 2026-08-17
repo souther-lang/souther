@@ -71,30 +71,35 @@ public final class Deviations {
         for (int round = 0; round < ROUNDS; round++) {
             Witnesses.Pairing pairing = new Witnesses.Pairing(text, form);
             List<Witness> witnesses = all(text, form, pairing);
-            for (Witness w : witnesses) {
-                int at = Repair.where(text, form, pairing, w);
-                if (at < 0) {
-                    continue;
+            if (witnesses.isEmpty()) {
+                break;   // nothing to say about this text, and nothing to project it onto
+            }
+            // One projection for both questions this round asks of it. Where a witness lands is
+            // where the first stretch it comes to begins, so a report that asked for that on its
+            // own evaluated the whole projection to keep one number and then evaluated it again to
+            // write the text.
+            List<List<Repair.Edit>> each;
+            try {
+                each = Repair.each(text, form, pairing, witnesses);
+            } catch (Witnesses.NoCorrespondence _) {
+                return new Report(sorted(out), false);   // a family that could not answer
+            }
+            for (int w = 0; w < witnesses.size(); w++) {
+                if (each.get(w).isEmpty()) {
+                    continue;   // nothing of it is written here
                 }
-                int was = at;
+                int was = each.get(w).get(0).from();
                 for (int i = repaired.size() - 1; i >= 0; i--) {
                     was = Repair.before(repaired.get(i), was);
                 }
-                Deviation d = new Deviation(lineOf(source, was), columnOf(source, was), rule(w),
-                        canonicalSide(w), sourceSide(w));
+                Deviation d = new Deviation(lineOf(source, was), columnOf(source, was),
+                        rule(witnesses.get(w)), canonicalSide(witnesses.get(w)),
+                        sourceSide(witnesses.get(w)));
                 if (seen.add(d.line() + ":" + d.column() + ": " + d.rule())) {
                     out.add(d);
                 }
             }
-            if (witnesses.isEmpty()) {
-                break;
-            }
-            List<Repair.Edit> edits;
-            try {
-                edits = Repair.edits(text, form, pairing, witnesses);
-            } catch (Witnesses.NoCorrespondence _) {
-                return new Report(sorted(out), false);   // a family that could not answer
-            }
+            List<Repair.Edit> edits = Repair.composed(each);
             String next = Repair.apply(text, edits);
             if (next.equals(text)) {
                 break;

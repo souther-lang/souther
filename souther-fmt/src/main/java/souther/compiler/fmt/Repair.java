@@ -4,8 +4,10 @@ import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -31,6 +33,76 @@ final class Repair {
     record Edit(int from, int to, String text) {}
 
     /**
+     * A source and its canonical form, with what every witness of one round would ask of them read
+     * once.
+     *
+     * <p>Two of the projections ask a question the round shares, and each of them asks it of a whole
+     * file to answer about one unit. A group's witness is about the opportunities that group
+     * settles, and a layout has one at every place any group could break; a level's witness is about
+     * the lines written under that level, and the canonical form's lines are the whole file's. Asked
+     * per witness, both read everything — so a round over a source that departs at a large fraction
+     * of its groups cost the witnesses multiplied by the file, when what the round is about is one
+     * departure per witness.
+     *
+     * <p>So each is gathered under the unit that is asked about. What a witness reads is then its
+     * own unit's, and what the projection reads is the file once.
+     *
+     * <p>Both here, though only one of them could be kept beside the layout. Which opportunities a
+     * group settles is the layout's answer and nothing about a source; which lines are written under
+     * a level is the canonical form's, but where the source begins each of them is not, and a
+     * gathering holding that is about the pair. Split between the two places, a reader asking what a
+     * projection reads once would have to find the answer in both.
+     */
+    record Round(String source, Formatter.CanonicalForm canonical, Witnesses.Pairing pairing,
+            Map<Doc.GroupRef, List<Opportunity>> settling,
+            Map<Doc.NestRef, List<Witnesses.CanonicalLine>> under) {
+
+        Round(String source, Formatter.CanonicalForm canonical, Witnesses.Pairing pairing) {
+            this(source, canonical, pairing, settling(canonical.layout()),
+                    under(Witnesses.lines(source, canonical, pairing)));
+        }
+
+        /**
+         * The layout's opportunities, gathered under the group whose decision settles each.
+         *
+         * <p>By identity, which is how a group is asked for everywhere else: a {@link Doc.GroupRef}
+         * is the group and not a description of one, and two of them are the same group exactly
+         * where they are the same reference.
+         */
+        private static Map<Doc.GroupRef, List<Opportunity>> settling(Layout layout) {
+            Map<Doc.GroupRef, List<Opportunity>> out = new IdentityHashMap<>();
+            for (Opportunity o : layout.opportunities()) {
+                out.computeIfAbsent(o.settledBy(), _ -> new ArrayList<>()).add(o);
+            }
+            return out;
+        }
+
+        /**
+         * The canonical form's lines, gathered under every level each is written under and not only
+         * the innermost.
+         *
+         * <p>That is what the indentation repair asks for: a level that moves takes what is nested
+         * inside it along, so the lines it writes are the ones written anywhere under it. Each line
+         * therefore stands under as many entries as it has levels, and what a level's witness reads
+         * is its own entry rather than the file.
+         *
+         * <p>In the order the canonical form writes them, which the repair rests on: it keeps the
+         * first line it meets at each of the source's line starts, and the order it meets them in is
+         * the order they are written.
+         */
+        private static Map<Doc.NestRef, List<Witnesses.CanonicalLine>> under(
+                List<Witnesses.CanonicalLine> lines) {
+            Map<Doc.NestRef, List<Witnesses.CanonicalLine>> out = new IdentityHashMap<>();
+            for (Witnesses.CanonicalLine line : lines) {
+                for (Doc.NestRef level : line.under()) {
+                    out.computeIfAbsent(level, _ -> new ArrayList<>()).add(line);
+                }
+            }
+            return out;
+        }
+    }
+
+    /**
      * {@code source} with the expectations of {@code witnesses} written into it.
      *
      * <p>Refuses two expectations over one stretch rather than letting the later win. Two rules
@@ -54,9 +126,33 @@ final class Repair {
      */
     static List<Edit> edits(String source, Formatter.CanonicalForm canonical,
             Witnesses.Pairing pairing, List<Witness> witnesses) {
-        List<Edit> edits = new ArrayList<>();
+        return composed(each(source, canonical, pairing, witnesses));
+    }
+
+    /**
+     * The stretches each of {@code witnesses} comes to on its own, in the same order as the
+     * witnesses.
+     *
+     * <p>Kept apart from the composition so that a caller who wants both gets one projection. What
+     * a report wants of a witness besides its expectation is where in the source it lands, which is
+     * where the first stretch it comes to begins — and asked for on its own that was the whole
+     * projection evaluated to keep one number, and then evaluated again to write the text.
+     */
+    static List<List<Edit>> each(String source, Formatter.CanonicalForm canonical,
+            Witnesses.Pairing pairing, List<Witness> witnesses) {
+        Round round = new Round(source, canonical, pairing);
+        List<List<Edit>> out = new ArrayList<>();
         for (Witness w : witnesses) {
-            edits.addAll(of(source, canonical, pairing, w));
+            out.add(of(round, w));
+        }
+        return out;
+    }
+
+    /** The stretches of {@code each}, composed and in the order they are written. */
+    static List<Edit> composed(List<List<Edit>> each) {
+        List<Edit> edits = new ArrayList<>();
+        for (List<Edit> mine : each) {
+            edits.addAll(mine);
         }
         edits.sort(Comparator.comparingInt(Edit::from)
                 .thenComparing(Comparator.comparingInt(Edit::to).reversed()));
@@ -130,24 +226,20 @@ final class Repair {
      *
      * <p>Empty where what it is about is written around a comment, which the rules about comments
      * have to say before anything can be written there.
-     */
-    static List<Edit> of(String source, Formatter.CanonicalForm canonical, Witness w) {
-        return of(source, canonical, new Witnesses.Pairing(source, canonical), w);
-    }
-
-    /**
-     * The same, for a caller that has already read the two texts' tokens.
      *
-     * <p>Read once for a whole repair rather than once per witness. What a witness is about is
-     * found by pairing the two token streams, and a source with three hundred of them was parsed a
-     * thousand times to write one text.
+     * <p>Asked of a {@link Round} rather than of the two texts, so that what a witness is about is
+     * found once for a whole round rather than once per witness. The two texts' tokens were the
+     * first of those — a source with three hundred of them was parsed a thousand times to write one
+     * text — and what a unit is asked of is the second.
      */
-    static List<Edit> of(String source, Formatter.CanonicalForm canonical,
-            Witnesses.Pairing pairing, Witness w) {
+    static List<Edit> of(Round round, Witness w) {
+        String source = round.source();
+        Formatter.CanonicalForm canonical = round.canonical();
+        Witnesses.Pairing pairing = round.pairing();
         return switch (w) {
             case Witness.BetweenTwoTokens b -> List.of(spacing(pairing, b));
             case Witness.Separation s -> List.of(separation(source, canonical, s));
-            case Witness.Indentation i -> indentation(source, canonical, pairing, i);
+            case Witness.Indentation i -> indentation(round, i);
             case Witness.Forced f -> switch (f.unit().adjacency()) {
                 case -1 -> List.of(ending(source, canonical, pairing));
                 case -2 -> List.of(aboveTheLastComment(source, canonical, pairing));
@@ -157,9 +249,9 @@ final class Repair {
             // texts disagree about; what writes the canonical form is the same either way, since
             // a construct is put down the page by breaking the places it settles.
             case Witness.Conditional c -> gaps(source, canonical, pairing,
-                    opportunitiesOf(source, canonical, pairing, c.unit().group()));
+                    opportunitiesOf(round, c.unit().group()));
             case Witness.RunTogether r -> gaps(source, canonical, pairing,
-                    opportunitiesOf(source, canonical, pairing, r.unit().group()));
+                    opportunitiesOf(round, r.unit().group()));
             case Witness.Settled s ->
                     gaps(source, canonical, pairing, List.of(s.unit().adjacency()));
             case Witness.AtTheEndOfALine e -> List.of(new Edit(e.unit().at(),
@@ -173,13 +265,6 @@ final class Repair {
         };
     }
 
-    /** Where in the source a witness lands, or -1 where nothing of it is written there. */
-    static int where(String source, Formatter.CanonicalForm canonical, Witnesses.Pairing pairing,
-            Witness w) {
-        List<Edit> edits = of(source, canonical, pairing, w);
-        return edits.isEmpty() ? -1 : edits.get(0).from();
-    }
-
     /**
      * The columns the canonical form writes the lines of a level at.
      *
@@ -191,14 +276,18 @@ final class Repair {
      * <p>Every line written under the level and not only the ones written at it. A level that moves
      * takes what is nested inside it along, and those deeper levels have nothing against them —
      * their step is right and it is the column underneath that changed.
+     *
+     * <p>Asked of the level's own lines and not of the file's. {@link Round} gathers them under the
+     * levels they are written under, so a source whose every level is indented wrongly reads each
+     * level's lines once rather than the file once per level.
      */
-    private static List<Edit> indentation(String source, Formatter.CanonicalForm canonical,
-            Witnesses.Pairing pairing, Witness.Indentation witness) {
+    private static List<Edit> indentation(Round round, Witness.Indentation witness) {
+        String source = round.source();
         List<Edit> out = new ArrayList<>();
         Set<Integer> at = new LinkedHashSet<>();
-        for (Witnesses.CanonicalLine line : Witnesses.lines(source, canonical, pairing)) {
-            if (line.sourceStart() == null || !line.under().contains(witness.unit().inner())
-                    || !at.add(line.sourceStart())) {
+        for (Witnesses.CanonicalLine line
+                : round.under().getOrDefault(witness.unit().inner(), List.of())) {
+            if (line.sourceStart() == null || !at.add(line.sourceStart())) {
                 continue;
             }
             int lineStart = line.sourceStart();
@@ -253,16 +342,20 @@ final class Repair {
      * <p>In the order they stand in, so that the first is the one the witness stands at. Where the
      * report says the source departed is the first place it did, and that has to be the same
      * question as which of them this writes first.
+     *
+     * <p>Asked of the group's own opportunities and not of the layout's. A layout has one at every
+     * place any group could break, so a sweep of it per group is the whole file for one group's
+     * question — and a source that departs at a large fraction of its groups is asked that as many
+     * times as it has departed. Which opportunities a group settles is the layout's answer, and
+     * {@link Round} has it once.
      */
-    private static List<Integer> opportunitiesOf(String source, Formatter.CanonicalForm canonical,
-            Witnesses.Pairing pairing, Doc.GroupRef group) {
+    private static List<Integer> opportunitiesOf(Round round, Doc.GroupRef group) {
         List<Integer> out = new ArrayList<>();
-        for (Opportunity o : canonical.layout().opportunities()) {
-            if (o.settledBy() != group
-                    || Witnesses.brokeInSource(source, pairing, o.at()) == o.broke()) {
+        for (Opportunity o : round.settling().getOrDefault(group, List.of())) {
+            if (Witnesses.brokeInSource(round.source(), round.pairing(), o.at()) == o.broke()) {
                 continue;
             }
-            int i = pairing.adjacencyAt(o.at());
+            int i = round.pairing().adjacencyAt(o.at());
             if (i >= 0) {
                 out.add(i);
             }
