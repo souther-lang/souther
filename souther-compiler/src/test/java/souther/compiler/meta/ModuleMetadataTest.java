@@ -167,42 +167,46 @@ class ModuleMetadataTest {
     }
 
     /**
-     * What is carried is what this module's own source declares.
+     * What is carried is what the model declares.
      *
-     * <p>An {@code examples for} file's values join the module its rows join, so the module as
-     * resolved holds `let`s whose source is in the companion file. A companion does not add to what
-     * the model compiles to, and there is nothing of it in a jar of the model, so a `let` only it
-     * declares is not the module's to publish.
+     * <p>An attached file's values join the module its rows join, so the module as resolved holds
+     * `let`s an {@code examples for} file wrote. An attached file adds nothing to what the model
+     * compiles to and there is nothing of it in a jar of the model, so a `let` only it declares is
+     * not the module's to publish.
      *
-     * <p>What this leaves open, and does not decide: a declaration written to reach such a value
-     * compiles, and the clause travels naming something the jar does not carry. Refusing that is a
-     * rule about what a model declaration may depend on — an `examples for` file being for the rows
-     * and the values they name — and it is not this walk's to make. Held here so that the reading is
-     * what someone decides against rather than what they discover.
+     * <p>Asked of the definition, which says what it was made as. Answered by whether a slice of
+     * its text happened to be kept, the set would come out right for a reason that is about how a
+     * jar is written — and a definition of the module's own that some other pass had not kept a
+     * slice for would drop out of what is published without anything saying so.
+     *
+     * <p>Nothing the model writes reaches such a value — that is refused where a name is answered
+     * (spec §an-attached-files-values-are-for-its-rows) — so what this holds is the walk's own
+     * domain rather than a second gate on the same mistake: a rule whose text is not the module's
+     * is not published, whatever reaches it.
      */
     @Test
-    void aValueOnlyACompanionFileDeclaresIsNotCarried() {
+    void aValueOnlyAnAttachedFileDeclaresIsNotCarried() {
         Map<String, byte[]> classes = Compiler.compileModules(List.of("""
                 module beside.rows exposing ( Amount, echo )
 
                 data Amount = { n: Int }
-                    invariant n >= floor
+                    invariant n >= 0
 
                 behavior echo : (x: Amount) -> Amount
                 let echo (x) = x
                 """, """
                 examples for beside.rows
 
-                let floor = 0
+                let floor = Amount { n = 0 }
 
                 example echo
-                    | "unchanged" : (Amount { n = 1 }) -> Amount { n = 1 }
+                    | "unchanged" : (floor) -> floor
                 """));
 
         assertEquals(List.of(),
                 strings(annotation(classes, Emitted.declarations("beside.rows"), "SoutherModule"),
                         "invariantHelpers"),
-                "the companion's source is not in this module's jar, so it has none to carry");
+                "the attached file's source is not in this module's jar, so it has none to carry");
     }
 
     /** A composition declares stages, not a signature. The importing module reads a signature, so

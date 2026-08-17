@@ -490,9 +490,17 @@ public final class Scoping {
         // there.
         Set<String> behaviorNames = behaviorNames(m);
         Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
+        // Which of them an attached file declares, read off the definition rather than off which
+        // file's text it arrived in. The values of an attached file join the module its rows join,
+        // so they are reachable under the same names as the module's own, and this is what says
+        // which of those names only the rows may write.
+        Set<String> attached = new LinkedHashSet<>();
         for (Ast.FnDef fn : m.fns()) {
             if (HelperInliner.isHelperName(behaviorNames, fn.name())) {
                 helpers.put(fn.name(), new ValueName.Helper(m.name(), fn.name()));
+                if (!fn.role().isTheModels()) {
+                    attached.add(fn.name());
+                }
             }
         }
         Map<String, ValueName.Behavior> behaviors = new LinkedHashMap<>();
@@ -521,7 +529,8 @@ public final class Scoping {
                 whole = false;
             }
         }
-        return new Resolve.Reachable(m.name(), helpers, behaviors, nothing, whole, library);
+        return new Resolve.Reachable(m.name(), helpers, behaviors, nothing, whole, library,
+                attached);
     }
 
     /**

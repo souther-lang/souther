@@ -16,20 +16,61 @@ package souther.compiler.ast;
  * a question about that position — what it contributes to reading the value, whether it requires
  * the value to be of its type — asks the position rather than a set of names kept beside the tree.
  *
- * <p>Two cases and not a taxonomy of everything a pass may mint. What divides them is whether the
- * definition is a row's value, because that is the division the rules are about; a definition
- * another module declared is ordinary here and says which module wrote it in the one place that
- * answers that ({@link Hir.FnDef#declaredIn}).
+ * <p>What divides these is whether the definition is the model's or the rows'. A definition another
+ * module declared is the model's here and says which module wrote it in the one place that answers
+ * that ({@link Hir.FnDef#declaredIn}); the other two are there so that rows can be written, and
+ * {@link #isTheModels} is what a rule about the difference asks.
  */
 public sealed interface DefinitionRole {
 
-    /** A definition read as a definition: a {@code let} its module wrote, and one another module
-     *  wrote that this one emits. */
+    /**
+     * Whether the definition is the model's: what the module's own source declares, what a jar of
+     * the module carries, and what another declaration of the model may name.
+     *
+     * <p>Answered by each case rather than by a test against one of them, so a case added later is
+     * one somebody had to answer for. Read as "not a row's value" it would put every new case on
+     * the model's side by default, which is the side that publishes and the side the model may
+     * reach.
+     */
+    boolean isTheModels();
+
+    /** A definition read as a definition: a {@code let} its module wrote in its own source, and one
+     *  another module wrote that this one emits. */
     record Ordinary() implements DefinitionRole {
 
         /** The one of these there is. A role holds nothing here, so a second instance would be a
          *  second name for one answer. */
         public static final Ordinary INSTANCE = new Ordinary();
+
+        @Override
+        public boolean isTheModels() {
+            return true;
+        }
+    }
+
+    /**
+     * A value an attached file declares, for the rows written beside it to name.
+     *
+     * <p>An {@code examples for} file's values join the module its rows join, so from resolution
+     * onwards they sit among the module's own definitions under one set of names. What tells them
+     * apart is this, and not where their text is: whether a jar of the module happens to carry a
+     * slice for one is how the artifact is written, and the question every rule here asks is whose
+     * the declaration is.
+     *
+     * <p>Two rules read it. Such a value is not published — the model compiles to nothing of the
+     * attached file, so there is no source of it in a jar to carry. And the model may not name one
+     * (spec §an-attached-files-values-are-for-its-rows): the file is for the rows and the values
+     * they name, and a model that reached into it would be a model its fixtures hold up.
+     */
+    record AttachedValue() implements DefinitionRole {
+
+        /** The one of these there is, for the same reason {@link Ordinary#INSTANCE} is. */
+        public static final AttachedValue INSTANCE = new AttachedValue();
+
+        @Override
+        public boolean isTheModels() {
+            return false;
+        }
     }
 
     /**
@@ -46,6 +87,11 @@ public sealed interface DefinitionRole {
             if (position == null) {
                 throw new IllegalArgumentException("a row's value stands at a position");
             }
+        }
+
+        @Override
+        public boolean isTheModels() {
+            return false;
         }
     }
 }

@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -340,7 +341,19 @@ public final class TypeChecker {
                 // written against, and the rule itself. A behavior's own `let` is not — what a reader
                 // reaches there is the behavior, which it calls, and the module publishes its
                 // specification rather than the body it was given (ADR-0005).
-                if (HelperInliner.helpersOf(module).containsKey(e)) {
+                Hir.FnDef helper = HelperInliner.helpersOf(module).get(e);
+                if (helper != null) {
+                    // The same rule a body is held to (spec §an-attached-files-values-are-for-its-rows),
+                    // read here because an `exposing` list is a list of names and not an expression, so
+                    // it is not answered where a name written in one is. A value an attached file
+                    // declares is there for the rows beside it; published, it would be a name an
+                    // importer reaches with no source of it in the jar.
+                    if (!helper.role().isTheModels()) {
+                        throw CompileException.of(Diagnostic.at(module.pos())
+                                .say(new ExampleMessage.TheModelNamesAValueAnAttachedFileDeclares(e))
+                                .hint(new ExampleMessage.MoveTheValueIntoTheModuleItself(e))
+                                .build());
+                    }
                     exposed.add(e);
                     continue;
                 }

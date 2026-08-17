@@ -3050,7 +3050,11 @@ How many rows are waiting is what `+souther examples+` reports; it is not a comp
 
 [[examples-file-names-a-compiled-module]]An `+examples for <module>+` file MUST name a module among those being compiled.
 
+[[an-attached-files-values-are-for-its-rows]]A value an attached file declares MAY be named by a row, by a `+fake+` and by another value of an attached file, and MUST NOT be named by the model: not by a `+data+`'s `+invariant+`, a `+behavior+`'s `+ensures+`, a `+let+`'s body, or the module's `+exposing+` list.
+
 The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
+
+The merge makes those values reachable under the same names as the module's own, and the direction they may be reached in is one way. A row is what the file is for, and a row written inline in the model source is a row too, so it names them as freely as one written beside them. The model is the other way: a module that named one would not compile without a file of fixtures, and a clause that named one would travel to an importer under <<a-published-module-carries-what-it-says-it-declares>> spelling a name the jar has no source for — the module's own source is what is published, and an attached file adds nothing to it. Naming one from the model is <<e1928>>. A value the model needs is declared in the model.
 
 [#example-adequacy]
 === What the rows establish
@@ -5912,6 +5916,25 @@ Emitted at an `+example+` whose behavior is answered by an implementation suppli
 Said once for the behavior in each source its rows are written in, however many rows those are: one answer and one model disagreeing is one fact, and the rows did not stop for reasons of their own. Not once for the behavior outright, because a diagnostic is said where it can be quoted — a behavior whose rows are written in the module and in an attached `+examples for+` file has rows in two files, and a reader of the second one would otherwise be shown rows that stopped and nothing saying why. Each row is recorded as undecided, with its inputs and its expectation already built and held to their invariants.
 
 Two things are reported under this code, and they are not the same finding. Where both sides were read and one declares something else, the declaration is named and the fix is to build again. Where the declarations could not be read at all — classes carrying none, or declarations this compiler cannot read back (<<a-published-module-can-be-read-back>>) — nothing has been established about either build, and saying a build was stale would be saying it on evidence nobody has.
+
+[#e1928]
+=== The model names a value an attached file declares
+
+[,text]
+----
+`floor` is declared in an attached `examples for` file, which holds the rows, the fakes
+they run against and the values those rows name. A declaration of the model cannot name
+one: the module would not compile without that file, and a clause carrying the name
+travels to an importer that has no source for it.
+----
+
+Emitted where a declaration of the model reaches a value an attached file declares (<<an-attached-files-values-are-for-its-rows>>). Two things follow from naming one and either is enough: the module no longer compiles from its own source, because the name it writes is declared in a file of fixtures; and a `+data+`'s `+invariant+` or a `+behavior+`'s `+ensures+` is published as the text that was written (<<a-published-module-carries-what-it-says-it-declares>>), so an importer reads a clause spelling a name it has no source for.
+
+Said where the name is written, once for each occurrence, and the module is not emitted. The `+exposing+` list is reported at the module header, because a name in it is written nowhere else.
+
+What is not reported is the other direction. A row names such a value wherever the row is written — beside the values in the attached file, or inline in the model source — because the values join the module the rows join and a row is what the file is for. A `+fake+` names one as a row does, and one attached value names another. An attached value naming the model's own `+let+` is a fixture reading the model, which is what a fixture is.
+
+The fix is to declare the value in the module's own source. A value the model is written against is part of the model, and the attached file goes on reaching it from there.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

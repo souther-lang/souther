@@ -49,7 +49,8 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
         Resolve.Resolution answered = Resolve.resolving(parsed, SyntaxSymbols.of(parsed),
                 new Resolve.Values(
-                        new Resolve.Reachable(parsed.name(), helpers, Map.of(), java.util.Set.of(), true, Map.of()),
+                        new Resolve.Reachable(parsed.name(), helpers, Map.of(), java.util.Set.of(), true, Map.of(),
+                                java.util.Set.of()),
                         Resolve.Elsewhere.NONE));
         if (!answered.unresolved().isEmpty()) {
             throw answered.unresolved().get(0);

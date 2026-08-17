@@ -194,7 +194,11 @@ public final class AstBuilder {
                     if (!fn.params().isEmpty()) {
                         throw onlyExamples(n);
                     }
-                    values.add(fn);
+                    // Read as what this file wrote it as. Its values join the module its rows join,
+                    // so from here on it sits among the module's own definitions under one set of
+                    // names, and nothing about the definition would say which of the two files
+                    // wrote it. Everything that turns on that reads this.
+                    values.add(fn.asAnAttachedValue());
                 }
                 case IMPORT_DECL, DATA_DEF, BEHAVIOR_DEF -> throw onlyExamples(n);
                 default -> { /* ERROR nodes already reported */ }

@@ -1256,8 +1256,13 @@ public final class Analyzer {
         Compilation compilation = compileOf(graph);
         String module = moduleOf(compilation, graph, uri);
         List<CompletionItem> declared = declaredIn(root, module);
+        // Whether this document is an attached file, read off its own text rather than off the
+        // compile: what is offered while a document will not parse is the point of keeping the last
+        // answer, and a document held out of the compile still says which of the two it is on its
+        // first line.
+        boolean writesRows = root.child(SyntaxKind.EXAMPLES_FILE_HEADER).isPresent();
         List<CompletionItem> fromElsewhere =
-                elsewhere.of(compilation, uri, module, labelsOf(declared));
+                elsewhere.of(compilation, uri, module, labelsOf(declared), writesRows);
 
         LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
         int cursor = new LineIndex(text).offsetOf(pos.line(), pos.character());

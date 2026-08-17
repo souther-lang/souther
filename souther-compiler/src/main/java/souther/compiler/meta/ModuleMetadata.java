@@ -186,14 +186,14 @@ public final class ModuleMetadata {
         for (Hir.BehaviorDef b : resolved.behaviors()) {
             behaviorNames.add(b.name());
         }
-        // What may be carried is what this module's own source declares. The resolved module is
-        // wider than that: an `examples for` file's values join the module its rows join, and a
-        // companion file does not add to what the model compiles to — so a `let` only it declares
-        // has no source here to carry and is not the module's to publish.
+        // What may be carried is what the model declares. The resolved module is wider than that:
+        // an attached file's values join the module its rows join, and an attached file does not
+        // add to what the model compiles to — so a `let` only it declares has no source here to
+        // carry. Asked of the definition, which is where that is recorded: whether a slice of its
+        // text was kept is how the jar is written, and would answer this by accident.
         Map<String, Hir.FnDef> own = new LinkedHashMap<>();
         for (Hir.FnDef fn : resolved.fns()) {
-            if (HelperInliner.isHelperName(behaviorNames, fn.name())
-                    && slices.fns().containsKey(fn.name())) {
+            if (HelperInliner.isHelperName(behaviorNames, fn.name()) && fn.role().isTheModels()) {
                 own.put(fn.name(), fn);
             }
         }
