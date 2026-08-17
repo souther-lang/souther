@@ -59,6 +59,16 @@ class ACaseIsNotHalfDecidedTest {
     }
 
     @Test
+    void aCaseHoldsWhatItsNameHoldsHoweverItIsMade() {
+        // The factory derives it; the constructor is a second way in and is held to the same thing,
+        // or the rule would be one a caller can walk around by not using the factory.
+        assertThrows(IllegalArgumentException.class,
+                () -> new CaseSelector(TypeSymbol.primitive(Type.Prim.INT),
+                        new Refinement.Direct(Type.BOOL)),
+                "testing `Int`'s class and reading the value as `Bool` is not a case of anything");
+    }
+
+    @Test
     void anArmsBindingIsReadOffWhatItSelects() {
         CaseSelector present = CaseSelector.optionPresent(ELEMENT);
         assertEquals(present.refinement(), new Core.ResolvedPattern.Single(present).binding(),

@@ -30,6 +30,14 @@ public record CaseSelector(TypeSymbol name, Refinement refinement) {
         if (named(refinement) == null && (TypeSymbol.SOME.equals(name) || TypeSymbol.NONE.equals(name))) {
             throw new IllegalArgumentException("an optional's case is one of its own carriers: " + name);
         }
+        // A case whose carrier is the value holds what its name says it holds. The emitter reads the
+        // two apart — the name picks the class it tests, the held type says what the value is read
+        // as — so a pair that disagreed would test one class and read the value as something else.
+        if (refinement instanceof Refinement.Direct direct
+                && !java.util.Objects.equals(direct.bound(), heldBy(name))) {
+            throw new IllegalArgumentException("`" + name + "` holds " + heldBy(name)
+                    + ", which is not " + direct.bound());
+        }
     }
 
     /**
