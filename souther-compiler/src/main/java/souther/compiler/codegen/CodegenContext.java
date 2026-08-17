@@ -94,7 +94,7 @@ final class CodegenContext {
      * not the same answer as having decided there is no check.
      */
     EnsuresEnforcement ensuresCheckOf(ValueName.Behavior behavior) {
-        return EnsuresEnforcement.in(ensuresChecks, behavior);
+        return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
     }
 
     void setDischargeInvariants(Map<TypeSymbol, List<Hir.InvariantClause>> clauses) {

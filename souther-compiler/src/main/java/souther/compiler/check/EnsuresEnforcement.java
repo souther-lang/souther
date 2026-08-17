@@ -108,18 +108,32 @@ public sealed interface EnsuresEnforcement {
     }
 
     /**
-     * What {@code decided} says about {@code behavior}, and {@link NotDecidedHere} where it says
-     * nothing.
+     * What {@code decided} says about {@code behavior}, where {@code decided} is the compilation of
+     * {@code module}.
      *
-     * <p>The one place a miss is read. A table of this compilation's decisions holds one for every
-     * behavior this compilation declares, so a name it has nothing under is a name from somewhere
-     * else — and answering that with {@link NoContract} would be this table reporting, about a
-     * declaration it never read, the conclusion it reaches for declarations it did.
+     * <p>The one place a miss is read, and the two kinds of miss are not one answer.
+     * {@link NotDecidedHere} is for a behavior another module declared, which this compilation did
+     * not classify because classifying it needs an ownership model it has not got.
+     *
+     * <p>A behavior of {@code module} is another matter. This compilation decided about every one of
+     * its own — that is what building the table is — so a miss there is not an answer at all but a
+     * table that was not filled, and giving it the foreign answer would let a local behavior with a
+     * clause emit no check while reading as a boundary somebody had reasoned about. The whole point
+     * of there being four cases is that a combination nothing means cannot be written; a miss
+     * standing for two unlike things would put one back in by the side door.
      */
     static EnsuresEnforcement in(Map<ValueName.Behavior, EnsuresEnforcement> decided,
-                                 ValueName.Behavior behavior) {
+                                 String module, ValueName.Behavior behavior) {
         EnsuresEnforcement answered = decided.get(behavior);
-        return answered == null ? NotDecidedHere.INSTANCE : answered;
+        if (answered != null) {
+            return answered;
+        }
+        if (!behavior.module().equals(module)) {
+            return NotDecidedHere.INSTANCE;
+        }
+        throw new IllegalStateException(
+                "no enforcement decision for `" + behavior.name() + "`, which `" + module
+                        + "` declares");
     }
 
     /**

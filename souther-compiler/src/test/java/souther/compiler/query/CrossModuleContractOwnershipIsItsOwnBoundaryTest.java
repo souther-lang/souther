@@ -17,6 +17,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -90,7 +91,7 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
         byId.put("down.sou", CALLING);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         Output.Classes.Inputs in = Output.Classes.inputs(c.db(), "down");
-        return EnsuresEnforcement.in(in.checks(), about);
+        return EnsuresEnforcement.in(in.checks(), "down", about);
     }
 
     /**
@@ -117,6 +118,28 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
         Map<String, byte[]> classes = Compiler.compileModules(List.of(DECLARING, CALLING));
         assertEquals(0, checksOf(classes.get("down.Use$Impl"), "up/Fetch$Ensures"),
                 "and so emits nothing for it — which follows from the decision above");
+    }
+
+    /**
+     * A table with nothing under a name of its own is not an answer, and says so.
+     *
+     * <p>Written here because nothing in the suite reaches it: this compilation decides about every
+     * behavior it declares, so the state is one no input produces, and a mechanism whose data never
+     * takes that shape is a mechanism nothing has run. What it guards is a table that was not filled
+     * — a local behavior with a clause would otherwise take the foreign answer, emit no check, and
+     * read as a boundary somebody had reasoned about.
+     */
+    @Test
+    void aNameOfItsOwnWithNoDecisionIsNotAnAnswer() {
+        ValueName.Behavior ofItsOwn = new ValueName.Behavior("down", "use");
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> EnsuresEnforcement.in(Map.of(), "down", ofItsOwn));
+        assertTrue(thrown.getMessage().contains("use"), thrown.getMessage());
+
+        assertInstanceOf(EnsuresEnforcement.NotDecidedHere.class,
+                EnsuresEnforcement.in(Map.of(), "down", new ValueName.Behavior("up", "fetch")),
+                "the same empty table answers for a name from elsewhere, which is the difference");
     }
 
     /** A behavior of its own that states nothing is the other answer: decided, and there is no
