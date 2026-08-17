@@ -38,6 +38,7 @@ public final class SoutherJvmAbi {
             };
             case GeneratedClass.Ctfe c -> nameOf(c.of()).binaryName() + "$Ctfe";
             case GeneratedClass.ExampleFake f -> nameOf(f.of()).binaryName() + "$Fake";
+            case GeneratedClass.Ensures e -> nameOf(e.of()).binaryName() + "$Ensures";
             case GeneratedClass.ModuleDeclarations m -> m.module() + ".$Module";
             case GeneratedClass.Helpers h -> h.module() + ".$Fns";
             case GeneratedClass.Lambda l -> l.module() + ".$Fn" + l.id();

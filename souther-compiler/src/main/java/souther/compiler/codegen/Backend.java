@@ -14,7 +14,9 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Requirements;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Sig;
+import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeChecker;
@@ -67,6 +69,7 @@ public final class Backend {
     private final ValueClassGen value;
     /** The checker's elaborated bodies: what this emits from (issue #81). */
     private final Bodies.Elaborated checked;
+    private final EnsuresGen ensures;
 
     /**
      * Every fn {@code module} emits a method for: what its source declared, and what it took on to
@@ -90,6 +93,19 @@ public final class Backend {
         this.codec = new CodecGen(ctx);
         this.value = new ValueClassGen(ctx, codec);
         this.checked = checked;
+        this.ensures = new EnsuresGen(ctx);
+    }
+
+    /**
+     * Where {@code behavior}'s declared relation is checked.
+     *
+     * <p>Asked of the context, which is where the decision was put for the emitters to read. Kept
+     * here as well it would be one decision in two fields filled from one argument, and the whole
+     * point of there being one value is that there is one reading of it — a later change setting one
+     * and not the other is a check emitted in a place the other half disagrees with.
+     */
+    private EnsuresEnforcement checkOf(ValueName.Behavior behavior) {
+        return ctx.ensuresCheckOf(behavior);
     }
 
     /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
@@ -127,9 +143,10 @@ public final class Backend {
                                                Map<ValueName.Behavior, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
-                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
+                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<ValueName.Behavior, EnsuresEnforcement> checks) {
         return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, dischargeInvariants, Instrumentation.NONE);
+                requirements, checked, dischargeInvariants, checks, Instrumentation.NONE);
     }
 
     /**
@@ -154,10 +171,11 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
-                    calleeSigs, requirements, checked, dischargeInvariants, instrumentation);
+                    calleeSigs, requirements, checked, dischargeInvariants, checks, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -175,6 +193,7 @@ public final class Backend {
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
                                                   Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                                  Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Instrumentation instrumentation) {
         Map<String, List<GeneratedClass>> caseToSums = new HashMap<>();
         for (Hir.Def def : module.defs()) {
@@ -205,6 +224,7 @@ public final class Backend {
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers);
         ctx.setDischargeInvariants(dischargeInvariants);
+        ctx.setEnsuresChecks(checks);
         ctx.setCoveragePlan(instrumentation.coverage());
         ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
@@ -402,6 +422,17 @@ public final class Backend {
         Map<ValueName.Behavior, List<Hir.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Hir.BehaviorDef bd : module.behaviors()) {
             emitting(bd.written(), () -> {
+                // The class a declared relation is checked by, emitted by the module that declares
+                // it whichever of the two places the check is called from. A crossing is in the
+                // caller's bytecode and calls this one, so the rule has one home and a caller has
+                // nothing of it to restate.
+                ValueName.Behavior named = new ValueName.Behavior(module.name(), bd.name());
+                BehaviorContract contract = b.checkOf(named).contract();
+                if (contract != null) {
+                    out.put(new GeneratedClass.Ensures(
+                                    new GeneratedClass.BehaviorInterface(module.name(), bd.name())),
+                            b.ensures.generate(contract));
+                }
                 switch (bd) {
                     case Hir.SpecBehavior spec -> {
                         Hir.FnDef fn = fns.get(spec.name());
@@ -1094,6 +1125,20 @@ public final class Backend {
      * (spec §collections). A signature is admitted again when it is read back out of a jar, and an
      * older compiler asked about {@code Map<LoanDate, Int>} would refuse a declaration this one
      * publishes.
+     *
+     * <p>Version 16 widens what a behavior's published declaration may say: it may carry an
+     * {@code ensures}, relating what the behavior is given to what it answers. A signature is read
+     * back out of a jar as the text that was written, so a declaration this compiler publishes is
+     * one an older compiler's reader has no production for and refuses.
+     *
+     * <p>What that number does not cover, and does not need to: where such a clause is checked.
+     * Enforcement is not read back — a caller reaches an imported behavior through its signature and
+     * its class, and nothing it reads says which of the two places the check was emitted in. A jar
+     * published earlier in this same version carries clauses nothing runs, and one published now
+     * carries clauses its own module runs, and a reader of either reads the same declaration. It
+     * becomes a question the day a caller may assume a clause it did not check itself, and what has
+     * to be decided then is which jars an assumption may rest on — the version being one way to
+     * answer that, and this note being where the question was left.
      */
     public static final int BOUNDARY_VERSION = 16;
 
@@ -1160,12 +1205,23 @@ public final class Backend {
             applyParams[i] = CD_Object;
         }
         MethodTypeDesc mtdApply = MethodTypeDesc.of(CD_Object, applyParams);
+        // Where this behavior's declared relation is checked, decided before the emitter ran. Where
+        // it is checked here, the body moves under a name of its own and `apply` becomes the wrapper
+        // that runs it and then holds its answer to the contract — so every way in goes through the
+        // check, including the typed bridge a multi-input interface is satisfied by.
+        EnsuresEnforcement where = checkOf(new ValueName.Behavior(ctx.pkg, spec.name()));
+        String bodyMethod = where instanceof EnsuresEnforcement.AtTheCallee ? "apply$body" : "apply";
+        int bodyFlags = where instanceof EnsuresEnforcement.AtTheCallee
+                ? ClassFile.ACC_PRIVATE : ClassFile.ACC_PUBLIC;
         return build(cdB, cb -> {
             cb.withFlags(pub(spec.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // implements its public interface (which itself extends Behavior for a single-input one)
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
             emitInjection(cb, cdB, injected);
-            cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
+            if (where instanceof EnsuresEnforcement.AtTheCallee(BehaviorContract contract)) {
+                emitCheckingApply(cb, cdB, spec, contract, mtdApply, n);
+            }
+            cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
                 BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
                 // The one body a coverage plan is made from, so the one body whose arms are counted.
                 gen.armsAreCounted();
@@ -1194,6 +1250,61 @@ public final class Backend {
         });
     }
 
+
+    /**
+     * {@code apply}, where the behavior's own body is what has to be held to its declaration.
+     *
+     * <p>The body keeps its own method and this one calls it. Woven into the body instead, the check
+     * would go at each of the places a body returns by — and a body returns from inside a
+     * {@code match} arm, from either side of a guard, from a departure — so the one that was missed
+     * would be a path that answers without being held to anything, and nothing would say so.
+     *
+     * <p>What runs is the body, then the check, then the same value the body produced. The answer is
+     * saved as it came, and what the check is handed is a copy read back through
+     * {@link ResultBoundary#project}: the value the body produced is a member of the behavior's
+     * declared union, and a member this module did not declare is carried in a bridge case. A rule
+     * is written about the answer and not about how the boundary carries it, so it is read out of the
+     * carrier first and the saved value — the one the caller is owed — is what is returned.
+     *
+     * <p>Nothing about how the body runs changes. It is still an instance method of this class, so
+     * the injected dependencies it reads are the same fields it read before; it runs to completion
+     * before anything here looks at its answer, so nothing is reordered around it; and a behavior
+     * cannot call itself ({@link SpecChecker#checkBehaviorsDoNotRecurse}), so there is no path where
+     * this wrapper stands between a behavior and its own recursion.
+     */
+    private void emitCheckingApply(ClassBuilder cb, ClassDesc cdB, Hir.SpecBehavior spec,
+                                   BehaviorContract contract, MethodTypeDesc mtdApply, int n) {
+        ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
+                new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
+        List<TypeSymbol> bridged = ctx.bridgedMembers(successType(spec.ret()));
+        List<ClassDesc> checkParams = new ArrayList<>();
+        for (int i = 0; i <= n; i++) {
+            checkParams.add(CD_Object);
+        }
+        MethodTypeDesc mtdCheck =
+                MethodTypeDesc.of(ConstantDescs.CD_void, checkParams.toArray(new ClassDesc[0]));
+        cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
+            int answered = n + 1;    // this=0, the arguments are 1..n
+            int carrier = n + 2;
+            code.aload(0);
+            for (int i = 0; i < n; i++) {
+                code.aload(i + 1);
+            }
+            code.invokespecial(cdB, "apply$body", mtdApply);
+            code.astore(answered);
+            code.aload(answered);
+            ResultBoundary.project(code, ctx, new ValueName.Behavior(ctx.pkg, spec.name()),
+                    bridged, carrier);
+            code.astore(carrier);
+            for (int i = 0; i < n; i++) {
+                code.aload(i + 1);
+            }
+            code.aload(carrier);
+            code.invokestatic(cdEnsures, "check", mtdCheck);
+            code.aload(answered);
+            code.areturn();
+        });
+    }
 
     /**
      * A composition's own signature, worked out when the module's signatures were.
@@ -1360,6 +1471,7 @@ public final class Backend {
             }
             code.invokevirtual(cdBehavior(stage), "apply", desc);
             projectStage(code, stage, stageOut, slot);
+            checkStageAtCrossing(code, stage, arity, slot + 1);
             code.astore(1);
             return;
         }
@@ -1372,6 +1484,7 @@ public final class Backend {
         code.invokevirtual(ctx.cdBehaviorImpl(stage), "apply",
                 MethodTypeDesc.of(CD_Object, params));
         projectStage(code, stage, stageOut, slot);
+        checkStageAtCrossing(code, stage, arity, slot + 1);
         code.astore(1);
     }
 
@@ -1387,7 +1500,35 @@ public final class Backend {
         code.aload(1);
         code.invokeinterface(CD_Behavior, "apply", MTD_apply);
         projectStage(code, stage, stageOut, slot);
+        checkStageAtCrossing(code, stage, 1, slot + 1);
         code.astore(1);
+    }
+
+    /**
+     * Holds an injected stage's answer to what it declared, with the answer on the stack as the
+     * boxed carrier {@code projectStage} left it and its arguments still in the slots they came in.
+     *
+     * <p>A stage whose body this compiler emits holds itself where it answers, so nothing is emitted
+     * for it here — this is the same crossing a call from a body makes, at the place a pipeline
+     * makes it. Read before the running value is stored back, because storing it is what overwrites
+     * the argument a single-input stage was given.
+     */
+    private void checkStageAtCrossing(CodeBuilder code, ValueName.Behavior stage, int arity,
+                                      int carrier) {
+        if (!(ctx.ensuresCheckOf(stage) instanceof EnsuresEnforcement.AtEachCrossing)) {
+            return;
+        }
+        code.astore(carrier);
+        for (int i = 0; i < arity; i++) {
+            code.aload(i + 1);
+        }
+        code.aload(carrier);
+        ClassDesc[] params = new ClassDesc[arity + 1];
+        java.util.Arrays.fill(params, CD_Object);
+        code.invokestatic(ctx.cd(new GeneratedClass.Ensures(
+                        new GeneratedClass.BehaviorInterface(stage.module(), stage.name()))),
+                "check", MethodTypeDesc.of(ConstantDescs.CD_void, params));
+        code.aload(carrier);
     }
 
     /** A stage answered with a member of its own result union; the running value the next stage sees

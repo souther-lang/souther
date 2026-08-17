@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.EnsuresEnforcement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
@@ -70,6 +71,31 @@ final class CodegenContext {
      * rather than the settled form the rest of the backend emits from.
      */
     private Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants = Map.of();
+
+    /**
+     * Where each behavior's declared relation is checked, as it was decided before emission.
+     *
+     * <p>Set rather than worked out, for the reason it is a decision and not a pair of facts: the
+     * emitter is adding to a set of injected names while it runs, so a reader here would be reading
+     * that set at whatever point it happened to be at.
+     */
+    private Map<ValueName.Behavior, EnsuresEnforcement> ensuresChecks = Map.of();
+
+    void setEnsuresChecks(Map<ValueName.Behavior, EnsuresEnforcement> checks) {
+        this.ensuresChecks = Map.copyOf(checks);
+    }
+
+    /**
+     * What is being done about {@code behavior}'s clause.
+     *
+     * <p>{@link EnsuresEnforcement.NotDecidedHere} for a behavior another module declared, which the
+     * lookup answers rather than this: a table of this compilation's decisions holds one for every
+     * behavior it declares, so a name it has nothing under is a name from somewhere else — which is
+     * not the same answer as having decided there is no check.
+     */
+    EnsuresEnforcement ensuresCheckOf(ValueName.Behavior behavior) {
+        return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
+    }
 
     void setDischargeInvariants(Map<TypeSymbol, List<Hir.InvariantClause>> clauses) {
         this.dischargeInvariants = clauses;

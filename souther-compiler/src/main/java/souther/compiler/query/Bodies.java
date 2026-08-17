@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorChecker;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
@@ -301,6 +303,65 @@ public final class Bodies {
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * What each of a module's behaviors declares about its answer, by the name it is declared under.
+     *
+     * <p>The one reading of a module's {@code ensures} clauses. A clause is resolved, typed, and
+     * split into the cases the answer can be, and every reader of that wants the same split: the
+     * emitter that turns a rule into the check a violation is found by, the classification that says
+     * how much of it a caller can assume, the editor that shows that classification, and the analysis
+     * that assumes it at a call. Read once here, so none of them goes back to the declaration to work
+     * out what a case means or what the parameters are called.
+     *
+     * <p>A behavior declaring nothing is not here. Absence says it states nothing, which is what a
+     * reader asking "is there a check to emit" is asking; an empty contract would be a second way to
+     * say the same thing, and the two would have to be kept agreeing.
+     *
+     * <p>The reports are this answer's own. Reading a clause is what finds a clause that cannot be
+     * read, so the two arrive together — a caller that got the contracts and left the reports behind
+     * would hold a module's declarations while nothing said that one of them was refused. Nobody
+     * re-raises them: a reader asks for the contracts and what the reading found comes with them,
+     * which is why the reading is not repeated at the reader that happens to be first.
+     */
+    public record Contracts(String name) implements Key<Map<String, BehaviorContract>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, BehaviorContract>> compute(Db db) {
+            Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
+            Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
+            if (!lowering.present() || !scope.present() || !signatures.present()
+                    || !helpers.present()) {
+                return Answer.absent();
+            }
+            Map<String, BehaviorContract> contracts = new LinkedHashMap<>();
+            List<Report> reports = new ArrayList<>();
+            for (Hir.BehaviorDef behavior : lowering.value().settled().behaviors()) {
+                if (!(behavior instanceof Hir.SpecBehavior spec) || spec.ensures().isEmpty()) {
+                    continue;
+                }
+                // Behavior by behavior, and one that cannot be read leaves the rest readable. Two
+                // behaviors each carrying a wrong clause are two things for an author to fix, and a
+                // reading that stopped at the first would turn one build into two.
+                try {
+                    contracts.put(spec.name(), BehaviorChecker.contractOf(spec, name,
+                            signatures.value().get(spec.name()), scope.value(), helpers.value()));
+                } catch (Unanswerable _) {
+                    // Rests on something already reported where it went wrong. Said again here it
+                    // would be that one mistake seen from a second angle.
+                } catch (CompileException e) {
+                    reports.addAll(Report.of(e));
+                }
+            }
+            return Answer.of(Ordered.map(contracts), reports);
         }
     }
 
@@ -1370,7 +1431,13 @@ public final class Bodies {
             for (CompileException e : reported.errors()) {
                 reports.addAll(Report.of(e));
             }
-            boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty();
+            // What a behavior declares about its answer is read by its own key, which owns both the
+            // contracts and what reading them found. Asked here so that a module with a clause that
+            // cannot be read is a module that does not reach codegen: the reports are that key's and
+            // are not repeated, and what is read off them here is whether there was a refusal.
+            Answer<Map<String, BehaviorContract>> contracts = db.ask(new Contracts(name));
+            boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty()
+                    && contracts.present() && !contracts.hasError();
             Map<String, Core> helperBodies = new LinkedHashMap<>();
             reported.emittedHelpers().forEach((h, core) -> helperBodies.put(h, GrowingFold.rewrite(core)));
             return Answer.of(new Of(helperBodies, sound, reported.stopped()), reports);

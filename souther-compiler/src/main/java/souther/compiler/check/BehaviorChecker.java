@@ -32,7 +32,7 @@ import java.util.Set;
  * what case it applies to and what has to be so there, and every rule this refuses is a rule it
  * could not read that from.
  */
-final class BehaviorChecker {
+public final class BehaviorChecker {
 
     private BehaviorChecker() {}
 
@@ -45,7 +45,7 @@ final class BehaviorChecker {
      * {@code value} leaves every rule ambiguous about what it names, so reading the rules underneath
      * it would report one mistake as several.
      */
-    static BehaviorContract contractOf(Hir.SpecBehavior behavior, String module, Sig sig,
+    public static BehaviorContract contractOf(Hir.SpecBehavior behavior, String module, Sig sig,
                                        Symbols symbols, Map<String, Type> helpers) {
         ValueName.Behavior name = new ValueName.Behavior(module, behavior.name());
         if (sig == null) {

@@ -64,6 +64,8 @@ class SoutherJvmAbiTest {
         rows.add(new Object[] {new GeneratedClass.Ctfe(order), "shop.Order$Ctfe"});
         rows.add(new Object[] {new GeneratedClass.ExampleFake(
                 new GeneratedClass.BehaviorInterface("shop", "findOrder")), "shop.FindOrder$Fake"});
+        rows.add(new Object[] {new GeneratedClass.Ensures(
+                new GeneratedClass.BehaviorInterface("shop", "findOrder")), "shop.FindOrder$Ensures"});
 
         // What belongs to a module rather than to anything in it.
         rows.add(new Object[] {new GeneratedClass.ModuleDeclarations("shop"), "shop.$Module"});

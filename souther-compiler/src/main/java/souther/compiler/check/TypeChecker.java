@@ -406,15 +406,10 @@ public final class TypeChecker {
         if (sigs == null) {
             throw new Unanswerable(module.pos());
         }
-        for (Hir.BehaviorDef behavior : module.behaviors()) {
-            // A behavior declaring nothing about its answer is asked nothing. Reading it would want
-            // a signature this does not need for it, and one that could not be made is a mistake
-            // reported where it happened.
-            if (behavior instanceof Hir.SpecBehavior spec && !spec.ensures().isEmpty()) {
-                collect(errors, abandoned, () -> BehaviorChecker.contractOf(spec, module.name(),
-                        sigs.get(spec.name()), symbols, recursiveHelperFns));
-            }
-        }
+        // What a behavior declares about its answer is not read here. `Bodies.Contracts` owns that
+        // reading and the reports it produces, so a reader asks for the contracts and what the
+        // reading found comes with them. Read here as well, the same clause would be walked twice
+        // and whichever caller ran first would be the reason the diagnostics existed.
         // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1023).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
