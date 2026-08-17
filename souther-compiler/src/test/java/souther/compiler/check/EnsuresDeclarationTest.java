@@ -3,6 +3,9 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,10 +41,6 @@ class EnsuresDeclarationTest {
     void bothSurfaceFormsCompile() {
         assertDoesNotThrow(() -> Compiler.compile(SINGLE));
         assertDoesNotThrow(() -> Compiler.compile(SUM));
-    }
-
-    @Test void aClauseNamesTheAnswer() {
-        refused(SINGLE.replace("value == id", "id == id"), "E1616");
     }
 
     @Test void aClauseNamesAParameter() {
@@ -82,6 +81,112 @@ class EnsuresDeclarationTest {
                 behavior both = one >-> two
                     ensures value == id
                 """, "E1624");
+    }
+
+    /**
+     * An output written under a sum's own name has that sum's cases, so a clause names them. The
+     * cases came from the written return terms before, which read a named sum as one term and left
+     * the form with no way to write a clause at all: an arm was refused, and the armless form bound
+     * `value` to the sum, on which no field can be read.
+     */
+    @Test void anOutputWrittenAsASumHasItsCases() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module example.named
+
+                data Id = Int
+                data Found = { id: Id }
+                data Missing = { id: Id }
+                data Answer = Found | Missing
+
+                behavior find : (id: Id, tag: Id) -> Answer
+                    ensures Found | Missing -> value.id == id
+                """));
+    }
+
+    /**
+     * And a case of a case is not one of them. A caller opens `Failure` and only then what is inside
+     * it, so a clause naming what is inside is one the caller has no arm to assume it at — the same
+     * cases a `match` over this answer admits, and no others.
+     */
+    @Test void aCaseOfACaseIsNotAnOutputCase() {
+        refused("""
+                module example.nested
+
+                data Id = Int
+                data Found = { id: Id }
+                data Missing = { id: Id }
+                data Refused = { id: Id }
+                data Failure = Missing | Refused
+
+                behavior find : (id: Id, tag: Id) -> Found | Failure
+                    ensures Missing -> value.id == id
+                """, "E1619");
+    }
+
+    /** What `value` is read as comes from what the case holds, which for a primitive case is that
+     *  primitive and not a reference to a type of its name. */
+    @Test void aPrimitiveOutputCaseHoldsItsPrimitive() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module example.prim
+
+                data DivisionByZero = { of: Int }
+
+                behavior divide : (n: Int, d: Int) -> Int | DivisionByZero
+                    ensures Int -> value <= n
+                """));
+    }
+
+    /** Two rules that are each wrong are two things to fix, so both are said. Stopping at the first
+     *  turns one build into two. */
+    @Test void everyRuleThatIsWrongIsSaid() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module example.two
+
+                data Id = Int
+                data Found = { id: Id }
+                data Missing = { id: Id }
+                data Other = { id: Id }
+
+                behavior find : (id: Id, tag: Id) -> Found | Missing
+                    ensures first = Found -> value.id == id
+                    ensures second = Missing -> true
+                    ensures third = Other -> value.id == id
+                """));
+        assertEquals(2, e.diagnostics().size(), "the second names no input and the third names no case of the answer");
+        assertEquals(List.of("E1617", "E1619"),
+                e.diagnostics().stream().map(Diagnostic::code).sorted().toList());
+    }
+
+    /**
+     * An arm refers to the answer, so a rule whose predicate reads only inputs still states a
+     * relation: where the answer is `Missing`, the inputs stood so. Asking for the word `value`
+     * instead reads the text for the relation rather than the rule, and refuses a rule that states
+     * one.
+     */
+    @Test void anArmIsAReferenceToTheAnswer() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module example.guarded
+
+                data Id = Int
+                data Found = { id: Id }
+                data Missing = { id: Id }
+
+                behavior find : (id: Id, tag: Id) -> Found | Missing
+                    ensures Missing -> id == tag
+                """));
+    }
+
+    /** With no arm there is nothing else to refer to the answer by, so the predicate names it. */
+    @Test void anArmlessRuleNamesTheAnswer() {
+        refused(SINGLE.replace("value == id", "id == id"), "E1616");
+    }
+
+    /** A name nothing declares is reported where it is written, once. That it is therefore not an
+     *  output case is the same mistake from another angle, and is not said again. */
+    @Test void anArmNamingNothingIsSaidOnce() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(
+                SUM.replace("Found | Missing ->", "Nothing ->")));
+        assertEquals(List.of("E1023"), e.diagnostics().stream().map(Diagnostic::code).toList());
     }
 
     private static void refused(String source, String code) {

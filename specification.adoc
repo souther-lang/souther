@@ -2331,11 +2331,23 @@ behavior findTodo : (id: TodoId) -> Todo | NotFound
     ensures Todo | NotFound -> value.id == id
 ----
 
-The answer is named `+value+`. [[an-ensures-clause-names-the-answer]]Each arm expression MUST name `+value+`, and [[an-ensures-clause-names-a-parameter]]MUST name at least one parameter. A value-only property belongs on the answer type's invariant; a parameter-only property is a precondition and is modelled as ADR-0003 decides. [[a-behavior-with-a-clause-has-no-parameter-named-value]]A behavior carrying a clause MUST NOT have a parameter named `+value+`.
+The answer is named `+value+`.
 
-For a single output type the form is `+ensures [name =] expression+`. [[an-ensures-clause-over-a-single-type-names-no-arm]]It MUST name no output arm. For an anonymous sum output the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the behavior's output. Several cases MAY share an expression. A case no clause names carries no stated postcondition, and there is no wildcard arm.
+A rule states a relation, so it refers to both sides of one. [[an-ensures-clause-names-the-answer]]A rule MUST refer to the answer, which it does through the arm it is written under or through `+value+`; where it names no arm there is nothing else to refer to the answer by, so its expression MUST name `+value+`. [[an-ensures-clause-names-a-parameter]]And it MUST name at least one parameter. A property of the answer alone belongs on the answer type's invariant; a property of the inputs alone is a precondition and is modelled as ADR-0003 decides. [[a-behavior-with-a-clause-has-no-parameter-named-value]]A behavior carrying a clause MUST NOT have a parameter named `+value+`.
 
-A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are distinct within the behavior, and [[an-ensures-clause-name-is-not-underscore]]`+_+` is not a clause name. The expression fragment is the invariant fragment unchanged: it is total, constructs nothing and contains no `+unreachable+` (<<invariant-expressions>>).
+An arm is a reference to the answer, so `+ensures Missing -> id == tag+` states a relation: where the answer is `+Missing+`, the inputs stood so. Asking for the word `+value+` in every expression would read the text for the relation rather than the rule, and would refuse a rule that states one.
+
+What a rule refers to is not what it is about, and only the first is decided here. `+value == value && id > 0+` refers to the answer and says nothing about it, and an arm of an answer with one case holds of everything it answers. Telling those apart is a proof; what this rule holds is that a relation is written with both of its sides in it.
+
+An answer that can be more than one thing has cases, and they are the ones a `+match+` over that answer opens: the members of an anonymous sum, or the cases declared with a named one. A case of a case is not one of them — a caller opens the outer case and only then what is inside it — so a rule naming one would be a rule the caller has no arm to assume it at. What `+value+` is read as in an arm is what that case holds, which for a case named by a primitive (<<unmarked-output>>) is that primitive.
+
+Where the answer has cases the form is `+ensures [name =] Case { | Case } -> expression { | Case { | Case } -> expression }+`. [[an-ensures-clause-over-a-sum-names-arms]]Each expression MUST name one or more arms, and [[an-ensures-arm-is-an-output-case]]every named arm MUST be a case of the answer. Several cases MAY share an expression. Where the answer has none the form is `+ensures [name =] expression+`, and [[an-ensures-clause-over-a-single-type-names-no-arm]]it MUST name no arm. A case no rule names carries no stated postcondition, and there is no wildcard arm.
+
+A behavior MAY carry more than one `+ensures+`, and every rule of every one of them holds. Where the answer is a case, the rules whose arms name that case are the rules it is held to — all of them, and not the first — so writing two clauses and writing their rules under one are the same statement about the model. What differs is where a violation is reported: a clause is what a failure is reported by, and its name is what a reader is given. Where more than one does not hold, the first that does not is the one reported, as a data's clauses are (<<invariant-declaration>>).
+
+Cases may overlap. A data may be a case of two sums declared in its module, so one answer can be named by an arm of each, and both of their rules hold of it. This is what makes a rule's arms a statement rather than a dispatch: `+match+` takes the first arm that answers, which is a control-flow reading, and a declaration has no order to read.
+
+A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are distinct within the behavior, and [[an-ensures-clause-name-is-not-underscore]]`+_+` is not a clause name. Unlike a data's clause name, it names nothing a departure arm can be written for (<<attempt-departures>>) — an `+ensures+` has no such form — so a name here is read in the violation and nowhere else. The expression fragment is the invariant fragment unchanged: it is total, constructs nothing and contains no `+unreachable+` (<<invariant-expressions>>).
 
 [[a-composition-carries-no-ensures]]A `+>->+` composition MUST NOT carry `+ensures+`: it writes no parameter list whose names a clause could relate to its answer, and a stage's relation is not inferred as the composition's.
 
@@ -5222,7 +5234,7 @@ Reported at the `+let+` (<<an-implementing-let-takes-its-shape-from-the-behavior
 [#e1616]
 === An `ensures` clause does not name the answer
 
-Reported at the clause when an arm expression does not name `+value+` (<<an-ensures-clause-names-the-answer>>).
+Reported at the rule when it refers to the answer neither through an arm nor through `+value+` (<<an-ensures-clause-names-the-answer>>).
 
 [#e1617]
 === An `ensures` clause does not name a parameter

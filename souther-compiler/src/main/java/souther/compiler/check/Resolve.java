@@ -860,7 +860,11 @@ public final class Resolve {
             List<Hir.EnsuresArm> arms = new ArrayList<>();
             for (Ast.EnsuresArm arm : clause.arms()) {
                 Answered answer = bind(params, Ast.Binder.desugared("value", arm.pos()));
-                arms.add(new Hir.EnsuresArm(names(arm.cases()), expr(arm.expr(), answer.bound()),
+                // Resolved as the case names they are, through what a `match` arm reads them with.
+                // A case is not always a type name — `Int` stands as a case of `Int |
+                // DivisionByZero`, and an optional's two carriers name no type at all — so reading
+                // them as types admits a narrower set than the answer actually has cases.
+                arms.add(new Hir.EnsuresArm(caseNames(arm.cases()), expr(arm.expr(), answer.bound()),
                         arm.pos(), arm.region()));
             }
             out.add(new Hir.EnsuresClause(clause.name(), List.copyOf(arms),

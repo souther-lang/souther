@@ -481,7 +481,10 @@ public final class CstParser {
     private void ensuresArm() {
         start(SyntaxKind.ENSURES_ARM);
         qualifiedName();
-        while (at(SyntaxKind.PIPE) && atEnsuresArmCaseFrom(1)) {
+        // A pipe joins another case to this arm only where a case still stands before the arrow;
+        // where it does not, the pipe begins the next arm and `ensuresClause` takes it. Which of the
+        // two it is is one question, so it is one reading of the tokens ahead.
+        while (at(SyntaxKind.PIPE) && atEnsuresArmFrom(1)) {
             bump();
             qualifiedName();
         }
@@ -513,12 +516,6 @@ public final class CstParser {
             }
             i++;
         }
-    }
-
-    /** A pipe inside an arm joins another output case only when another case still precedes the
-     * arrow; otherwise it starts the next arm and is consumed by {@link #ensuresClause()}. */
-    private boolean atEnsuresArmCaseFrom(int offset) {
-        return atEnsuresArmFrom(offset);
     }
 
     private void paramList() {
