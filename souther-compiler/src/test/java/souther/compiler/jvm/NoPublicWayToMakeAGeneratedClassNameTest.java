@@ -79,7 +79,7 @@ class NoPublicWayToMakeAGeneratedClassNameTest {
      *  reader to notice the switch has no default. */
     @Test
     void everyGeneratedClassHasAName() {
-        assertEquals(12, kindsOf(GeneratedClass.class).size(),
+        assertEquals(13, kindsOf(GeneratedClass.class).size(),
                 "the kinds of class this compiler invents; changing this is changing the ABI");
     }
 

@@ -9,14 +9,17 @@ import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.WhereTheCheckIs;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.Instrumentation;
@@ -75,7 +78,8 @@ public final class Output {
                 Emissions emitted = Backend.generate(
                         shipped(in), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
-                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses());
+                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
+                        in.checks());
                 stamp(db, emitted);
                 return Answer.of(Ordered.map(emitted.byBinaryName()));
             } catch (CompileException e) {
@@ -118,6 +122,7 @@ public final class Output {
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<TypeSymbol, List<Hir.InvariantClause>> dischargeClauses,
+                      Map<ValueName.Behavior, WhereTheCheckIs> checks,
                       Set<String> rowMethods) {}
 
         static Inputs inputs(Db db, String name) {
@@ -141,16 +146,46 @@ public final class Output {
             // is written against the operations an author wrote — which the lowered module no longer has.
             Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
+            Answer<Map<String, BehaviorContract>> contracts = db.ask(new Bodies.Contracts(name));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
                     || !signatures.present() || !injected.present() || !callees.present()
-                    || !prepared.present() || !requirements.present() || !dischargeClauses.present()) {
+                    || !prepared.present() || !requirements.present() || !dischargeClauses.present()
+                    || !contracts.present()) {
                 return null;
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
                     prepared.value().importedFrom(), signatures.value(), imported.value(),
                     injected.value(),
                     callees.value(), requirements.value(), checked.value(), dischargeClauses.value(),
+                    checksOf(lowering.value().lowered(), injected.value(), contracts.value()),
                     Set.copyOf(prepared.value().operandMethods().values()));
+        }
+
+        /**
+         * Where each of this module's behaviors has its {@code ensures} checked.
+         *
+         * <p>Decided here and handed over, rather than left for the emitter to work out from the
+         * contracts and the injected set. The emitter goes on adding to a set of injected names — a
+         * behavior it gives a body to but reaches as a dependency joins it — so a reader arriving
+         * afterwards finds a bodied behavior among the injected ones. What the emitter is given is
+         * the decision, not the two facts it was made from, so there is nowhere for a second reading
+         * of either to disagree with this one.
+         *
+         * <p>{@link Requirements#injectedNames} is the set as the requirements pass answered it,
+         * which is the reading the decision is owed.
+         */
+        private static Map<ValueName.Behavior, WhereTheCheckIs> checksOf(
+                Hir.Module lowered, Set<ValueName.Behavior> importedInjected,
+                Map<String, BehaviorContract> contracts) {
+            Set<ValueName.Behavior> injected =
+                    Requirements.injectedNames(lowered, importedInjected);
+            Map<ValueName.Behavior, WhereTheCheckIs> checks = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : lowered.behaviors()) {
+                ValueName.Behavior named =
+                        new ValueName.Behavior(lowered.name(), behavior.name());
+                checks.put(named, WhereTheCheckIs.of(named, contracts, injected));
+            }
+            return Map.copyOf(checks);
         }
 
         /**
@@ -344,7 +379,7 @@ public final class Output {
                         in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
                         in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
-                        instrumentation);
+                        in.checks(), instrumentation);
                 Classes.stamp(db, name, emitted);
                 // The classes and what they implement, from the one emission that decided both.
                 return Answer.of(new EvaluationArtifact(Ordered.map(emitted.byBinaryName()),

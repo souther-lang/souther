@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.WhereTheCheckIs;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
@@ -70,6 +71,32 @@ final class CodegenContext {
      * rather than the settled form the rest of the backend emits from.
      */
     private Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants = Map.of();
+
+    /**
+     * Where each behavior's declared relation is checked, as it was decided before emission.
+     *
+     * <p>Set rather than worked out, for the reason it is a decision and not a pair of facts: the
+     * emitter is adding to a set of injected names while it runs, so a reader here would be reading
+     * that set at whatever point it happened to be at.
+     */
+    private Map<ValueName.Behavior, WhereTheCheckIs> ensuresChecks = Map.of();
+
+    void setEnsuresChecks(Map<ValueName.Behavior, WhereTheCheckIs> checks) {
+        this.ensuresChecks = Map.copyOf(checks);
+    }
+
+    /**
+     * Where {@code behavior}'s declared relation is checked.
+     *
+     * <p>{@code Nowhere} for a behavior nothing here decided about, which is every behavior another
+     * module declared. A clause of theirs is checked where their module says it is, and reaching it
+     * from here is a question about who owns a contract across a module boundary — which this
+     * compilation stage does not answer, and which answering by module name would be deciding it by
+     * a spelling.
+     */
+    WhereTheCheckIs ensuresCheckOf(ValueName.Behavior behavior) {
+        return ensuresChecks.getOrDefault(behavior, WhereTheCheckIs.Nowhere.INSTANCE);
+    }
 
     void setDischargeInvariants(Map<TypeSymbol, List<Hir.InvariantClause>> clauses) {
         this.dischargeInvariants = clauses;

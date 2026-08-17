@@ -20,6 +20,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
+import souther.compiler.check.WhereTheCheckIs;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
@@ -1557,6 +1558,13 @@ final class BodyGen {
         private void requiredCall(Core.Call call) {
             ValueName.Behavior callee = behaviorOf(call);
             Type success = reqSuccess.get(callee);
+            // An injected behavior's body is supplied from outside, so there is no `apply` of this
+            // compiler's to hold it to what it declared. The line is the one the Decoder draws: where
+            // an answer enters the domain. What the arguments were has to survive the call to be
+            // handed to the check, so they are put in slots first — the call consumes what it is
+            // pushed.
+            List<Integer> saved = ctx.ensuresCheckOf(callee) instanceof WhereTheCheckIs.AtEachCrossing
+                    ? new ArrayList<>() : null;
             if (ctx.isStandaloneRequired(callee)) {
                 // other than one input: the required behavior is its own base class, called with a
                 // typed invokevirtual apply(A,B,…); each arg is left as its declared param type
@@ -1567,9 +1575,11 @@ final class BodyGen {
                 for (Core arg : call.args()) {
                     Type at = genExpr(arg);
                     box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
+                    keepForTheCheck(saved);
                 }
                 code.invokevirtual(ctx.cdBehavior(callee), "apply", desc);
                 project(callee, success);
+                checkAtCrossing(callee, saved);
                 stackCast(success);
                 return;
             }
@@ -1577,9 +1587,53 @@ final class BodyGen {
             code.getfield(cdName, held.of(callee).fieldName(), CD_Behavior);
             Type at = genExpr(call.args().get(0));
             box(code, at);
+            keepForTheCheck(saved);
             code.invokeinterface(CD_Behavior, "apply", MTD_apply);
             project(callee, success);
+            checkAtCrossing(callee, saved);
             stackCast(success);
+        }
+
+        /** Keeps a copy of the boxed argument on the stack in a slot of its own, where a check is
+         *  going to want it after the call has consumed it. Does nothing where none is coming. */
+        private void keepForTheCheck(List<Integer> saved) {
+            if (saved == null) {
+                return;
+            }
+            int slot = slot(Type.NOTHING);
+            code.dup();
+            code.astore(slot);
+            saved.add(slot);
+        }
+
+        /**
+         * Holds an injected behavior's answer to what it declared, with the answer on the stack as
+         * the boxed carrier {@code project} left it.
+         *
+         * <p>Between the projection and the cast, which is where the value is a Souther value and is
+         * not yet the representation the code below runs on. A rule is written about the answer, so
+         * it is read after the boundary's carrier is off it and before a primitive is taken out of
+         * it.
+         */
+        private void checkAtCrossing(ValueName.Behavior callee, List<Integer> saved) {
+            if (saved == null) {
+                return;
+            }
+            int carrier = slot(Type.NOTHING);
+            code.astore(carrier);
+            for (int slot : saved) {
+                code.aload(slot);
+            }
+            code.aload(carrier);
+            List<ClassDesc> params = new ArrayList<>();
+            for (int i = 0; i <= saved.size(); i++) {
+                params.add(CD_Object);
+            }
+            code.invokestatic(ctx.cd(new GeneratedClass.Ensures(
+                            new GeneratedClass.BehaviorInterface(callee.module(), callee.name()))),
+                    "check",
+                    MethodTypeDesc.of(ConstantDescs.CD_void, params.toArray(new ClassDesc[0])));
+            code.aload(carrier);
         }
 
         /**

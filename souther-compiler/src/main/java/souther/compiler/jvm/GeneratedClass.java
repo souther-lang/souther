@@ -140,6 +140,25 @@ public sealed interface GeneratedClass {
         }
     }
 
+    /**
+     * The class carrying a behavior's declared relation as the check a violation is found by.
+     *
+     * <p>Its own class rather than a method on the behavior's interface or its {@code $Impl},
+     * because three callers reach it and one of them is in another module: the behavior's own
+     * {@code apply}, the crossing where an injected answer enters generated code, and a row
+     * validating a fixture through reflection. A static method on a class named from the behavior's
+     * interface is one address all three name the same way, and the interface is a name a module
+     * cannot declare anything else under.
+     *
+     * <p>Built from the interface for the reason {@link ExampleFake} is: a behavior with a body and
+     * an injected one are both under {@link BehaviorInterface}, so one key reaches either.
+     */
+    record Ensures(BehaviorInterface of) implements GeneratedClass {
+        public Ensures {
+            Require.derivedFrom(of);
+        }
+    }
+
     /** A synthetic class for an escaping lambda, numbered within the module that emits it. */
     record Lambda(String module, int id) implements GeneratedClass {
         public Lambda {
