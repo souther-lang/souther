@@ -396,7 +396,7 @@ public final class Prelude {
         return SyntaxSymbols.of(TypeSymbol.RUNTIME,
                 Registry.ofRead(Map.of(TypeSymbol.RUNTIME, new Registry.Declared<>(
                         declared, Registry.baseNames(m.exposing())))),
-                scope, Map.of());
+                Denoting.of(scope, Map.of()));
     }
 
     /** The runtime-backed declaration {@code name} denotes, or null when there is none. */

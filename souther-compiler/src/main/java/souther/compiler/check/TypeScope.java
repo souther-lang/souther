@@ -37,19 +37,19 @@ import java.util.Set;
 public final class TypeScope {
 
     private final String module;
-    /** What a bare name means here: this module\'s own definitions plus the imported ones. */
-    private final Map<String, Denotation> scope;
-    /** Each {@code import ... as} alias → the module it names. A module of the compilation is also
-     * a qualifier under its own name, which {@link #moduleOfQualifier} reads off the registry
-     * rather than listing here — listing it would mean naming every module up front. */
-    private final Map<String, String> aliases;
+    /** What a name written here means: this module\'s own definitions plus the imported ones, and
+     * what each {@code import ... as} alias reaches. Asked rather than held, for the reason
+     * {@link Denoting} gives.
+     *
+     * <p>Not every qualifier is an alias. A module of the compilation is one under its own name,
+     * which {@link #moduleOfQualifier} reads off the registry — listed here instead, a scope could
+     * not be built without naming every module of the compilation up front. */
+    private final Denoting names;
     private final Registry<?> registry;
 
-    TypeScope(String module, Map<String, Denotation> scope, Map<String, String> aliases,
-              Registry<?> registry) {
+    TypeScope(String module, Denoting names, Registry<?> registry) {
         this.module = module;
-        this.scope = scope;
-        this.aliases = aliases;
+        this.names = names;
         this.registry = registry;
     }
 
@@ -90,8 +90,8 @@ public final class TypeScope {
     private Denotation resolveSpelling(String written) {
         int dot = written.lastIndexOf('.');
         if (dot < 0) {
-            Denotation name = scope.get(written);
-            if (name != null) {
+            Denotation name = names.of(written);
+            if (!(name instanceof Denotation.NotInScope)) {
                 return name;
             }
             // The prelude's runtime-backed data is nameable everywhere, on the lowest rung: a
@@ -156,24 +156,24 @@ public final class TypeScope {
      * nothing wherever it was put.
      */
     public TypeReachName reach(TypeSymbol type) {
-        if (type.isPrimitive() || type.equals(scope.get(type.name()) instanceof Denotation.Denotes d
+        if (type.isPrimitive() || type.equals(names.of(type.name()) instanceof Denotation.Denotes d
                 ? d.type() : null)) {
             return new TypeReachName.Bare(type);
         }
         if (TypeSymbol.RUNTIME.equals(type.module())) {
             // Reached bare, and only while nothing else here is: the runtime namespace is not a
             // module a qualifier names, so a module declaring the spelling leaves it with no name.
-            return scope.containsKey(type.name()) ? new TypeReachName.Unnameable(type)
+            return inScope(type.name()) ? new TypeReachName.Unnameable(type)
                     : new TypeReachName.Bare(type);
         }
         if (!exposes(type.module(), type.name())) {
             return new TypeReachName.Unnameable(type);
         }
         String alias = null;
-        for (Map.Entry<String, String> each : aliases.entrySet()) {
-            if (each.getValue().equals(type.module())
-                    && (alias == null || each.getKey().compareTo(alias) < 0)) {
-                alias = each.getKey();
+        for (String each : names.aliases()) {
+            if (type.module().equals(names.moduleOfAlias(each))
+                    && (alias == null || each.compareTo(alias) < 0)) {
+                alias = each;
             }
         }
         return alias != null ? new TypeReachName.ViaAlias(alias, type)
@@ -210,7 +210,7 @@ public final class TypeScope {
      * when it names none. Used to tell "unknown module" apart from "unknown type in a known
      * module". */
     public String moduleOfQualifier(String qualifier) {
-        String alias = aliases.get(qualifier);
+        String alias = names.moduleOfAlias(qualifier);
         if (alias != null) {
             return alias;
         }
@@ -220,18 +220,18 @@ public final class TypeScope {
     /** Every qualifier a reference may carry here — what a "did you mean" may offer for one. */
     public Set<String> qualifiers() {
         Set<String> all = new LinkedHashSet<>(registry.moduleNames());
-        all.addAll(aliases.keySet());
+        all.addAll(names.aliases());
         return all;
     }
 
     /** Whether {@code name} is reachable here as a bare name. */
     public boolean inScope(String name) {
-        return scope.containsKey(name);
+        return !(names.of(name) instanceof Denotation.NotInScope);
     }
 
     /** The bare names reachable here — what a "did you mean" suggestion may offer. */
     public Set<String> namesInScope() {
-        return scope.keySet();
+        return names.spellings();
     }
 
     /**
@@ -244,11 +244,11 @@ public final class TypeScope {
      */
     public Map<String, TypeSymbol> denotedNames() {
         Map<String, TypeSymbol> named = new LinkedHashMap<>();
-        scope.forEach((spelling, denotation) -> {
-            if (denotation instanceof Denotation.Denotes d) {
+        for (String spelling : names.spellings()) {
+            if (names.of(spelling) instanceof Denotation.Denotes d) {
                 named.put(spelling, d.type());
             }
-        });
+        }
         return named;
     }
 

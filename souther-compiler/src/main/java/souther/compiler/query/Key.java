@@ -32,6 +32,12 @@ import java.util.List;
  * recomputed as often as it likes, and what the consumer reads stops at the cut.
  * {@link Bodies.CalleeSigsForBody} and {@link Names.Meanings} are the two.
  *
+ * <p>They meet again at a capability, and there the cut is not needed. A capability that reads this
+ * store is built inside a compute, so what it asks for is asked when the consumer reads it — a
+ * consumer that reads nothing has taken no dependency, and one that reads everything has taken the
+ * one it means. {@link souther.compiler.check.Denoting} is that for what a module's names mean, and
+ * it is why nothing had to decide which of them a body needs.
+ *
  * <p>The answer lives on the key rather than in a dispatch table somewhere, so one class is one
  * question: what it is, what it reads, and what it does when it cannot answer are in one place. A
  * key reaches everything else it needs by asking {@link Db}, which is what makes the read

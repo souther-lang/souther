@@ -23,15 +23,14 @@ public final class Symbols implements NameSense {
     private final TypeScope scope;
     private final Declarations<Hir.Def> declarations;
 
-    private Symbols(String module, Registry<Hir.Def> registry,
-                    Map<String, Denotation> names, Map<String, String> aliases) {
-        this.scope = new TypeScope(module, names, aliases, registry);
+    private Symbols(String module, Registry<Hir.Def> registry, Denoting names) {
+        this.scope = new TypeScope(module, names, registry);
         this.declarations = new Declarations<>(registry, Declarations.Vocabulary.ofLanguage());
     }
 
     /** No module at all — for signatures written over primitives and type variables only. */
     public static Symbols none() {
-        return new Symbols("", Registry.empty(), Map.of(), Map.of());
+        return new Symbols("", Registry.empty(), Denoting.NONE);
     }
 
     /**
@@ -57,18 +56,20 @@ public final class Symbols implements NameSense {
         return new Symbols(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
                         declared.declarations(), Registry.baseNames(m.exposing())))),
-                names, Map.of());
+                Denoting.of(names, Map.of()));
     }
 
     /** A module compiled over a registry that reads its declarations
      * however it likes — the form a query-backed compilation uses, where a module's definitions are
      * asked for one at a time rather than held in a map.
      *
-     * <p>Reached through {@link Scoping.Scoped#symbolsOver}, for the reason
-     * {@link SyntaxSymbols#of(String, Registry, Map, Map)} is. */
-    static Symbols of(String module, Registry<Hir.Def> registry,
-                      Map<String, Denotation> names, Map<String, String> aliases) {
-        return new Symbols(module, registry, names, Map.copyOf(aliases));
+     * <p>What names mean here arrives as a {@link Denoting} rather than as the table itself, for
+     * the reason that interface gives: a reader that fetched the table to build this would have
+     * depended on every name in the module before reading one of them. The three that are one
+     * assembly — the module, its meanings and its aliases — still arrive together, because a caller
+     * free to pair them itself could pair parts of two. */
+    public static Symbols of(String module, Registry<Hir.Def> registry, Denoting names) {
+        return new Symbols(module, registry, names);
     }
 
     /** What a name written here means. */

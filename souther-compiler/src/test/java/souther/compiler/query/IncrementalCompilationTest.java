@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -646,17 +647,17 @@ class IncrementalCompilationTest {
     }
 
     /**
-     * Known and not narrowed: declaring a type re-checks every body of the module. A body is checked
-     * in what the names of its module mean, and a type declaration is a spelling that means
-     * something there — so unlike a behavior, this really does change what every body reads.
+     * Declaring a type is none of the business of the bodies that do not write it. What a body is
+     * checked in is still everything its module's names mean — the scope is the module's, and no
+     * narrower — and what changed is when that is asked for: {@link souther.compiler.check.Denoting}
+     * is asked as the scope is read rather than fetched to build it, so a body whose check reads no
+     * meaning depends on none of them.
      *
-     * <p>What is left of issue #829, which is issue #835. Which of a module's meanings a body needs
-     * is a question about what a body's scope is rather than a table being read whole, and answering
-     * it here would settle that by accident. Written down so that narrowing it is a change that
-     * shows.
+     * <p>Issue #835, and what was left of #829. Measured before it was built: over this suite a body
+     * check reads a module's meanings once in 5446 checks, and that once is the report below.
      */
     @Test
-    void declaringADataRechecksTheBodiesBesideIt() {
+    void declaringADataDoesNotRecheckTheBodiesBesideIt() {
         Compilation c = stating();
         Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
 
@@ -666,8 +667,121 @@ class IncrementalCompilationTest {
                 """), Set.of());
         c.answerEverything();
 
-        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
-                "`Discount` is a spelling `caller` does not write, and it means something here");
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`Discount` is a spelling `caller` does not write");
+    }
+
+    /**
+     * And the other half of it. A body that writes the spelling is checked again, because what the
+     * spelling means is what changed — it meant nothing there and now denotes a declaration. The
+     * pair is what says the dependency was narrowed and not dropped: a cut carrying only the
+     * spellings that already resolved would leave this one alone and be wrong to.
+     */
+    @Test
+    void declaringADataRechecksTheBodyThatWritesItsSpelling() {
+        Compilation c = Compilation.ofDocuments(Map.of("orders.sou", STATING + """
+
+                behavior writing : (n: Amount) -> Amount
+                    constructs Amount
+                let writing (n) = Amount(Discount(n.value).value)
+                """), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertFalse(c.db().allReports().isEmpty(), "`Discount` denotes nothing to begin with");
+        Answer<?> writing = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing"));
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                data Discount = Int
+
+                behavior writing : (n: Amount) -> Amount
+                    constructs Amount
+                let writing (n) = Amount(Discount(n.value).value)
+                """), Set.of());
+        c.answerEverything();
+
+        assertNotSame(writing, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing")),
+                "`writing` names `Discount`, which meant nothing here and now denotes a declaration");
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "and `caller` beside it still does not write it");
+    }
+
+    /**
+     * A scope answers from what the module means now, however long the thing holding it has been
+     * held.
+     *
+     * <p>A scope is built inside the question that reads it and goes no further, which is the rule
+     * and not something a scope can check. What it can do is not depend on it: what a name means is
+     * asked of the store each time and the reading built over that answer is kept only while it is
+     * the answer, so a scope kept past its question is slower and not wrong. Held instead from the
+     * first read, it would answer from that read for as long as it lived, and whether that could be
+     * seen would be a fact about who kept a scope rather than one this module can be sure of.
+     *
+     * <p>So this test keeps one on purpose, which nothing in the compiler does.
+     */
+    @Test
+    void aScopeHeldPastTheQuestionItWasBuiltForStillAnswersFromWhatTheModuleMeansNow() {
+        Compilation c = stating();
+        Symbols held = Scopes.derived(c.db(), "shop.orders").value();
+        assertFalse(held.scope().inScope("Discount"), "nothing here is written that way yet");
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                data Discount = Int
+                """), Set.of());
+        c.answerEverything();
+
+        assertTrue(held.scope().inScope("Discount"),
+                "the same scope, asked again after the declaration arrived");
+    }
+
+    /** A body whose report offers the sum an arm's name does belong to (E1203). What that report
+     * says is worked out from every name in sight, so this is the one body check that reads what a
+     * module's names mean. */
+    private static final String OFFERING = """
+            module shop.offering exposing ( Out, run )
+
+            data A = { n: Int }
+            data B = { n: Int }
+            data Inner = A | B
+            data Q
+            data Outer = Inner | Q
+            data Out = { n: Int }
+
+            behavior run : (i: Inner) -> Out
+                constructs Out
+            let run (i) =
+                match i with
+                    | A { n } -> Out { n = n }
+                    | Q -> Out { n = 0 }
+            """;
+
+    /**
+     * The other side of {@link #declaringADataDoesNotRecheckTheBodiesBesideIt}, and what says the
+     * dependency was moved rather than dropped. This body's report names the sum `Q` is a case of,
+     * which is read off every name in sight — so declaring a type does change what this check
+     * answers, and the check depends on it because it read it.
+     *
+     * <p>Written as a pair with the one above because either alone is passed by a mistake. A
+     * dependency taken whenever a scope is built passes the first and not this one; a dependency
+     * dropped altogether passes this one and not the first — and nothing else here would see it,
+     * because what the report says is checked where reports are read and not where an edit is
+     * costed.
+     */
+    @Test
+    void declaringADataRechecksTheBodyWhoseReportIsReadOffEveryNameInSight() {
+        Compilation c = Compilation.ofDocuments(Map.of("offering.sou", OFFERING), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertFalse(c.db().allReports().isEmpty(), "`Q` is not a case of `Inner`, which is reported");
+        Answer<?> run = c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run"));
+
+        c.update(Map.of("offering.sou", OFFERING + "\ndata Discount = Int\n"), Set.of());
+        c.answerEverything();
+
+        assertNotSame(run, c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run")),
+                "what this body's report offers is read off every name in sight, `Discount` among "
+                        + "them");
     }
 
     /**

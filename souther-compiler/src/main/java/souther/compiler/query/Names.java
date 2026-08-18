@@ -7,6 +7,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationRefusals;
+import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
 import souther.compiler.check.Scoping;
@@ -406,9 +407,14 @@ public final class Names {
      *
      * <p>The cutoff every reader of a scope stops at. A module is assembled once and the assembly
      * holds more than this: the value namespace, a way of asking the modules around it a further
-     * question, and what its import lines could not do. A body is checked against none of those and
-     * against this, so declaring a behavior — which adds a value name and no type name — comes out
-     * here as the answer that was already there, and nothing that reads it runs again.
+     * question, and what its import lines could not do. A scope is built over none of those and over
+     * this, so declaring a behavior — which adds a value name and no type name — comes out here as
+     * the answer that was already there, and nothing that reads it runs again.
+     *
+     * <p>Who reads it is a second question, and not this one's. A scope asks for this the first time
+     * it is read rather than to be built ({@link souther.compiler.check.Denoting}), so a reader that
+     * reads no meaning has not asked — which is why declaring a type reaches the bodies that write
+     * its spelling and the reports read off every name in sight, and no others.
      */
     public record Meanings(String name) implements Key<Scoping.Meanings> {
         @Override
@@ -435,11 +441,101 @@ public final class Names {
      * a time, and is the finer dependency this hands out.
      */
     private static Answer<Symbols> symbols(Db db, String name, Registry<Hir.Def> registry) {
-        Answer<Scoping.Meanings> meanings = db.ask(new Meanings(name));
-        if (!meanings.present()) {
+        if (!db.ask(new HasScope(name)).value()) {
             return Answer.absent();
         }
-        return Answer.of(meanings.value().symbolsOver(registry));
+        return Answer.of(Symbols.of(name, registry, asked(db, name)));
+    }
+
+    /**
+     * Whether this compilation can assemble a scope for {@code name} — which is the only thing a
+     * reader of one has to be told before it reads it.
+     *
+     * <p>A question of its own because of what its answer is. Read off {@link ModuleScope}, whose
+     * answer moves whenever anything in the module is edited, and answered as a yes or a no, which
+     * does not: a reader that took the assembly to find out whether there was one would be told
+     * every edit to the module, and every reader of it in turn. What is left to ask for is what the
+     * names mean, and {@link Denoting} is where that is asked.
+     */
+    public record HasScope(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            return Answer.of(db.ask(new ModuleScope(name)).present());
+        }
+    }
+
+    /**
+     * What a module's names mean, asked of this store as a scope reads them.
+     *
+     * <p>The other half of what {@link #symbols} hands out, and the half issue #835 is about.
+     * Handing over the table meant asking {@link Meanings} to build a scope, so every reader of a
+     * scope depended on every name in the module before reading one of them — and what a body check
+     * reads of them is almost always nothing, because the names it is checked over were resolved a
+     * representation earlier and it reads the declarations they denote one at a time. Asked here, a
+     * body that reads no meaning depends on none of them, and the report that reads every name in
+     * sight depends on every name in sight, which is what it is about.
+     * {@code IncrementalCompilationTest} holds the pair.
+     *
+     * <p>Built where it is used and never kept, for the reason {@link Key} gives: it reads this
+     * store, so two of them are the same when the store is, which says where they came from and not
+     * what they say. The reads it makes land on whichever question was being answered when it made
+     * them.
+     *
+     * <p>The store is asked every time and not once. What is kept is the reading built over the
+     * answer, and it is kept only while the answer is the one it was built over — so a scope read
+     * after an edit answers from what the module means now, and one read many times while a single
+     * question is being answered builds the reading once. Fetched once instead, this would hold a
+     * snapshot for as long as it lived, and whether that could be read after an edit would be a
+     * fact about who kept a scope rather than one this can be sure of on its own.
+     *
+     * <p>Where this compilation has no such module, every spelling means nothing — the answer
+     * {@link Denoting#NONE} gives. Nothing reading a scope learns that a compilation can be missing
+     * a module, and nothing here has to hold an absence it would have to decide what to do with:
+     * {@link HasScope} is what a reader is told, before it has a scope at all.
+     */
+    private static Denoting asked(Db db, String module) {
+        return new Denoting() {
+            private Scoping.Meanings over;
+            private Denoting reading;
+
+            private Denoting read() {
+                Answer<Scoping.Meanings> meanings = db.ask(new Meanings(module));
+                Scoping.Meanings now = meanings.present() ? meanings.value() : null;
+                // The answer itself and not what it means: this is asking whether the reading in
+                // hand was built over what the store just handed over, which is a question about
+                // the two being the one object.
+                if (reading == null || now != over) {
+                    over = now;
+                    reading = now == null ? Denoting.NONE : now.denoting();
+                }
+                return reading;
+            }
+
+            @Override
+            public Denotation of(String spelling) {
+                return read().of(spelling);
+            }
+
+            @Override
+            public Set<String> spellings() {
+                return read().spellings();
+            }
+
+            @Override
+            public String moduleOfAlias(String alias) {
+                return read().moduleOfAlias(alias);
+            }
+
+            @Override
+            public Set<String> aliases() {
+                return read().aliases();
+            }
+        };
     }
 
     /** What names mean in a module over the declarations as resolution left them — what
@@ -456,11 +552,10 @@ public final class Names {
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
      * against. */
     static Answer<SyntaxSymbols> writtenSymbols(Db db, String name) {
-        Answer<Scoping.Meanings> meanings = db.ask(new Meanings(name));
-        if (!meanings.present()) {
+        if (!db.ask(new HasScope(name)).value()) {
             return Answer.absent();
         }
-        return Answer.of(meanings.value().writtenSymbols(writtenRegistry(db)));
+        return Answer.of(SyntaxSymbols.of(name, writtenRegistry(db), asked(db, name)));
     }
 
     /**
