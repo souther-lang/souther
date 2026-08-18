@@ -18,7 +18,6 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -173,18 +172,18 @@ final class EnsuresGen {
      * The cases an arm answers for, as the names they are declared under.
      *
      * <p>Its leaves, because that is what a written answer is one of: a union member may be a sum,
-     * and an arm naming that sum is about each of the cases it has. Empty for a carrier that is not
-     * a name a written answer can wear — an optional's, which is made by its own factory and named
-     * by neither of the two — and a rule guarded by one of those is decided nowhere but at the
-     * answer.
+     * and an arm naming that sum is about each of the cases it has. Read off the selector, which is
+     * what a selector is for — what a case means was settled where the arm was specialized, and
+     * working it back out of the name here would be a second answer to it.
+     *
+     * <p>Empty for a carrier that is not a case a written answer wears: an optional's, which is
+     * made by its own factory and named by neither of the two, and a carrier standing under no
+     * readable type. A rule guarded by one of those is decided nowhere but at the answer.
      */
     private Set<TypeSymbol> answersFor(CaseSelector selector) {
-        Type held = CaseSelector.heldBy(selector.name());
-        if (held == null) {
-            return Set.of();
-        }
-        Set<TypeSymbol> leaves = TypeOps.leafCases(held, ctx.symbols);
-        return leaves.isEmpty() ? new LinkedHashSet<>(List.of(selector.name())) : leaves;
+        return selector.refinement() instanceof Refinement.Direct(Type bound) && bound != null
+                ? TypeOps.leafCases(bound, ctx.symbols)
+                : Set.of();
     }
 
     /**

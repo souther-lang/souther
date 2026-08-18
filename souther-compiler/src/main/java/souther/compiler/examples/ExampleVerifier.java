@@ -1024,10 +1024,11 @@ public final class ExampleVerifier {
         // against an empty expected value — a wrong answer for a row that was right.
         FixtureReader.ExpectedValue expected;
         // What the row states of the answer, which is not always the answer. A bare case name
-        // asserts the arm; where that arm is a unit case the arm and the value are the same thing —
-        // there is one value of that type, so a row naming it has written the whole answer and not
-        // a name standing for values it did not write. Where the case carries fields the row has
-        // stated the case and nothing under it, which is weaker evidence and still evidence.
+        // asserts the arm, and whether that is also the answer is decided by whether the name
+        // determines a value: a unit case has one, so a row naming it has written the whole answer
+        // and not a name standing for values it did not write. Where the name determines none, the
+        // row has stated the case and nothing under it, which is weaker evidence and still
+        // evidence.
         Evidence evidence;
         try {
             TypeSymbol only = fixtures.caseOnly(row.expected());
