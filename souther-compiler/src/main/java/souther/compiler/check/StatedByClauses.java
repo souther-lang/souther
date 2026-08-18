@@ -115,7 +115,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
 
     StatedByClauses meet(StatedByClauses other) {
         return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered),
-                byValues.and(other.byValues), byOrder.and(other.byOrder));
+                byValues.both(other.byValues), byOrder.both(other.byOrder));
     }
 
     /**
@@ -152,8 +152,11 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
             OrderedIntervals<FactSubject> range = ordered.leaf(e, positive);
             Set<FactSubject> mentions = mentioned(e);
             return new StatedByClauses(said, range,
-                    Adoption.at(mentions, said.values().keySet()),
-                    Adoption.at(mentions, range.ranges().keySet()));
+                    // Each language says whether it gave up on the leaf. The reading of values
+                    // carries it; the reading of order has nothing to hand back but its ranges, and
+                    // a leaf it read leaves at least one.
+                    Adoption.at(mentions, said.values().keySet(), said.dropped()),
+                    Adoption.at(mentions, range.ranges().keySet(), range.ranges().isEmpty()));
         }
 
         /**
@@ -216,7 +219,8 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
                         values.either(one.values.leavingNothing(), other.values.leavingNothing()),
                         ordered.either(one.ordered.leavingNothing(),
                                 other.ordered.leavingNothing()),
-                        one.byValues.and(other.byValues), one.byOrder.and(other.byOrder));
+                        one.byValues.either(other.byValues),
+                        one.byOrder.either(other.byOrder));
             }
             // An alternative nobody can take says nothing about the positions, its unread rules
             // included — so what it missed leaves with it, the way its evidence does.
@@ -228,7 +232,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
             }
             return new StatedByClauses(values.either(one.values, other.values),
                     ordered.either(one.ordered, other.ordered),
-                    one.byValues.and(other.byValues), one.byOrder.and(other.byOrder));
+                    one.byValues.either(other.byValues), one.byOrder.either(other.byOrder));
         }
     }
 }

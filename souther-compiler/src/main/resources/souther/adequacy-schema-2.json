@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://souther-lang.org/schema/adequacy-1.json",
+  "$id": "https://souther-lang.org/schema/adequacy-2.json",
   "title": "Souther adequacy report",
   "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and something added since does not — a key added since is optional, and a word added to an enumerated field is one no earlier document carried, so a document written before either existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
   "type": "object",

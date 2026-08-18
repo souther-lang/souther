@@ -314,6 +314,26 @@ class EverySchemaWordIsAccountedForTest {
                         "properties", "read", "properties", "extent")));
     }
 
+    /**
+     * The three places this schema says which version it is agree.
+     *
+     * <p>Its name, the number a document carries, and the identifier a resolver keys on. They are
+     * edited in different places and one of them was left behind: a copy raised to 2 kept the
+     * `$id` of the first, so two schemas claimed one canonical name and a consumer holding a cache
+     * would be handed whichever it fetched first.
+     */
+    @Test
+    void theVersionIsTheSameInAllThreePlacesItIsWritten() {
+        assertEquals(AdequacyReport.SCHEMA_VERSION,
+                schema().get("properties").get("schemaVersion").get("const").asInt(),
+                "what a document carries is what this schema demands");
+        assertTrue(SCHEMA.endsWith("-" + AdequacyReport.SCHEMA_VERSION + ".json"),
+                "and the file is named for it: " + SCHEMA);
+        assertTrue(schema().get("$id").asString()
+                        .endsWith("adequacy-" + AdequacyReport.SCHEMA_VERSION + ".json"),
+                "and so is the identifier a resolver keys on: " + schema().get("$id"));
+    }
+
     /** Every enumerated field of the schema is either held above or named as the exception. */
     @Test
     void noEnumeratedFieldIsUnaccountedFor() {

@@ -200,6 +200,42 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     }
 
     /**
+     * A branch nothing read widens the positions the other branch spoke of, named there or not.
+     *
+     * <p>{@code x == 7 || f(y)} says nothing about {@code x}: a value satisfying the branch nothing
+     * could read owes the other one nothing, so what the clause leaves {@code x} is exactly what
+     * cannot be said here. The reading of values composes its own answer that way already
+     * ({@code AdmissibleValues.join}), and adoption is a projection of the same reading — a rule
+     * that widens one without widening the other reports a position as read on evidence the reading
+     * does not have.
+     *
+     * <p>Which makes a choice and a conjunction two operations rather than one. Under
+     * {@code x >= 1 && f(y)} the bound on {@code x} still holds, because all of it holds.
+     */
+    @Test
+    void aBranchNothingReadWidensWhatTheOtherSpokeOf() {
+        assertEquals(Set.of("x", "y"), unansweredAbout("x == 7 || Int.abs(y) >= 2"),
+                "neither position is one this clause was read at");
+        assertEquals(Set.of(), unansweredAbout("x == 7 || y == 2"),
+                "and a choice both branches were read at leaves nothing standing");
+        assertEquals(Set.of("y"), unansweredAbout("x >= 1 && Int.abs(y) >= 2"),
+                "while a conjunct nothing read leaves the one beside it saying what it said");
+    }
+
+    /** The positions of a two-field record that the clause written over them was not read at. */
+    private static Set<String> unansweredAbout(String clause) {
+        return accountingOf("""
+                module example.pair
+
+                data Pair = { x: Int, y: Int }
+                    invariant said = %s
+                """.formatted(clause), "Pair").values().stream()
+                .flatMap(each -> each.unaccounted().stream())
+                .map(owed -> owed.subject().path())
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
      * An alternative nothing read leaves the clause unread, and the connective does not decide it.
      *
      * <p>{@code value == 7 || Int.abs(value) >= 2} is read on the left and not on the right, and a

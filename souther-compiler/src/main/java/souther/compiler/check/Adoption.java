@@ -6,54 +6,100 @@ import java.util.Set;
 /**
  * Where one reading took a clause in, composed over the clause the way its state is.
  *
- * <p>Two sets and not one. A position a reading took in at one leaf and could not read at another is
- * a position it did not read the clause at: {@code value == 7 || Int.abs(value) >= 2} is read on the
- * left and not on the right, and a set of the leaves that succeeded says the clause was read. The
- * connectives are the clause's, so the same union holds under both of them — an alternative nothing
- * could read leaves the position as open as a conjunct nothing could read does, which is what
- * {@link souther.compiler.values.AdmissibleValues} already says of the values themselves.
+ * <p>The same algebra {@link souther.compiler.values.AdmissibleValues} composes its values by, and
+ * it has to be: what a reading may say about a position and where it took the clause in are two
+ * projections of one reading, and a rule that widens the first without widening the second is a
+ * position reported as read on evidence the reading itself does not have.
+ *
+ * <p>So the connectives are not one operation. Under a conjunction, a part nothing could read
+ * leaves the parts beside it saying what they said — {@code value >= 1 && f(value)} still bounds the
+ * value. Under a choice it does not: a value satisfying the branch nothing could read is under no
+ * obligation from the other, so {@code x == 7 || f(y)} says nothing about {@code x} either. That is
+ * why {@link #dropped} is here and why {@link #either} spoils across positions the unread branch
+ * never named — the same reason {@code AdmissibleValues.join} does.
  *
  * <p>Composed rather than collected. A set filled as the leaves go by is a fact about the walk and
  * not about the clause, and it cannot be undone by what a later branch failed to read.
  *
- * @param read   the positions a leaf of this clause was taken in at
- * @param missed the positions a leaf of it was about and could not be taken in at
+ * @param read    the positions a part of this clause was taken in at
+ * @param missed  the positions a part of it was about, or was widened by a part nothing read, and
+ *                so was not taken in at
+ * @param dropped whether a part of this clause went unread anywhere in it, which is what a choice
+ *                needs in order to know that a branch widened it. What that part was about is not
+ *                carried: a branch nothing could read widens the positions the other branch spoke
+ *                about whether or not it names them
  */
-record Adoption(Set<FactSubject> read, Set<FactSubject> missed) {
+record Adoption(Set<FactSubject> read, Set<FactSubject> missed, boolean dropped) {
 
-    private static final Adoption NOTHING = new Adoption(Set.of(), Set.of());
+    private static final Adoption NOTHING = new Adoption(Set.of(), Set.of(), false);
 
     Adoption {
         read = Set.copyOf(read);
         missed = Set.copyOf(missed);
     }
 
-    /** What a clause this reading has no word for comes to: it took nothing in and missed nothing,
-     *  since it was about nothing this reading names. */
+    /** What a clause this reading has no word for comes to. */
     static Adoption nothing() {
         return NOTHING;
     }
 
-    /** A leaf about {@code mentions}, of which this reading took {@code read} in. */
-    static Adoption at(Set<FactSubject> mentions, Set<FactSubject> read) {
+    /**
+     * One leaf: what it was about, what this reading produced of it, and whether it gave up on it.
+     *
+     * <p>{@code failed} is the reading's own, and not the emptiness of what it produced: a leaf
+     * about no position of this value produces nothing and is not a leaf a reading gave up on —
+     * though a reading that has no word for it did give up, which is what each of them says for
+     * itself.
+     */
+    static Adoption at(Set<FactSubject> mentions, Set<FactSubject> produced, boolean failed) {
         Set<FactSubject> missed = new LinkedHashSet<>(mentions);
-        missed.removeAll(read);
+        missed.removeAll(produced);
         Set<FactSubject> took = new LinkedHashSet<>(mentions);
-        took.retainAll(read);
-        return new Adoption(took, missed);
+        took.retainAll(produced);
+        return new Adoption(took, missed, failed);
     }
 
-    /** Both parts of one clause, whichever connective joined them. */
-    Adoption and(Adoption other) {
-        Set<FactSubject> both = new LinkedHashSet<>(read);
-        both.addAll(other.read);
-        Set<FactSubject> lost = new LinkedHashSet<>(missed);
-        lost.addAll(other.missed);
-        return new Adoption(both, lost);
+    /**
+     * Both parts holding at once.
+     *
+     * <p>Nothing spoils anything: a part nothing read leaves the parts beside it saying what they
+     * said, since all of them hold.
+     */
+    Adoption both(Adoption other) {
+        return new Adoption(union(read, other.read), union(missed, other.missed),
+                dropped || other.dropped);
+    }
+
+    /**
+     * Either part holding.
+     *
+     * <p>A branch nothing could read widens every position the other branch spoke about, named
+     * there or not: a value satisfying the unread branch owes the read one nothing. Read as a union
+     * of what the branches managed, {@code x == 7 || f(y)} said {@code x} had been read — and what
+     * the clause leaves {@code x} is exactly what nothing here can say.
+     */
+    Adoption either(Adoption other) {
+        Set<FactSubject> lost = union(missed, other.missed);
+        if (other.dropped) {
+            lost = union(lost, read);
+        }
+        if (dropped) {
+            lost = union(lost, other.read);
+        }
+        return new Adoption(union(read, other.read), lost, dropped || other.dropped);
     }
 
     /** Whether this reading took the whole of what the clause says about {@code position} in. */
     boolean took(FactSubject position) {
         return read.contains(position) && !missed.contains(position);
+    }
+
+    private static Set<FactSubject> union(Set<FactSubject> these, Set<FactSubject> those) {
+        if (those.isEmpty()) {
+            return these;
+        }
+        Set<FactSubject> out = new LinkedHashSet<>(these);
+        out.addAll(those);
+        return out;
     }
 }
