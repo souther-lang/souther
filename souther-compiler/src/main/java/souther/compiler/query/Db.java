@@ -45,16 +45,35 @@ import java.util.Set;
  * What would is for an example to depend on the classes it reaches rather than on all of them,
  * which is per-definition work and not here.
  *
- * <p>Which is one case of the rule the rest of them are cases of. A collection gathered per module
- * is an index, and a question asked per definition depends on the entries it reaches rather than on
- * the index. Read whole, an index hands the finer question the coarser one's identity: an edit
- * anywhere in the module — or in a module it imports — arrives as an edit to every definition in it,
- * and no test of what the compiler answers can see the difference. Keeping the index is fine, and
- * so is reading one to answer a question about a single entry — {@link Bodies.Stated} does exactly
- * that. What a per-definition question may not do is take the index as its own dependency.
- * {@link Bodies.ContractsForBody} is a body's contracts asked entry by entry. Checking a body still
- * reads its module's {@link Bodies.CalleeSigs} whole, so declaring a behavior re-checks every body
- * of the module; that is issue #829, and {@code IncrementalCompilationTest} pins it.
+ * <p>Two rules run through the rest of them, and an answer can break either one.
+ *
+ * <p>A node is a value. What {@code equals} says is what stops work, so an answer says what it
+ * means and not where it came from; an answer that never equals the one it replaces leaves nothing
+ * downstream of it ever kept, while every test of what the compiler says stays green. That rules
+ * out a kind of thing and not a missing method: an object that reads this store when it is asked —
+ * a registry, a scope over one, a loader — is the same as another when the store is, which is where
+ * it came from. Those are built inside a {@code compute} and used there, which is also what makes
+ * their reads land on the question being answered. {@link Names#derivedSymbols} is one, handed out
+ * and not kept, and {@code EquivalentDatabasesAnswerTheSameTest} is what says which answers still
+ * break the rule.
+ *
+ * <p>An edge is what its consumer means. A collection gathered per module is an index, and a
+ * question asked per definition depends on the entries it reaches rather than on the index. Read
+ * whole, an index hands the finer question the coarser one's identity: an edit anywhere in the
+ * module — or in a module it imports — arrives as an edit to every definition in it, and again no
+ * test of what the compiler answers can see the difference. Keeping the index is fine, and so is
+ * reading one to answer a question about a single entry — {@link Bodies.Stated} does exactly that.
+ * What a per-definition question may not do is take the index as its own dependency.
+ *
+ * <p>Which does not mean every producer has to be split. What the consumer reads has to stop where
+ * its meaning stops, and a key between the two is where that happens: the broad answer is
+ * recomputed as often as its own inputs move, and the cut is what the consumer depends on.
+ * {@link Names.Meanings} is what a module's names mean, cut from the whole assembly they are read
+ * off — so declaring a behavior, which adds a value name, stops there. {@link Bodies.CalleeSigsForBody}
+ * is the signatures one body names, cut from its module's index of everything callable in it.
+ * {@link Bodies.ContractsForBody} is a body's contracts asked entry by entry. A body is still
+ * checked in what all of its module's names mean, so declaring a type re-checks every body of the
+ * module; that is what is left of issue #829, and {@code IncrementalCompilationTest} pins it.
  *
  * <p>One store is one workspace over time, not one compile. It is not thread-safe and does not need
  * to be: the work inside a compile is a graph walk, not a set of independent jobs.

@@ -12,6 +12,26 @@ import java.util.List;
  * free — and a key holds only what identifies the question, never a compilation, a registry or a
  * position, because anything held here would be part of the question's identity.
  *
+ * <p>The answer is a value too, and for a reason of the same kind. An edit is absorbed by an answer
+ * coming out equal to the one it replaces, so what {@code equals} says here is the whole of what
+ * stops work: an answer that never equals its predecessor makes everything that read it run again
+ * for as long as the compilation lives, and no test of what the compiler says can see it. So an
+ * answer says what it is, not where it came from — two of them are equal when they mean the same
+ * thing, and a value that compares by identity or by which store built it is not one of these.
+ *
+ * <p>Which rules out a kind of thing rather than a missing method. An object that reads {@link Db}
+ * when it is asked — a registry, a scope over one, a loader — has no such equality to give: two of
+ * them are the same when the store is, which says where they came from. These are what a
+ * {@code compute} builds and uses while it runs, never what one answers with, and building one
+ * inside the compute that reads it is also what makes its reads land on the question being answered
+ * rather than on nothing. {@link Names#derivedSymbols} is one, handed out and not kept.
+ *
+ * <p>A question asked per definition depends on what it reaches and not on the index its module
+ * gathered, which {@link Db} states. Those two rules meet at a projection: a broad answer read
+ * whole, cut down to what one consumer means, is a key of its own — the coarse answer may be
+ * recomputed as often as it likes, and what the consumer reads stops at the cut.
+ * {@link Bodies.CalleeSigsForBody} and {@link Names.Meanings} are the two.
+ *
  * <p>The answer lives on the key rather than in a dispatch table somewhere, so one class is one
  * question: what it is, what it reads, and what it does when it cannot answer are in one place. A
  * key reaches everything else it needs by asking {@link Db}, which is what makes the read
