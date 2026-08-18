@@ -244,6 +244,186 @@ public final class ExampleVerifier {
     }
 
     /**
+     * The explicit entries of the first table faking {@code behavior}, read as values.
+     *
+     * <p>Three kinds of written thing are not entries, each for a reason ADR-0093 already gives, and
+     * two of them are settled before this looks. The {@code _} row states no input and is the table's
+     * fallback rather than one of its explicit rows. An explicit row shadowed by an earlier one
+     * stating the same arguments is never what dispatch picks, and #716 made the compiler refuse it
+     * (E1926), so what {@code Standins.explicit} holds is rows the fake can answer with.
+     *
+     * <p>The third is a whole table: a second {@code fake} written for a target that already has one
+     * never stands in for anything, and nothing refuses it. Running its entries would report
+     * disagreements about values the fake would never answer with — the mistake ADR-0093 was written
+     * to avoid, one level up from the row it was written about. So the first table for a target is
+     * the one read, which is the same rule the reading that produces E1919 keeps.
+     *
+     * <p>A {@code with dep = value} is not here at all. It states no input — what reaches the
+     * dependency is whatever the parent behavior computes — and is a fixture bound to the run of one
+     * row rather than a statement about the dependency.
+     */
+    List<StandinEntry> standinEntries(BoundExamples of, String behavior) {
+        Sig sig = sigs.get(behavior);
+        if (sig == null) {
+            return List.of();
+        }
+        Hir.Fake first = null;
+        souther.compiler.check.Prepared.FakeTable table = null;
+        for (souther.compiler.check.Prepared.FakeTable written : module.fakes()) {
+            if (written.target().equals(behavior)) {
+                first = written.read();
+                table = written;
+                break;
+            }
+        }
+        if (first == null) {
+            return List.of();
+        }
+        FixtureReader fixtures = newFixtureReader();
+        ExampleStatements.BuiltTable built = ExampleStatements.standins(fixtures, first, sig.ins(),
+                sig.out(), new ArrayList<>());
+        if (built == null) {
+            return List.of();   // a table with a row that will not build stands in with nothing
+        }
+        List<StandinEntry> entries = new ArrayList<>();
+        List<StatedRow> rows = recordedRowsOf(of, behavior, fixtures, sig);
+        for (ExampleStatements.Standin entry : built.standins().explicit()) {
+            List<ObservedValue> inputs = new ArrayList<>();
+            List<String> shownInputs = new ArrayList<>();
+            for (int i = 0; i < entry.arguments().length; i++) {
+                inputs.add(fixtures.observed(entry.arguments()[i]));
+                shownInputs.add(fixtures.shown(fixtures.structured(entry.arguments()[i]),
+                        sig.ins().get(i).type()));
+            }
+            List<RecordedRow> alsoBy = new ArrayList<>();
+            for (StatedRow stated : rows) {
+                if (statesTheSame(stated.arguments(), entry.arguments())) {
+                    alsoBy.add(stated.handle());
+                }
+            }
+            entries.add(new StandinEntry(of, behavior, table, entry.row(), inputs,
+                    fixtures.observed(entry.answer().value()), shownInputs,
+                    fixtures.shown(fixtures.structured(entry.answer().value()), sig.outputType()),
+                    alsoBy));
+        }
+        return entries;
+    }
+
+    /** A recorded row and the arguments it states, read without running it. */
+    private record StatedRow(RecordedRow handle, Object[] arguments) {}
+
+    /**
+     * The behavior's recorded rows whose inputs could be read, each with what it states.
+     *
+     * <p>A row that will not build states nothing, and it is reported as the input error it is where
+     * the row is evaluated; read otherwise here than there it would be associated with an entry on an
+     * assertion the model itself refuses.
+     */
+    private List<StatedRow> recordedRowsOf(BoundExamples of, String behavior,
+                                           FixtureReader fixtures, Sig sig) {
+        List<StatedRow> found = new ArrayList<>();
+        for (souther.compiler.check.Prepared.Rows block : module.examples()) {
+            Hir.Example written = block.read();
+            if (!written.target().equals(behavior)) {
+                continue;
+            }
+            for (Hir.ExampleRow row : written.rows()) {
+                if (row.inputs().size() != sig.ins().size()) {
+                    continue;
+                }
+                Object[] args = new Object[sig.ins().size()];
+                boolean read = true;
+                for (int i = 0; i < args.length && read; i++) {
+                    try {
+                        args[i] = fixtures.built(row.inputs().get(i), sig.ins().get(i));
+                    } catch (FixtureException _) {
+                        read = false;
+                    }
+                }
+                if (read) {
+                    found.add(new StatedRow(new RecordedRow(of, behavior, row), args));
+                }
+            }
+        }
+        return found;
+    }
+
+    /** The equality fake dispatch already keys on, asked of two statements of one input. */
+    private static boolean statesTheSame(Object[] a, Object[] b) {
+        if (a.length != b.length) {
+            return false;
+        }
+        for (int i = 0; i < a.length; i++) {
+            if (!souther.runtime.Values.equal(a[i], b[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * What the answerer answers for {@code entry}'s input, held to what the entry states.
+     *
+     * <p>{@code observe} and not a second {@code evaluate}: one adjudicates an obligation and this
+     * relates two answers, and spelling them apart keeps a consumer from sliding a fake entry into
+     * the row default by accident.
+     *
+     * <p>Dispatch is not re-asked whether the entry is the row that answers its own inputs. #716
+     * holds exactly that, and re-checking it here would make this a second checker of an invariant
+     * that already has one.
+     */
+    StandinObservation observe(String behavior, StandinEntry entry) {
+        Sig sig = sigs.get(behavior);
+        ExampleTarget target = targetOf(behavior);
+        if (sig == null || target == null) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.TheEntryWasNotRead(
+                            "`" + behavior + "` has nothing to apply its inputs to"));
+        }
+        if (!(target.answer() instanceof Answerer.Answer.Something applies)) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.TheImplementationWasNotReached(
+                            "nothing this run was given applies `" + behavior + "`"));
+        }
+        FixtureReader fixtures = newFixtureReader();
+        Object[] args;
+        Asserted stated;
+        try {
+            args = new Object[sig.ins().size()];
+            for (int i = 0; i < args.length; i++) {
+                args[i] = fixtures.built(entry.written().inputs().get(i), sig.ins().get(i));
+            }
+            stated = fixtures.assertedExpected(entry.written().output(), sig.out()).asserted();
+        } catch (FixtureException fe) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.TheEntryWasNotRead(
+                            String.valueOf(fe.getMessage())));
+        }
+        Object answered;
+        try {
+            answered = applies.applying(List.of())
+                    .to(handed(fixtures, target, args, sig.ins()));
+        } catch (InvocationFailure f) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.TheInvocationAborted(
+                            String.valueOf(f.getCause())));
+        } catch (ImplementationNotReached | StandinNotBuilt e) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.TheImplementationWasNotReached(
+                            String.valueOf(e.getMessage())));
+        } catch (FixtureException fe) {
+            return new StandinObservation.Unobserved(
+                    new StandinObservation.Reason.AValueCouldNotCross(
+                            String.valueOf(fe.getMessage())));
+        }
+        answered = projected(answered, sig.outputType());
+        ValueMatch.Mismatch differs = fixtures.disagreement(stated, answered, sig.outputType());
+        return differs == null ? new StandinObservation.AsStated()
+                : new StandinObservation.OtherThanStated(entry.stated(),
+                        fixtures.observed(answered), differs.path());
+    }
+
+    /**
      * What a measure loses when a row ends undecided, read off what stopped the row.
      *
      * <p>The two vocabularies are kept apart here and joined nowhere else. What stopped a row is a

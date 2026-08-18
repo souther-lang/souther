@@ -101,4 +101,33 @@ public final class BoundExamples {
     public List<String> boundBehaviors() {
         return bound;
     }
+
+    /**
+     * The explicit entries of the tables faking the bound behaviors.
+     *
+     * <p>Each is an input and an answer in the same form a recorded row is, written for some other
+     * behavior's sake and held to nothing until now. Nothing new is written to run them.
+     */
+    public List<StandinEntry> standinEntries() {
+        List<StandinEntry> found = new ArrayList<>();
+        for (String behavior : bound) {
+            found.addAll(verifier.standinEntries(this, behavior));
+        }
+        return found;
+    }
+
+    /**
+     * What the implementation answered for {@code entry}'s input, held to what the entry states.
+     *
+     * <p>Enumerated and observed one at a time, as rows are and for the same reason: what the
+     * implementation answers comes out of world state the caller arranges between calls. The same
+     * entry may be observed under as many worlds as they like and nothing is retained between calls —
+     * two different answers are two observations, not a contradiction.
+     */
+    public StandinObservation observe(StandinEntry entry) {
+        if (entry == null || entry.enumeratedBy() != this) {
+            throw new IllegalArgumentException("an entry belongs to the enumeration that made it");
+        }
+        return verifier.observe(entry.behavior(), entry);
+    }
 }
