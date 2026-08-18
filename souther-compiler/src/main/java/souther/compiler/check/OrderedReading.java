@@ -56,21 +56,15 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
     /** What each position's values are ordered on, for the positions that are ordered at all. */
     private final Map<FactSubject, OrderScale> scales;
 
-    /** Where this reading took a leaf in, filled as it takes them — see {@link AdmissibleReading}'s
-     * field of the same name. */
-    private final java.util.Set<FactSubject> adopted;
-
-    private OrderedReading(Terms terms, Denotations at, Map<FactSubject, OrderScale> scales,
-                           java.util.Set<FactSubject> adopted) {
+    private OrderedReading(Terms terms, Denotations at, Map<FactSubject, OrderScale> scales) {
         this.terms = terms;
         this.at = at;
         this.scales = scales;
-        this.adopted = adopted;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
     static OrderedReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                             Symbols symbols, java.util.Set<FactSubject> adopted) {
+                             Symbols symbols) {
         Map<FactSubject, OrderScale> scales = new LinkedHashMap<>();
         byName.forEach((name, type) -> {
             OrderScale scale = OrderScale.ofValue(type, symbols);
@@ -78,7 +72,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
                 scales.put(name, scale);
             }
         });
-        return new OrderedReading(terms, at, scales, adopted);
+        return new OrderedReading(terms, at, scales);
     }
 
     @Override
@@ -159,9 +153,8 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
      * every answer rather than something applied once at the end. A reader adding a second such
      * place has to remember the extent; this one cannot forget it.
      */
-    private OrderedIntervals<FactSubject> leaves(FactSubject position, OrderScale scale,
-                                                 OrderedInterval range) {
-        adopted.add(position);
+    private static OrderedIntervals<FactSubject> leaves(FactSubject position, OrderScale scale,
+                                                       OrderedInterval range) {
         return OrderedIntervals.at(position, scale.extent().meet(range));
     }
 

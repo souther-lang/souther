@@ -200,6 +200,27 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     }
 
     /**
+     * An alternative nothing read leaves the clause unread, and the connective does not decide it.
+     *
+     * <p>{@code value == 7 || Int.abs(value) >= 2} is read on the left and not on the right, and a
+     * position the clause was read at on one branch is not a position the clause was read at. The
+     * conjunction was already right — a clause is taken apart a conjunct at a time — so a set of the
+     * branches that succeeded made correctness turn on which connective was written.
+     *
+     * <p>The two languages are two accounts, and either will do. {@code value == 7 || value >= 5} is
+     * a comparison the reading of values has no word for beside one it does, and the reading of
+     * order has both — so the clause is read, and asking for one language to have all of it would
+     * report a model that was read.
+     */
+    @Test
+    void anAlternativeNothingReadLeavesTheClauseUnread() {
+        assertFalse(answered("value == 7 || Int.abs(value) >= 2"),
+                "read on one branch is not read");
+        assertTrue(answered("value == 7 || value >= 5"),
+                "and one language having the whole of it is enough");
+    }
+
+    /**
      * A clause half of which nothing read is a clause nothing read.
      *
      * <p>A conjunction is one rule the author wrote and is read a conjunct at a time, so the

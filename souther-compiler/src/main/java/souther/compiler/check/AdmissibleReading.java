@@ -43,25 +43,19 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
      * values an integer has, and the reading that asked the carrier had no word for the first. */
     private final Map<FactSubject, Type> byName;
     private final Symbols symbols;
-    /** Where this reading took a leaf in, filled as it takes them. Said here because this is the
-     * only thing that knows: what it ends up leaving a position is a different fact, and a caller
-     * reading adoption off that calls a clause it read whole unread wherever it narrowed nothing —
-     * `value == 5 || value /= 5` is every value there is and was read perfectly. */
-    private final Set<FactSubject> adopted;
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                              Symbols symbols, Set<FactSubject> adopted) {
+                              Symbols symbols) {
         this.terms = terms;
         this.at = at;
         this.byName = byName;
         this.symbols = symbols;
-        this.adopted = adopted;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
     static AdmissibleReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
-                                Symbols symbols, Set<FactSubject> adopted) {
-        return new AdmissibleReading(terms, at, byName, symbols, adopted);
+                                Symbols symbols) {
+        return new AdmissibleReading(terms, at, byName, symbols);
     }
 
     @Override
@@ -139,11 +133,7 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
         FactSubject position = positionIn(where);
         Type type = position == null ? null : byName.get(position);
         Value value = type == null ? null : valueOf(what);
-        if (value == null) {
-            return null;
-        }
-        adopted.add(position);
-        return AdmissibleValues.at(position, admits(value, states, type));
+        return value == null ? null : AdmissibleValues.at(position, admits(value, states, type));
     }
 
     /** The position {@code e} is, or null where it is not one of the positions being read for. */

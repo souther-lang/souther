@@ -260,10 +260,12 @@ public final class InputDomain {
                 // short of a position's rules is that reading's business, and a rule another
                 // reading took in is not a rule left unread.
                 placed.unanswered(path),
-                // And whether the rules were reached at all, which the reading of values is the one
-                // thing that knows. No question is raised where nothing was seen, so an empty list
-                // beside it would say every rule was accounted for.
-                admitted.whyPartial() == souther.compiler.values.UnreadReason.NOT_REACHED,
+                // And whether the rules were reached at all, asked of the gathering that knows.
+                // No question is raised where nothing was seen, so an empty list beside it would
+                // say every rule was accounted for. Read off the reading's own reason instead, a
+                // position carrying both a rule it could not read and a subtree it never entered
+                // answered with the first and lost the second.
+                !placed.everyRuleReachedAt(path),
                 structure);
     }
 

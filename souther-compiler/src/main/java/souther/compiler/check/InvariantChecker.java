@@ -585,9 +585,9 @@ public final class InvariantChecker {
             // everything before it. Recorded per clause because that is the granularity a question
             // has: a clause the readings took in whole sat beside one they could not, and the
             // position-wide account said both had gone unread.
-            StatedByClauses.Reading one =
-                    StatedByClauses.readingOf(c.terms, at, positions, symbols);
-            stated = stated.meet(one.read(each.clause(), true));
+            StatedByClauses one = StatedByClauses
+                    .readingOf(c.terms, at, positions, symbols).read(each.clause(), true);
+            stated = stated.meet(one);
             one.adopted().forEach(position -> took.record(each.from(), position));
         }
         ConstraintState constraints = k.constraints()

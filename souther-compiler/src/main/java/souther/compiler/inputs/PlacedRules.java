@@ -86,6 +86,18 @@ record PlacedRules(TypeSymbol value, Rules rules) {
         return List.copyOf(out);
     }
 
+    /**
+     * Whether the gathering reached every rule written about the position at {@code path}.
+     *
+     * <p>Asked of the gathering, which is what knows. A position can carry both a rule that arrived
+     * and could not be read and a subtree the walk never entered, and what a reading came back
+     * short of has one slot to answer in — so reach read off {@link #admits} is lost wherever
+     * another reason won it.
+     */
+    boolean everyRuleReachedAt(TermPath path) {
+        return rules.everyRuleReachedAt(String.join(".", path.fields()));
+    }
+
     /** The ends the clauses reaching this value place on the coordinates at {@code path}, which is
      *  a different question from what {@link #at} leaves them. */
     List<FieldDomains.Placed> placedAt(TermPath path) {

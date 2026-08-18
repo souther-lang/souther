@@ -124,6 +124,52 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
                 "and an empty list is a position with nothing standing, which is the other state");
     }
 
+    /** Two positions of one value, one with a rule nothing took in and one with rules out of
+     *  sight. */
+    private static final String BOTH_FACTS = """
+            module m
+
+            data Inner = String
+                invariant String.length(value) >= 1
+
+            data R = { n: Int, deep: Inner? }
+                invariant odd = n * n >= 4
+
+            data Ok = { at: Int }
+
+            behavior f : (r: R) -> Ok
+                constructs Ok
+
+            let f (r) = if r.n >= 5 then Ok { at = 1 } else Ok { at = 2 }
+            """;
+
+    /**
+     * The two facts are independent, and a position carries the one that is true of it.
+     *
+     * <p>They were arms of one type, which said they could not both be so. Nothing grounds that:
+     * what a reading could not read and what a walk never reached are different facts about
+     * different rules, and here they fall at two positions of one value. Whether one position can
+     * carry both is not shown by this — the model and the schema allow it, and no input is known
+     * that produces it.
+     */
+    @Test
+    void aRuleNothingTookInAndRulesOutOfSightAreIndependent() {
+        Compilation compilation = Compilation.ofSource(BOTH_FACTS, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        JsonNode axes = JSON.readTree(
+                        AdequacyReport.of(compilation).json(SourceNameResolver.identity()))
+                .get("modules").get(0).get("behaviors").get(0).get("partition").get("axes");
+
+        JsonNode number = axes.get(0).get("read");
+        assertEquals(1, number.get("unanswered").size(), number.toString());
+        assertFalse(number.has("rulesNotReached"), number.toString());
+
+        JsonNode held = axes.get(1).get("read");
+        assertTrue(held.get("rulesNotReached").asBoolean(), held.toString());
+        assertFalse(held.has("unanswered"), held.toString());
+    }
+
     /** Nothing standing: `complete`, and neither key. */
     @Test
     void aPositionWithNothingStandingIsCompleteAndCarriesNeitherKey() {

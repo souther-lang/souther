@@ -5,8 +5,10 @@ import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What the clauses of one value say, in each of the languages a clause is read in.
@@ -32,11 +34,33 @@ import java.util.Map;
  * A branch impossible only by an arithmetic relation between two positions is one nothing here can
  * drop, and giving those two a reading of alternatives is its own change with its own reason.
  */
-record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered) {
+record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
+                       Adoption byValues, Adoption byOrder) {
 
     /** Nothing read, so nothing ruled out. */
     static StatedByClauses top() {
-        return new StatedByClauses(AdmissibleValues.top(), OrderedIntervals.top());
+        return new StatedByClauses(AdmissibleValues.top(), OrderedIntervals.top(),
+                Adoption.nothing(), Adoption.nothing());
+    }
+
+    /** The positions some reading took the whole of this clause in at.
+     *
+     * <p>Some, and not both: the two languages are short of different things, and a bound one of
+     * them has no word for is read whole by the other. What neither took in is what is left
+     * standing. */
+    Set<FactSubject> adopted() {
+        Set<FactSubject> out = new LinkedHashSet<>();
+        byValues.read().forEach(each -> {
+            if (byValues.took(each)) {
+                out.add(each);
+            }
+        });
+        byOrder.read().forEach(each -> {
+            if (byOrder.took(each)) {
+                out.add(each);
+            }
+        });
+        return out;
     }
 
 
@@ -59,9 +83,8 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                              Symbols symbols) {
-        java.util.Set<FactSubject> adopted = new java.util.LinkedHashSet<>();
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, adopted),
-                OrderedReading.of(terms, at, byName, symbols, adopted), adopted);
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols),
+                OrderedReading.of(terms, at, byName, symbols), terms, at, byName);
     }
 
     /**
@@ -84,11 +107,9 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      * <p>A reading of its own, so the set holds what this clause was adopted at and not what
      * everything before it was.
      */
-    static java.util.Set<FactSubject> adoptedIn(Core clause, Terms terms, Denotations at,
-                                                Map<FactSubject, Type> byName, Symbols symbols) {
-        Reading reading = readingOf(terms, at, byName, symbols);
-        reading.read(clause, true);
-        return reading.adopted();
+    static Set<FactSubject> adoptedIn(Core clause, Terms terms, Denotations at,
+                                      Map<FactSubject, Type> byName, Symbols symbols) {
+        return readingOf(terms, at, byName, symbols).read(clause, true).adopted();
     }
 
 
@@ -105,7 +126,8 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
     }
 
     StatedByClauses meet(StatedByClauses other) {
-        return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered));
+        return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered),
+                byValues.and(other.byValues), byOrder.and(other.byOrder));
     }
 
     /**
@@ -118,8 +140,8 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      * value there is. That is the same reconstruction {@code Predicates.Assumed} keeps a field of
      * its own to avoid, and the one this accounting was written against.
      */
-    record Reading(AdmissibleReading values, OrderedReading ordered,
-                   java.util.Set<FactSubject> adopted)
+    record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms, Denotations at,
+                   Map<FactSubject, Type> byName)
             implements ClauseReading<StatedByClauses> {
 
         @Override
@@ -127,9 +149,44 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
             return top();
         }
 
+        /**
+         * What each language makes of one leaf, and where each of them took it in.
+         *
+         * <p>Which positions the leaf is about is the clause's own content and is read once here;
+         * which of them a language managed is that language's, taken from what it produced at this
+         * leaf and nowhere else. A leaf about a position that a language has no word for is one it
+         * missed, and the other language answering for it is what makes them two accounts rather
+         * than one.
+         */
         @Override
         public StatedByClauses leaf(Core e, boolean positive) {
-            return new StatedByClauses(values.leaf(e, positive), ordered.leaf(e, positive));
+            AdmissibleValues<FactSubject> said = values.leaf(e, positive);
+            OrderedIntervals<FactSubject> range = ordered.leaf(e, positive);
+            Set<FactSubject> mentions = mentioned(e);
+            return new StatedByClauses(said, range,
+                    Adoption.at(mentions, said.values().keySet()),
+                    Adoption.at(mentions, range.ranges().keySet()));
+        }
+
+        /**
+         * The positions of this value that {@code e} names.
+         *
+         * <p>A fact about the clause and not about either language, which is why it is read here
+         * and once. A position names itself, and nothing under it is a position of its own.
+         */
+        private Set<FactSubject> mentioned(Core e) {
+            Set<FactSubject> found = new LinkedHashSet<>();
+            gather(e, found);
+            return found;
+        }
+
+        private void gather(Core e, Set<FactSubject> found) {
+            FactSubject here = terms.subjectOf(e, at);
+            if (here != null && byName.containsKey(here)) {
+                found.add(here);
+                return;
+            }
+            Core.forEachChild(e, child -> gather(child, found));
         }
 
         @Override
@@ -170,8 +227,11 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
                 return new StatedByClauses(
                         values.either(one.values.leavingNothing(), other.values.leavingNothing()),
                         ordered.either(one.ordered.leavingNothing(),
-                                other.ordered.leavingNothing()));
+                                other.ordered.leavingNothing()),
+                        one.byValues.and(other.byValues), one.byOrder.and(other.byOrder));
             }
+            // An alternative nobody can take says nothing about the positions, its unread rules
+            // included — so what it missed leaves with it, the way its evidence does.
             if (one.holdsNothing()) {
                 return other;
             }
@@ -179,7 +239,8 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
                 return one;
             }
             return new StatedByClauses(values.either(one.values, other.values),
-                    ordered.either(one.ordered, other.ordered));
+                    ordered.either(one.ordered, other.ordered),
+                    one.byValues.and(other.byValues), one.byOrder.and(other.byOrder));
         }
     }
 }
