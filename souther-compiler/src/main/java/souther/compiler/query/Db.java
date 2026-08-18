@@ -286,6 +286,20 @@ public final class Db {
     }
 
     /**
+     * Every answer being kept, by the question it answers.
+     *
+     * <p>For the one reader that is about the store rather than about a compile: whether the answers
+     * it keeps are values is a question about all of them at once, and there is no question to ask
+     * that would enumerate them. Nothing in a compile reads this — a pass wanting an answer asks for
+     * the one it wants.
+     */
+    Map<Key<?>, Answer<?>> everyAnswer() {
+        Map<Key<?>, Answer<?>> out = new LinkedHashMap<>();
+        memos.forEach((key, memo) -> out.put(key, memo.answer()));
+        return out;
+    }
+
+    /**
      * A report, the module it is about, and the source the key that found it names — either of which
      * may be null.
      *
