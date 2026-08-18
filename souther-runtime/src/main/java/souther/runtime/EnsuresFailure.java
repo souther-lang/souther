@@ -44,8 +44,22 @@ import org.jspecify.annotations.Nullable;
  * says — the same answer {@link InvariantFailure} gives for the same reason.
  */
 public record EnsuresFailure(String module, String behavior, @Nullable String clause,
-                             @Nullable String selector, @Nullable String answeredCase)
+                             @Nullable DeclaredCase selector, @Nullable DeclaredCase answeredCase)
         implements ConstraintFailure {
+
+    /**
+     * Both cases or neither, which is what the clause's rule being guarded or unguarded means.
+     *
+     * <p>Held rather than described. What the two say is that a rule was applied to an answer
+     * because the answer was this case, and half of that is not a weaker statement but a
+     * meaningless one — and a message built from it would read as though it were saying something.
+     */
+    public EnsuresFailure {
+        if ((selector == null) != (answeredCase == null)) {
+            throw new IllegalArgumentException("a rule guarded by a case has both the case it was "
+                    + "written for and the case that answered; one guarded by none has neither");
+        }
+    }
 
     /** The behavior as Souther identifies it: a behavior is its module and its name, and two modules
      *  may each declare a {@code find}. */
@@ -59,7 +73,13 @@ public record EnsuresFailure(String module, String behavior, @Nullable String cl
      * <p>Read in that order because that is the order the question is asked in — which contract
      * broke, what it was checking, what came back. What the rule was declared for is left out where
      * it is the case that answered: the two are the same fact there, and saying it twice would put
-     * a distinction in front of a reader that this answer does not have.
+     * a distinction in front of a reader that this answer does not have. Whether they are the same
+     * is asked of the cases and not of their names, so one module's {@code Denied} answering a rule
+     * written for another's is two cases and is said as two.
+     *
+     * <p>Shown by name, which is the reader's decision and not the record's. A message is read by
+     * someone who has the source in front of them; what identifies the case is here for whoever
+     * needs more.
      */
     @Override
     public String toString() {
@@ -70,11 +90,11 @@ public record EnsuresFailure(String module, String behavior, @Nullable String cl
             separator = ", ";
         }
         if (selector != null && !selector.equals(answeredCase)) {
-            said.append(separator).append("for ").append(selector);
+            said.append(separator).append("for ").append(selector.name());
             separator = ", ";
         }
         if (answeredCase != null) {
-            said.append(separator).append("answering ").append(answeredCase);
+            said.append(separator).append("answering ").append(answeredCase.name());
         }
         return said.toString();
     }

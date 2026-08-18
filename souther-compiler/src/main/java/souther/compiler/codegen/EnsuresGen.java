@@ -22,8 +22,10 @@ import java.util.List;
 import java.util.Set;
 
 import static souther.compiler.codegen.Descriptors.CD_ConstraintViolation;
+import static souther.compiler.codegen.Descriptors.CD_DeclaredCase;
 import static souther.compiler.codegen.Descriptors.CD_EnsuresFailure;
 import static souther.compiler.codegen.Descriptors.CD_String;
+import static souther.compiler.codegen.Descriptors.MTD_declaredCase;
 import static souther.compiler.codegen.Descriptors.MTD_ensuresFailure;
 import static souther.compiler.codegen.Descriptors.MTD_equalsObject;
 import static souther.compiler.codegen.Descriptors.MTD_notHeld;
@@ -102,8 +104,9 @@ final class EnsuresGen {
         int answer = contract.params().size();
 
         BodyGen gen = bindParams(code, cd, contract);
-        // Where the case the answer is, is written before the abort is built. Read off the answer
-        // and only where a rule is about to refuse it, so a call that holds pays nothing for it.
+        // Where the case the answer is, is put before the abort is built. Read off the answer and
+        // only where a rule is about to refuse it, so a call that holds pays nothing for it. A
+        // reference slot: what stands in it is a case, and a reference is what that is.
         int answered = gen.slot(Type.STRING);
         for (Rule rule : contract.rules()) {
             emitRule(code, gen, contract, rule, answer, answered);
@@ -146,9 +149,9 @@ final class EnsuresGen {
         int named = contract.params().size();
 
         BodyGen gen = bindParams(code, cd, contract);
-        // The case that answered, kept for the abort. Written where a leaf is matched rather than
-        // worked out again there: which leaf it was is known at the comparison, and asking the
-        // argument a second time would be the same question answered twice.
+        // The case that answered, kept for the abort. Put there where a leaf is matched rather than
+        // worked out again: which leaf it was is known at the comparison, and asking the argument a
+        // second time would be the same question answered twice. A reference slot, as above.
         int answered = gen.slot(Type.STRING);
         for (Rule rule : contract.rules()) {
             if (!(rule.guard() instanceof Guard.Case(CaseSelector selector)) || rule.readsAnswer()) {
@@ -168,14 +171,14 @@ final class EnsuresGen {
                 code.invokevirtual(CD_String, "equals", MTD_equalsObject);
                 Label notThis = code.newLabel();
                 code.ifeq(notThis);
-                code.ldc(leaf.name());
+                pushDeclaredCase(code, leaf);
                 code.astore(answered);
                 code.goto_(matched);
                 code.labelBinding(notThis);
             }
             code.goto_(next);
             code.labelBinding(matched);
-            emitStatement(code, gen, contract, rule, next, selector, () -> code.aload(answered));
+            emitStatement(code, gen, contract, rule, next, selector, answered, () -> { });
         }
         code.return_();
     }
@@ -191,6 +194,11 @@ final class EnsuresGen {
      * <p>Empty for a carrier that is not a case a written answer wears: an optional's, which is
      * made by its own factory and named by neither of the two, and a carrier standing under no
      * readable type. A rule guarded by one of those is decided nowhere but at the answer.
+     *
+     * <p>No arm reaches that today. A behavior's output may not be written as an optional at all
+     * (<em>E1402</em>), so the cases a clause names are a union's or a sum's, and each of them has
+     * leaves. It is what this answers rather than a rule about optionals — the question is asked of
+     * the selector, and a selector that has nothing to answer with is not made into one that does.
      */
     private Set<TypeSymbol> answersFor(CaseSelector selector) {
         return selector.refinement() instanceof Refinement.Direct(Type bound) && bound != null
@@ -218,7 +226,7 @@ final class EnsuresGen {
         if (refinement instanceof Refinement.OptionAbsent) {
             // The case carries nothing, so there is nothing to bind. A rule about it refers to the
             // answer through its guard, which is what having got here is.
-            emitStatement(code, gen, contract, rule, next, selector,
+            emitStatement(code, gen, contract, rule, next, selector, answered,
                     () -> readAnsweredCase(code, selector, answer, answered));
             return;
         }
@@ -230,58 +238,76 @@ final class EnsuresGen {
         int slot = gen.slot(valueType);
         unbox(code, valueType, slot, ctx);
         gen.bind(rule.value(), "value", slot, valueType);
-        emitStatement(code, gen, contract, rule, next, selector,
+        emitStatement(code, gen, contract, rule, next, selector, answered,
                 () -> readAnsweredCase(code, selector, answer, answered));
     }
 
     /**
      * The rule's statement, and the abort where it does not hold.
      *
-     * <p>{@code pushAnswered} leaves the case the answer is on the stack, and is run only here —
-     * on the path that refuses. What it costs is paid by a call that was going to abort anyway.
+     * <p>{@code fillAnswered} puts the case the answer is into {@code answered} and leaves nothing
+     * on the stack. It is run only here — on the path that refuses — so what it costs is paid by a
+     * call that was going to abort anyway.
      */
     private void emitStatement(CodeBuilder code, BodyGen gen, BehaviorContract contract, Rule rule,
-                               Label next, CaseSelector selector, Runnable pushAnswered) {
+                               Label next, CaseSelector selector, int answered,
+                               Runnable fillAnswered) {
         gen.expr(rule.statement());
         code.ifne(next);
-        emitAbort(code, contract, rule, selector, pushAnswered);
+        emitAbort(code, contract, rule, selector, answered, fillAnswered);
         code.labelBinding(next);
     }
 
-    /** {@code throw ConstraintViolation.notHeld(new EnsuresFailure(…))}. */
+    /**
+     * {@code throw ConstraintViolation.notHeld(new EnsuresFailure(…))}.
+     *
+     * <p>The case the answer is, is settled first and read from its slot after. Whatever settles it
+     * branches, and a half-made object sitting on the operand stack across a branch is a shape to
+     * keep out of the emitter — so nothing is built until there is nothing left to decide.
+     */
     private void emitAbort(CodeBuilder code, BehaviorContract contract, Rule rule,
-                           CaseSelector selector, Runnable pushAnswered) {
+                           CaseSelector selector, int answered, Runnable fillAnswered) {
+        if (selector != null) {
+            fillAnswered.run();
+        }
         code.new_(CD_EnsuresFailure);
         code.dup();
         code.ldc(contract.behavior().module());
         code.ldc(contract.behavior().name());
         pushOrNull(code, contract.clauseOf(rule).name().orElse(null));
-        pushOrNull(code, selector == null ? null : selector.name().name());
         if (selector == null) {
             code.aconst_null();
+            code.aconst_null();
         } else {
-            pushAnswered.run();
+            pushDeclaredCase(code, selector.name());
+            code.aload(answered);
         }
         code.invokespecial(CD_EnsuresFailure, ConstantDescs.INIT_NAME, MTD_ensuresFailure);
         code.invokestatic(CD_ConstraintViolation, "notHeld", MTD_notHeld);
         code.athrow();
     }
 
+    /** {@code new DeclaredCase(module, name)}: the case as Souther identifies it, which is the pair
+     *  and not the name — two modules may each declare a {@code Denied}. */
+    private static void pushDeclaredCase(CodeBuilder code, TypeSymbol declared) {
+        code.new_(CD_DeclaredCase);
+        code.dup();
+        code.ldc(declared.module());
+        code.ldc(declared.name());
+        code.invokespecial(CD_DeclaredCase, ConstantDescs.INIT_NAME, MTD_declaredCase);
+    }
+
     /**
-     * Writes the case the answer in {@code answer} is into {@code into}, then leaves it on the
-     * stack.
+     * Writes the case the answer in {@code answer} is into {@code into}.
      *
      * <p>The leaves of the arm, tested against the value. An arm may name a case that has cases of
      * its own, and what answered is one of those — so a reading that stopped at the arm would name
      * an {@code Errors} for an answer no run produces. Which leaves those are is worked out where
      * this is emitted; the value only says which of them it is.
      *
-     * <p>Into a slot before the abort is built rather than onto the stack while it is being built:
-     * the tests branch, and a half-made object sitting on the stack across a branch is a shape to
-     * keep out of the emitter.
-     *
-     * <p>The arm's own name is what is left where no leaf answers. A carrier with no leaf a written
-     * answer wears — an optional's — has nothing more to say than which carrier it is.
+     * <p>The arm's own case is what is left where no leaf answers, which no arm a behavior may
+     * declare does — see {@link #answersFor}. It is what this does with an answer it cannot narrow,
+     * and not a claim that an optional's carrier is a case.
      */
     private void readAnsweredCase(CodeBuilder code, CaseSelector selector, int answer, int into) {
         Label done = code.newLabel();
@@ -290,15 +316,14 @@ final class EnsuresGen {
             code.aload(answer);
             code.instanceOf(ctx.matchCaseClass(leaf));
             code.ifeq(notThis);
-            code.ldc(leaf.name());
+            pushDeclaredCase(code, leaf);
             code.astore(into);
             code.goto_(done);
             code.labelBinding(notThis);
         }
-        code.ldc(selector.name().name());
+        pushDeclaredCase(code, selector.name());
         code.astore(into);
         code.labelBinding(done);
-        code.aload(into);
     }
 
     private static void pushOrNull(CodeBuilder code, String text) {
