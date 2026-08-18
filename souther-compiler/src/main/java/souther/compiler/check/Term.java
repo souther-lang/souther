@@ -296,10 +296,24 @@ final class Term {
          * <p>One chain and not a chain of chains: fields read off something that already has fields
          * read off it are the one path, so a value reached a field at a time and the same value
          * reached all at once are one term.
+         *
+         * <p>Which holds of a place too. A place is a root and the fields read from it ({@link
+         * Shape#AT}), so reading one more field off it is that same root with a longer path, and not
+         * a path over a term that happens to be a place. Reading a value's fields does not decide
+         * which value it is, so the two spellings of {@code x.a} — the whole chain asked at once, and
+         * {@code a} read off what {@code x} is — are one term. Without it a reader that builds a
+         * chain from the root's own identity and a reader that builds it from the location answer
+         * differently about one value, which is the identity question given two authorities.
          */
         Term on(Term base, List<String> fields) {
             if (fields.isEmpty()) {
                 return base;
+            }
+            if (base.shape == Shape.AT) {
+                Location where = (Location) base.of;
+                List<String> whole = new ArrayList<>(where.path());
+                whole.addAll(fields);
+                return at(new Location(where.root(), whole));
             }
             if (base.shape == Shape.ON) {
                 List<String> whole = new ArrayList<>(base.fields());
