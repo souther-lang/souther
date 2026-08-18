@@ -5999,7 +5999,7 @@ The values this row states do not keep what `findTodo` declares of what it answe
 ensures not held on todo.findTodo: asked, answering Todo
 ----
 
-Emitted at an `+example+` row whose input and stated answer do not keep an `+ensures+` of the behavior it is written for (<<a-row-keeps-what-the-behavior-states>>). The stated answer is the value the row wrote, or the case its arm names where it wrote no value. What decides it is the declaration's own check, applied to the values the row wrote (<<example-ensures>>), so what the message carries is what that check said — the clause that was not kept, and the case the answer turned out to be.
+Emitted at an `+example+` row whose input and stated answer do not keep an `+ensures+` of the behavior it is written for (<<a-row-keeps-what-the-behavior-states>>). The stated answer is the value the row wrote, or the case its arm names where it wrote no value. What decides it is the declaration's own check, applied to the values the row wrote (<<example-ensures>>), so what the message carries is what that check said — the clause that was not kept, the case that clause's rule was written for, and the case the answer turned out to be. An arm may name a case that has cases of its own, and an answer is one of those, so the two are said apart; where they are the same case it is said once.
 
 A refusal and not a warning. A stand-in and a row disagreeing is two descriptions with no right side (<<e1919>>); this is a description held to what the model states, and a row that records an answer the model rules out is a record of something that will not happen.
 
