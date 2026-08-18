@@ -1360,9 +1360,17 @@ public final class Adequacy {
         private static GenerationOutcome atEdge(Finding gap, List<BoundaryAssessment> edges) {
             String axis = String.valueOf(gap.args().get(0));
             String value = String.valueOf(gap.args().get(1));
+            Object rule = gap.args().get(2);
             String subject = axis + " = " + value;
             for (BoundaryAssessment each : edges) {
-                if (!each.axis().equals(axis) || !each.value().equals(value)) {
+                // The rule as well as the place. Several rules can draw a line at one value — a
+                // type's invariant and a `guard` that repeats it — and they are separate obligations
+                // that a row meets separately, so one of them can be a gap while the one beside it
+                // already has its row. Found by the value alone, the gap was answered by whichever
+                // assessment came first, and where that was the met one this read its own answer as
+                // a contradiction.
+                if (!each.axis().equals(axis) || !each.value().equals(value)
+                        || !each.rule().equals(rule)) {
                     continue;
                 }
                 return switch (each.attempt()) {
