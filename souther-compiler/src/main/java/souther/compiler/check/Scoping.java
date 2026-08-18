@@ -428,6 +428,11 @@ public final class Scoping {
      * does not, because a behavior is not a type. Read as part of the whole assembly, that edit
      * arrived at every reader of what the names mean; read as this, it arrives at none of them.
      *
+     * <p>A type being declared does change this, and reaches whoever read it. Which readers those
+     * are is {@link Denoting}'s doing rather than this value's: a scope asks for these the first
+     * time it is read, so declaring a type reaches the bodies that write its spelling and the
+     * reports that are read off every name in sight, rather than everything built over a scope.
+     *
      * <p>The three parts are here together and not handed over one at a time, for the reason
      * {@link Scoped} gives: the module name, the scope and the aliases come out of one assembly and
      * mean nothing apart from each other, so a caller putting them together could pair parts of two.
@@ -445,12 +450,19 @@ public final class Scoping {
         /** What {@code Resolve} reads this module against, over the declarations as they were
          *  written. */
         public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry) {
-            return SyntaxSymbols.of(module, registry, denotations, aliases);
+            return SyntaxSymbols.of(module, registry, denoting());
         }
 
         /** The same over a stage of the declarations something has resolved. */
         public Symbols symbolsOver(Registry<Hir.Def> registry) {
-            return Symbols.of(module, registry, denotations, aliases);
+            return Symbols.of(module, registry, denoting());
+        }
+
+        /** These meanings as the operations a scope performs on them — what a reader that already
+         *  holds the answer is asked through, so that it and one asking a store as it reads are
+         *  told apart by nothing above {@link Denoting}. */
+        public Denoting denoting() {
+            return Denoting.of(denotations, aliases);
         }
     }
 

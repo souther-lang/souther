@@ -71,9 +71,16 @@ import java.util.Set;
  * {@link Names.Meanings} is what a module's names mean, cut from the whole assembly they are read
  * off — so declaring a behavior, which adds a value name, stops there. {@link Bodies.CalleeSigsForBody}
  * is the signatures one body names, cut from its module's index of everything callable in it.
- * {@link Bodies.ContractsForBody} is a body's contracts asked entry by entry. A body is still
- * checked in what all of its module's names mean, so declaring a type re-checks every body of the
- * module; that is what is left of issue #829, and {@code IncrementalCompilationTest} pins it.
+ * {@link Bodies.ContractsForBody} is a body's contracts asked entry by entry.
+ *
+ * <p>A cut is one way to stop an index short of a reader. The other is to hand the reader the
+ * questions rather than the table, so that the index is asked for when it is read and not when it
+ * is built — which is what {@link souther.compiler.check.Registry} does for a module's declarations
+ * and {@link souther.compiler.check.Denoting} for what its names mean. It answers what a cut cannot
+ * here: which of a module's meanings a body needs is a question about what a body's scope is, and
+ * nothing has to decide it, because a body that reads none of them depends on none of them and the
+ * one report that reads every name in sight depends on every name in sight. That is issue #835,
+ * and {@code IncrementalCompilationTest} holds both halves.
  *
  * <p>One store is one workspace over time, not one compile. It is not thread-safe and does not need
  * to be: the work inside a compile is a graph walk, not a set of independent jobs.

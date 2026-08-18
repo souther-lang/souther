@@ -32,16 +32,15 @@ public final class SyntaxSymbols implements NameSense {
     private final Registry<Ast.Def> registry;
     private final Declarations<Ast.Def> declarations;
 
-    private SyntaxSymbols(String module, Registry<Ast.Def> registry,
-                          Map<String, Denotation> names, Map<String, String> aliases) {
-        this.scope = new TypeScope(module, names, aliases, registry);
+    private SyntaxSymbols(String module, Registry<Ast.Def> registry, Denoting names) {
+        this.scope = new TypeScope(module, names, registry);
         this.registry = registry;
         this.declarations = new Declarations<>(registry, Declarations.Vocabulary.ofNothing());
     }
 
     /** No module at all — for signatures written over primitives and type variables only. */
     public static SyntaxSymbols none() {
-        return new SyntaxSymbols("", Registry.empty(), Map.of(), Map.of());
+        return new SyntaxSymbols("", Registry.empty(), Denoting.NONE);
     }
 
     /**
@@ -67,7 +66,7 @@ public final class SyntaxSymbols implements NameSense {
         return new SyntaxSymbols(m.name(),
                 Registry.ofRead(Map.of(m.name(), new Registry.Declared<>(
                         declared.declarations(), Registry.baseNames(m.exposing())))),
-                names, Map.of());
+                Denoting.of(names, Map.of()));
     }
 
     /** A module resolved against a registry that reads its declarations however it likes — the form
@@ -77,9 +76,8 @@ public final class SyntaxSymbols implements NameSense {
      * one answer — the module, its scope and its aliases — come from. A caller free to pass them
      * separately could pass parts of two different assemblies, and nothing it was holding would
      * have said so. */
-    static SyntaxSymbols of(String module, Registry<Ast.Def> registry,
-                            Map<String, Denotation> names, Map<String, String> aliases) {
-        return new SyntaxSymbols(module, registry, names, Map.copyOf(aliases));
+    public static SyntaxSymbols of(String module, Registry<Ast.Def> registry, Denoting names) {
+        return new SyntaxSymbols(module, registry, names);
     }
 
     /** What a name written here means. */
