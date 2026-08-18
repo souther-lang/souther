@@ -65,6 +65,16 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
      * <p>A rule is already specialized — there is one per case an arm names, because {@code value}
      * is read as what that case holds and the cases hold different things. So a reader does not
      * specialize again, and the identity of what it is reading is the rule's own.
+     *
+     * <p>What a {@link Guard.Case}'s selector is named by is the type the case is declared as, never
+     * the arm's spelling: the selectors come from the output's own declarations, and the arm is
+     * matched against them by the type its name resolved to. A reader carrying that name out —
+     * into a failure a run leaves behind, into a report — is carrying the case and not the text.
+     *
+     * <p>It is also the case the rule is <em>about</em>, which is not the case an answer turns out
+     * to be. An arm may name a case that has cases of its own, so a rule written for {@code Errors}
+     * holds of an answer that is a {@code NotFound}, and a reader that wants the second asks the
+     * answer.
      */
     public record Rule(Guard guard, BindingId value, Hir.Expr statement, RuleId id, SourcePos pos) {
 

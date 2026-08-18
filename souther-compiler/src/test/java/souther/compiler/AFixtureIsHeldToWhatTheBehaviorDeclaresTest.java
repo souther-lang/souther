@@ -257,11 +257,10 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      * worked out where the check is emitted, so the arm `Errors` decides for the `NotFound` a row
      * writes.
      *
-     * <p>Two case names meet here and the message carries the arm's: the row answered `NotFound`
-     * and the rule that refused it is written for `Errors`. Pinned as it stands rather than left to
-     * be read either way — what an `EnsuresFailure` names is the same on the path that has a value,
-     * where a rule written for a sum refuses a leaf just as it does here, and which of the two it
-     * should carry is a question about that record and not about this row (#830).
+     * <p>Two case names meet here and the refusal keeps them apart: the row answered `NotFound` and
+     * the rule that refused it is written for `Errors`. What each of them is, and why one field
+     * carrying both was a reader being told the answer was an `Errors`, is
+     * {@link AnEnsuresFailureSaysWhatItWasDeclaredForTest}'s.
      */
     @Test
     void anArmNamingASumDecidesForEachLeafItHas() {
@@ -283,8 +282,8 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
 
         assertTrue(codesOf(refused).contains("E1928"),
                 "`NotFound` is a leaf of the arm `Errors`: " + codesOf(refused));
-        assertTrue(rendered(only("E1928", refused)).contains("answering Errors"),
-                "the arm the refusing rule is written for, not the leaf the row wrote: "
+        assertTrue(rendered(only("E1928", refused)).contains("for Errors, answering NotFound"),
+                "the arm the rule is written for, and the leaf the row wrote: "
                         + rendered(only("E1928", refused)));
     }
 
