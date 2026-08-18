@@ -1131,6 +1131,13 @@ public final class Backend {
      * back out of a jar as the text that was written, so a declaration this compiler publishes is
      * one an older compiler's reader has no production for and refuses.
      *
+     * <p>Version 17 changes what a published class calls the runtime with. A violated {@code ensures}
+     * now records two things where it recorded one — the case the broken rule was declared for, and
+     * the case the answer turned out to be — so a class emitted before this builds its abort with a
+     * constructor that is no longer there. It would reach it only where a clause is already broken,
+     * which is the worst place to find a jar and a runtime that were not built together. What a jar
+     * declares is unchanged; what moved is what its own classes call.
+     *
      * <p>What that number does not cover, and does not need to: where such a clause is checked.
      * Enforcement is not read back — a caller reaches an imported behavior through its signature and
      * its class, and nothing it reads says which of the two places the check was emitted in. A jar
@@ -1139,8 +1146,12 @@ public final class Backend {
      * becomes a question the day a caller may assume a clause it did not check itself, and what has
      * to be decided then is which jars an assumption may rest on — the version being one way to
      * answer that, and this note being where the question was left.
+     *
+     * <p>That a check is emitted is one question and what the emitted code calls is another. The
+     * first is not read back and needs no number. The second is not read back either and needs one
+     * all the same: a class in a jar runs, and what it calls has to be there when it does.
      */
-    public static final int BOUNDARY_VERSION = 16;
+    public static final int BOUNDARY_VERSION = 17;
 
     /** Emits the class a module's own declarations are published on, carrying {@code declarations}.
      * What it says is the caller's; that it is built like every other generated class — the same Java
