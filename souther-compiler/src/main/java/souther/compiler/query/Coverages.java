@@ -434,9 +434,10 @@ final class Coverages {
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
         // Whether meeting this line takes the comparison having run, asked of the rule rather than
-        // read off which kind it is. A guard is the one reached conditionally; an invariant refuses
-        // everything outside its bound and a clause is checked whenever the behavior answers, so
-        // for both of those writing the value is the whole of what there is to reach.
+        // read off which kind it is. A guard's line is about a place in a body and is reached or
+        // not; an invariant's and a clause's are about the values — one refuses everything outside
+        // its bound, the other states a relation — so for both of those writing the value is the
+        // whole of what there is to reach.
         java.util.OptionalInt site = obligation.origin().comparisonSite();
         boolean guard = site.isPresent();
         BoundaryAssessment.Coverage.Reason absent = guard
@@ -478,8 +479,8 @@ final class Coverages {
             BoundaryTarget.EqualTerms line = (BoundaryTarget.EqualTerms) each.target();
             // The same two questions a line at a place is asked, and asked of the rule rather than
             // read off the shape of the line. Both shapes are drawn by a `guard` and by a clause,
-            // and which of them drew this one is what says whether meeting it takes the comparison
-            // having run — so a clause's line here is not one waiting on the arms either.
+            // and which of them drew this one is what says whether the line is about a place in a
+            // body — so a clause's line here is not one waiting on the arms either.
             java.util.OptionalInt site = each.origin().comparisonSite();
             boolean guard = site.isPresent();
             BoundaryAssessment.Coverage.Reason absent = guard
@@ -569,8 +570,8 @@ final class Coverages {
      *
      * @param site where the comparison's own value is recorded, for a rule that meeting takes more
      *             than writing the two values. Empty where writing them is the whole of it, which is
-     *             a clause: it is checked whenever the behavior answers, so a row putting one count
-     *             in both positions has reached the comparison by construction
+     *             a clause: what it states is a relation, and the input the relation changes at is a
+     *             pair of counts that are equal
      */
     private static Met heldBetween(BoundaryTarget.EqualTerms line, BehaviorInputs where,
                                    List<RowOutcome> rows, java.util.OptionalInt site) {

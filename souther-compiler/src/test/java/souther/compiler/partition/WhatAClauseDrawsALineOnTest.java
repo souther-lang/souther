@@ -7,6 +7,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.NumericTerm;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -231,6 +232,98 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(1, clauses.singled().size(), clauses.singled().toString());
         assertTrue(clauses.singled().get(0).origin().besideTheCut().isEmpty(),
                 "a value singled out has no neighbour: the values either side of it are one class");
+    }
+
+    /**
+     * A measure of a location draws a line where the location's own value does.
+     *
+     * <p>What a line can be drawn on is one list (ADR-0090, spec §boundary-coordinates): the content
+     * of a location, or {@code List.length}, {@code String.length}, {@code Set.size},
+     * {@code Map.size} taken of one. A rule is read the same way wherever it is written, so a clause
+     * over a length draws the line a {@code guard} over the same length draws.
+     *
+     * <p>It did not. A declaration's rules are read in the representation that keeps the operations
+     * the language defines the meaning of standing, so the call arrives as a
+     * {@code Core.PreservedCall} and not as the {@code Core.Call} a body's condition holds — and the
+     * reader recognised one shape. Semantically the same call, in two trees; the position came back
+     * as one this compiler could not read a rule about.
+     */
+    @Test
+    void aMeasureOfALocationDrawsALine() {
+        for (String measure : List.of("String.length(name.value)", "List.length(tags)")) {
+            EnsuresThresholds.Clauses clauses = drawn("""
+                    module g
+
+                    data Name = String
+                    data Found = { name: Name }
+                    data NotFound = { asked: Name }
+
+                    behavior find : (name: Name, tags: List<String>) -> Found | NotFound
+                        ensures NotFound -> %s > 3
+                    """.formatted(measure), "find");
+
+            assertEquals(1, clauses.thresholds().size(),
+                    () -> measure + " draws a line: " + valuesOf(clauses));
+            assertEquals(List.of(), clauses.unread(),
+                    () -> measure + " was read, so nothing says otherwise: " + clauses.unread());
+            assertTrue(clauses.thresholds().get(0).term() instanceof NumericTerm.SizeOf,
+                    () -> measure + " is a line on the measure: "
+                            + clauses.thresholds().get(0).term());
+        }
+    }
+
+    /**
+     * A rule stated through a helper draws the lines the helper's own comparisons draw.
+     *
+     * <p>A call is expanded where the rules are read, so the conjunct arrives as the helper's body
+     * under a binding of the call's argument. A walk that stopped at anything that is not a
+     * comparison found the rule stating nothing — and the position then fell out of every answer and
+     * was reported as one the model draws no line through, which the clause two tokens away
+     * contradicts. A {@code let} is not a choice: what the expression comes to is its body.
+     */
+    @Test
+    void aRuleStatedThroughAHelperDrawsItsLines() {
+        EnsuresThresholds.Clauses clauses = drawn("""
+                module g
+
+                data N = Int
+                data Amount = { n: N }
+                data Ok = { n: Int }
+                data Refused = { why: String }
+
+                let big (a: Amount) : Bool = a.n.value > 100
+
+                behavior charge : (a: Amount) -> Ok | Refused
+                    ensures small = Refused -> big(a)
+                """, "charge");
+
+        assertEquals(List.of("a.n = 100"), valuesOf(clauses));
+    }
+
+    /**
+     * And a rule stated in a form this does not read names the position it is about.
+     *
+     * <p>The other half. Where the walk stops on something it has no rule for, the position has to
+     * be named as one a rule was written about that this could not read — anything else reports the
+     * model as drawing no line where it draws one.
+     */
+    @Test
+    void aRuleInAFormThisDoesNotReadNamesItsPosition() {
+        EnsuresThresholds.Clauses clauses = drawn("""
+                module g
+
+                data N = Int
+                data Amount = { n: N }
+                data Ok = { n: Int }
+                data Refused = { why: String }
+
+                behavior charge : (a: Amount) -> Ok | Refused
+                    ensures small = Refused -> Bool.not(a.n.value > 100)
+                """, "charge");
+
+        assertEquals(List.of(), valuesOf(clauses));
+        assertEquals(List.of("a.n"),
+                clauses.unread().stream().map(each -> each.at().toString()).toList());
     }
 
     /**

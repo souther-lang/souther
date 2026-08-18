@@ -5,6 +5,7 @@ import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.TermPath;
@@ -24,19 +25,23 @@ import java.util.Map;
  * answer — and {@code ensures asked = NotFound -> id.value > 0} draws a line at zero as much as a
  * {@code guard} comparing the same number does.
  *
- * <p>Met by writing the value, which is where this parts from {@link GuardThresholds}. A guard is
- * reached conditionally: a value can arrive at a behavior's input and never arrive at the comparison
- * that cares about it, so meeting a guard's line takes getting the comparison to answer. Every rule
- * of a declaration runs whenever the behavior answers, so a row that hands the behavior the
- * threshold has reached the comparison by construction and there is no site to look for it at. The
- * line still has values either side, so a row is owed at the value and beside it — which is neither
- * of the two accounts that were here before, and is why the origin answers what meeting it takes
- * rather than being read off which arm it is.
+ * <p>Met by writing the value, which is where this parts from {@link GuardThresholds}, and the two
+ * are not measuring the same thing. A guard's line is about control flow: the comparison is a place
+ * in a body, a value can arrive at the behavior's input and never arrive there, and meeting the line
+ * takes getting it to answer. A clause states a relation the behavior is held to, and its line is
+ * covered by the input the relation changes at — so what meets it is a row writing that value, and
+ * nothing about the run is asked. Whether some evaluation of the clause reached that conjunct is a
+ * different question and not the one a boundary measures. The line still has values either side, so
+ * a row is owed at the value and beside it — which is neither of the two accounts that were here
+ * before, and is why the origin answers what meeting it takes rather than being read off which arm
+ * it is.
  *
- * <p><b>Only what a rule states outright.</b> A conjunct of what the rule comes to is stated
- * whenever the rule applies; a disjunct is not — {@code id.value > 0 || id.flagged} says nothing
- * about zero on its own, and reading a line off it would put a distinction into the partition that
- * the model never drew. So the walk descends through {@code &&} and stops at everything else.
+ * <p><b>Only what a rule requires.</b> A conjunct is part of what the rule asks of an answer, so the
+ * relation changes where it does; a disjunct is not — {@code id.value > 0 || id.flagged} is
+ * satisfied wherever the other side is, whatever the comparison comes to, so the relation does not
+ * change at zero. Reading a line off one would put a distinction into the partition that the model
+ * never drew. So the walk descends through {@code &&} and through what a {@code let} binds, which
+ * is not a choice either, and stops at everything else.
  *
  * <p><b>And only about an input.</b> A comparison reading {@code value} is a line on the answer, and
  * a row cannot be written at one: what a row chooses is what the behavior is applied to. Nothing
@@ -131,10 +136,26 @@ public final class EnsuresThresholds {
             stated(both.right(), rule, clause, reads, symbols, out);
             return;
         }
-        // Only a comparison. An operator that combines two conditions rather than comparing two
-        // values is not one this could not read — it is one that was read, and what a disjunction
-        // states is not what either side of it states.
+        // Through what a `let` binds, which is not a choice: what the expression comes to is its
+        // body, so the body states whatever the rule states. This is the shape a helper called from
+        // a clause arrives in — the call is expanded and its argument bound to the helper's own
+        // parameter — and a walk that stopped here found the rule stating nothing while the model
+        // plainly says something about the position.
+        if (e instanceof Core.LetIn let) {
+            stated(let.body(), rule, clause, reads.and(let.binder(), let.value()), symbols, out);
+            return;
+        }
+        // A disjunction was read, and what it states is not what either side of it states. Said as
+        // nothing rather than as a rule this could not read: reporting it would send an author after
+        // a limit of this compiler that is not there.
+        if (e instanceof Core.Binary or && or.op() == Hir.BinOp.OR) {
+            return;
+        }
+        // Anything else is a form this walk does not read. Which positions it is about is still
+        // said, because a position left out of every answer is reported as one the model draws no
+        // line through — and the model says otherwise in the rule this stopped on.
         if (!(e instanceof Core.Binary comparison) || !GuardThresholds.orders(comparison.op())) {
+            reportUnread(e, rule.value(), reads, symbols, out.unread());
             return;
         }
         // What the comparison draws is read the same way wherever a comparison is written.
@@ -168,9 +189,10 @@ public final class EnsuresThresholds {
      * on an axis.
      *
      * <p>Met by writing the two values, which is this reader's own answer and not the one the same
-     * shape of line gets from a {@code guard}. A guard's is met by getting the comparison to answer;
-     * every rule of a declaration runs whenever the behavior answers, so a row putting one count in
-     * both positions has met this one by putting it there.
+     * shape of line gets from a {@code guard}. A guard's is met by getting the comparison to answer,
+     * because what it is about is a place in a body; a clause states a relation, and the input the
+     * relation changes at is a pair of counts that are equal — so a row putting one count in both
+     * positions has met it.
      *
      * <p>{@code valueBelongsBelow} is not a question this line answers — the two sides of it are
      * decided by both positions at once — and {@code singles} is false, because this is a line and
@@ -193,27 +215,33 @@ public final class EnsuresThresholds {
     }
 
     /**
-     * The positions a comparison names that nothing turned into a line, where that is a limit of
+     * The positions a statement names that nothing turned into a line, where that is a limit of
      * this compiler.
      *
      * <p>Named rather than passed over, because a position left out of every answer is reported as
      * one the model draws no line through — a sentence about the model, and the model says otherwise
-     * in the clause two tokens away. Asked of the comparison and not of the positions: a position
+     * in the clause two tokens away. Asked of the statement and not of the positions: a position
      * carries more than one statement, and a line read at it settles nothing about the rest.
      *
      * <p><b>Except where the other side is the answer.</b> {@code value.sku == item.sku} was read,
      * and understood, and draws no line a row can be written at — what a row chooses is what the
      * behavior is applied to. Reported as unread it sends an author after a limit of this compiler
      * that is not there, which is the opposite mistake to the one above and just as wrong.
+     *
+     * <p>Why it could not be read is a comparison's own answer where the statement is one. Where it
+     * is not — a rule stated in some other form — what stopped this is the form, which is the one
+     * of the three reasons that does not turn on what two sides name.
      */
-    private static void reportUnread(Core.Binary comparison, BindingId answer, InputReads reads,
+    private static void reportUnread(Core statement, BindingId answer, InputReads reads,
                                      Symbols symbols, List<UnreadRule> unread) {
-        if (readsTheAnswer(comparison, answer)) {
+        if (readsTheAnswer(statement, answer)) {
             return;
         }
-        for (TermPath named : GuardThresholds.mentionedIn(comparison, reads, symbols)) {
-            UnreadRule here =
-                    new UnreadRule(named, GuardThresholds.why(comparison, reads, symbols));
+        BlockReason why = statement instanceof Core.Binary comparison
+                ? GuardThresholds.why(comparison, reads, symbols)
+                : new BlockReason.UnreadComparisonForm();
+        for (TermPath named : GuardThresholds.mentionedIn(statement, reads, symbols)) {
+            UnreadRule here = new UnreadRule(named, why);
             if (unread.stream().noneMatch(had -> had.equals(here))) {
                 unread.add(here);
             }

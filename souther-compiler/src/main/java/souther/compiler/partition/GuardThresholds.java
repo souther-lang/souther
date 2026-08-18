@@ -469,11 +469,10 @@ public final class GuardThresholds {
      * names, and a boundary on it could not be looked for in a row.
      */
     static NumericTerm termOf(Core e, InputReads reads, Symbols symbols) {
-        if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
-                && reached.name() instanceof ReachName.OfLibrary library
-                && NumericMeasures.isMeasure(library.target()) && call.args().size() == 1) {
-            TermPath of = reads.pathOf(call.args().get(0), symbols);
-            return of == null ? null : new NumericTerm.SizeOf(library.target(), of);
+        NumericMeasures.Measured measured = NumericMeasures.measureIn(e);
+        if (measured != null) {
+            TermPath of = reads.pathOf(measured.of(), symbols);
+            return of == null ? null : new NumericTerm.SizeOf(measured.operation(), of);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);

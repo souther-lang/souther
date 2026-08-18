@@ -85,12 +85,13 @@ public sealed interface OriginRef {
      * A comparison written in a behavior's {@code ensures}.
      *
      * <p>The third rule that draws a line, and neither of the other two. Like an invariant it is met
-     * by writing the value: every rule of a declaration runs when the behavior answers, so a row
-     * that hands the behavior the value has reached the comparison by construction and there is no
-     * site to look for it at. Like a guard the line has values on both sides — {@code id.value > 0}
-     * under a {@code NotFound} arm says the behavior may not answer that case at or below zero and
-     * may above it, so a row is owed either side — which is what tells it from a bound, where
-     * nothing outside can be constructed at all.
+     * by writing the value: what a clause states is a relation the behavior is held to, so the line
+     * is covered by the input the relation changes at and there is no site to look for it at —
+     * whether some run of the clause reached that comparison is another question and not the one a
+     * boundary measures. Like a guard the line has values on both sides — {@code id.value > 0} under
+     * a {@code NotFound} arm says the behavior may not answer that case at or below zero and may
+     * above it, so a row is owed either side — which is what tells it from a bound, where nothing
+     * outside can be constructed at all.
      *
      * <p>Only a comparison on an input is here. One reading {@code value} is a line on the answer,
      * and a row cannot be written at it: what a row chooses is what the behavior is applied to, not
@@ -279,13 +280,13 @@ public sealed interface OriginRef {
      *
      * <p>Asked of the rule rather than matched on which kind it is, because the two are not the same
      * question and reading one for the other is what puts a new rule on whichever arm the code was
-     * written next to. A guard is reached conditionally — a value can arrive at a behavior's input
-     * without arriving at the comparison that cares about it — so a row met that line by getting the
-     * comparison to answer, and the site is where that is recorded. Every other rule runs whenever
-     * there is a value to run it on: an invariant refuses everything outside its bound, so nothing
-     * exists that could have missed it, and a clause is checked whenever the behavior answers. For
-     * those, writing the value is the whole of what there is to reach and there is no site to look
-     * at.
+     * written next to. A guard's line is about control flow: the comparison is a place in a body, a
+     * value can arrive at the behavior's input without arriving there, and a row met the line by
+     * getting it to answer — the site is where that is recorded. Every other rule states something
+     * about the values themselves. An invariant refuses everything outside its bound, so nothing
+     * exists that could have missed it; a clause states a relation, and what covers where the
+     * relation changes is the input written at it. For those, writing the value is the whole of what
+     * there is to reach and there is no site to look at.
      */
     default java.util.OptionalInt comparisonSite() {
         return switch (this) {

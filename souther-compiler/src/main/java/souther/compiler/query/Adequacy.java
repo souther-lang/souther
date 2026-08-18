@@ -1377,6 +1377,14 @@ public final class Adequacy {
          * would lose the case that matters most to an author — an edge the projection proves is
          * writable and the search could not produce a row for — which came out as a verdict of
          * "provable" with nothing said about the row that never appeared.
+         *
+         * <p>Both lists are the same reading of the same lines. {@code edges} is what
+         * {@link Boundaries} answered, and every finding here was made from one of its assessments
+         * ({@code Findings} walks {@code PartitionEvidence#boundaries}, which is that answer put
+         * beside the counts) — which is why a gap can be looked up rather than measured again. The
+         * three things matched on are what a boundary is told apart by, so a finding with no
+         * assessment is the two readings having come apart rather than a row that could not be
+         * generated, and it is refused below as one.
          */
         private static GenerationOutcome atEdge(Finding gap, List<BoundaryAssessment> edges) {
             String axis = String.valueOf(gap.args().get(0));
