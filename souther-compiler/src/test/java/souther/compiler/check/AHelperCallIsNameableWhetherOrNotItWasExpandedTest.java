@@ -88,13 +88,23 @@ class AHelperCallIsNameableWhetherOrNotItWasExpandedTest {
     }
 
     /**
-     * What a behavior answers is named by nothing, whichever way it is reached.
+     * A behavior's answer having a subject is not a reason to report on it.
      *
-     * <p>Held beside the helper because the two used to differ by which of them this reading had
-     * expanded. They differ by what was called.
+     * <p>This once held that such an answer was named by nothing, which was one sentence doing two
+     * jobs: it had no symbolic name, and so nothing was said of a construction over it. The first
+     * stopped being true when identity closed — every value can be pointed at now, and an injected
+     * behavior's answer is pointed at by an atom equal to itself and nothing else. The second is
+     * still true and is what this holds.
+     *
+     * <p>Which is the whole separation, read at a construction: {@code step} declares nothing, no
+     * guard mentions its answer, and the type it answers guarantees nothing of it. So there is
+     * nothing for {@code NonNeg}'s clause to be discharged from, the run-time check stands for it,
+     * and the compile says nothing — exactly as before. Having somewhere to file a fact is not
+     * having one. The identity half is held in
+     * {@code WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest}.
      */
     @Test
-    void aBehaviorsAnswerIsNamedByNothing() {
+    void aBehaviorAnswerHavingASubjectDoesNotMakeItAReportableSite() {
         reads(Verdict.UNREPRESENTABLE, TYPES + """
 
                 behavior step : (n: Int) -> Int

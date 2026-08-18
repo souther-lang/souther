@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * What a behavior declared about its answer is what a caller that reached the case may assume.
@@ -153,11 +154,15 @@ class ACallerMayAssumeWhatTheAnswerWasDeclaredToBeTest {
 
         assertEquals(List.of(), unproven(source),
                 "`value.rank > id.value` was read, whatever became of the half beside it");
-        assertEquals(1, unproven(source.replace(
-                        "    ensures String.startsWith(value.tag, \"x\") && value.rank > id.value\n",
-                        "")).size(),
-                "and with the rule taken away the construction is unproven — without this, the "
-                        + "silence above is also what a rule reaching nobody looks like (#819)");
+        // The control cannot be the rule taken away. Say nothing about an answer and there is
+        // nothing for a clause about it to be discharged from, so the construction is one the
+        // run-time check stands for and this is silent either way. A rule that refutes it is the
+        // control that works: it can only refuse by having reached the construction, which is what
+        // the silence above needs saying about it.
+        assertThrows(souther.compiler.diag.CompileException.class,
+                () -> unproven(source.replace("value.rank > id.value",
+                        "value.rank + id.value < 0")),
+                "a rule that refutes the construction refuses it, so the rule reached it");
     }
 
 

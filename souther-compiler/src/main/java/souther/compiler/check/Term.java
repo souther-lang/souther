@@ -68,6 +68,17 @@ final class Term {
         BUILT,
         /** A call, over its arguments. */
         CALLED,
+        /**
+         * One evaluation, told apart from every other by the { EvaluationId} it holds and not by
+         * anything about its shape.
+         *
+         * <p>The one nominal atom. Everything else here is structural all the way down, which is what
+         * makes two writings of one value one term; a value nothing may share needs a leaf that is
+         * equal to nothing but itself, and it needs to be a leaf of this same algebra so that what is
+         * built over it composes. { length(E)} written twice is one term because { CALLED}
+         * interns over its children and the child is the one atom both times.
+         */
+        EVALUATION,
         /** A value given to an optional position. */
         SOME,
         /** The empty optional, at the type of the position it fills. */
@@ -150,10 +161,28 @@ final class Term {
      * one term, and nothing here reads a rendering back: that is what the string form of this was,
      * and it is why an escaping bug in it could make one value out of two.
      */
+    /**
+     * Whether this stands on one evaluation and nothing else this check can read — the atom itself,
+     * or a field read off one.
+     *
+     * <p>Such a term names a value, which is what lets a guard or a declaration speak about it; it
+     * says nothing at all on its own. The two used to be one answer, because a value with no
+     * structure to read had no name either, and a reader could take having a name as evidence that
+     * something was readable. Now it is not evidence, and the readers that used it that way ask this.
+     */
+    boolean standsOnAnEvaluation() {
+        return switch (shape) {
+            case EVALUATION -> true;
+            case ON -> parts.get(0).standsOnAnEvaluation();
+            default -> false;
+        };
+    }
+
     String rendered() {
         StringBuilder sb = new StringBuilder();
         switch (shape) {
             case AT, BOUND -> sb.append(of);
+            case EVALUATION -> sb.append(of);
             case ON -> sb.append(parts.get(0).rendered()).append(path());
             case INT, DECIMAL, BOOL -> sb.append(of);
             case STRING -> sb.append('"').append(of).append('"');
@@ -365,6 +394,12 @@ final class Term {
          * that have to keep agreeing. */
         Term called(ValueName operation, List<Term> args) {
             return of(Shape.CALLED, operation, args);
+        }
+
+        /** The value one evaluation answered. Equal to itself and to nothing else, because an
+         * { EvaluationId} is. */
+        Term evaluated(EvaluationId where) {
+            return of(Shape.EVALUATION, where, List.of());
         }
 
         /**

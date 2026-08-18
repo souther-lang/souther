@@ -347,33 +347,16 @@ final class Terms {
         if (affineScalarBase(e.type()) == null) {
             return null;
         }
-        Term key = bodyKey(e, at);
-        // A number the term grammar cannot name is still a number, and it is still one value. Where
-        // it is a part of an evaluation — `findIt(id).rank` — the evaluation is what it is a part of,
-        // and that is what a clause about the answer is read against.
-        FactSubject atom = named(key != null ? FactSubject.of(key) : partOfAnEvaluation(e, at),
-                granularityOf(e.type()));
+        // A number the term grammar cannot read is still a number, and still one value: it takes an
+        // atom of its own, and what is built over it composes with that atom rather than starting
+        // again. Which is why this asks for the identity and not for the symbolic key.
+        FactSubject atom = named(FactSubject.of(identityOf(e, at)), granularityOf(e.type()));
         if (atom != null) {
             recording(atom, e, at);
         }
         return atom;
     }
 
-    /**
-     * The part of an evaluation {@code e} is, or null where it is not read off one.
-     *
-     * <p>A field read off something the term grammar cannot name is a part of that evaluation rather
-     * than an evaluation of its own — the rule {@link Location} carries for a place, asked here of an
-     * evaluation. Nothing else is: an evaluation reached no other way is left to {@link #evaluationOf},
-     * which is where an occurrence is given its identity.
-     */
-    private FactSubject partOfAnEvaluation(Core e, Denotations at) {
-        if (!(e instanceof Core.FieldAccess fa)
-                || !(subjectOf(fa.target(), at) instanceof FactSubject.OfAnEvaluation base)) {
-            return null;
-        }
-        return Location.isStep(fa.target().type(), fa.field(), symbols) ? base.then(fa.field()) : base;
-    }
 
     /**
      * Records how {@code atom} was computed, where it stands for arithmetic the affine fragment
@@ -641,7 +624,13 @@ final class Terms {
     /** An expression's canonical key: a location names itself, and everything else is read
      * structurally. */
     Term bodyKey(Core e, Denotations at) {
-        return termKey(e, at, Map.of(), 0);
+        return termKey(e, at, Map.of(), 0, Leaf.SYMBOLIC);
+    }
+
+    /** The identity a fact about {@code e} is filed under: the same algebra, taking an atom of its
+     * own where the grammar runs out rather than answering nothing. */
+    private Term identityOf(Core e, Denotations at) {
+        return termKey(e, at, Map.of(), 0, Leaf.AN_EVALUATION);
     }
 
     /**
@@ -653,31 +642,7 @@ final class Terms {
      * it differently from the one beside it.
      */
     FactSubject subjectOf(Core e, Denotations at) {
-        FactSubject atom = atomOf(e, at);
-        if (atom != null) {
-            return atom;
-        }
-        Term key = bodyKey(e, at);
-        if (key != null) {
-            return FactSubject.of(key);
-        }
-        // Nothing the term grammar can name. That is a value this cannot share, not a value it
-        // cannot point at, so the evaluation itself is the subject — and a field read off one is a
-        // part of that evaluation rather than an evaluation of its own.
-        FactSubject part = partOfAnEvaluation(e, at);
-        if (part != null) {
-            return part;
-        }
-        // A name is the expression it was given. Answering it with an evaluation of its own would
-        // make naming an answer change which value a fact is about — the seeding speaks at the call,
-        // and every reading of the name would look elsewhere.
-        if (e instanceof Core.Read r) {
-            Core given = at.valueOf(r.binding());
-            if (given != null && given != e) {
-                return subjectOf(given, at);
-            }
-        }
-        return evaluationOf(e);
+        return FactSubject.of(identityOf(e, at));
     }
 
     /**
@@ -689,12 +654,12 @@ final class Terms {
      * an occurrence is here: two writings of one call are two nodes and so two evaluations, which is
      * the answer for a value nothing may share and the safe answer for one that may.
      */
-    FactSubject evaluationOf(Core e) {
+    private EvaluationId evaluationIdOf(Core e) {
         if (e == null) {
             return null;
         }
-        return new FactSubject.OfAnEvaluation(evaluations.computeIfAbsent(asWritten(e),
-                node -> new EvaluationId(shapeOf(node), node.pos())), java.util.List.of());
+        return evaluations.computeIfAbsent(asWritten(e),
+                node -> new EvaluationId(shapeOf(node), node.pos()));
     }
 
     /**
@@ -815,8 +780,9 @@ final class Terms {
      * still the value it is and so is part of the term. Anything outside this grammar keys as
      * {@code null}, and the clause reading it is left opaque.
      */
-    private Term termKey(Core raw, Denotations at, Map<BindingId, Term> bound, int depth) {
-        return naming(raw, at, bound, depth).term();
+    private Term termKey(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
+                         Leaf leaf) {
+        return naming(raw, at, bound, depth, leaf).term();
     }
 
     /**
@@ -834,54 +800,87 @@ final class Terms {
      * not. That a call is still standing here is not one of the questions — whether a helper was
      * expanded into this body is a fact about the reading, not about the value it answers.
      */
-    private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth) {
+    /**
+     * What a walk over an expression does where the term grammar runs out.
+     *
+     * <p>Two readings, one walk. The symbolic domain wants to know whether it can read a value's
+     * structure, and an answer of "no" is what leaves a clause over it opaque. Asking what a fact
+     * about that value would be filed under is a different question with a different right answer:
+     * the value is still one value, and it takes an atom equal to itself and to nothing else. Written
+     * as two walks they would be two structural rules to keep agreeing, which is what a second
+     * identity algebra would have been.
+     */
+    enum Leaf {
+        /** Runs out: the shape has no term, and neither has anything built from it. */
+        SYMBOLIC,
+        /** Takes an atom of its own, so that what is built over it composes. */
+        AN_EVALUATION
+    }
+
+    /** {@code c}'s arguments, with a size call's container peeled back to the one whose size it is.
+     * Only where an identity is being built: what the symbolic reader keys a size as is its own
+     * question, and answering it here would move a key nothing asked to be moved. */
+    private List<Core> sizedOver(Core.PreservedCall c, Leaf leaf) {
+        Core container = leaf == Leaf.AN_EVALUATION ? DischargeRules.sizeArgOf(c) : null;
+        return container == null ? c.args() : List.of(DischargeRules.sizeSource(container));
+    }
+
+    /** The naming to answer with where the grammar runs out, which is nothing or the evaluation
+     * itself. */
+    private Naming ranOut(Core raw, Leaf leaf, Naming absent) {
+        return leaf == Leaf.AN_EVALUATION
+                ? new Naming.Named(interned.evaluated(evaluationIdOf(raw))) : absent;
+    }
+
+    private Naming naming(Core raw, Denotations at, Map<BindingId, Term> bound, int depth,
+                          Leaf leaf) {
         Core e = asOperator(raw);
         BindingId root = rootBinding(e);
         if (root != null) {
             Term here = bound.get(root);
             return here != null ? new Naming.Named(interned.on(here, chainOf(e)))
-                    : Naming.of(pathKey(e, at), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
+                    : Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
             case Core.Read _, Core.FieldAccess _ ->
-                    Naming.of(pathKey(e, at), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
+                    Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
             case Core.Int i -> new Naming.Named(interned.written(i.value()));
             case Core.Decimal d -> new Naming.Named(interned.written(d.value()));
             case Core.Str str -> new Naming.Named(interned.written(str.value()));
             case Core.Bool b -> new Naming.Named(interned.written(b.value()));
             case Core.UnitValue u -> new Naming.Named(interned.unit(u.data()));
-            case Core.Neg n -> over(List.of(n.operand()), at, bound, depth,
+            case Core.Neg n -> over(List.of(n.operand()), at, bound, depth, leaf,
                     ps -> interned.negated(ps.get(0)));
-            case Core.Binary b -> over(List.of(b.left(), b.right()), at, bound, depth,
+            case Core.Binary b -> over(List.of(b.left(), b.right()), at, bound, depth, leaf,
                     ps -> interned.operator(b.op(), ps.get(0), ps.get(1)));
-            case Core.ListLit l -> over(l.elements(), at, bound, depth, interned::list);
-            case Core.Tuple t -> over(t.elements(), at, bound, depth, interned::tuple);
-            case Core.TupleGet g -> over(List.of(g.tuple()), at, bound, depth,
+            case Core.ListLit l -> over(l.elements(), at, bound, depth, leaf, interned::list);
+            case Core.Tuple t -> over(t.elements(), at, bound, depth, leaf, interned::tuple);
+            case Core.TupleGet g -> over(List.of(g.tuple()), at, bound, depth, leaf,
                     ps -> interned.part(ps.get(0), g.index()));
-            case Core.If iff -> over(List.of(iff.cond(), iff.then(), iff.els()), at, bound, depth,
+            case Core.If iff -> over(List.of(iff.cond(), iff.then(), iff.els()), at, bound, depth, leaf,
                     ps -> interned.choice(ps.get(0), ps.get(1), ps.get(2)));
-            case Core.OptionSome s -> over(List.of(s.value()), at, bound, depth,
+            case Core.OptionSome s -> over(List.of(s.value()), at, bound, depth, leaf,
                     ps -> interned.some(ps.get(0)));
             case Core.OptionNone none -> new Naming.Named(interned.none(none.type()));
             case Core.Block b -> {
                 Map<BindingId, Term> inner = binding(bound, b.params(), depth);
-                yield named(naming(b.body(), at, inner, depth + 1),
+                yield named(naming(b.body(), at, inner, depth + 1, leaf),
                         body -> interned.closure(b.params().size(), body));
             }
             case Core.LetIn li -> {
-                Naming value = naming(li.value(), at, bound, depth);
+                Naming value = naming(li.value(), at, bound, depth, leaf);
                 if (value instanceof Naming.Unnamed absent) {
                     yield absent;
                 }
                 Map<BindingId, Term> inner = binding(bound, List.of(li.binder()), depth);
-                yield named(naming(li.body(), at, inner, depth + 1),
+                yield named(naming(li.body(), at, inner, depth + 1, leaf),
                         body -> interned.let(value.term(), body));
             }
             // A construction is a pure function of its fields, and a closure that builds one is what a
             // mapping usually is. The fields are held in declaration order, so two sites writing them
             // in different orders — or one of them through a spread — write one term.
             case Core.Construct nd -> over(nd.values().stream().map(Core.FieldValue::value).toList(),
-                    at, bound, depth,
+                    at, bound, depth, leaf,
                     ps -> interned.built(nd.typeName(),
                             nd.values().stream().map(Core.FieldValue::field).toList(), ps));
             case Core.Match m -> {
@@ -892,21 +891,21 @@ final class Terms {
                 for (Core.Case arm : m.cases()) {
                     Map<BindingId, Term> inner = arm.binding() == null ? outer
                             : binding(outer, List.of(arm.binding()), depth);
-                    answers.add(naming(arm.body(), at, inner, depth + 1));
+                    answers.add(naming(arm.body(), at, inner, depth + 1, leaf));
                 }
-                Naming scrutinee = naming(m.scrutinee(), at, bound, depth);
+                Naming scrutinee = naming(m.scrutinee(), at, bound, depth, leaf);
                 yield joined(scrutinee, answers,
                         parts -> interned.matched(parts.get(0),
                                 m.cases().stream().map(Core.Case::caseTypes).toList(),
                                 parts.subList(1, parts.size())));
             }
             case Core.IfConstructed ic -> {
-                Naming built = naming(ic.construct(), at, bound, depth);
+                Naming built = naming(ic.construct(), at, bound, depth, leaf);
                 Map<BindingId, Term> inner = binding(bound, List.of(ic.binder()), depth);
                 List<Naming> answers = new ArrayList<>();
-                answers.add(naming(ic.then(), at, inner, depth + 1));
+                answers.add(naming(ic.then(), at, inner, depth + 1, leaf));
                 for (Core.ElseArm arm : ic.els()) {
-                    answers.add(naming(arm.body(), at, bound, depth));
+                    answers.add(naming(arm.body(), at, bound, depth, leaf));
                 }
                 yield joined(built, answers,
                         parts -> interned.attempted(parts.get(0),
@@ -917,20 +916,26 @@ final class Terms {
             // functions of what they were given: the first because the language defines them, the
             // second because a helper is pure (spec §fn-rules). What an injected behavior answers is
             // neither, and a call to one is named by nothing.
-            case Core.PreservedCall c -> over(c.args(), at, bound, depth,
+            // A size is keyed over the container it is really the size of. An operation that answers
+            // exactly as many as it was given does not change the number, which the discharge table
+            // states as a relation between the two values (`Cardinality.SAME`) rather than as
+            // something this check happens to follow — so it is an equality identity may read.
+            case Core.PreservedCall c -> over(sizedOver(c, leaf), at, bound, depth, leaf,
                     ps -> interned.called(c.operation(), ps));
             case Core.Call c -> switch (c.fn()) {
                 case Core.Reached reached -> switch (answersOf(reached.denotes())) {
-                    case Naming.OfAName.AnswersNothing none -> new Naming.Opaque(none.reason());
-                    case Naming.OfAName.Answers ignored -> over(c.args(), at, bound, depth,
+                    case Naming.OfAName.AnswersNothing none ->
+                            ranOut(raw, leaf, new Naming.Opaque(none.reason()));
+                    case Naming.OfAName.Answers ignored -> over(c.args(), at, bound, depth, leaf,
                             ps -> interned.called(reached.denotes(), ps));
                 };
                 // A walk this compiler minted for a shape the backend lowers as a whole. The reading
                 // this check is given keeps no such call, so one arriving is a pass having run over a
                 // tree it was not written for rather than a value nothing can be said of.
-                case Core.Emitted emitted -> unsupported(emitted.rendered());
+                case Core.Emitted emitted -> ranOut(raw, leaf, unsupported(emitted.rendered()));
             };
-            case Core.Apply _ -> new Naming.Opaque(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED);
+            case Core.Apply _ -> ranOut(raw, leaf,
+                    new Naming.Opaque(Naming.Reason.A_FUNCTION_VALUE_WAS_APPLIED));
             case Core.Unreachable _ -> new Naming.Opaque(Naming.Reason.NOTHING_IS_ANSWERED);
         };
     }
@@ -997,10 +1002,10 @@ final class Terms {
 
     /** {@code made} of the terms {@code parts} are, or null where any of them is named by nothing. */
     private Naming over(List<Core> parts, Denotations at, Map<BindingId, Term> bound, int depth,
-                        java.util.function.Function<List<Term>, Term> made) {
+                        Leaf leaf, java.util.function.Function<List<Term>, Term> made) {
         List<Term> terms = new ArrayList<>();
         for (Core part : parts) {
-            Naming one = naming(part, at, bound, depth);
+            Naming one = naming(part, at, bound, depth, leaf);
             if (one instanceof Naming.Unnamed absent) {
                 return absent;
             }
@@ -1051,21 +1056,31 @@ final class Terms {
      * rule and is read here of a term too, so a value keyed one way through a binding and the other
      * way through a field is one value.
      */
-    Term pathKey(Core e, Denotations at) {
+    Term pathKey(Core e, Denotations at, Leaf leaf) {
         Location located = locationOf(e, at);
         if (located != null) {
             return interned.at(located);
         }
         return switch (e) {
-            case Core.Read r -> termOf(at.of(r.binding()));
+            case Core.Read r -> {
+                Term named = termOf(at.of(r.binding()));
+                if (named != null || leaf == Leaf.SYMBOLIC) {
+                    yield named;
+                }
+                // A name is the expression it was given, so it is that expression's identity and not
+                // one of its own. Given nothing, the name is all there is, and it takes an atom.
+                Core given = at.valueOf(r.binding());
+                yield given != null && given != e ? termKey(given, at, Map.of(), 0, leaf)
+                        : interned.evaluated(evaluationIdOf(e));
+            }
             case Core.FieldAccess fa -> {
                 if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
-                    yield pathKey(fa.target(), at);
+                    yield pathKey(fa.target(), at, leaf);
                 }
-                Term base = pathKey(fa.target(), at);
+                Term base = pathKey(fa.target(), at, leaf);
                 yield base == null ? null : interned.on(base, List.of(fa.field()));
             }
-            default -> null;
+            default -> leaf == Leaf.AN_EVALUATION ? interned.evaluated(evaluationIdOf(e)) : null;
         };
     }
 
@@ -1090,7 +1105,7 @@ final class Terms {
         if (located != null) {
             return new Denotes.At(located);
         }
-        Naming named = naming(e, at, Map.of(), 0);
+        Naming named = naming(e, at, Map.of(), 0, Leaf.SYMBOLIC);
         if (named instanceof Naming.Unnamed absent) {
             return new Denotes.Nothing(absent);
         }

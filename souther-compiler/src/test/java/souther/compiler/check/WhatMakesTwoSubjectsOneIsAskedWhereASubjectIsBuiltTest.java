@@ -9,7 +9,6 @@ import souther.compiler.types.Type;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -46,7 +45,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
         FactSubject first = terms.subjectOf(new Core.Read("n", n, Type.INT, POS), at);
         FactSubject second = terms.subjectOf(new Core.Read("n", n, Type.INT, POS), at);
 
-        assertInstanceOf(FactSubject.OfATerm.class, first, "a place is named by the way it is built");
+        assertNotNull(first, "a place is something to point at");
         assertEquals(first, second, "so two writings of it are one subject");
     }
 
@@ -69,9 +68,89 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
         FactSubject second = terms.subjectOf(other, at);
 
         assertNotNull(first, "an evaluation can be pointed at even where it cannot be named");
-        assertInstanceOf(FactSubject.OfAnEvaluation.class, first,
-                "and pointing at it is what it is given");
         assertNotEquals(first, second, "two occurrences are two evaluations");
+    }
+
+    /**
+     * A referentially transparent operation over one evaluation answers one subject.
+     *
+     * <p>The closure the whole separation is for. An evaluation gets a subject because it can be
+     * pointed at; whether two writings of something built <em>over</em> it are one value is then the
+     * operation's to decide, and {@code List.length} decides it the way every pure operation does —
+     * same operation, same arguments, same value. If a subject could only be composed out of things
+     * the term grammar already named, an answer would be nameable and everything built from it would
+     * not, and a fact about {@code length(xs)} would be about nothing by the second reading of it.
+     */
+    @Test
+    void onePureApplicationToOneEvaluationHasOneSubject() {
+        Terms terms = new Terms(Symbols.none());
+        Denotations at = Denotations.none();
+        Core answer = unnameable();
+
+        assertEquals(terms.subjectOf(length(answer), at), terms.subjectOf(length(answer), at),
+                "one operation over one evaluation is one value, however often it is written");
+    }
+
+    /** And over two evaluations it is two, because the arguments are two values. The control for the
+     * law above: equality there must come from the operation composing, not from everything being
+     * lumped together. */
+    @Test
+    void onePureApplicationToTwoEvaluationsHasTwoSubjects() {
+        Terms terms = new Terms(Symbols.none());
+        Denotations at = Denotations.none();
+
+        assertNotEquals(terms.subjectOf(length(unnameable()), at),
+                terms.subjectOf(length(unnameable()), at),
+                "two evaluations are two values, so the sizes of them are two values");
+    }
+
+    /**
+     * A part of an evaluation composes the same way anything else reads a field.
+     *
+     * <p>Not a projection machinery of its own. A place has one and a term has one, and an evaluation
+     * having a third would be three rules to keep saying the same thing — {@code E.rank} is the field
+     * {@code rank} read off whatever {@code E} is, which is what reading a field means everywhere.
+     */
+    @Test
+    void aFieldReadOffAnEvaluationComposesWithIt() {
+        Terms terms = new Terms(Symbols.none());
+        Denotations at = Denotations.none();
+        Core answer = unnameable();
+
+        assertEquals(terms.subjectOf(field(answer, "rank"), at),
+                terms.subjectOf(field(answer, "rank"), at),
+                "one field of one evaluation is one value");
+        assertNotEquals(terms.subjectOf(field(answer, "rank"), at),
+                terms.subjectOf(answer, at),
+                "and it is not the evaluation it is read off");
+    }
+
+    /**
+     * An evaluation that reaches outside the language has a subject, and every ask of it has its own.
+     *
+     * <p>The half that used to be missing. What such a behavior answers cannot be shared — two asks
+     * are two answers — and the only way to give a value a name was to declare it shared, so it was
+     * given none. Having none is what left a construction over it neither proved nor refuted nor
+     * reported (#819).
+     *
+     * <p>Having one is not the same as anything being known of it, and nothing here says it is: what
+     * a construction over such an answer comes out as is held at
+     * {@code AHelperCallIsNameableWhetherOrNotItWasExpandedTest}, and it is still silence.
+     */
+    @Test
+    void anAnswerFromOutsideTheLanguageHasASubjectAndEachAskHasItsOwn() {
+        Terms terms = new Terms(Symbols.none());
+        Denotations at = Denotations.none();
+
+        assertNotNull(terms.subjectOf(unnameable(), at),
+                "two asks are two answers, which is a reason to keep them apart, not to refuse "
+                        + "both a name");
+        assertNotEquals(terms.subjectOf(unnameable(), at), terms.subjectOf(unnameable(), at),
+                "and each ask is its own");
+    }
+
+    private static Core field(Core of, String name) {
+        return new Core.FieldAccess(of, name, Type.INT, POS);
     }
 
     /** And the same occurrence asked twice is one subject, or a fact filed under the first ask would
@@ -189,11 +268,11 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
         FactSubject part = terms.subjectOf(
                 new Core.FieldAccess(answer, "rank", Type.INT, POS), at);
 
-        assertInstanceOf(FactSubject.OfAnEvaluation.class, part, "a part of an evaluation");
-        assertEquals(((FactSubject.OfAnEvaluation) whole).where(),
-                ((FactSubject.OfAnEvaluation) part).where(),
-                "and of that evaluation, not of one of its own");
+        assertNotNull(part, "a part of an evaluation is something to point at");
         assertNotEquals(whole, part, "the answer and the field read off it are two values");
+        assertEquals(part, terms.subjectOf(
+                new Core.FieldAccess(answer, "rank", Type.INT, POS), at),
+                "and one field of one evaluation is one value");
     }
 
     private static Core length(Core of) {
@@ -215,6 +294,6 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
      * injected from outside. */
     private static Core unnameable() {
         return new Core.Apply(new Core.Read("f", binding(1), Type.INT, POS), java.util.List.of(),
-                Type.INT, POS);
+                Type.list(Type.INT), POS);
     }
 }

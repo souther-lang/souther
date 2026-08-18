@@ -199,14 +199,22 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
     }
 
     /**
-     * A condition the reading could not take in is not among the reasons a proof gives.
+     * A proof carries every condition the reading took in on the way to it.
      *
-     * <p>The proof says which conditions leave nothing together. One that narrowed nothing did no
-     * part of that, and naming it says a line was holding where nothing here could tell whether it
-     * was.
+     * <p>Not the fewest that would do. {@code conditionsThatCannotAllHold} promises the conditions
+     * assumed on the way here and says so; cutting them down to the ones that actually did the ruling
+     * out is a different job, and one nothing here has asked for.
+     *
+     * <p>This held two before, and the third was the first guard: a size taken over a list nothing
+     * could name was a condition the reading passed over. It is read now. A value the term grammar
+     * cannot name still has an identity, so the size of it composes over that identity, and a guard
+     * about it is a guard the reading takes in — which is the whole of what closing the identity
+     * algebra was for. What the older test held beside this — that a condition nothing could read is
+     * not among a proof's reasons — is still true and no longer has a fixture here, since this one
+     * stopped being an example of it.
      */
     @Test
-    void aConditionNothingCouldReadIsNotAReasonForAnything() {
+    void everyConditionTheReadingTookInIsCarriedByTheProof() {
         List<Proof> proven = provenIn("""
                 module demo
 
@@ -227,7 +235,8 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
         assertEquals(1, proven.size(),
                 "nothing under fifty is eighty or more, and the guard above is what says so");
         List<PathDecision> why = WhatAnAnswerSays.conditionsIn(proven.get(0));
-        assertEquals(2, why.size(),
-                () -> "the two guards that were read, and not the one through a fold: " + why);
+        assertEquals(3, why.size(),
+                () -> "every guard the reading assumed on the way here, and not a smaller set of "
+                        + "them that would have done: " + why);
     }
 }

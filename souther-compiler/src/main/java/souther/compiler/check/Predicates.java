@@ -382,14 +382,40 @@ final class Predicates {
      * elsewhere, and that check names the clause that failed rather than only saying one did, so it
      * is left to say it. */
     Owed obligations(Core inv, Known k, Denotations at, boolean decidesFalse) {
-        return obligations(inv, k, at, Set.of(), true, decidesFalse);
+        return obligations(inv, k, at, Set.of(), true, decidesFalse, Read.AN_ASSUMPTION);
+    }
+
+    /**
+     * Whether a clause is being read as something that makes knowledge or as something that spends
+     * it. Not a direction of travel: the two read one expression through one reader, which is what
+     * keeps them from drifting, and this is the single thing they cannot share.
+     *
+     * <p>An assumption produces. A guard holds because the branch was taken, an {@code ensures}
+     * holds because the callee established it, and an invariant holds because the value was built
+     * through a checked constructor — none of them needs anything to have been said about the value
+     * beforehand, and each is how something first comes to be said about it.
+     *
+     * <p>An obligation spends. It asks the author to account for a value, and asking that about a
+     * value nothing has ever said anything of is asking for something no guard they could write
+     * would settle; the run-time check stands for such a clause instead.
+     *
+     * <p>Requiring an assumption to spend what it produces is the circle it looks like: to be spoken
+     * of, a value would have to already be spoken of. It is not a theoretical worry — written that
+     * way, a declaration that refutes a construction stopped refusing it, because the declaration was
+     * turned away for want of the knowledge it was carrying.
+     */
+    enum Read {
+        /** Knowledge being made: a guard, an invariant, a declared guarantee. */
+        AN_ASSUMPTION,
+        /** Knowledge being spent: a clause this construction has to account for. */
+        AN_OBLIGATION
     }
 
     /** The same, where {@code unnamed} holds the values the site hands over that no clause may be
      * read against. */
     Owed obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
                      boolean decidesFalse) {
-        return obligations(inv, k, at, unnamed, true, decidesFalse);
+        return obligations(inv, k, at, unnamed, true, decidesFalse, Read.AN_OBLIGATION);
     }
 
     /**
@@ -400,29 +426,29 @@ final class Predicates {
      * taken. Reading a predicate never takes a reading away.
      */
     private Owed obligations(Core rawInv, Known k, Denotations at, Set<Core> unnamed,
-                             boolean positive, boolean decidesFalse) {
+                             boolean positive, boolean decidesFalse, Read way) {
         Core sized = asSizeComparison(rawInv);
         Core ordered = asOrderComparison(sized, at);
-        Owed read = read(ordered, k, at, unnamed, positive, decidesFalse);
+        Owed read = read(ordered, k, at, unnamed, positive, decidesFalse, way);
         return ordered != sized && read.unreadable()
-                ? read(sized, k, at, unnamed, positive, decidesFalse) : read;
+                ? read(sized, k, at, unnamed, positive, decidesFalse, way) : read;
     }
 
     /** What {@code inv} owes, read as it stands. Its parts are read through {@link #obligations},
      * which is where each of them is taken as the comparison it states. */
     private Owed read(Core inv, Known k, Denotations at, Set<Core> unnamed,
-                      boolean positive, boolean decidesFalse) {
+                      boolean positive, boolean decidesFalse, Read way) {
         if (inv instanceof Core.Binary b && b.op() == Hir.BinOp.AND && positive) {
             // Each conjunct on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
             // That it stands is carried rather than dropped — the other conjunct being discharged is
             // not the invariant proven.
-            return obligations(b.left(), k, at, unnamed, true, decidesFalse)
-                    .and(obligations(b.right(), k, at, unnamed, true, decidesFalse));
+            return obligations(b.left(), k, at, unnamed, true, decidesFalse, way)
+                    .and(obligations(b.right(), k, at, unnamed, true, decidesFalse, way));
         }
         Core under = negated(inv);
         if (under != null) {
-            return obligations(under, k, at, unnamed, !positive, decidesFalse);
+            return obligations(under, k, at, unnamed, !positive, decidesFalse, way);
         }
         Boolean folded = decidedAt(inv);
         if (folded != null) {
@@ -443,8 +469,13 @@ final class Predicates {
             Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
             LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
             LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
-            if (la != null && ra != null) {
-                numeric = new Constraint(la.minus(ra), eff);
+            // Asked of the relation, not of its two sides. An atom on both sides cancels, and one
+            // that is not in the relation is not something the relation depends on — turning a clause
+            // away for a value it does not actually rest on would report nothing about a value the
+            // author was never asked about.
+            LinearForm<FactSubject> between = la == null || ra == null ? null : la.minus(ra);
+            if (between != null && canBeDischargedFrom(between, k, way)) {
+                numeric = new Constraint(between, eff);
                 // The same clause read as the cases of whatever chooses inside it. Both readings are
                 // kept: a guard may name the call itself, which the clause as it stands is what
                 // settles, and reading it case by case never takes that away.
@@ -466,6 +497,28 @@ final class Predicates {
         sizeFacts(inv, at, known);
         resultFacts(inv, at, known);
         return Owed.of(new Clause(numeric, fact, known, piecewise));
+    }
+
+    /**
+     * Whether there is anything for a clause written over {@code form} to be discharged from.
+     *
+     * <p>The same question {@link Terms#reportableSite} asks of a value, asked here of the atoms a
+     * clause is written over — and it has to be asked here as well, because a clause reaches atoms
+     * the site's own value never mentions. An atom is either one the check writes about of its own
+     * accord, which is what a place is, or one something on this path has spoken of. There is no
+     * third kind, and for an atom the first reduces to a single test: only an atom standing on one
+     * evaluation is outside what the seeding writes about.
+     *
+     * <p>Asked at all only because identity closed. A form being built used to be evidence that
+     * something was known, because a value nothing could be said of could not be composed into a form
+     * either; now every value has an identity and arithmetic composes over any of them, so the
+     * coincidence is gone and the rule it stood for has to be stated. Left unstated, a clause over a
+     * value nothing has ever mentioned would be owed here, and owing it would mean reporting a
+     * construction no guard an author could write would ever settle.
+     */
+    private static boolean canBeDischargedFrom(LinearForm<FactSubject> form, Known k, Read way) {
+        return way == Read.AN_ASSUMPTION || form.coefs().keySet().stream()
+                .allMatch(atom -> !atom.identity().standsOnAnEvaluation() || k.speaksOf(atom));
     }
 
     /** Whether {@code inv} is decided outright: the clause, with the construction's own values
@@ -636,10 +689,6 @@ final class Predicates {
     }
 
 
-    /** {@code k} with everything {@code owed} states taken as holding, as far as {@code held}
-     * reaches. What a clause owes at a construction is what it guarantees where it is already
-     * established, so the two read the same clauses through the same rule and differ only in
-     * direction. */
     /** Every subject the clauses in {@code owed} say something about. */
     private static Set<FactSubject> subjectsIn(Owed owed) {
         Set<FactSubject> named = new LinkedHashSet<>();
@@ -657,6 +706,10 @@ final class Predicates {
         return named;
     }
 
+    /** {@code k} with everything {@code owed} states taken as holding, as far as {@code held}
+     * reaches. What a clause owes at a construction is what it guarantees where it is already
+     * established, so the two read the same clauses through the same rule and differ only in
+     * direction. */
     Known assume(Owed owed, Known k, Known.Held held) {
         Known out = k;
         // Every subject this takes something in about is one something has been said about. Recorded
