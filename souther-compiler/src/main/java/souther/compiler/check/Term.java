@@ -81,6 +81,15 @@ final class Term {
         EVALUATION,
         /** A value given to an optional position. */
         SOME,
+        /**
+         * What a present optional holds, read where an arm has opened one.
+         *
+         * <p>The one operation that takes a value apart here, and it is not a projection algebra: an
+         * optional's carrier is the only case whose binding is a different value from the value it was
+         * read out of, so this is that one case and nothing more general. Everything else a
+         * {@code match} opens binds the value it was given.
+         */
+        HELD,
         /** The empty optional, at the type of the position it fills. */
         NONE,
         /** A value opened, over the scrutinee and each arm's body. */
@@ -173,7 +182,7 @@ final class Term {
     boolean standsOnAnEvaluation() {
         return switch (shape) {
             case EVALUATION -> true;
-            case ON -> parts.get(0).standsOnAnEvaluation();
+            case ON, HELD -> parts.get(0).standsOnAnEvaluation();
             default -> false;
         };
     }
@@ -210,6 +219,7 @@ final class Term {
             }
             case CALLED -> joined(sb.append(((ValueName) of).name()).append('('), ", ").append(')');
             case SOME -> sb.append("Some(").append(parts.get(0).rendered()).append(')');
+            case HELD -> sb.append("held(").append(parts.get(0).rendered()).append(')');
             case NONE -> sb.append("None:").append(of);
             case MATCHED -> joined(sb.append("match("), ", ").append(')');
             case ATTEMPTED -> joined(sb.append("attempt("), ", ").append(')');
@@ -432,6 +442,21 @@ final class Term {
         /** A value given to an optional position. */
         Term some(Term value) {
             return of(Shape.SOME, null, List.of(value));
+        }
+
+        /**
+         * What the present optional {@code optional} holds.
+         *
+         * <p>What a value was built out of is what taking it apart answers: an optional written as
+         * {@code Some(v)} holds {@code v}, so opening it names {@code v} and not a value of its own.
+         * Stated here beside the building of it, because a constructor and what undoes it are one
+         * fact and holding them apart is holding it twice.
+         */
+        Term held(Term optional) {
+            if (optional.shape == Shape.SOME) {
+                return optional.parts.get(0);
+            }
+            return of(Shape.HELD, null, List.of(optional));
         }
 
         /** The empty optional. Held at the type of the position, since the absent value of one

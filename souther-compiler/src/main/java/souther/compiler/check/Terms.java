@@ -693,6 +693,18 @@ final class Terms {
     }
 
     /**
+     * The subject of what the present optional {@code optional} holds.
+     *
+     * <p>An optional and what stands under it are two values, so opening one is the only place a
+     * {@code match} arm names something other than the value it was given. Which value that is
+     * follows from the optional's own — two arms opening one optional open one value — and it is
+     * asked here for the same reason every other identity is.
+     */
+    FactSubject heldBy(FactSubject optional) {
+        return optional == null ? null : FactSubject.of(interned.held(optional.identity()));
+    }
+
+    /**
      * The subject one evaluation of {@code e} is — the same one every time this occurrence is asked
      * about, and one no other occurrence can be given.
      *

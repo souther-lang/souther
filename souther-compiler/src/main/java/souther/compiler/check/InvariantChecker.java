@@ -1908,9 +1908,9 @@ public final class InvariantChecker {
         }
 
         /** A {@code match} arm's body, read with what the arm binds standing for a value of the
-         * case's type — a location this arm introduces, carrying what that type guarantees. */
+         * case's type — a value this reading introduces, carrying what that type guarantees. */
         static Binder of(Core.Case arm) {
-            return (engine, k, at) -> engine.enteringArm(arm, k, at);
+            return (engine, k, at) -> engine.enteringLiftedArm(arm, k, at);
         }
 
         /** An attempted construction's success branch, read with the binding carrying the invariant
