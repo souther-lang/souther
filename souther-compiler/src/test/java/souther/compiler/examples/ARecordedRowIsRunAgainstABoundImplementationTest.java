@@ -303,6 +303,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         assertEquals(List.of("E1930"), ran.diagnostics().stream().map(Diagnostic::code).toList());
     }
 
+
     private static Map<String, byte[]> compiled(String model) {
         Compilation c = Compilation.ofSource(model, "Main");
         return c.db().ask(new Output.All()).value();
@@ -350,7 +351,10 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                Answering.bound(bound, c.db().ask(new Bodies.Signatures(name)).value()),
+                // What this instance is supplied for, said by the caller. Whether a behavior may be
+                // supplied for at all is `SoutherExamples.bind`'s rule; this is the seam below it.
+                Answering.bound(bound, java.util.Set.of("findTodo"),
+                        c.db().ask(new Bodies.Signatures(name)).value()),
                 c.db().ask(new Bodies.Contracts(name)).value());
     }
 

@@ -229,20 +229,71 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
                 "and not the number this compile held it under");
     }
 
+
+    /**
+     * A behavior that implements itself is not one a binding makes runnable.
+     *
+     * <p>Its rows were runnable before anything was bound and are run by its own body where a
+     * compile runs them. Answering one from a supplied instance would not be running a recorded row
+     * against an implementation — it would be replacing the model's own with another and reporting
+     * the difference as the model's. Whether that is a thing to offer is its own question.
+     *
+     * <p>Refused where the binding is made, so a caller who bound the wrong instance is told what is
+     * wrong with the instance rather than that some row did not hold.
+     */
+    @Test
+    void aBehaviorThatImplementsItselfIsNotBound() throws Exception {
+        String withABody = """
+                module example.own
+
+                data TodoId = Int
+                data NotFound = { id: TodoId }
+
+                behavior findTodo : (id: TodoId) -> NotFound
+                    constructs NotFound
+
+                let findTodo (id) = NotFound { id = id }
+
+                example findTodo
+                    | "anything at all" : (TodoId(1)) -> NotFound { id = TodoId(1) }
+                """;
+        String replacing = """
+                package example.own;
+                public final class FindTodoImpl implements FindTodo {
+                    public NotFound apply(TodoId id) { return null; }
+                }
+                """;
+
+        SoutherExamples model = SoutherExamples.ofSource(withABody);
+        Object instance = builtElsewhere(withABody, "example.own", replacing, "FindTodoImpl");
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> model.bind(instance));
+        assertTrue(refused.getMessage().contains("has an implementation of its own"),
+                refused.getMessage());
+    }
+
     private static BoundExamples bound() throws Exception {
         return SoutherExamples.ofSources(List.of(SHARED, MODEL, COMPANION), ModulePath.EMPTY)
                 .bind(implementation());
     }
 
     private static Object implementation() throws Exception {
+        return builtElsewhere(null, "example.app", IMPL, "FindTodoImpl");
+    }
+
+    private static Object builtElsewhere(String only, String pkg, String impl, String named)
+            throws Exception {
         Path classes = Files.createTempDirectory("souther-sources");
-        for (var e : souther.compiler.Compiler.compileModules(List.of(SHARED, MODEL)).entrySet()) {
+        List<String> models = only == null ? List.of(SHARED, MODEL) : List.of(only);
+        for (var e : souther.compiler.Compiler.compileModules(models).entrySet()) {
             Path at = classes.resolve(e.getKey().replace('.', '/') + ".class");
             Files.createDirectories(at.getParent());
             Files.write(at, e.getValue());
         }
-        Path java = classes.resolve("example/app/FindTodoImpl.java");
-        Files.writeString(java, IMPL);
+        Path java = classes.resolve(pkg.replace('.', '/') + "/" + named + ".java");
+        Files.createDirectories(java.getParent());
+        Files.writeString(java, impl);
         java.io.ByteArrayOutputStream err = new java.io.ByteArrayOutputStream();
         int rc = ToolProvider.getSystemJavaCompiler().run(null, null, err,
                 "-encoding", "UTF-8",
@@ -251,6 +302,6 @@ class TheFaceReadsWhatAModelIsWrittenAsTest {
         assertEquals(0, rc, "the implementation compiles: " + err);
         URLClassLoader loader = new URLClassLoader(new URL[] {classes.toUri().toURL()},
                 SoutherExamples.class.getClassLoader());
-        return loader.loadClass("example.app.FindTodoImpl").getConstructor().newInstance();
+        return loader.loadClass(pkg + "." + named).getConstructor().newInstance();
     }
 }

@@ -378,9 +378,9 @@ public final class ExampleVerifier {
      * that already has one.
      */
     StandinObservation observe(String behavior, StandinEntry entry) {
-        // Under the deadline, as a row is. An implementation that does not come back is what a
-        // budget is for, and an observation that ran outside one would hang the caller's loop where
-        // a row's evaluation would have been given up on.
+        // Through the run's deadline, as a row is — which is what decides where the work runs and
+        // what bounds it, and is the same answer for both. An observation reaching the applied code
+        // by a different route would be the binding meaning two things again.
         switch (deadline.given(new Deadline.Work.Table(behavior, entry.at()),
                 () -> observing(behavior, entry))) {
             case Deadline.Outcome.Finished(StandinObservation observed) -> {

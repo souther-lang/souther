@@ -35,6 +35,21 @@ The binding answers for the behaviors it implements and delegates the rest to `A
 The resolution is per behavior because a module declares behaviors of both kinds, and one evaluation
 applies each as what applies it.
 
+**A binding is of a behavior written without a body.** What a binding adds is the rows that had
+nothing to run them; a behavior with a `let` is runnable before anything is bound and its rows are
+run by that body where a compile runs them. Answering one from a supplied instance would not be
+running a recorded row against an implementation — it would be replacing the model's own with
+another and reporting the difference as the model's. Whether such a replacement is a thing to offer
+is its own question and not this one, so `bind` refuses the instance rather than quietly taking over.
+Refused where the binding is made: a caller who bound the wrong instance is told what is wrong with
+the instance, not that some row of some behavior did not hold.
+
+That rule belongs to `bind` and not to the seam under it. `Answering` is what applies a behavior for
+a run, and a run may legitimately be given an answerer that applies anything — one bringing a second
+loader's classes for a bodied behavior is what #732 is held by. So the behaviors a bound answerer
+answers for are handed to it as a set, which is the admitting side's statement of what the instance
+was supplied for, rather than worked out a second time where it would be free to differ.
+
 **The API is enumeration and single evaluation.** `rows()` says what the binding makes runnable,
 `evaluate(row)` runs one, and nothing here owns the loop. What changes between rows — the world the
 implementation answers out of — is the caller's, and the owner of what changes between iterations
@@ -131,11 +146,8 @@ anything applies the behavior and whether what applies it was built against this
 together, as a sealed `Handing`, so a caller that has values to hand over cannot consider one and
 forget the other. Asked as two conditions each caller kept, `observe` asked neither: it applied an
 implementation `evaluate` was keeping rows away from, and the same binding meant two things
-depending on which call was made. An observation runs under the same deadline a row does, for the
-same reason — an implementation that does not come back would otherwise hang the caller's loop where
-a row's evaluation would have been given up on. The budget is the caller's to set (`withBudget`),
-because what a bound implementation waits for is a database or a socket and how long that may take
-is not something a compile knows.
+depending on which call was made. The same holds of where the work runs: both apply on the thread
+that asked, which is the paragraph above.
 
 **The `apply` that runs is the one the behavior's base declares.** Read off the instance by name and
 arity, an unrelated `apply(String debug)` is as good a candidate, and which one ran would depend on
@@ -171,7 +183,9 @@ No JUnit, no `DynamicTest`, no assertions, no before/after hooks, no database li
 transactions, environment setup, scheduling, retries or parallelism: the loop and the world are the
 caller's. Fixture construction, fake dispatch, arm resolution and comparison stay the ones
 `ExampleVerifier` has — no second example semantics. Holding two builds' declarations together stays
-#748's, used as it stands. The result is `RowOutcome`; no new test-result model.
+#748's, used as it stands. The result is `RowEvaluation` — the observation `RowOutcome`
+already was, beside what the compiler said about it — and no test-result model: nothing here is
+about passing, failing, skipping or reporting.
 
 Nothing is added to the language. A SQL implementation's real signature is
 `(DatabaseState, TodoId) -> (DatabaseState, Todo | NotFound)`, and the hidden input is written

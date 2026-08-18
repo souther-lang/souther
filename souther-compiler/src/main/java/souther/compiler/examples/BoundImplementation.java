@@ -49,9 +49,16 @@ final class BoundImplementation implements Answerer {
     private final Answerer generatedHere;
     private final String module;
 
-    /** The binary names of everything the instance is, so asking whether it is a behavior's base is
-     *  a lookup rather than a walk per behavior. */
-    private final Set<String> is;
+    /**
+     * The behaviors this answers for.
+     *
+     * <p>Handed over rather than worked out again here. Which behaviors an instance implements is
+     * one question, and the binding that admitted it has already asked — of the ABI, and then of
+     * whether each is a behavior a binding may answer at all. Asking a second time here would let
+     * the two sets differ, and the way they would differ is the one that matters: a behavior with a
+     * body is refused at the binding and would be answered here.
+     */
+    private final Set<String> answersFor;
 
     /** What the instance's own build declared, read from the loader that has its classes. */
     private final PublishedClasses theirs;
@@ -59,13 +66,13 @@ final class BoundImplementation implements Answerer {
     /** The instance's values, read into its classes. */
     private final Crossing crossing;
 
-    BoundImplementation(Object implementation, Map<String, Sig> sigs, Answerer generatedHere,
-                        String module) {
+    BoundImplementation(Object implementation, Set<String> answersFor, Map<String, Sig> sigs,
+                        Answerer generatedHere, String module) {
         this.implementation = implementation;
+        this.answersFor = Set.copyOf(answersFor);
         this.sigs = sigs;
         this.generatedHere = generatedHere;
         this.module = module;
-        this.is = everythingItIs(implementation.getClass());
         ClassLoader loader = implementation.getClass().getClassLoader();
         this.theirs = new ClassFileDeclarations(binaryName -> bytesOf(loader, binaryName));
         this.crossing = new Crossing(loader);
@@ -74,14 +81,12 @@ final class BoundImplementation implements Answerer {
     /**
      * The supplied instance where it is the behavior's, and this compile's answer everywhere else.
      *
-     * <p>Asked of the ABI and not of the module: a behavior this compile also generated an
-     * implementation for is still answered by the instance if the instance is one of its bases, and
-     * that is what an implementation supplied for it means. A behavior it is not a base of never
-     * reaches the crossing at all.
+     * <p>Asked of what the binding admitted. A behavior it did not is answered as this compile
+     * answers it, and never reaches the crossing at all.
      */
     @Override
     public Answer of(String behavior) {
-        if (!is.contains(baseOf(behavior))) {
+        if (!answersFor.contains(behavior)) {
             return generatedHere.of(behavior);
         }
         Sig sig = sigs.get(behavior);
@@ -177,7 +182,7 @@ final class BoundImplementation implements Answerer {
         Class<?> base;
         try {
             base = implementation.getClass().getClassLoader()
-                    .loadClass(baseOf(behavior));
+                    .loadClass(baseOf(module, behavior));
         } catch (ClassNotFoundException e) {
             throw new ImplementationNotReached("the base of `" + behavior + "` is not in the classes"
                     + " the implementation was built against", e);
@@ -207,10 +212,6 @@ final class BoundImplementation implements Answerer {
             throw new ImplementationNotReached("the bound implementation supplies no `apply` the"
                     + " base of `" + behavior + "` declares", e);
         }
-    }
-
-    private String baseOf(String behavior) {
-        return baseOf(module, behavior);
     }
 
     /**

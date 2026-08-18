@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
@@ -162,6 +163,7 @@ public final class SoutherExamples {
             List<String> here = new ArrayList<>();
             for (String behavior : declared.getValue().keySet()) {
                 if (BoundImplementation.isFor(implementation, declared.getKey(), behavior)) {
+                    refuseIfItHasABody(declared.getKey(), behavior);
                     here.add(behavior);
                 }
             }
@@ -183,7 +185,32 @@ public final class SoutherExamples {
         Prepared.ExampleExecution rows = compilation.db()
                 .ask(new Shapes.Prepared(module)).value().forExamples();
         return new BoundExamples(module, rows, ExampleRuns.evaluating(compilation.db(), module,
-                Answering.bound(implementation, sigs.get(module))), bound);
+                Answering.bound(implementation, Set.copyOf(bound), sigs.get(module))), bound);
+    }
+
+    /**
+     * A behavior that implements itself is not one a binding makes runnable.
+     *
+     * <p>What a binding adds is the rows that had nothing to run them. A behavior with a `let` body
+     * was runnable before anything was bound, and its rows are run by that body where a compile runs
+     * them — so answering one from a supplied instance would not be running a recorded row against
+     * an implementation, it would be replacing the model's own with another and reporting the
+     * difference as the model's. Whether such a replacement is a thing to offer is its own question,
+     * and it is not this one.
+     *
+     * <p>Refused where the binding is made rather than where a row would notice. A caller who bound
+     * the wrong instance is told what is wrong with the instance, not told that some row of some
+     * behavior did not hold.
+     */
+    private void refuseIfItHasABody(String module, String behavior) {
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        for (Hir.BehaviorDef declared : prepared.behaviors()) {
+            if (declared.name().equals(behavior) && !prepared.injected(declared)) {
+                throw new IllegalArgumentException("`" + module + "." + behavior + "` has an"
+                        + " implementation of its own, so its rows are run by that; a binding is of a"
+                        + " behavior written without one");
+            }
+        }
     }
 
     /** The modules these sources declare. */
