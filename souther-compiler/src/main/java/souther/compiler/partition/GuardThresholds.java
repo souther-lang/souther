@@ -479,38 +479,6 @@ public final class GuardThresholds {
     }
 
 
-    /**
-     * The count a comparison is against, or null where the other side is not a value on
-     * {@code carrier}.
-     *
-     * <p>Which count the literal is on comes from the position, not from the literal. A written
-     * temporal reaches here however it is spelled, and the carrier is what says whether the days or
-     * the seconds of it are the number the line is drawn at — the same question an invariant's
-     * literal is asked, asked of the same place, so an invariant and a {@code guard} at one position
-     * cannot admit different rules.
-     */
-    static Place constantOf(Core e, Carrier carrier, Symbols symbols) {
-        if (carrier == null) {
-            return null;
-        }
-        return switch (e) {
-            case Core.Neg n -> {
-                Place inner = constantOf(n.operand(), carrier, symbols);
-                yield inner == null ? null : Count.number(inner).negate();
-            }
-            // A newtype written around a constant is that constant at this location. What makes it
-            // one is the declaration: a data of one field that is not a newtype wraps its value
-            // rather than being it.
-            case Core.Construct nd when TypeOps.numericBase(Type.ref(nd.typeName()), symbols) != null ->
-                    constantOf(nd.values().get(0).value(), carrier, symbols);
-            // Everything else is a value written down or is not one, which the carrier answers —
-            // the same question an invariant's bound asks it, so the two cannot admit different
-            // rules at one position. What this reader adds is how a value can be built up around
-            // one: a minus in front of it, and a newtype around it.
-            case null, default -> carrier.literalOf(e);
-        };
-    }
-
     /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */
     static boolean orderable(Type type, Symbols symbols) {
         return Carrier.ofValue(type, symbols) != null;

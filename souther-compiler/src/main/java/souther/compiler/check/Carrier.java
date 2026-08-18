@@ -326,6 +326,18 @@ public sealed interface Carrier {
     }
 
     /**
+     * The value {@code e} writes down on the carrier of {@code type}, or null where it writes none.
+     *
+     * <p>Where a reader has the position's type rather than its carrier. A type nothing orders has
+     * no values to read here, and saying so once is what keeps every caller from deciding for
+     * itself what an unordered position's literals are.
+     */
+    static Place writtenOn(Core e, Type type, Symbols symbols) {
+        Carrier carrier = ofValue(type, symbols);
+        return carrier == null ? null : carrier.literalOf(e, symbols);
+    }
+
+    /**
      * The count a rule's literal names on this carrier, read from the body's own representation.
      *
      * <p>The pair of the reading above. A {@code guard}'s comparison reaches its reader as
@@ -333,22 +345,54 @@ public sealed interface Carrier {
      * is a rule about the representation rather than about the model — which is what the two readers
      * deciding separately what a literal is already cost once.
      */
-    default Place literalOf(Core e) {
+    default Place literalOf(Core e, Symbols symbols) {
+        Core bare = bare(e, symbols);
         return switch (this) {
-            case Whole _, Dense _ -> switch (e) {
+            case Whole _, Dense _ -> switch (bare) {
                 case Core.Int i -> onTheGrid(Count.of(i.value()));
                 case Core.Decimal d -> onTheGrid(Count.of(d.value()));
+                // A minus in front of a value is part of the value written down, and these are the
+                // only carriers with one to write: nothing negates a date, a case or a string.
+                case Core.Neg n -> {
+                    Place inner = literalOf(n.operand(), symbols);
+                    yield inner == null ? null : Count.number(inner).negate();
+                }
                 case null, default -> null;
             };
-            case Days _, Seconds _, SecondsOfDay _, Nanos _ -> written(e) instanceof Core.Str iso
-                    ? placeOf(new ObservedValue.Temporal(iso.value())) : null;
+            case Days _, Seconds _, SecondsOfDay _, Nanos _ ->
+                    constructedFrom(bare) instanceof Core.Str iso
+                            ? placeOf(new ObservedValue.Temporal(iso.value())) : null;
             // A case, which is named rather than written. Where the position counts in some other
             // enumeration's declaration this is a value of neither, and that is said by `at`.
             case Ordinal ordinal ->
-                    e instanceof Core.UnitValue unit ? ordinal.at(unit.data()) : null;
-            case Text _ -> e instanceof Core.Str str
+                    bare instanceof Core.UnitValue unit ? ordinal.at(unit.data()) : null;
+            case Text _ -> bare instanceof Core.Str str
                     ? souther.compiler.numeric.Text.of(str.value()) : null;
         };
+    }
+
+    /**
+     * What {@code e} writes, with the names around it taken off.
+     *
+     * <p>A newtype's construction around a value is that value at this position, and it is taken off
+     * here for the reason {@link #ofValue} reads through one to find the carrier at all: a name is
+     * not a step, and what carries the value is what the name wraps. The two walks are the same walk
+     * and have to reach the same place — a position sent to a carrier by one and left unreadable by
+     * the other has a carrier and no way to read the values its own model writes at it.
+     *
+     * <p>Which is what it cost: the peeling asked whether the base was a number, so
+     * {@code Amount < Amount(100)} drew a line and {@code Cutoff < Cutoff(Time("16:00:00"))} drew
+     * none, over the same construction and for no reason either type states. Every carrier's
+     * newtypes are read now, and a carrier added is read with them.
+     *
+     * <p>What makes something one is the declaration and never the shape: a data of one field that
+     * is not a newtype wraps its value rather than being it, so its construction is a value of its
+     * own and is left alone.
+     */
+    private static Core bare(Core e, Symbols symbols) {
+        return e instanceof Core.Construct nd && !nd.values().isEmpty()
+                && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), symbols)
+                ? bare(nd.values().get(0).value(), symbols) : e;
     }
 
     /**
@@ -365,7 +409,7 @@ public sealed interface Carrier {
      * asked. Not by the name: an operation a library gave its own module's name renders the same
      * either way, which is the reading-a-name-back-out that type exists to stop.
      */
-    private static Core written(Core e) {
+    private static Core constructedFrom(Core e) {
         return e instanceof Core.Call call
                 && call.fn() instanceof Core.Reached reached
                 && reached.denotes() instanceof ValueName.Stdlib lib && lib.isNamespace()

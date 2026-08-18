@@ -177,6 +177,50 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             let guardStageWrapped (x) = { guard x.value < Qualified else Ok
                 No }
 
+            // The same line, written as the position's own type rather than as what it wraps. A
+            // newtype is the value it carries, so `x < WholeN(5000)` compares two of them and the
+            // line is the one `x < 5000` draws at the value inside.
+            behavior guardWholeBuilt : (x: WholeN) -> Verdict
+                constructs Ok, No, WholeN
+            let guardWholeBuilt (x) = { guard x < WholeN(5000) else Ok
+                No }
+
+            behavior guardDenseBuilt : (x: DenseN) -> Verdict
+                constructs Ok, No, DenseN
+            let guardDenseBuilt (x) = { guard x < DenseN(0.5m) else Ok
+                No }
+
+            behavior guardDayBuilt : (x: DayN) -> Verdict
+                constructs Ok, No, DayN
+            let guardDayBuilt (x) = { guard x < DayN(Date("2026-08-01")) else Ok
+                No }
+
+            behavior guardMomentBuilt : (x: MomentN) -> Verdict
+                constructs Ok, No, MomentN
+            let guardMomentBuilt (x) = {
+                guard x < MomentN(DateTime("2026-08-01T00:00:00")) else Ok
+                No }
+
+            behavior guardTimeBuilt : (x: TimeN) -> Verdict
+                constructs Ok, No, TimeN
+            let guardTimeBuilt (x) = { guard x < TimeN(Time("16:00:00")) else Ok
+                No }
+
+            behavior guardNanoBuilt : (x: NanoN) -> Verdict
+                constructs Ok, No, NanoN
+            let guardNanoBuilt (x) = {
+                guard x < NanoN(Instant("2026-08-01T00:00:00Z")) else Ok
+                No }
+
+            behavior guardTextBuilt : (x: TextN) -> Verdict
+                constructs Ok, No, TextN
+            let guardTextBuilt (x) = { guard x < TextN("2026-08") else Ok
+                No }
+
+            // No `guardStageBuilt`. A newtype over an enumeration is not comparable against
+            // itself — `StageN < StageN` is refused where it is written (E1319) — so the form does
+            // not exist to measure. The wrapped row is how such a position is compared.
+
             behavior boundWhole  : (x: WholeI)  -> Ok
                 constructs Ok
             let boundWhole (x) = Ok
@@ -298,6 +342,17 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         // carrier always did, so the cell that was a name changing what a rule means is a cell that
         // says the two forms are one.
         expected.put("guardStageWrapped", readBesideItsClasses(2));
+        // And the same line written as the position's own type. A newtype's construction around a
+        // value is that value here, for the reason the carrier reads through the name to begin
+        // with — so a cell differing from the bare one is a value the model wrote that this could
+        // not read back.
+        expected.put("guardWholeBuilt", read(2));
+        expected.put("guardDenseBuilt", read(1));
+        expected.put("guardDayBuilt", read(2));
+        expected.put("guardMomentBuilt", read(2));
+        expected.put("guardTimeBuilt", read(2));
+        expected.put("guardNanoBuilt", read(2));
+        expected.put("guardTextBuilt", read(1));
 
         assertEquals(expected, measured(expected.keySet()));
     }
@@ -369,16 +424,29 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      */
     @Test
     void aNameWrappedRoundTheValuesDoesNotChangeWhatIsMeasured() {
-        Map<String, Measured> all = measured(List.of(
-                "guardWholeBare", "guardDenseBare", "guardDayBare", "guardMomentBare",
-                "guardTextBare", "guardTimeBare", "guardNanoBare", "guardStageBare",
-                "guardWholeWrapped", "guardDenseWrapped", "guardDayWrapped", "guardMomentWrapped",
-                "guardTextWrapped", "guardTimeWrapped", "guardNanoWrapped", "guardStageWrapped"));
+        List<String> carriers = List.of("Whole", "Dense", "Day", "Moment", "Text", "Time", "Nano",
+                "Stage");
+        List<String> asked = new java.util.ArrayList<>();
+        for (String carrier : carriers) {
+            asked.add("guard" + carrier + "Bare");
+            asked.add("guard" + carrier + "Wrapped");
+            if (!carrier.equals("Stage")) {
+                asked.add("guard" + carrier + "Built");
+            }
+        }
+        Map<String, Measured> all = measured(asked);
 
-        for (String carrier : List.of("Whole", "Dense", "Day", "Moment", "Text", "Time", "Nano",
-                "Stage")) {
+        for (String carrier : carriers) {
             assertEquals(all.get("guard" + carrier + "Bare"), all.get("guard" + carrier + "Wrapped"),
                     carrier + ": a newtype is the value it carries");
+            // And the value written as the newtype rather than as what it wraps. The reading that
+            // sends a position to a carrier walks through the names; a reading of the values that
+            // stops at one leaves a position whose own literals it cannot read.
+            if (!carrier.equals("Stage")) {
+                assertEquals(all.get("guard" + carrier + "Bare"),
+                        all.get("guard" + carrier + "Built"),
+                        carrier + ": and a value written as the newtype is that value");
+            }
         }
     }
 
