@@ -12,7 +12,7 @@ import souther.compiler.diag.SourcePos;
  * ({@link Location} states the same rule for bindings, and {@code an offset is not an identity} is
  * how it was learned).
  *
- * <p>Made once per occurrence and handed back, by {@link Terms#evaluationOf}. Constructed rather
+ * <p>Made once per occurrence and handed back, by {@link Terms#evaluationIdOf}. Constructed rather
  * than worked out again at each ask: a subject recomputed from what a walk happens to hold is a
  * subject that moves when the walk does, and a fact filed under the old one is then about nothing.
  *

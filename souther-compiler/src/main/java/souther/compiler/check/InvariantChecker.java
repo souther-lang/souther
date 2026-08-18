@@ -614,7 +614,7 @@ public final class InvariantChecker {
         // What the position is called, which every position has and only some are numbers. An
         // enumeration is ordered and carries no atom, so a clause bounding one is recognised by this
         // and by nothing above it.
-        FactSubject key = FactSubject.of(terms.bodyKey(value, at));
+        FactSubject key = terms.subjectOf(value, at);
         if (key != null) {
             keys.put(path, key);
         }

@@ -18,12 +18,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * nothing: no subject, and so nothing for either its type's invariant or its {@code ensures} to be
  * written under. A construction downstream of such a call was then not proved, not refuted, and not
  * reported (#819). The silence was the whole of the problem, and silence is also what a check that
- * never ran looks like — so every test here says what the same program is like with the guarantee
- * taken away, and expects the construction to be an unproven one (E2011) there.
+ * never ran looks like, so nothing here rests on it alone.
  *
  * <p>Both spellings of the same program, because they are the same program. Naming a call and
  * writing it where it is used differ in nothing an author means, and a check that answered them
  * differently would be one where naming a value changes what is known of it.
+ *
+ * <p>The control is never the guarantee taken away. Declare nothing about an answer and there is
+ * nothing for a clause about it to be discharged from, so the construction is one the run-time check
+ * stands for and the compile is silent — correctly, and as it was before any of this. Silence is
+ * therefore the wrong control for silence. A guarantee that <em>refutes</em> the construction is the
+ * right one: it can only refuse by having reached it.
  */
 class WhatABehaviorGuaranteesOfItsAnswerReachesTheCallerTest {
 
@@ -231,5 +236,51 @@ class WhatABehaviorGuaranteesOfItsAnswerReachesTheCallerTest {
 
         assertThrows(souther.compiler.diag.CompileException.class, () -> unproven(source),
                 "`n` cancels and `a - b` is -1, which the invariant rejects however opaque `n` is");
+    }
+
+    /**
+     * A guarantee that is a predicate reaches the caller too, and not only one that is a number.
+     *
+     * <p>The half that closing identity for the numeric domain alone would have left behind. A
+     * relation between numbers reaches a caller through the affine reading, which composes over
+     * whatever atom the answer is; a predicate reaches it through the key a fact is filed under, and
+     * that key was still being built the symbolic way — which runs out at an answer exactly as it did
+     * before any of this. So {@code ensures value.rank > 0} would arrive and {@code ensures value.ok}
+     * would not, which is one guarantee kept and one quietly dropped for no reason an author could
+     * see.
+     *
+     * <p>Read through the refutation, for the reason every control here is: with nothing declared the
+     * construction is silent, so silence proves nothing on its own. A guarantee that contradicts the
+     * invariant can only refuse by having reached it.
+     */
+    @Test
+    void aGuaranteeThatIsAPredicateReachesTheCallerAsWell() {
+        String source = """
+                module m.d exposing ( Id, Found, Checked, findIt, use )
+
+                data Id      = Int
+                data Found   = { ok: Bool }
+                data Checked = { ok: Bool }
+                    invariant ok
+
+                behavior findIt : (id: Id) -> Found
+                    constructs Found
+                    ensures id.value > 0 && value.ok
+
+                let findIt (id) = Found { ok = id.value > 0 }
+
+                behavior use : (id: Id) -> Checked
+                    constructs Checked
+                let use (id) = {
+                    let answer = findIt(id)
+                    Checked { ok = answer.ok }
+                }
+                """;
+
+        assertEquals(List.of(), unproven(source), "`value.ok` holds of the answer, so this is built");
+        assertThrows(souther.compiler.diag.CompileException.class,
+                () -> unproven(source.replace("&& value.ok", "&& Bool.not(value.ok)")),
+                "and a predicate that contradicts the invariant refuses the construction, which it "
+                        + "can only do by having reached it");
     }
 }

@@ -57,7 +57,7 @@ final class Predicates {
         Set<Shape> crossed = EnumSet.noneOf(Shape.class);
         Core source = container;
         while (true) {
-            FactSubject key = FactSubject.of(terms.bodyKey(source, at));
+            FactSubject key = terms.subjectOf(source, at);
             if (key != null) {
                 for (Quantified q : k.quantified()) {
                     if (key.equals(q.container()) && q.through().containsAll(crossed)) {
@@ -122,7 +122,7 @@ final class Predicates {
         // The container is the carrying rule's, which is the one argument this predicate is about.
         // What the operation hands its closure answers the same question about the same argument, and
         // is asked here only for the closure.
-        FactSubject container = FactSubject.of(terms.bodyKey(carried.container(), at));
+        FactSubject container = terms.subjectOf(carried.container(), at);
         if (container == null) {
             return;
         }
@@ -610,7 +610,7 @@ final class Predicates {
             if (la != null && ra != null) {
                 LinearForm compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
-                read = true;
+                read |= readsItsShape(b.left(), at) && readsItsShape(b.right(), at);
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
@@ -625,16 +625,41 @@ final class Predicates {
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
-        FactSubject key = FactSubject.of(terms.bodyKey(polar.expr(), at));
+        FactSubject key = terms.subjectOf(polar.expr(), at);
         return key == null ? new Assumed(out, read)
-                : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH), true);
+                : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH),
+                        read || readsItsShape(polar.expr(), at));
+    }
+
+    /**
+     * Whether a rule here read the shape {@code e} is written in.
+     *
+     * <p>Not what a fact about {@code e} is filed under, which is {@link Terms#subjectOf}'s and is
+     * now an answer for every expression there is. This is the other question, and the only place
+     * the symbolic reading is the right one to ask: whether the check reached what the condition
+     * <em>says</em>, or only which value it says it of.
+     *
+     * <p>What it decides is what an unsettled arm is explained by. A condition of a shape no rule
+     * reads is this compiler's limit and widening the reading removes it; a condition read to no
+     * effect is the ordinary state of a branch nobody built a value for, and no widening touches it.
+     * Since identity closed, every condition names something and a fact about that something is
+     * always recorded — so answering this from whether anything was recorded made the first kind
+     * vanish, and every limit of this compiler was reported as a fact about the model. Measured:
+     * over the whole suite the first kind stopped occurring at all.
+     *
+     * <p>The knowledge is taken in either way. What a guard says about a value is true whether or not
+     * this check could read the shape it was written in, and a clause naming that value is still
+     * discharged by it. This says only what may be claimed about the reading.
+     */
+    private boolean readsItsShape(Core e, Denotations at) {
+        return terms.bodyKey(e, at) != null;
     }
 
     /** The terms one side of a compared pair names: the expression itself, and each atom of the form it
      * reduced to — {@code leftover + 1} says something about {@code leftover}. */
     Collection<FactSubject> spokenOf(Core side, Denotations at, LinearForm<FactSubject> form) {
         Set<FactSubject> named = new HashSet<>(form == null ? Set.of() : form.coefs().keySet());
-        FactSubject written = FactSubject.of(terms.bodyKey(side, at));
+        FactSubject written = terms.subjectOf(side, at);
         if (written != null) {
             named.add(written);
         }
@@ -758,7 +783,9 @@ final class Predicates {
         }
         Core container = DischargeRules.sizeArgOf(call);
         if (container != null) {
-            FactSubject atom = terms.sizeAtomOf(call, arg -> terms.bodyKey(arg, at));
+            // The subject and not the symbolic key: a size is never negative whatever it is taken
+            // of, and a count over something the term grammar cannot read is still a count.
+            FactSubject atom = terms.subjectOf(call, at);
             if (atom != null) {
                 out.add(new Constraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
                 bounds(call.operation(), DischargeRules.sizeSource(container), at, out);
@@ -989,7 +1016,7 @@ final class Predicates {
      * the same predicate of each container the written one was built from by a construction that
      * carries it. Stating {@code List.all(p, xs)} is stating it of every sublist of {@code xs}. */
     List<FactSubject> factKeys(Core inv, Denotations at) {
-        FactSubject written = FactSubject.of(terms.bodyKey(inv, at));
+        FactSubject written = terms.subjectOf(inv, at);
         if (written == null) {
             return List.of();
         }
@@ -1016,7 +1043,7 @@ final class Predicates {
                 break;
             }
             Core source = built.container();
-            FactSubject key = FactSubject.of(terms.bodyKey(carried.over(next, source), at));
+            FactSubject key = terms.subjectOf(carried.over(next, source), at);
             if (key == null) {
                 break;
             }
