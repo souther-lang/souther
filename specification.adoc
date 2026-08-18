@@ -5846,23 +5846,29 @@ Not warned about for a case the model's own rules refuse (<<a-case-the-rules-ref
 
 [,text]
 ----
-No row is at submit/cost = 100, which is where guard@14:5 draws its line.
+No row is at submit/cost = 100, which is where the `guard` draws its line.
 Hint: A row on the line is what tells a rule written `<=` from one written `<`.
 ----
 
-A warning, and one that needs the arms measured where the line was drawn by a `+guard+` (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a boundary of several and reaching it through one leaves the others unmet.
+A warning, and one that needs the arms measured where the line was drawn by a fork of the body (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a boundary of several and reaching it through one leaves the others unmet.
+
+The fork is named by the construct it was written as — an `+if+`, a `+guard+`, or a guard comprehension (<<stdlib-list>>) — and where it is written is pointed at rather than said, a place being something only a reader's own files give a name to. All three lower to one form before anything runs, so the word comes from where the source was read and not from the shape it was lowered to.
 
 [#e1918]
 === No row goes through an arm
 
 [,text]
 ----
-No row goes through the `else` arm of `submit`.
+No row goes through the `else` arm in `submit`.
 Hint: Either a row is missing for what this arm answers, or nothing reaches it — which an
 `unreachable` states.
 ----
 
-A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites. A behavior no row names is not warned about, whether or not another behavior's rows run through it. An arm that answers nothing is not an arm and is not warned about (<<an-arm-that-answers-nothing-is-not-an-arm>>); the hint names `+unreachable+` because stating that nothing reaches an arm is what answers this warning where no row can.
+A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites.
+
+A behavior no row names is not warned about, whether or not another behavior's rows run through it. An arm that answers nothing is not an arm and is not warned about (<<an-arm-that-answers-nothing-is-not-an-arm>>); the hint names `+unreachable+` because stating that nothing reaches an arm is what answers this warning where no row can.
+
+What the way through is called comes from the construct as well as from the way. An `+if+` has a `+then+` and an `+else+` to quote; a `+guard+` has the `+else+` the author wrote and, on the other side, the rest of the block, which is named as that rather than as a `+then+` nobody wrote; a guard comprehension has neither word, and its two ways are the element it yields and the empty list it yields instead.
 
 [#e1919]
 === A stand-in and a recorded row answer one input differently

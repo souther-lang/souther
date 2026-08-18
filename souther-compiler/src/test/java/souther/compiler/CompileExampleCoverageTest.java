@@ -377,7 +377,9 @@ class CompileExampleCoverageTest {
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(module)).value().get("submit");
 
-        assertEquals(List.of("then"), unreached(branch));
+        // The `guard` passes into the rest of the block, and the author wrote no `then` for it
+        // to be called after.
+        assertEquals(List.of("continued"), unreached(branch));
         assertEquals(1, signature.output().verified().size());
         assertFalse(signature.output().verified().isEmpty(),
                 "the arm that ran is the case that was verified");

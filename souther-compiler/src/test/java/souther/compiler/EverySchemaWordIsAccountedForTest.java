@@ -93,10 +93,20 @@ class EverySchemaWordIsAccountedForTest {
         }
     }
 
-    /** The kinds of site a branch measure counts, spelled by the writer's own encoder. */
+    /** The names a branch measure can give an arm, spelled by the writer's own encoder. */
     private static Set<String> armWords() {
-        return Arrays.stream(CoverageSites.Site.Kind.values())
-                .filter(CoverageSites.Site.Kind::isArm)
+        return Arrays.stream(souther.compiler.coverage.OutcomeName.values())
+                .filter(souther.compiler.coverage.OutcomeName::isArm)
+                .map(AdequacyReport::word)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /** The constructs an arm can be an outcome of. Fewer than the kinds an origin carries: a
+     *  comparison is inside a fork rather than being one, and nothing wrote the last. */
+    private static Set<String> constructWords() {
+        return Arrays.stream(souther.compiler.types.CoverageConstruct.values())
+                .filter(c -> c != souther.compiler.types.CoverageConstruct.COMPARISON
+                        && c != souther.compiler.types.CoverageConstruct.NOT_WRITTEN)
                 .map(AdequacyReport::word)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
@@ -154,7 +164,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("branch.unreached[].kind",
                     List.of("$defs", "branch", "properties", "unreached", "items", "properties",
                             "kind"),
-                    CoverageSites.Site.Kind.class, armWords(), Set.of()),
+                    souther.compiler.coverage.OutcomeName.class, armWords(), Set.of()),
+            // The other half of what an arm is. Held apart from the outcome because they vary on
+            // their own: an `else` is written under an `if` and under a `guard`, and a construct
+            // added to the language does not add an outcome.
+            new Vocabulary("branch.unreached[].construct",
+                    List.of("$defs", "branch", "properties", "unreached", "items", "properties",
+                            "construct"),
+                    souther.compiler.types.CoverageConstruct.class, constructWords(), Set.of()),
             new Vocabulary("partition.axesMeasure.reason",
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),

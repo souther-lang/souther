@@ -305,9 +305,13 @@ class AnArmNothingReachesIsNotOwedARowTest {
     // --- what happens if the proof is wrong -------------------------------------------------------
 
     private static CoverageSites.Site arm(int index) {
-        return new CoverageSites.Site("classify", CoverageSites.Site.Kind.THEN, "then", null,
-                index, index,
-                new CoverageSites.Obligation("classify", CoverageOrigin.written("t", index), 0));
+        return new CoverageSites.Site("classify",
+                new souther.compiler.coverage.SourceOutcome.Held(
+                        new souther.compiler.coverage.SourceOutcome.HeldBy.Condition()),
+                null, index, index,
+                new CoverageSites.Obligation("classify",
+                        CoverageOrigin.written("t", index,
+                                souther.compiler.types.CoverageConstruct.IF), 0));
     }
 
     /**

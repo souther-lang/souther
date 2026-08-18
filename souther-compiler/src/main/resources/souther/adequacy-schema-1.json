@@ -140,7 +140,14 @@
             "additionalProperties": false,
             "properties": {
               "label": { "type": "string" },
-              "kind": { "enum": ["then", "else", "case", "constructed", "departure"] },
+              "kind": {
+                "description": "What this way through the construct is. `then` and `else` are the arms of an `if`; `continued` is the body past a `guard` whose condition held, which the author writes no word for; `kept` and `dropped` are the element a comprehension yields and the empty list it yields instead; `case` is an arm of a `match`; `constructed` and `departure` are the two ways out of an attempted construction. Read beside `construct`: the same outcome under two constructs is two things, and an `else` written under a `guard` is not the `else` of an `if`.",
+                "enum": ["then", "else", "case", "constructed", "departure", "continued", "kept", "dropped"]
+              },
+              "construct": {
+                "description": "What the author wrote this an outcome of. Not in `required`: a document written before this key existed is still a document of this version, and in one of those `then` and `else` were written for a `guard` and a comprehension as well as for an `if`.",
+                "enum": ["if", "guard", "comprehension", "match"]
+              },
               "at": { "$ref": "#/$defs/at" }
             }
           }
@@ -255,7 +262,7 @@
             "additionalProperties": false,
             "properties": {
               "axis": { "type": "string" },
-              "origin": { "type": "string", "description": "The rule that drew this line — a type's invariant, or a guard." },
+              "origin": { "type": "string", "description": "The rule that drew this line — a type's invariant, a behavior's `ensures`, or the fork of a body a condition was written in, named by the construct the author wrote it as (`if`, `guard` or `comprehension`) and where. Prose rather than a word list: which rules there are is the model's question, not this document's." },
               "side": { "enum": ["below", "at", "above"] },
               "kind": {
                 "enum": ["at_value", "between_positions"],

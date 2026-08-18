@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
 
@@ -32,8 +33,15 @@ import java.util.Map;
  * invariant clause gets none either: it is a property of a type, not a fork in this body, and whether
  * the rows reach its edges is a different measure asked another way.
  *
- * <p>A {@code guard … else} is an {@code if} by the time it gets here, so it needs no case of its own.
- * Helper bodies are not walked: a non-recursive helper is already inlined into the body that uses it,
+ * <p>A {@code guard … else} and a comprehension's condition are both an {@code if} by the time they
+ * get here, so the walk has one case for the three of them — and what they are is not read off that
+ * case. Which construct the author wrote is carried from where the source was read
+ * ({@link souther.compiler.types.CoverageConstruct}), and what one way through it means is a
+ * {@link SourceOutcome} beside it. Deciding either from the shape of the lowered node is answering a
+ * question about the source out of the tree that runs, which is how a comprehension came to be
+ * reported as a {@code guard} with a {@code then} arm.
+ *
+ * <p>Helper bodies are not walked: a non-recursive helper is already inlined into the body that uses it,
  * and a recursive one is a shared method rather than a fork in any one behavior.
  */
 public final class CoverageSites {
@@ -68,8 +76,15 @@ public final class CoverageSites {
     public record Obligation(String behavior, CoverageOrigin origin, int part) {}
 
     /**
-     * One arm, as it stands in the tree that runs.
+     * One outcome of one construct, as it stands in the tree that runs.
      *
+     * <p>Two halves and one meaning. {@link #obligation} carries the construct the source wrote, and
+     * {@link #outcome} what this way through it means; neither says the other, so nothing here can
+     * hold two answers about one construct. What a reader is told is {@link #name}, and it is the
+     * pair that settles it — a condition holding is a {@code then} under an {@code if} and the rest
+     * of the block under a {@code guard}.
+     *
+     * @param outcome     what this way through the construct means, in the source's terms
      * @param at          where the arm is written, as a report may say it. A {@link Citation} and
      *                    not a place, because an arm of a body spliced in from out of sight is at a
      *                    call in the caller's file and is not written there — a report handed the
@@ -80,42 +95,87 @@ public final class CoverageSites {
      * @param ordinal     where it comes in its behavior, for display
      * @param obligation  what a row would be owed for, which several occurrences share
      */
-    public record Site(String behavior, Kind kind, String label, Citation at,
+    public record Site(String behavior, SourceOutcome outcome, Citation at,
                        int index, int ordinal, Obligation obligation) {
 
-        public enum Kind {
-            /** The arm an {@code if} takes when its condition holds. */
-            THEN,
-            /** The arm it takes when the condition does not hold — a {@code guard}'s departure. */
-            ELSE,
-            /** One arm of a {@code match}. Cases written together on one arm are one site: they are
-             * one run of code, and a row takes it or does not. */
-            CASE,
-            /** The arm an attempted construction takes when the value was built. */
-            CONSTRUCTED,
-            /** An arm it takes when a clause refused. */
-            DEPARTURE,
-            /**
-             * One comparison of a guard's condition, recorded where it produced its boolean value.
-             *
-             * <p>Not an arm, and counted as one nowhere. A condition stops as soon as its answer is
-             * settled, so which arm a row landed in does not say which of the condition's comparisons
-             * ran: under {@code A && B} the arm where the condition failed is where a row that made
-             * {@code B} false lands and where a row that never reached {@code B} lands. Only an
-             * observation at the comparison separates them.
-             */
-            COMPARISON;
+        public Site {
+            // The pair is what carries the meaning, so the pair is what is checked. Not every
+            // combination is a construct of the language — a comprehension attempts no construction,
+            // a `match` settles no condition — and a walk that put an outcome on the wrong construct
+            // is the defect this whole value exists to make impossible.
+            OutcomeName.of(obligation.origin().kind(), outcome);
+        }
 
-            /** Whether a site of this kind is one of the arms a branch measure counts, and so one a
-             * report can name as an arm no row goes through. */
-            public boolean isArm() {
-                return this != COMPARISON;
-            }
+        /** What the author wrote this an outcome of. */
+        public CoverageConstruct construct() {
+            return obligation.origin().kind();
+        }
+
+        /** What a reader is told this is, which the two halves settle together. */
+        public OutcomeName name() {
+            return OutcomeName.of(construct(), outcome);
         }
 
         /** Whether this is one of the arms a branch measure counts. */
         public boolean isArm() {
-            return kind.isArm();
+            return outcome.isArm();
+        }
+
+        /**
+         * What a sentence in the reader's language calls this arm.
+         *
+         * <p>A key and what goes in it, chosen from the pair and not from either half: a condition
+         * holding is a {@code then} to quote under an {@code if} and the rest of the block under a
+         * {@code guard}, and the words for both are the catalog's.
+         */
+        public souther.compiler.diag.Localizable said() {
+            return switch (outcome) {
+                case SourceOutcome.Matched(List<TypeSymbol> cases) ->
+                        souther.compiler.diag.Localizable.of("arm.case", namesOf(cases));
+                case SourceOutcome.Failed(SourceOutcome.FailedBy.Construction(var clause)) ->
+                        clause.map(c -> souther.compiler.diag.Localizable.of(
+                                        "arm.departure.clause", c))
+                                .orElseGet(() -> souther.compiler.diag.Localizable.of(
+                                        "arm.departure"));
+                case SourceOutcome.Held _, SourceOutcome.Failed _, SourceOutcome.Compared _ ->
+                        switch (name()) {
+                            case THEN -> souther.compiler.diag.Localizable.of("arm.then");
+                            case ELSE -> souther.compiler.diag.Localizable.of("arm.else");
+                            case CONTINUED ->
+                                    souther.compiler.diag.Localizable.of("arm.continued");
+                            case KEPT -> souther.compiler.diag.Localizable.of("arm.kept");
+                            case DROPPED -> souther.compiler.diag.Localizable.of("arm.dropped");
+                            case CONSTRUCTED ->
+                                    souther.compiler.diag.Localizable.of("arm.constructed");
+                            // Neither is reachable here — a `case` and a departure are answered
+                            // above, and a comparison is not an arm, so nothing asks a sentence
+                            // about one.
+                            case CASE, DEPARTURE, COMPARISON -> throw new IllegalStateException(
+                                    "no sentence names this: " + name());
+                        };
+            };
+        }
+
+        /**
+         * The same, as the reports that are written in one language spell it.
+         *
+         * <p>Short where {@link #said} is a phrase: this goes in a field a consumer joins on and in a
+         * line of a table, and neither is a sentence.
+         */
+        public String label() {
+            return switch (outcome) {
+                case SourceOutcome.Matched(List<TypeSymbol> cases) -> "case " + namesOf(cases);
+                case SourceOutcome.Failed(SourceOutcome.FailedBy.Construction(var clause)) ->
+                        clause.map(c -> "else " + c).orElse("else");
+                case SourceOutcome.Compared(Hir.BinOp op) -> op.toString();
+                case SourceOutcome.Held _, SourceOutcome.Failed _ ->
+                        name().name().toLowerCase(java.util.Locale.ROOT);
+            };
+        }
+
+        private static String namesOf(List<TypeSymbol> cases) {
+            return cases.stream().map(TypeSymbol::name)
+                    .collect(java.util.stream.Collectors.joining(" | "));
         }
     }
 
@@ -281,6 +341,14 @@ public final class CoverageSites {
                 new IdentityHashMap<>();
         private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
+        /** The outcomes that carry nothing of their own. What each of them means is settled with
+         *  the construct beside it, so one instance stands for every occurrence. */
+        private static final SourceOutcome HELD =
+                new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition());
+        private static final SourceOutcome FAILED =
+                new SourceOutcome.Failed(new SourceOutcome.FailedBy.Condition());
+        private static final SourceOutcome BUILT =
+                new SourceOutcome.Held(new SourceOutcome.HeldBy.Construction());
         private String behavior;
         private int ordinal;
         /** Numbered across the whole plan and never reused, so that one number names one place
@@ -305,14 +373,14 @@ public final class CoverageSites {
          * an {@code unreachable} is E1911 and states nothing, so an arm only such a row could go
          * through is an arm no row will ever be recorded in.
          */
-        private ControlPointId.ArmOccurrence armOf(Site.Kind kind, String label, Core owner,
+        private ControlPointId.ArmOccurrence armOf(SourceOutcome outcome, Core owner,
                                                    CoverageOrigin origin, int part, Core arm,
                                                    boolean reachable) {
             // The arm is made either way. Whether a run through it can be recorded is the second
             // question and only the probe turns on it — an arm nothing could record is still an arm,
             // and the readings that judge one need to be able to name it.
             int probe = reachable && NormalReturn.of(arm)
-                    ? site(kind, label, owner, origin, part) : NO_SITE;
+                    ? site(outcome, owner, origin, part) : NO_SITE;
             return new ControlPointId.ArmOccurrence(controls++,
                     probe == NO_SITE ? OptionalInt.empty() : OptionalInt.of(probe),
                     // The fork's own coordinate, as a site takes it: an arm's body is what lowering
@@ -361,13 +429,13 @@ public final class CoverageSites {
          * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
-        private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part) {
+        private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part) {
             int index = sites.size();
             // Of the node's own coordinate. This walk is over one module and an arm of a
             // helper another module of this compile wrote is in that module's file, so a
             // source carried here beside the position would be the wrong half of two
             // answers about one place. The walk holds none for that reason.
-            sites.add(new Site(behavior, kind, label, Citation.of(owner.pos()),
+            sites.add(new Site(behavior, outcome, Citation.of(owner.pos()),
                     index, ordinal++, new Obligation(behavior, origin, part)));
             return index;
         }
@@ -425,10 +493,10 @@ public final class CoverageSites {
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
                     ControlPointId.ArmOccurrence then =
-                            armOf(Site.Kind.THEN, "then", iff, iff.origin(), 0, iff.then(), inside);
+                            armOf(HELD, iff, iff.origin(), 0, iff.then(), inside);
                     walk(iff.then(), inside);
                     ControlPointId.ArmOccurrence els =
-                            armOf(Site.Kind.ELSE, "else", iff, iff.origin(), 1, iff.els(), inside);
+                            armOf(FAILED, iff, iff.origin(), 1, iff.els(), inside);
                     walk(iff.els(), inside);
                     byNode.put(iff, probesOf(then, els));
                     armsByNode.put(iff, new ControlPointId.ArmOccurrence[] {then, els});
@@ -445,8 +513,7 @@ public final class CoverageSites {
                             new ControlPointId.ArmOccurrence[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, m.origin(), i, arm.body(),
-                                inside);
+                        arms[i] = armOf(matched(arm), m, m.origin(), i, arm.body(), inside);
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, probesOf(arms));
@@ -456,12 +523,12 @@ public final class CoverageSites {
                     ic.construct().values().forEach(given -> walk(given.value(), inside));
                     ControlPointId.ArmOccurrence[] arms =
                             new ControlPointId.ArmOccurrence[1 + ic.els().size()];
-                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.origin(), 0,
+                    arms[0] = armOf(BUILT, ic, ic.origin(), 0,
                             ic.then(), inside);
                     walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
-                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, ic.origin(), i + 1,
+                        arms[i + 1] = armOf(refused(arm), ic, ic.origin(), i + 1,
                                 arm.body(), inside);
                         walk(arm.body(), inside);
                     }
@@ -508,19 +575,19 @@ public final class CoverageSites {
                             + "; a tree rebuilt for an analysis is not the tree that runs");
                 }
                 byComparison.put(comparison,
-                        site(Site.Kind.COMPARISON, comparison.op().toString(), comparison,
+                        site(new SourceOutcome.Compared(comparison.op()), comparison,
                                 comparison.origin(), 0));
                 controlByComparison.put(comparison, controls++);
             }
         }
 
-        private static String label(Core.Case arm) {
-            List<String> names = arm.caseTypes().stream().map(TypeSymbol::name).toList();
-            return "case " + String.join(" | ", names);
+        private static SourceOutcome matched(Core.Case arm) {
+            return new SourceOutcome.Matched(arm.caseTypes());
         }
 
-        private static String label(Core.ElseArm arm) {
-            return arm.clause().map(c -> "else " + c).orElse("else");
+        private static SourceOutcome refused(Core.ElseArm arm) {
+            return new SourceOutcome.Failed(
+                    new SourceOutcome.FailedBy.Construction(arm.clause()));
         }
     }
 

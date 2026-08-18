@@ -107,7 +107,7 @@ class AComparisonBelongsToWhoWroteItNotToTheForkTestingItTest {
         Map<String, Core> bodies = checked.behaviorBodies();
         CoverageSites.Plan plan = CoverageSites.of(bodies);
         return plan.sites().stream()
-                .filter(site -> site.kind() == CoverageSites.Site.Kind.COMPARISON)
+                .filter(site -> site.outcome() instanceof SourceOutcome.Compared)
                 .map(CoverageSites.Site::obligation)
                 .toList();
     }

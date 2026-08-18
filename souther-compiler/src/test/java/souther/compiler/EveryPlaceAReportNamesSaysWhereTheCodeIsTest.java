@@ -244,8 +244,8 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
 
         assertFalse(said.boundaryLines().isEmpty(), "the comparison drew lines");
         for (String line : said.boundaryLines()) {
-            assertTrue(line.contains("guard@up.sou:"),
-                    () -> "the line names the file the guard is written in: " + line);
+            assertTrue(line.contains("if@up.sou:"),
+                    () -> "the line names the file the fork is written in: " + line);
         }
     }
 
@@ -293,15 +293,15 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     /**
      * A rule with no name gets a sentence of its own rather than a phrase built for its slot.
      *
-     * <p>A type and an invariant have names, which read the same in every language. A guard has none,
-     * and what filled the slot for it was English assembled in Java — so the Japanese warning said
-     * "a guard が線を引いているのはそこです". The words belong to the catalog, where every language
-     * has its own.
+     * <p>A type and an invariant have names, which read the same in every language. A fork of a body
+     * has none, and what filled the slot for it was English assembled in Java — so the Japanese
+     * warning said "a guard が線を引いているのはそこです". The words belong to the catalog, where
+     * every language has its own, and which construct it was is one of them.
      */
     @Test
-    void aLineAGuardDrewIsSaidInEveryLanguageItIsAskedIn() {
+    void aLineAForkDrewIsSaidInEveryLanguageItIsAskedIn() {
         Diagnostic edge = saidAbout(IN_SIGHT).edge();
-        assertInstanceOf(ExampleMessage.NoRowIsAtTheLineAGuardDrew.class, edge.said(),
+        assertInstanceOf(ExampleMessage.NoRowIsAtTheLineAConstructDrew.class, edge.said(),
                 "a rule with no name reports its own message");
         assertFalse(DiagnosticRenderer.body(edge, Locale.JAPANESE).contains("a guard"),
                 () -> "no English is assembled into a Japanese sentence: "
@@ -335,12 +335,12 @@ class EveryPlaceAReportNamesSaysWhereTheCodeIsTest {
     }
 
     @Test
-    void aGuardWrittenHereGainsNoneOfIt() {
+    void aForkWrittenHereGainsNoneOfIt() {
         Said said = saidAbout(IN_SIGHT);
         assertFalse(said.boundaryOrigins().isEmpty(), "the comparison drew lines");
         for (String origin : said.boundaryOrigins()) {
-            assertTrue(origin.startsWith("guard@"),
-                    () -> "the guard is where the report says it is: " + origin);
+            assertTrue(origin.startsWith("if@"),
+                    () -> "the fork is where the report says it is: " + origin);
         }
     }
 

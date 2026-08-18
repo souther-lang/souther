@@ -1930,8 +1930,12 @@ public final class Adequacy {
                 return;
             }
             for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
+                // The arm itself and not words about it. What to call one differs between a report,
+                // which is written in one language, and a diagnostic, which is written in the
+                // reader's — and the two readings ask the same arm rather than one of them being
+                // handed the other's answer.
                 out.add(new Finding(Kind.ARM_UNREACHED, behavior.name(), branch.status(),
-                        arm.at(), List.of(arm.label(), arm.behavior())));
+                        arm.at(), List.of(arm, arm.behavior())));
             }
         }
     }
@@ -1996,15 +2000,16 @@ public final class Adequacy {
                                 text(said, 0), text(said, 1), text(said, 2));
                         // The rule named without a place. Nothing here knows what to call a
                         // source, so a line and a column written into the sentence would be read
-                        // against whichever file the reader has in mind. Where the rule is a
-                        // guard, the place is pointed at rather than said.
+                        // against whichever file the reader has in mind. Where a fork of a body
+                        // drew the line, the place is pointed at rather than said, and which
+                        // construct it was is a phrase the catalog holds in every language.
                         case BOUNDARY_UNMET -> rule(said).isAGuard()
-                                ? new ExampleMessage.NoRowIsAtTheLineAGuardDrew(
-                                        text(said, 0), text(said, 1))
+                                ? new ExampleMessage.NoRowIsAtTheLineAConstructDrew(
+                                        text(said, 0), text(said, 1), constructOf(said))
                                 : new ExampleMessage.NoRowIsAtThatBoundary(
                                         text(said, 0), text(said, 1), rule(said).named());
                         case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
-                                text(said, 0), text(said, 1));
+                                arm(said).said(), text(said, 1));
                         default -> throw new IllegalArgumentException(
                                 "no message for " + finding.kind());
                     });
@@ -2026,10 +2031,12 @@ public final class Adequacy {
                         switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
                                     built.secondary(souther.compiler.diag.Region.point(w.at()),
-                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                                            new ExampleMessage.TheConstructThatDrawsTheLine(
+                                                    constructOf(said)));
                             case souther.compiler.diag.Citation.Reached r ->
                                     built.secondary(souther.compiler.diag.Region.point(r.at()),
-                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                                            new ExampleMessage.TheConstructThatDrawsTheLine(
+                                                    constructOf(said)));
                             // Nowhere this compilation can put a marker. Where the guard is written
                             // out of sight the label says so instead; where it is in a text the
                             // caller handed over there is no declaration to name and nothing to say,
@@ -2037,7 +2044,8 @@ public final class Adequacy {
                             // a place a reader is sent to names its source, and this one cannot.
                             case souther.compiler.diag.Citation.Elsewhere e ->
                                     built.secondaryOutOfSight(e.provenance(),
-                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                                            new ExampleMessage.TheConstructThatDrawsTheLine(
+                                                    constructOf(said)));
                             case souther.compiler.diag.Citation.Unplaced _ -> { }
                         }
                     });
@@ -2078,6 +2086,18 @@ public final class Adequacy {
          *  which cannot. */
         private static souther.compiler.partition.OriginRef rule(List<Object> said) {
             return (souther.compiler.partition.OriginRef) said.get(2);
+        }
+
+        /** The arm an arm finding is about, which it carries as itself for the same reason a
+         *  boundary finding carries its rule: what to call it is the reader's question. */
+        private static souther.compiler.coverage.CoverageSites.Site arm(List<Object> said) {
+            return (souther.compiler.coverage.CoverageSites.Site) said.get(0);
+        }
+
+        /** Which construct of the language drew a boundary's line, as a phrase the reader's
+         *  language supplies. Asked of the rule, which is where the source's own answer is. */
+        private static souther.compiler.diag.Localizable constructOf(List<Object> said) {
+            return rule(said).constructThatDrewIt().said();
         }
 
         /** What a finding put at {@code at}, as the text a message carries. */

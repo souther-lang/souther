@@ -60,20 +60,24 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
     }
 
     /**
-     * A clause's line is met by writing the value; a guard's at the same value is not.
+     * A clause's line is met by writing the value; a fork's at the same value is not.
      *
      * <p>The distinction the whole thing turns on, in one report. The row hands the behavior a
      * hundred and takes the branch above the comparison, so it never reaches
-     * {@code a.n.value > 100} — the guard's line at a hundred is unmet, and the clause's is met,
+     * {@code a.n.value > 100} — the fork's line at a hundred is unmet, and the clause's is met,
      * because every rule of a declaration runs whenever the behavior answers.
+     *
+     * <p>The fork is named {@code if} because that is what this body writes. Matched on the word so
+     * that the two rules are told apart by what drew each of them; a report naming every fork
+     * {@code guard} would have this pass while sending a reader after a construct that is not there.
      */
     @Test
-    void aClausesLineIsMetByWritingTheValueAndAGuardsIsNot() throws Exception {
+    void aClausesLineIsMetByWritingTheValueAndAForksIsNot() throws Exception {
         List<String> gaps = boundaryGaps(reportOf(REACHED_BY_ONE_RULE_ONLY));
 
         assertTrue(gaps.stream().anyMatch(line -> line.contains("charge/a.n = 100")
-                        && line.contains("guard")),
-                () -> "no row got the guard's comparison to answer at a hundred: " + gaps);
+                        && line.contains("if@")),
+                () -> "no row got the fork's comparison to answer at a hundred: " + gaps);
         assertFalse(gaps.stream().anyMatch(line -> line.contains("charge/a.n = 100")
                         && line.contains("ensures")),
                 () -> "the row writes a hundred, which is the whole of what the clause wants: "
@@ -107,7 +111,7 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
      * <p>A clause comparing one input against another draws a line where the two hold one count. It
      * is on neither of them, so it has no axis and no class either side — and what meeting it takes
      * is the same answer the clause's other lines get: the row that puts one count in both
-     * positions has met it. The guard drawing the same line is not met, because the row takes the
+     * positions has met it. The fork drawing the same line is not met, because the row takes the
      * branch above the comparison.
      */
     @Test
@@ -115,8 +119,8 @@ class AComparisonInAnEnsuresIsOfferedARowTest {
         List<String> gaps = boundaryGaps(reportOf(A_LINE_BETWEEN_TWO_POSITIONS));
 
         assertTrue(gaps.stream().anyMatch(line -> line.contains("book/from = to")
-                        && line.contains("guard")),
-                () -> "no row got the guard's comparison to answer on the line: " + gaps);
+                        && line.contains("if@")),
+                () -> "no row got the fork's comparison to answer on the line: " + gaps);
         assertFalse(gaps.stream().anyMatch(line -> line.contains("book/from = to")
                         && line.contains("ensures")),
                 () -> "the row puts one count in both positions, which is what the clause wants: "

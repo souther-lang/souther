@@ -68,9 +68,8 @@ class CoverageSitesTest {
         CoverageSites.Plan plan = planOf(MODEL);
 
         assertEquals(List.of("case UnderThirty", "then", "else"), labels(plan));
-        assertEquals(List.of(CoverageSites.Site.Kind.CASE, CoverageSites.Site.Kind.THEN,
-                        CoverageSites.Site.Kind.ELSE),
-                plan.sites().stream().map(CoverageSites.Site::kind).toList());
+        assertEquals(List.of(OutcomeName.CASE, OutcomeName.THEN, OutcomeName.ELSE),
+                plan.sites().stream().map(CoverageSites.Site::name).toList());
     }
 
     /**

@@ -795,7 +795,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.ARM_UNREACHED)) {
             out.append(String.format("      %s no row goes through `%s` (%s)%n",
-                    mark(f), f.args().get(0), f.at().said(names, declaredIn)));
+                    mark(f), armOf(f).label(), f.at().said(names, declaredIn)));
         }
     }
 
@@ -1228,7 +1228,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (souther.compiler.coverage.CoverageSites.Site arm : named) {
             ObjectNode a = unreached.addObject();
             a.put("label", arm.label());
-            a.put("kind", word(arm.kind()));
+            a.put("kind", word(arm.name()));
+            // What the arm is an outcome of. Two fields because the meaning is the pair: an `else`
+            // an author wrote under an `if` and one written under a `guard` are the same outcome of
+            // two constructs, and a consumer told only the outcome cannot tell them apart.
+            a.put("construct", word(arm.construct()));
             at(a, arm.at(), sources);
         }
     }
@@ -1314,14 +1318,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private static String subject(Adequacy.Finding finding) {
         List<Object> args = finding.args();
         return switch (finding.kind()) {
+            // The label and not the arm, and the same label `branch.unreached` writes: this field
+            // exists to join to that entry, and a value spelled a second way here would join to
+            // nothing.
+            case ARM_UNREACHED -> armOf(finding).label();
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
-                    ARM_UNREACHED, PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
+                    PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
                     PARTITION_READ_IN_PART, PARTITION_OMITTED ->
                     String.valueOf(args.get(0));
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
             case BOUNDARY_UNMET -> args.get(0) + " = " + args.get(1);
         };
+    }
+
+    /** The arm an arm finding carries, which it holds as itself so that each reader names it its
+     *  own way. */
+    private static souther.compiler.coverage.CoverageSites.Site armOf(Adequacy.Finding finding) {
+        return (souther.compiler.coverage.CoverageSites.Site) finding.args().get(0);
     }
 
     /**
