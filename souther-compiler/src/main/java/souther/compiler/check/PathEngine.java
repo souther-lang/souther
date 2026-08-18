@@ -38,6 +38,18 @@ import java.util.function.Predicate;
  */
 final class PathEngine {
 
+    /**
+     * Where a test in this package reads the answers this took a guarantee from, one entry per
+     * seeding, and null everywhere else.
+     *
+     * <p>Beside {@link InvariantChecker#WATCHING} and for a reason of its own. Seeding one answer
+     * twice lands on the subjects it landed on the first time, so a reading that seeds once per node
+     * and one that seeds once per region say the same thing about every program — what separates
+     * them is what they cost, and no diagnostic is about that. So the property has nowhere else to be
+     * read, and one that nothing reads stops being true without anything failing.
+     */
+    static List<Core> SEEDED;
+
     /** How far into a value's fields the seeding reads. A type's own invariant is what its fields
      * guarantee, and a field's type carries its own; past a couple of levels what a clause could be
      * read against is a value the body would have had to name, and it names it by reading it. */
@@ -406,6 +418,7 @@ final class PathEngine {
         }
         Known out = k;
         if (isACheckedProducer(e)) {
+            seeded(e);
             out = seedAt(e, out, at, 0);
         }
         out = assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
@@ -425,6 +438,14 @@ final class PathEngine {
                 yield threaded[0];
             }
         };
+    }
+
+    /** Records an answer this read a guarantee off, where a test is reading them. */
+    private static void seeded(Core answer) {
+        List<Core> watching = SEEDED;
+        if (watching != null) {
+            watching.add(answer);
+        }
     }
 
     /**

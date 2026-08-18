@@ -64,7 +64,8 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
         Map<String, OriginRef.GuardOrigin.Witness> out = new LinkedHashMap<>();
         for (Threshold each : guards.thresholds()) {
-            out.put(each.path().toString(), each.origin().witness());
+            out.put(each.path().toString(),
+                    ((OriginRef.GuardOrigin) each.origin()).witness());
         }
         return out;
     }

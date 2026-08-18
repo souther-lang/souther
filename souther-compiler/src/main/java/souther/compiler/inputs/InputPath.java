@@ -42,7 +42,7 @@ public final class InputPath {
      * binding a body gave it.
      */
     public static TermPath of(Core e, InputDomain read, Symbols symbols) {
-        return of(e, read, Map.of(), symbols);
+        return of(e, read.parameterReads(), Map.of(), symbols, false);
     }
 
     /**
@@ -58,18 +58,23 @@ public final class InputPath {
      * value is a call is a value the rules of no position say anything about, and it answers
      * nothing here.
      *
-     * @param bound what each binding on the way holds, in the order they were passed
+     * @param roots      which bindings name which parameter, in the tree being walked
+     * @param bound      what each binding on the way holds, in the order they were passed
+     * @param callsStand whether this tree is one that keeps the operations the language defines the
+     *                   meaning of standing. Where it is, such a call names no location and that is
+     *                   the answer; where it is not, meeting one says the walk was handed a
+     *                   representation it does not read
      */
-    public static TermPath of(Core e, InputDomain read, Map<BindingId, Core> bound,
-                              Symbols symbols) {
-        return of(e, read, bound, symbols, 0);
+    public static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
+                              Symbols symbols, boolean callsStand) {
+        return of(e, roots, bound, symbols, callsStand, 0);
     }
 
-    private static TermPath of(Core e, InputDomain read, Map<BindingId, Core> bound,
-                               Symbols symbols, int through) {
+    private static TermPath of(Core e, Map<BindingId, String> roots, Map<BindingId, Core> bound,
+                               Symbols symbols, boolean callsStand, int through) {
         return switch (e) {
             case Core.Read r -> {
-                String parameter = read.parameterRead(r.binding());
+                String parameter = roots.get(r.binding());
                 if (parameter != null) {
                     yield TermPath.of(parameter);
                 }
@@ -77,20 +82,26 @@ public final class InputPath {
                 // A binding holds one value, so following it cannot come back to itself; the count
                 // is what says so to a reader rather than a claim in a comment.
                 yield held == null || through >= bound.size() ? null
-                        : of(held, read, bound, symbols, through + 1);
+                        : of(held, roots, bound, symbols, callsStand, through + 1);
             }
             case Core.FieldAccess fa -> {
-                TermPath base = of(fa.target(), read, bound, symbols, through);
+                TermPath base = of(fa.target(), roots, bound, symbols, callsStand, through);
                 if (base == null) {
                     yield null;
                 }
                 yield Location.isStep(fa.target().type(), fa.field(), symbols)
                         ? base.then(fa.field()) : base;
             }
-            // A call kept standing names no location, and its presence says this walk was handed a
-            // representation it does not read. Said rather than answered with "no path", which would
-            // be the same answer a number gives.
-            case Core.PreservedCall p -> throw p.unexpectedIn("an input position");
+            // A call kept standing names no location. Where the walk is over a tree that keeps them
+            // that is the answer, and where it is not, its presence says this walk was handed a
+            // representation it does not read — said rather than answered with "no path", which
+            // would be the same answer a number gives.
+            case Core.PreservedCall p -> {
+                if (!callsStand) {
+                    throw p.unexpectedIn("an input position");
+                }
+                yield null;
+            }
             case null, default -> null;
         };
     }
