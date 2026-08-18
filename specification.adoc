@@ -3047,6 +3047,8 @@ What a row can be held to without a body, it is held to. Its arity, each input b
 
 Evaluation begins by itself. The row is unchanged when the `+let+` arrives; from that compile on it is applied and compared like any other, and a row that stated the wrong answer is <<e1905>> then rather than never.
 
+An implementation supplied to a run is the other way it begins. Where something outside a compile answers the behavior, the row is applied and compared the same way — the same fixtures, the same arm resolution, the same comparison — and a row that stated the wrong answer is <<e1905>> there too. What the implementation answered is held to what the behavior declares of what it answers (<<an-implementation-keeps-what-the-behavior-states>>), which for an injected behavior is where that clause is checked at all. Whether such a run happens is not the model's to say and nothing about the row changes for it: what is recorded is what applied it, and the rows are the same rows either way.
+
 A `+fake+` is not what a pending row wants. A fake stands in for a dependency while some *other* behavior's row runs (<<example-fakes>>); an `+example+` of an injected behavior says what that behavior itself will have to answer. Neither is run from the other, so both belong. An injected behavior declares no `+depends on+` of its own (<<depends-on>>), so a pending row needs no fake at all.
 
 They are read against each other all the same. Where a stand-in and a recorded row answer one input differently, that is <<e1919>>.
