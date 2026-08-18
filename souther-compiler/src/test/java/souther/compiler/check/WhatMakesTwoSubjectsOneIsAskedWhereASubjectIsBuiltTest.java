@@ -149,6 +149,33 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
                 "and each ask is its own");
     }
 
+    /**
+     * A size taken over a part of an evaluation composes with it, like anything else built over one.
+     *
+     * <p>Held because this is where a closure that only went one level deep would show: the size rule
+     * keys a count over the container it is really the size of, and that container is here a field of
+     * something the term grammar cannot name. Were the composition to stop at either step, one
+     * writing of this in a guard and another in a clause would be two values, and the guard could
+     * never discharge the clause.
+     */
+    @Test
+    void aSizeOverAPartOfAnEvaluationComposesWithIt() {
+        Terms terms = new Terms(Symbols.none());
+        Denotations at = Denotations.none();
+        Core answer = unnameable();
+
+        assertEquals(terms.subjectOf(length(items(answer)), at),
+                terms.subjectOf(length(items(answer)), at),
+                "one count of one field of one evaluation is one value");
+        assertNotEquals(terms.subjectOf(length(items(answer)), at),
+                terms.subjectOf(length(items(unnameable())), at),
+                "and over another evaluation it is another value");
+    }
+
+    private static Core items(Core of) {
+        return new Core.FieldAccess(of, "items", Type.list(Type.INT), POS);
+    }
+
     private static Core field(Core of, String name) {
         return new Core.FieldAccess(of, name, Type.INT, POS);
     }
