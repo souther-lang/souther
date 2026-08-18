@@ -153,6 +153,20 @@ public final class InputDomain {
     }
 
     /**
+     * The same, as the whole map, for a reader that walks a tree rather than asking about one
+     * binding.
+     *
+     * <p>A behavior's parameters are bound more than once. The implementation binds them where the
+     * body reads them, and the declaration binds them where its own {@code ensures} clauses do; a
+     * reading is handed the bindings of the tree it is walking, and one given the others finds every
+     * comparison about nothing. What is here is the implementation's, which is what this reading was
+     * made from.
+     */
+    public Map<BindingId, String> parameterReads() {
+        return read;
+    }
+
+    /**
      * One position, read, and then what is under it.
      *
      * <p>What is under a position is walked whether or not the position itself came to anything.

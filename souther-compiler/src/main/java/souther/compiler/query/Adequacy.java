@@ -245,6 +245,13 @@ public final class Adequacy {
                 : read.getOrDefault(spec.name(), InputDomain.NONE);
     }
 
+    /** What one behavior states about its answer, or nothing where it states none. A behavior
+     *  declaring nothing is not in the map at all, which is what says it states nothing. */
+    private static souther.compiler.check.StatedContract statedOf(
+            Map<String, souther.compiler.check.StatedContract> declared, Hir.SpecBehavior spec) {
+        return declared == null ? null : declared.get(spec.name());
+    }
+
 
     /**
      * What the model's own rules say arrives at each place of each behavior of one module.
@@ -601,6 +608,10 @@ public final class Adequacy {
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
             Map<String, List<BoundaryAssessment>> boundaries = db.ask(new Boundaries(name)).value();
+            // What each behavior states about its answer, read into the representation the analysis
+            // holds it in. A comparison written there draws a line as a `guard`'s does.
+            Map<String, souther.compiler.check.StatedContract> declared =
+                    db.ask(new Bodies.StatedContracts(name)).value();
 
             Map<String, PartitionEvidence> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -619,7 +630,7 @@ public final class Adequacy {
                         scope.value(), bodies.get(spec.name()), plan, seen,
                         boundaries == null ? List.of()
                                 : boundaries.getOrDefault(spec.name(), List.of()),
-                        arrivalsOf(arrives, spec)));
+                        arrivalsOf(arrives, spec), statedOf(declared, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -674,6 +685,9 @@ public final class Adequacy {
             boolean armsAsked = levelOf(db).measuresArms();
             FixtureReader.Construction building = constructing(db, name,
                     prepared.value().forExamples(), symbols);
+            // And what each behavior states about its answer, which draws lines of its own.
+            Map<String, souther.compiler.check.StatedContract> declared =
+                    db.ask(new Bodies.StatedContracts(name)).value();
 
             Map<String, List<BoundaryAssessment>> out = new LinkedHashMap<>();
             for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -686,7 +700,8 @@ public final class Adequacy {
                 }
                 out.put(spec.name(), assess(spec, sig, symbols, bodies.get(spec.name()), plan,
                         byTarget.getOrDefault(spec.name(), Observed.NONE), armsAsked, building,
-                        domainOf(readInputs, spec), arrivalsOf(arrives, spec)));
+                        domainOf(readInputs, spec), arrivalsOf(arrives, spec),
+                        statedOf(declared, spec)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -696,13 +711,15 @@ public final class Adequacy {
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 boolean armsAsked, FixtureReader.Construction building, InputDomain domain,
-                souther.compiler.check.PathReachability.Answers arrives) {
+                souther.compiler.check.PathReachability.Answers arrives,
+                souther.compiler.check.StatedContract stated) {
             List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
             souther.compiler.partition.BehaviorInputs inputs =
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives);
+                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives,
+                            stated);
             Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
@@ -1261,6 +1278,9 @@ public final class Adequacy {
 
             Map<String, List<BoundaryAssessment>> boundaries =
                     db.ask(new Boundaries(name)).value();
+            // And what each behavior states about its answer, which draws lines of its own.
+            Map<String, souther.compiler.check.StatedContract> declared =
+                    db.ask(new Bodies.StatedContracts(name)).value();
 
             Map<String, List<Finding>> findings = db.ask(new Findings(name)).value();
             Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
@@ -1282,7 +1302,8 @@ public final class Adequacy {
                 try {
                     pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
-                            domainOf(readInputs, spec), arrivalsOf(arrives, spec));
+                            domainOf(readInputs, spec), arrivalsOf(arrives, spec),
+                            statedOf(declared, spec));
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -1364,11 +1385,11 @@ public final class Adequacy {
             String subject = axis + " = " + value;
             for (BoundaryAssessment each : edges) {
                 // The rule as well as the place. Several rules can draw a line at one value — a
-                // type's invariant and a `guard` that repeats it — and they are separate obligations
-                // that a row meets separately, so one of them can be a gap while the one beside it
-                // already has its row. Found by the value alone, the gap was answered by whichever
-                // assessment came first, and where that was the met one this read its own answer as
-                // a contradiction.
+                // type's invariant and a `guard` that repeats it, a clause and a guard comparing the
+                // same number — and they are separate obligations that a row meets separately, so
+                // one of them can be a gap while the one beside it already has its row. Found by the
+                // value alone, the gap was answered by whichever assessment came first, and where
+                // that was the met one this read its own answer as a contradiction.
                 if (!each.axis().equals(axis) || !each.value().equals(value)
                         || !each.rule().equals(rule)) {
                     continue;
@@ -1520,7 +1541,8 @@ public final class Adequacy {
                 Hir.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 FixtureReader.Construction building, InputDomain domain,
-                souther.compiler.check.PathReachability.Answers arrives) {
+                souther.compiler.check.PathReachability.Answers arrives,
+                souther.compiler.check.StatedContract stated) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -1537,7 +1559,8 @@ public final class Adequacy {
                     new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
                             symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives);
+                    Coverages.partitioningOf(spec, domain, sig, symbols, body, plan, arrives,
+                            stated);
             Generator.Subject subject = new Generator.Subject(inputs, partitioning.axes());
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());

@@ -366,7 +366,11 @@ public final class Partitions {
                     // this could not settle keeps its line and its rows, which is the direction that
                     // leaves an author with work rather than with a report about a model of theirs
                     // that is fine.
-                    .filter(t -> !arrives.dividesNothing(t.origin().site()))
+                    // Asked of the comparison, where the rule is met by having produced one. A
+                    // clause has no comparison a path can arrive at: it is checked whenever the
+                    // behavior answers, so nothing about which branch a body took drops its line.
+                    .filter(t -> t.origin().comparisonSite().stream()
+                            .noneMatch(arrives::dividesNothing))
                     .toList();
             // What the term is, not what an invariant said about it. There is a bound to read only
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
@@ -590,8 +594,9 @@ public final class Partitions {
      * The values a row has to be written at, one per rule that drew a cut.
      *
      * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so
-     * the edge is the only row there is to write. A guard's line has values on both sides, so it wants
-     * the value and its neighbour — and the neighbour only where the type has one to give.
+     * the edge is the only row there is to write. A guard's line and a clause's have values on both
+     * sides, so each wants the value and its neighbour — and the neighbour only where the type has
+     * one to give.
      */
     public static List<BoundaryObligation> obligationsOf(Axis axis, Symbols symbols,
                                                          NumericDomain.Bounds within) {
@@ -613,28 +618,33 @@ public final class Partitions {
                             new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), cut.at()),
                             origin, BoundaryObligation.BoundarySide.AT));
                 }
-                // A line that singles a value out has no neighbour to ask for: the values either
-                // side of it are one class, so a row over there is a row the class's own already is.
-                if (origin instanceof OriginRef.GuardOrigin guard && !guard.singles()) {
-                    // The other class's edge is the neighbour on the side the cut value is not on —
-                    // where that class has values. A guard at the end of what the position can hold
-                    // has nothing on one side of it, and a step off the end is a row nobody can write:
-                    // `value >= 10` under `x < 10` would be owed a 9. The cut itself stays either way,
-                    // because the comparison is still reached by a row written at the line.
-                    if (guard.valueBelongsBelow()) {
-                        domain.successor(cut.at())
+                // Whether the line has another side is the rule's own answer, asked rather than read
+                // off which kind of rule it is. A guard and a clause both leave values either side;
+                // an invariant leaves none outside its bound, and a rule that singles a value out
+                // leaves the values either side of it in one class, so a row over there is a row
+                // that class already has.
+                //
+                // The other class's edge is the neighbour on the side the cut value is not on —
+                // where that class has values. A line at the end of what the position can hold has
+                // nothing on one side of it, and a step off the end is a row nobody can write:
+                // `value >= 10` under `x < 10` would be owed a 9. The cut itself stays either way,
+                // because the line is still met by a row written at it.
+                origin.besideTheCut().ifPresent(beside -> {
+                    switch (beside) {
+                        case ABOVE -> domain.successor(cut.at())
                                 .filter(next -> within == null || within.admits(next))
                                 .ifPresent(next -> out.add(new BoundaryObligation(
                                         new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), next),
                                         origin, BoundaryObligation.BoundarySide.ABOVE)));
-                    } else {
-                        domain.predecessor(cut.at())
+                        case BELOW -> domain.predecessor(cut.at())
                                 .filter(before -> within == null || within.admits(before))
                                 .ifPresent(before -> out.add(new BoundaryObligation(
                                         new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), before),
                                         origin, BoundaryObligation.BoundarySide.BELOW)));
+                        // The cut itself is not a value beside the cut, so nothing answers with it.
+                        case AT -> { }
                     }
-                }
+                });
             }
         }
         return List.copyOf(out);

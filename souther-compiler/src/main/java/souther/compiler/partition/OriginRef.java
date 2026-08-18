@@ -82,6 +82,49 @@ public sealed interface OriginRef {
     }
 
     /**
+     * A comparison written in a behavior's {@code ensures}.
+     *
+     * <p>The third rule that draws a line, and neither of the other two. Like an invariant it is met
+     * by writing the value: every rule of a declaration runs when the behavior answers, so a row
+     * that hands the behavior the value has reached the comparison by construction and there is no
+     * site to look for it at. Like a guard the line has values on both sides — {@code id.value > 0}
+     * under a {@code NotFound} arm says the behavior may not answer that case at or below zero and
+     * may above it, so a row is owed either side — which is what tells it from a bound, where
+     * nothing outside can be constructed at all.
+     *
+     * <p>Only a comparison on an input is here. One reading {@code value} is a line on the answer,
+     * and a row cannot be written at it: what a row chooses is what the behavior is applied to, not
+     * what it answers with. Nothing turns such a comparison away; a term over the answer names no
+     * position of the input, so it draws nothing.
+     *
+     * <p>Both shapes of line wear this. A line at a count of one position and a line between two
+     * are drawn by the same rules and are met the same way, so what tells them apart is the target
+     * and not the origin — and a reader asking which rule is owed this row does not have to know
+     * which shape the line has.
+     *
+     * @param rule              which rule of which clause, which is what tells one line from
+     *                          another. Two arms of one clause may name the same case, so the
+     *                          author's words for it are not enough
+     * @param clause            what a report calls it: the name the author gave the clause, or the
+     *                          case the arm names where they gave none, or empty where the clause
+     *                          states one rule over every answer
+     * @param valueBelongsBelow which side of the line the cut value itself is on, which decides
+     *                          which neighbour is the other class's edge
+     * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
+     *                          from {@code valueBelongsBelow}, and what tells one line of a rule
+     *                          from another written at the same value: {@code id.value <= 5} and
+     *                          {@code id.value > 5} agree about the class the value is in and are
+     *                          two things a row on the line shows apart. On a line between two
+     *                          positions it is the whole of what the row shows, since there is no
+     *                          class either side to read instead
+     * @param singles           whether the comparison singles the value out rather than ordering
+     *                          the values either side of it
+     */
+    record EnsuresOrigin(souther.compiler.check.BehaviorContract.RuleId rule, String clause,
+                         boolean valueBelongsBelow, boolean holdsAtTheValue,
+                         boolean singles) implements OriginRef {}
+
+    /**
      * A bound one rule put there and another took in.
      *
      * <p>One obligation and not two. The rules do not each want a row: {@code MinuteOfDay}'s maximum
@@ -161,6 +204,7 @@ public sealed interface OriginRef {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
+            case EnsuresOrigin e -> nameOf(e);
             case GuardOrigin g -> switch (g.at()) {
                 case Citation.Written _, Citation.Unplaced _ ->
                         "guard@" + g.at().said(names, sectionSource);
@@ -184,6 +228,7 @@ public sealed interface OriginRef {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
+            case EnsuresOrigin e -> nameOf(e);
             // Never rendered to a reader: a rule with no name gets a sentence of its own, so the
             // catalog holds those words in every language rather than this building them in one.
             // What reaches this is a caller that wanted something to call the rule anyway.
@@ -194,13 +239,28 @@ public sealed interface OriginRef {
         };
     }
 
+    /**
+     * What a report calls a clause: the behavior, and the words that tell one of its rules from
+     * another.
+     *
+     * <p>A name and not a place, which is what puts it beside an invariant rather than beside a
+     * guard. A clause belongs to a behavior, so there is always something to call it — where the
+     * author named the clause it is that name, and where they did not it is the case the arm is
+     * about. Only a clause stating one rule over every answer has neither, and the behavior's own
+     * name is then the whole of it.
+     */
+    private static String nameOf(EnsuresOrigin e) {
+        return "ensures " + e.rule().behavior().name()
+                + (e.clause().isEmpty() ? "" : " (" + e.clause() + ")");
+    }
+
     /** Whether a guard drew this line, through however many narrowings. Asked rather than matched
      *  on the text: what a rule is called is a rendering, and two of them read the same word. */
     default boolean isAGuard() {
         return switch (this) {
             case GuardOrigin _ -> true;
             case NarrowedOrigin n -> n.bound().isAGuard();
-            case TypeOrigin _, InvariantOrigin _ -> false;
+            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> false;
         };
     }
 
@@ -209,6 +269,55 @@ public sealed interface OriginRef {
         return switch (this) {
             case GuardOrigin g -> java.util.Optional.of(g.at());
             case NarrowedOrigin n -> n.bound().citation();
+            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+        };
+    }
+
+    /**
+     * Where the comparison's own value is recorded, for a rule that meeting takes more than writing
+     * the value.
+     *
+     * <p>Asked of the rule rather than matched on which kind it is, because the two are not the same
+     * question and reading one for the other is what puts a new rule on whichever arm the code was
+     * written next to. A guard is reached conditionally — a value can arrive at a behavior's input
+     * without arriving at the comparison that cares about it — so a row met that line by getting the
+     * comparison to answer, and the site is where that is recorded. Every other rule runs whenever
+     * there is a value to run it on: an invariant refuses everything outside its bound, so nothing
+     * exists that could have missed it, and a clause is checked whenever the behavior answers. For
+     * those, writing the value is the whole of what there is to reach and there is no site to look
+     * at.
+     */
+    default java.util.OptionalInt comparisonSite() {
+        return switch (this) {
+            case GuardOrigin g -> java.util.OptionalInt.of(g.site());
+            case NarrowedOrigin n -> n.bound().comparisonSite();
+            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> java.util.OptionalInt.empty();
+        };
+    }
+
+    /**
+     * The value beside the cut a row is owed as well, or nothing where the line has no other side.
+     *
+     * <p>The second of the two questions, and independent of the first. What decides it is whether
+     * the values either side of the line are both writable: a guard and a clause leave a range on
+     * each side, and a bound leaves nothing outside itself, so an invariant's edge is the only row
+     * there is to write. A value a rule singles out has no neighbour either — the values either side
+     * of it are one class, so a row over there is a row that class already has.
+     *
+     * <p>Which neighbour it is comes from where the cut value itself falls: {@code <= 3000} leaves
+     * 3001 over the line and {@code < 3000} leaves 2999.
+     */
+    default java.util.Optional<BoundaryObligation.BoundarySide> besideTheCut() {
+        return switch (this) {
+            case GuardOrigin g -> g.singles() ? java.util.Optional.empty()
+                    : java.util.Optional.of(g.valueBelongsBelow()
+                            ? BoundaryObligation.BoundarySide.ABOVE
+                            : BoundaryObligation.BoundarySide.BELOW);
+            case EnsuresOrigin e -> e.singles() ? java.util.Optional.empty()
+                    : java.util.Optional.of(e.valueBelongsBelow()
+                            ? BoundaryObligation.BoundarySide.ABOVE
+                            : BoundaryObligation.BoundarySide.BELOW);
+            case NarrowedOrigin n -> n.bound().besideTheCut();
             case TypeOrigin _, InvariantOrigin _ -> java.util.Optional.empty();
         };
     }

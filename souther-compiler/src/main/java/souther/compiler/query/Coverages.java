@@ -17,6 +17,7 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.partition.EnsuresThresholds;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.partition.OriginRef;
@@ -50,20 +51,39 @@ final class Coverages {
     static Partitions.Partitioning partitioningOf(Hir.SpecBehavior behavior, InputDomain inputs,
                                                   Sig sig, Symbols symbols,
                                                   Core body, CoverageSites.Plan plan,
-                                                  PathReachability.Answers arrives) {
+                                                  PathReachability.Answers arrives,
+                                                  souther.compiler.check.StatedContract stated) {
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
         // a field under a name is reached by taking the name off, and a walk given the paths
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning = Partitions.of(behavior.name(), inputs, symbols);
-        if (body == null) {
-            return partitioning;
+        // What the behavior states about its own answer, which is read whether or not anything
+        // implements it: a clause is written against the declaration, so an injected behavior draws
+        // its lines like any other and there is no body for them to have come out of.
+        EnsuresThresholds.Clauses clauses = EnsuresThresholds.of(stated, inputs, symbols);
+        GuardThresholds.Guards guards = body == null ? GuardThresholds.Guards.NONE
+                : GuardThresholds.of(behavior.name(), body, plan, inputs, symbols);
+        // Both producers of one kind of line, put together before the position is divided. Two
+        // rules at one value are one cut and stay separate obligations, which is what the merge
+        // below does — applied one producer at a time, a clause and a guard naming one number would
+        // divide the position twice.
+        return Partitions.withThresholds(partitioning,
+                both(clauses.thresholds(), guards.thresholds()), symbols,
+                both(clauses.unread(), guards.unread()),
+                both(clauses.singled(), guards.singled()),
+                both(clauses.between(), guards.between()), arrives);
+    }
+
+    /** The two producers' lines, in one list. */
+    private static <T> List<T> both(List<T> declared, List<T> compared) {
+        if (declared.isEmpty()) {
+            return compared;
         }
-        GuardThresholds.Guards guards =
-                GuardThresholds.of(behavior.name(), body, plan, inputs, symbols);
-        return Partitions.withThresholds(partitioning, guards.thresholds(), symbols,
-                guards.unread(), guards.singled(), guards.between(), arrives);
+        List<T> all = new ArrayList<>(declared);
+        all.addAll(compared);
+        return List.copyOf(all);
     }
 
     /**
@@ -77,7 +97,8 @@ final class Coverages {
                                 Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
                                 List<BoundaryAssessment> boundaries,
-                                PathReachability.Answers arrives) {
+                                PathReachability.Answers arrives,
+                                souther.compiler.check.StatedContract stated) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Hir.Param::name).toList();
         // What a row's values are, where they sit and what they are written as, read together:
@@ -85,7 +106,7 @@ final class Coverages {
         // alone reaches nothing where the derivation reaches a field.
         BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning =
-                partitioningOf(behavior, inputs, sig, symbols, body, plan, arrives);
+                partitioningOf(behavior, inputs, sig, symbols, body, plan, arrives, stated);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
@@ -412,7 +433,12 @@ final class Coverages {
             BoundaryObligation obligation, Axis axis, BehaviorInputs where,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
-        boolean guard = obligation.origin() instanceof OriginRef.GuardOrigin;
+        // Whether meeting this line takes the comparison having run, asked of the rule rather than
+        // read off which kind it is. A guard is the one reached conditionally; an invariant refuses
+        // everything outside its bound and a clause is checked whenever the behavior answers, so
+        // for both of those writing the value is the whole of what there is to reach.
+        java.util.OptionalInt site = obligation.origin().comparisonSite();
+        boolean guard = site.isPresent();
         BoundaryAssessment.Coverage.Reason absent = guard
                 ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen())
                 : whyNoInvariantLine(rows, observed.someRowsUnseen());
@@ -421,11 +447,9 @@ final class Coverages {
         }
         Met met = switch (obligation.target()) {
             case BoundaryTarget.AtPlace place -> guard
-                    ? evaluatedAt(axis, where, rows, place.at(),
-                            (OriginRef.GuardOrigin) obligation.origin())
+                    ? evaluatedAt(axis, where, rows, place.at(), site.getAsInt())
                     : writtenAt(axis, where, rows, place.at());
-            case BoundaryTarget.EqualTerms line ->
-                    heldBetween(line, where, rows, (OriginRef.GuardOrigin) obligation.origin());
+            case BoundaryTarget.EqualTerms line -> heldBetween(line, where, rows, site);
         };
         return verdictOf(met, guard, observed);
     }
@@ -452,12 +476,19 @@ final class Coverages {
         java.util.SequencedMap<Line, BoundaryAssessment> out = new LinkedHashMap<>();
         for (BoundaryObligation each : partitioning.between()) {
             BoundaryTarget.EqualTerms line = (BoundaryTarget.EqualTerms) each.target();
-            BoundaryAssessment.Coverage.Reason absent =
-                    whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen());
+            // The same two questions a line at a place is asked, and asked of the rule rather than
+            // read off the shape of the line. Both shapes are drawn by a `guard` and by a clause,
+            // and which of them drew this one is what says whether meeting it takes the comparison
+            // having run — so a clause's line here is not one waiting on the arms either.
+            java.util.OptionalInt site = each.origin().comparisonSite();
+            boolean guard = site.isPresent();
+            BoundaryAssessment.Coverage.Reason absent = guard
+                    ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(),
+                            observed.someRowsUnseen())
+                    : whyNoInvariantLine(rows, observed.someRowsUnseen());
             BoundaryAssessment.Coverage coverage = absent != null
                     ? new BoundaryAssessment.Coverage.NotMeasured(absent)
-                    : verdictOf(heldBetween(line, where, rows,
-                            (OriginRef.GuardOrigin) each.origin()), true, observed);
+                    : verdictOf(heldBetween(line, where, rows, site), guard, observed);
             // A place both positions admit is what a row on the line writes. Read once: it is what a
             // candidate is built at, and what proves the line writable where the two are independent.
             Place at = Partitions.commonPlace(partitioning.domains(), line);
@@ -535,9 +566,14 @@ final class Coverages {
      * positions are of one carrier and need not be of one type — {@code Charge} against {@code Ceiling}
      * is what the domain this was found in is made of — and two values of different types are never
      * equal however much the numbers inside them agree.
+     *
+     * @param site where the comparison's own value is recorded, for a rule that meeting takes more
+     *             than writing the two values. Empty where writing them is the whole of it, which is
+     *             a clause: it is checked whenever the behavior answers, so a row putting one count
+     *             in both positions has reached the comparison by construction
      */
     private static Met heldBetween(BoundaryTarget.EqualTerms line, BehaviorInputs where,
-                                   List<RowOutcome> rows, OriginRef.GuardOrigin origin) {
+                                   List<RowOutcome> rows, java.util.OptionalInt site) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
             NumericTerm.Reading on = line.on()
@@ -552,7 +588,7 @@ final class Coverages {
             if (on instanceof NumericTerm.Reading.Number here
                     && against instanceof NumericTerm.Reading.Number there
                     && here.value().sameAs(there.value())
-                    && litBy(row).contains(origin.site())) {
+                    && site.stream().allMatch(litBy(row)::contains)) {
                 return Met.YES;
             }
         }
@@ -687,7 +723,7 @@ final class Coverages {
      * second kind and could not credit the first.
      */
     private static Met evaluatedAt(Axis axis, BehaviorInputs where, List<RowOutcome> rows,
-                                   Place boundary, OriginRef.GuardOrigin origin) {
+                                   Place boundary, int site) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
             switch (readingFor(axis, where, row)) {
@@ -695,7 +731,7 @@ final class Coverages {
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
                     if (number.value().sameAs(boundary)
-                            && litBy(row).contains(origin.site())) {
+                            && litBy(row).contains(site)) {
                         return Met.YES;
                     }
                 }
