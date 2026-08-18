@@ -3089,7 +3089,7 @@ Where only one side is written there is no relation to hold. A `+_+` row of a `+
 
 A table with a refused row answers nothing wherever else it is read. Nothing stands in with it (<<example-fakes>>), and it is not compared with the rows recorded for the behavior (<<stand-in-and-recorded-row-agree>>): that comparison names neither side as the right one, and this has already named one. The two cannot both be said about one pair.
 
-A bare case name that carries fields is not held today. The arm names the answer, so a rule reading only the inputs is decidable from such a row — what stands in the way is that the check is asked about an answer rather than about an arm, and closing it is a check that can be asked the second way.
+Where a bare case name does not determine a value on its own, what the row states is the case and nothing under it, and the declaration is asked what that alone decides. A rule reading only the inputs is decided: its arm names the answer, and the row has said which case that is. A rule reading `+value+` is not, and stays undecided rather than being decided against a value nobody wrote — it is held where the behavior answers, as everything nothing wrote a value for is. Which rules a case decides is worked out where the declaration's check is emitted, so an arm naming a sum decides for each of the cases it has, and nothing here reads a clause to find out.
 
 [#example-placement]
 === Inline or an attached file
@@ -5993,11 +5993,11 @@ The values this row states do not keep what `findTodo` declares of what it answe
 ensures not held on todo.findTodo: asked, answering Todo
 ----
 
-Emitted at an `+example+` row whose input and stated answer do not keep an `+ensures+` of the behavior it is written for (<<a-row-keeps-what-the-behavior-states>>). The stated answer is the value the row wrote, or the unit case its arm names. What decides it is the declaration's own check, applied to the values the row wrote (<<example-ensures>>), so what the message carries is what that check said — the clause that was not kept, and the case the answer turned out to be.
+Emitted at an `+example+` row whose input and stated answer do not keep an `+ensures+` of the behavior it is written for (<<a-row-keeps-what-the-behavior-states>>). The stated answer is the value the row wrote, or the case its arm names where it wrote no value. What decides it is the declaration's own check, applied to the values the row wrote (<<example-ensures>>), so what the message carries is what that check said — the clause that was not kept, and the case the answer turned out to be.
 
 A refusal and not a warning. A stand-in and a row disagreeing is two descriptions with no right side (<<e1919>>); this is a description held to what the model states, and a row that records an answer the model rules out is a record of something that will not happen.
 
-Said before anything applies the behavior, so a row waiting for an implementation is told the same day it is written. A row whose expectation is a bare case name carrying fields is not held (<<example-ensures>>).
+Said before anything applies the behavior, so a row waiting for an implementation is told the same day it is written. A row whose expectation is a bare case name is held to what that case decides on its own (<<example-ensures>>).
 
 [#e1929]
 === A fake row stands in with values the dependency's clause rules out
