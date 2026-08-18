@@ -277,7 +277,7 @@ final class Terms {
      * answers that with the location, which is what the seeding wrote about.
      */
     private LinearForm<FactSubject> givenForm(Core e, Denotations at) {
-        if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Computed)
+        if (!(e instanceof Core.Read r) || !computesAsWhatItWasGiven(r.binding(), at)
                 || affineScalarBase(e.type()) == null) {
             return null;
         }
@@ -1183,6 +1183,30 @@ final class Terms {
     }
 
     /**
+     * Whether {@code binding}'s name may be read as the workings of the expression it was given: what
+     * that expression is arithmetic over, what rule names it, read of the name as well.
+     *
+     * <p>Asked here rather than left as which arm a denotation is. Two readers tested one arm of
+     * {@link Denotes} for it, and an arm is a poor way to ask: {@code Computed} says what a binding
+     * is not — not a place, not text, not nameless — so what those readers meant held by falling
+     * through the others, and removing an arm silently widened what they read. Named, the question is
+     * one thing to answer and one thing to get wrong.
+     *
+     * <p>Not the same as following what a name was given. {@link #writtenValue} does that too, and
+     * does it whatever the name denotes, because what was written is a fact about the value however
+     * it is reached. This is about carrying a computation across a name, which a name given text or
+     * given a place does not do: the text folds and the place is the atom, and neither is arithmetic
+     * to read through to.
+     *
+     * <p>Answered from the denotation as it stands. Whether it can be worked out from what is asked
+     * elsewhere — a place, written text, a name at all — is worth measuring, and measuring it needs
+     * the question to have a name first.
+     */
+    boolean computesAsWhatItWasGiven(BindingId binding, Denotations at) {
+        return at.of(binding) instanceof Denotes.Computed;
+    }
+
+    /**
      * Whether {@code e} is a place: somewhere the seeding writes about, whatever value happens to be
      * there.
      *
@@ -1316,7 +1340,7 @@ final class Terms {
             // It was a flag recorded when the binding was entered, which is a second record of what
             // the initializer already answers.
             Core given = at.valueOf(r.binding());
-            return at.of(r.binding()) instanceof Denotes.Computed && given != null && given != e
+            return computesAsWhatItWasGiven(r.binding(), at) && given != null && given != e
                     && (affineOf(given, at) != null || namedByRule(given, at));
         }
         Core read = asOperator(e);
