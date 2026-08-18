@@ -67,7 +67,8 @@ public final class GeneratedRows {
                 }
                 filling = only;
             }
-            out.append(of(name, filling, boundaries, names));
+            out.append(of(name, filling, WrittenEnsures.of(compilation.db(), name),
+                    boundaries, names));
         }
         return out.toString();
     }
@@ -77,10 +78,15 @@ public final class GeneratedRows {
      *
      * @param module     the module the rows are about, which an attached file names in its header
      * @param generated  one filling per behavior, keyed the way a report keys them
+     * @param ensures    what each behavior has written in its {@code ensures}, in the author's own
+     *                   words and keyed as {@code generated} is. Read before this is called and
+     *                   handed over: what the source says is not something a renderer works out, and
+     *                   a form of this that could be called without it would be a way of dropping it
      * @param boundaries whether to add the rows that sit on an edge nothing has been written at
      * @param names      what the caller calls its sources, for the notes that name one
      */
     public static String of(String module, Map<String, Adequacy.Filling> generated,
+                            Map<String, List<String>> ensures,
                             boolean boundaries, SourceNameResolver names) {
         List<Map.Entry<String, Composed>> asked = new ArrayList<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
@@ -102,7 +108,7 @@ public final class GeneratedRows {
             out.append(String.format(
                     "// Replace each `%s` with what the system actually answers, then uncomment.%n",
                     UNANSWERED));
-            out.append(commented(blocks(module, offered)));
+            out.append(commented(stated(blocks(module, offered), ensures)));
         }
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             notes(out, behavior.getKey(), behavior.getValue(), boundaries, names);
@@ -237,6 +243,46 @@ public final class GeneratedRows {
         // author's choice — the module's own file or an attached one — and only one of those wants it.
         return formatted.replaceFirst("^examples for \\S+\\R+", "")
                 .replace(PLACEHOLDER, UNANSWERED);
+    }
+
+    /** What the heading over a behavior's clauses says. A source-level fact and not a reading of one:
+     * these are the words the author put in the declaration, quoted here whether or not the checker
+     * could make a rule of them, so what is claimed is that they are written and nothing further. */
+    private static final String WRITTEN_FOR = "`ensures` written for `%s`:%n";
+
+    /**
+     * The clauses each behavior carries, put over the rows they are about.
+     *
+     * <p>Over the rows and not beside each one. A clause is written on the behavior, so it says the
+     * same thing about every row of it, and a copy per row would be the same words as many times as
+     * the generator happened to offer questions.
+     *
+     * <p>Put in after {@link #blocks} and not inside it, because these lines are not rows. What that
+     * builds is source, written so that {@code souther fmt} would leave it alone; a heading is prose
+     * the whole block is commented behind, and the formatter parses what it is handed.
+     */
+    private static String stated(String source, Map<String, List<String>> ensures) {
+        StringBuilder out = new StringBuilder();
+        for (String line : source.lines().toList()) {
+            // The heading a behavior's rows are written under, which is the one line of the block
+            // that names a behavior. A row is written indented and under it, so nothing else here
+            // can be read for one.
+            String behavior =
+                    line.startsWith("example ") ? line.substring("example ".length()) : null;
+            List<String> clauses =
+                    behavior == null ? List.of() : ensures.getOrDefault(behavior, List.of());
+            if (!clauses.isEmpty()) {
+                out.append(String.format(WRITTEN_FOR, behavior));
+                for (String clause : clauses) {
+                    for (String each : clause.lines().toList()) {
+                        out.append("    ").append(each).append(System.lineSeparator());
+                    }
+                }
+                out.append(System.lineSeparator());
+            }
+            out.append(line).append(System.lineSeparator());
+        }
+        return out.toString();
     }
 
     private static String commented(String source) {
