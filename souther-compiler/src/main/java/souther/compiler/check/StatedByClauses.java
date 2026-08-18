@@ -35,7 +35,7 @@ import java.util.Set;
  * drop, and giving those two a reading of alternatives is its own change with its own reason.
  */
 record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
-                       Adoption byValues, Adoption byOrder) {
+                       Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder) {
 
     /** Nothing read, so nothing ruled out. */
     static StatedByClauses top() {
@@ -50,12 +50,15 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      * standing. */
     Set<FactSubject> adopted() {
         Set<FactSubject> out = new LinkedHashSet<>();
-        byValues.read().forEach(each -> {
+        // Everything either account is about, and not what it put a constraint on: a position a
+        // dead branch settled is one the reading answered for and put no constraint on, which is
+        // what `took` is asked rather than told.
+        byValues.mentions().forEach(each -> {
             if (byValues.took(each)) {
                 out.add(each);
             }
         });
-        byOrder.read().forEach(each -> {
+        byOrder.mentions().forEach(each -> {
             if (byOrder.took(each)) {
                 out.add(each);
             }
