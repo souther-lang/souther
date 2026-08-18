@@ -274,6 +274,30 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         }
     }
 
+    /**
+     * A tree nothing wrote is refused wherever it is numbered, and not only at a comparison.
+     *
+     * <p>The invariant-discharge reader rebuilds comparisons so it can read them as such, and that
+     * tree is not the tree that runs; the walk said so of a condition's comparisons and left a fork's
+     * arms to be turned away by whatever noticed first. Held over a fork because a fork is the half
+     * the rule was not written for — the arms are where a row would be owed, and nobody can be owed
+     * one for code no source wrote.
+     */
+    @Test
+    void anArmOfSomethingNoSourceWroteIsRefusedWhereItWouldBeNumbered() {
+        souther.compiler.diag.SourcePos at = new souther.compiler.diag.SourcePos(1, 1);
+        Core answer = new Core.Int(1, souther.compiler.types.Type.INT, at);
+        Core fork = new Core.If(new Core.Bool(true, souther.compiler.types.Type.BOOL, at),
+                answer, new Core.Int(2, souther.compiler.types.Type.INT, at),
+                CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at);
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> CoverageSites.of(Map.of("b", fork)));
+
+        assertTrue(refused.getMessage().contains("no source wrote it"),
+                () -> "the walk says what is wrong with the tree: " + refused.getMessage());
+    }
+
     // --- what the origin says a line was drawn in ---------------------------------------------------
 
     @Test

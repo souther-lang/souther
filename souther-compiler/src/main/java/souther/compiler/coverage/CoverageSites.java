@@ -373,6 +373,16 @@ public final class CoverageSites {
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
         private int site(SourceOutcome outcome, Core owner, CoverageOrigin origin, int part) {
+            // Said here because this is where anything is numbered, and the rule is about numbering
+            // rather than about comparisons: an arm of a fork nothing wrote is as much a row nobody
+            // can be owed as a comparison of one. Stated for the comparisons alone, it left the arms
+            // to be refused further down by whatever noticed first — which was the pair check on
+            // `Site`, saying something true about the pair and nothing about the tree.
+            if (!origin.isWritten()) {
+                throw new IllegalStateException("a construct with no source wrote it is being "
+                        + "numbered at " + owner.pos()
+                        + "; a tree rebuilt for an analysis is not the tree that runs");
+            }
             int index = sites.size();
             // Of the node's own coordinate. This walk is over one module and an arm of a
             // helper another module of this compile wrote is in that module's file, so a
@@ -512,11 +522,6 @@ public final class CoverageSites {
                 // condition can be an application of a function parameter, and then the comparison is
                 // the caller's: two predicates written separately are two lines, and one predicate
                 // handed to two calls is one, neither of which the fork can say.
-                if (!comparison.origin().isWritten()) {
-                    throw new IllegalStateException("a comparison with no source wrote it is being "
-                            + "numbered at " + comparison.pos()
-                            + "; a tree rebuilt for an analysis is not the tree that runs");
-                }
                 byComparison.put(comparison,
                         site(new SourceOutcome.Compared(comparison.op()), comparison,
                                 comparison.origin(), 0));
