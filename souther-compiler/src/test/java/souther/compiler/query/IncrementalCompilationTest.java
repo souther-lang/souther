@@ -622,16 +622,14 @@ class IncrementalCompilationTest {
     }
 
     /**
-     * Known and not narrowed: declaring a behavior re-checks every body of the module. A body reads
-     * the signatures of everything callable in its module as a whole table, so adding one changes it
-     * and reaches all of them — issue #829.
-     *
-     * <p>Written down so that narrowing it is a change that shows, and so that the contract
-     * dependency above is not read as having made an edit to a declaration local. It did not: it
-     * made an edit to an `ensures` local, which is a different edit.
+     * Declaring a behavior is none of the business of the bodies beside it. A body reads what the
+     * names of its module mean and the signatures of what it calls; the first does not change when a
+     * value name is added, and the second is what this body names rather than what the module has
+     * callable in it. Both were read as whole tables, so adding a behavior nothing calls reached
+     * every body in the file — issue #829.
      */
     @Test
-    void declaringABehaviorRechecksTheBodiesBesideIt() {
+    void declaringABehaviorDoesNotRecheckTheBodiesBesideIt() {
         Compilation c = stating();
         Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
 
@@ -643,7 +641,85 @@ class IncrementalCompilationTest {
                 """), Set.of());
         c.answerEverything();
 
-        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
                 "`caller` neither calls `added` nor names anything of it");
+    }
+
+    /**
+     * Known and not narrowed: declaring a type re-checks every body of the module. A body is checked
+     * in what the names of its module mean, and a type declaration is a spelling that means
+     * something there — so unlike a behavior, this really does change what every body reads.
+     *
+     * <p>What is left of issue #829, which is issue #835. Which of a module's meanings a body needs
+     * is a question about what a body's scope is rather than a table being read whole, and answering
+     * it here would settle that by accident. Written down so that narrowing it is a change that
+     * shows.
+     */
+    @Test
+    void declaringADataRechecksTheBodiesBesideIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                data Discount = Int
+                """), Set.of());
+        c.answerEverything();
+
+        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`Discount` is a spelling `caller` does not write, and it means something here");
+    }
+
+    /**
+     * And moving one. What a body is checked against is what the declarations say, so the order they
+     * are written in is not part of it — a signature that arrived at a caller carrying where it was
+     * written, or the position its module numbered it at, would reach every caller on an edit above
+     * it.
+     */
+    @Test
+    void reorderingTheDeclarationsDoesNotRecheckTheBodiesBesideThem() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        String uncalled = """
+                behavior uncalled : (n: Amount) -> Amount
+                    constructs Amount
+                    ensures value.value > n.value - 1
+                let uncalled (n) = Amount(n.value * 3)
+
+                """;
+        String called = """
+                behavior called : (n: Amount) -> Amount
+                    constructs Amount
+                    ensures value.value >= n.value
+                let called (n) = Amount(n.value * 2)
+                """;
+        assertTrue(STATING.contains(uncalled) && STATING.endsWith(called),
+                "the fixture is the two declarations in this order");
+        c.update(Map.of("orders.sou",
+                STATING.replace(uncalled, "").replace(called, called + "\n" + uncalled.strip() + "\n")),
+                Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`called` takes what it took, wherever in the file it is written");
+    }
+
+    /** And the other way round: editing what a called behavior takes is what its callers read. */
+    @Test
+    void changingWhatACalledBehaviorTakesRechecksTheBodiesThatCallIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING.replace(
+                "behavior called : (n: Amount) -> Amount",
+                "behavior called : (n: Amount, m: Amount) -> Amount").replace(
+                "let called (n) = Amount(n.value * 2)",
+                "let called (n, m) = Amount(n.value * 2 + m.value)").replace(
+                "let caller (n) = called(n)", "let caller (n) = called(n, n)")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` calls `called`, so what `called` takes is what it is typed against");
     }
 }
