@@ -731,7 +731,7 @@ final class Terms {
         if (d instanceof Denotes.Written) {
             return null;
         }
-        FactSubject subject = FactSubject.of(termOf(d));
+        FactSubject subject = subjectOf(e, at);
         if (subject == null) {
             return null;
         }
@@ -760,7 +760,7 @@ final class Terms {
 
     /** What {@code d} is named by, or null where it is named by nothing. Said here because a place is
      * named by the term it is, and only this holds the terms. */
-    Term termOf(Denotes d) {
+    private Term termOf(Denotes d) {
         return switch (d) {
             case Denotes.At located -> interned.at(located.where());
             case Denotes.Computed computed -> computed.term();

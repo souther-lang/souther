@@ -131,6 +131,61 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
                 "nothing said these were one occurrence, so they are two");
     }
 
+    /**
+     * A build that answers exactly as many as its source, and that source, have one size subject.
+     *
+     * <p>This is the one place equivalence is strengthened by making {@link Terms#subjectOf} the only
+     * authority: read through the old one, {@code length(reverse(ns))} and {@code length(ns)} were two
+     * subjects. They are one value, and the table already says so — {@code Cardinality.SAME} is a
+     * statement about how many the result has, not about what this check happens to be able to
+     * follow, which is what makes it something identity may read.
+     *
+     * <p>Held as a unit rather than through a program, because no program tells the two apart today:
+     * the caller of {@code reportableSite} reads only whether it answered, so which subject it
+     * answered with reaches nothing yet. That is what makes this safe to unify now, and it is also why
+     * the rule needs holding here — nothing downstream would notice it going away.
+     */
+    @Test
+    void aSizeAndTheSizeOfWhatItWasBuiltFromAreOneSubject() {
+        Terms terms = new Terms(Symbols.none());
+        BindingId ns = binding(2);
+        Denotations at = Denotations.none().location(ns);
+        Core list = new Core.Read("ns", ns, Type.list(Type.INT), POS);
+
+        FactSubject ofTheSource = terms.subjectOf(length(list), at);
+        assertNotNull(ofTheSource, "a size is a value this names, or the two below are one nothing");
+        assertEquals(ofTheSource, terms.subjectOf(length(reverse(list)), at),
+                "`reverse` answers exactly as many, so the two sizes are the one value");
+    }
+
+    /** And an operation the same table says may answer fewer is not identified with its source. */
+    @Test
+    void aSizeOfABuildThatMayAnswerFewerIsItsOwnSubject() {
+        Terms terms = new Terms(Symbols.none());
+        BindingId ns = binding(3);
+        Denotations at = Denotations.none().location(ns);
+        Core list = new Core.Read("ns", ns, Type.list(Type.INT), POS);
+
+        assertNotEquals(terms.subjectOf(length(list), at),
+                terms.subjectOf(length(distinct(list)), at),
+                "`distinct` may answer fewer, so its size is a value of its own");
+    }
+
+    private static Core length(Core of) {
+        return new Core.PreservedCall(new souther.compiler.types.ValueName.Stdlib("List", "length"),
+                java.util.List.of(of), Type.INT, POS);
+    }
+
+    private static Core reverse(Core of) {
+        return new Core.PreservedCall(new souther.compiler.types.ValueName.Stdlib("List", "reverse"),
+                java.util.List.of(of), of.type(), POS);
+    }
+
+    private static Core distinct(Core of) {
+        return new Core.PreservedCall(new souther.compiler.types.ValueName.Stdlib("List", "distinct"),
+                java.util.List.of(of), of.type(), POS);
+    }
+
     /** A value of a shape no term covers: applying whatever a binding holds, which may be a behavior
      * injected from outside. */
     private static Core unnameable() {
