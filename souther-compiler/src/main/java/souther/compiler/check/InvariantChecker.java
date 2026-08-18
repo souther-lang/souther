@@ -995,8 +995,8 @@ public final class InvariantChecker {
      * unread, it would say the bounds are not the whole story about a declaration whose rules this
      * understood completely.
      */
-    private static boolean readAsABound(Hir.Expr clause, OrderScale scale) {
-        return !(InvariantBound.of(clause, scale) instanceof InvariantBound.Read.NoEnd);
+    private static boolean readAsABound(Hir.Expr clause, Carrier carrier) {
+        return !(InvariantBound.of(clause, carrier) instanceof InvariantBound.Read.NoEnd);
     }
 
     /** A position read from no source, for the reads this makes to stand at. */

@@ -1,15 +1,17 @@
 package souther.compiler.numeric;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 
 /**
  * A moment on the timeline as an order can hold it.
  *
- * <p>One direction only, for the reason {@link Times} is: counting is what a rule about where an
- * {@code Instant} stops needs, and writing a count back is what a line drawn at one would need. No
- * line is drawn at an {@code Instant} (spec §a-line-is-drawn-where-the-values-can-carry-one).
+ * <p>Both directions, for the reason {@link Times} has both: counting is what a rule about where an
+ * {@code Instant} stops needs, and writing a count back is what a line drawn at one needs (spec
+ * §a-line-is-drawn-where-the-values-can-carry-one).
  *
  * <p><b>Nanoseconds, and this is why it is not the date-time's carrier.</b> An {@code Instant} is
  * held to the nanosecond (spec §an-instant-carries-what-a-timestamp-said) where a {@code DateTime}
@@ -41,6 +43,26 @@ public final class Instants {
         } catch (DateTimeParseException _) {
             return null;
         }
+    }
+
+    /**
+     * The moment {@code count} counts to, written the way a model writes one.
+     *
+     * <p>Divided towards the count below rather than towards zero, so the second a moment falls in
+     * is the second before it on both sides of the epoch. Truncating instead would put the moment a
+     * nanosecond before midnight in 1969 into the second after it.
+     */
+    public static String written(Place count) {
+        BigInteger nanos = Count.number(count).at()
+                .setScale(0, RoundingMode.FLOOR).toBigIntegerExact();
+        BigInteger[] parts = nanos.divideAndRemainder(PER_SECOND.toBigIntegerExact());
+        BigInteger second = parts[0];
+        BigInteger within = parts[1];
+        if (within.signum() < 0) {
+            second = second.subtract(BigInteger.ONE);
+            within = within.add(PER_SECOND.toBigIntegerExact());
+        }
+        return Instant.ofEpochSecond(second.longValueExact(), within.longValueExact()).toString();
     }
 
     private Instants() {}

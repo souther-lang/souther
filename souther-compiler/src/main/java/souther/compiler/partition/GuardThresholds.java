@@ -507,10 +507,14 @@ public final class GuardThresholds {
                     constantOf(nd.values().get(0).value(), carrier, symbols);
             // A temporal written the way a model writes one. Read by what the construction answers
             // with rather than by the name in front of it, so one reaches this however it is spelled.
+            //
+            // Which temporal it is decided by asking the constructed type for its carrier, rather
+            // than by listing the pairs that go together. A list is a copy of the table in
+            // `Carrier.ofValue` and goes stale the way that copy always does: it named a date and a
+            // date-time, and a time of day written the same way was refused for being neither.
             case Core.Call call when call.args().size() == 1
                     && call.args().get(0) instanceof Core.Str iso ->
-                    (call.type() == Type.DATE && carrier instanceof Carrier.Days)
-                            || (call.type() == Type.DATETIME && carrier instanceof Carrier.Seconds)
+                    carrier.equals(Carrier.ofValue(call.type(), symbols))
                             ? carrier.placeOf(new souther.compiler.observe.ObservedValue.Temporal(
                                     iso.value()))
                             : null;

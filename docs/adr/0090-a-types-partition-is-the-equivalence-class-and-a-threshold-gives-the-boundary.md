@@ -169,8 +169,12 @@ derivable and is reported as the position, because naming its length there would
 report that nobody wrote.
 
 One carrier says which values carry a line, and every reader asks it. A line is drawn on every
-ordered value: an `Int`, a `Decimal`, a `Date`, a `DateTime`, a `String`, an enumeration, and a
-single-value newtype over any of them. The carriers are
+ordered value: an `Int`, a `Decimal`, a `Date`, a `DateTime`, a `Time`, an `Instant`, a `String`, an
+enumeration, and a single-value newtype over any of them. A `Time` and an `Instant` were the two
+this said and did not do (#846): each was ordered and read, and each was missing the conversion
+that writes a count back, so a rule over one came back naming no line. What made that a gap in the
+list rather than a decision was that nothing about the values said it — writing the two
+conversions was all it took. The carriers are
 matched exhaustively wherever a count is read or written, so one added stops the build at every
 place that would otherwise answer for it by omission, and the primitives are matched exhaustively
 where a type is classified, so a primitive added stops it there. A newtype is reduced to its base

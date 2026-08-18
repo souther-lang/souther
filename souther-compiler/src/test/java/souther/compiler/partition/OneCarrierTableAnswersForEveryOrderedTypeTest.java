@@ -82,6 +82,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             data DayN    = Date
             data MomentN = DateTime
             data TextN   = String
+            data TimeN   = Time
+            data NanoN   = Instant
             data StageN  = Stage
 
             data WholeI  = Int      invariant value >= 100
@@ -89,6 +91,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             data DayI    = Date     invariant value >= Date("2026-01-01")
             data MomentI = DateTime invariant value >= DateTime("2026-01-01T00:00:00")
             data TextI   = String   invariant value >= "2020-01"
+            data TimeI   = Time     invariant value >= Time("09:00:00")
+            data NanoI   = Instant  invariant value >= Instant("2026-01-01T00:00:00Z")
             data StageI  = Stage    invariant value >= Qualified
 
             behavior guardWholeBare : (x: Int) -> Verdict
@@ -114,6 +118,16 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             behavior guardTextBare : (x: String) -> Verdict
                 constructs Ok, No
             let guardTextBare (x) = { guard x < "2026-08" else Ok
+                No }
+
+            behavior guardTimeBare : (x: Time) -> Verdict
+                constructs Ok, No
+            let guardTimeBare (x) = { guard x < Time("16:00:00") else Ok
+                No }
+
+            behavior guardNanoBare : (x: Instant) -> Verdict
+                constructs Ok, No
+            let guardNanoBare (x) = { guard x < Instant("2026-08-01T00:00:00Z") else Ok
                 No }
 
             behavior guardStageBare : (x: Stage) -> Verdict
@@ -147,6 +161,17 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             let guardTextWrapped (x) = { guard x.value < "2026-08" else Ok
                 No }
 
+            behavior guardTimeWrapped : (x: TimeN) -> Verdict
+                constructs Ok, No
+            let guardTimeWrapped (x) = { guard x.value < Time("16:00:00") else Ok
+                No }
+
+            behavior guardNanoWrapped : (x: NanoN) -> Verdict
+                constructs Ok, No
+            let guardNanoWrapped (x) = {
+                guard x.value < Instant("2026-08-01T00:00:00Z") else Ok
+                No }
+
             behavior guardStageWrapped : (x: StageN) -> Verdict
                 constructs Ok, No, Qualified
             let guardStageWrapped (x) = { guard x.value < Qualified else Ok
@@ -171,6 +196,14 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             behavior boundText   : (x: TextI)   -> Ok
                 constructs Ok
             let boundText (x) = Ok
+
+            behavior boundTime   : (x: TimeI)   -> Ok
+                constructs Ok
+            let boundTime (x) = Ok
+
+            behavior boundNano   : (x: NanoI)   -> Ok
+                constructs Ok
+            let boundNano (x) = Ok
 
             behavior boundStage  : (x: StageI)  -> Ok
                 constructs Ok
@@ -247,6 +280,10 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         // decimal gets and for the same reason — so it is one obligation short of the carriers whose
         // values step, rather than unread.
         expected.put("guardTextBare", read(1));
+        // Both step, each at its own unit: a time of day at the second and a moment at the
+        // nanosecond, so each is owed the line and the value beside it.
+        expected.put("guardTimeBare", read(2));
+        expected.put("guardNanoBare", read(2));
         // The line and the case beside it, written as case names. The classes are still the three
         // cases: `read(2)` would say the cut replaced them, and it does not.
         expected.put("guardStageBare", readBesideItsClasses(2));
@@ -255,6 +292,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardDayWrapped", read(2));
         expected.put("guardMomentWrapped", read(2));
         expected.put("guardTextWrapped", read(1));
+        expected.put("guardTimeWrapped", read(2));
+        expected.put("guardNanoWrapped", read(2));
         // What the bare position answers. The classes reader reads through the name now, as the
         // carrier always did, so the cell that was a name changing what a rule means is a cell that
         // says the two forms are one.
@@ -285,6 +324,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("boundDay", new Measured(0, 1, null));
         expected.put("boundMoment", new Measured(0, 1, null));
         expected.put("boundText", new Measured(0, 1, null));
+        expected.put("boundTime", new Measured(0, 1, null));
+        expected.put("boundNano", new Measured(0, 1, null));
         expected.put("boundStage", new Measured(1, 1, null));
 
         assertEquals(expected, measured(expected.keySet()));
@@ -302,13 +343,15 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     void aCarrierIsReadOrNotWhicheverRuleWroteIt() {
         Map<String, Measured> all = measured(List.of(
                 "guardWholeBare", "guardDenseBare", "guardDayBare", "guardMomentBare",
-                "guardTextBare", "guardStageBare",
-                "boundWhole", "boundDense", "boundDay", "boundMoment", "boundText", "boundStage"));
+                "guardTextBare", "guardTimeBare", "guardNanoBare", "guardStageBare",
+                "boundWhole", "boundDense", "boundDay", "boundMoment", "boundText", "boundTime",
+                "boundNano", "boundStage"));
 
         for (String[] pair : new String[][] {
                 {"guardWholeBare", "boundWhole"}, {"guardDenseBare", "boundDense"},
                 {"guardDayBare", "boundDay"}, {"guardMomentBare", "boundMoment"},
-                {"guardTextBare", "boundText"}, {"guardStageBare", "boundStage"}}) {
+                {"guardTextBare", "boundText"}, {"guardTimeBare", "boundTime"},
+                {"guardNanoBare", "boundNano"}, {"guardStageBare", "boundStage"}}) {
             assertEquals(all.get(pair[0]).unread(), all.get(pair[1]).unread(),
                     "a carrier a guard's line is drawn on is one an invariant's bound is drawn on: "
                             + pair[0] + " against " + pair[1]);
@@ -328,11 +371,12 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     void aNameWrappedRoundTheValuesDoesNotChangeWhatIsMeasured() {
         Map<String, Measured> all = measured(List.of(
                 "guardWholeBare", "guardDenseBare", "guardDayBare", "guardMomentBare",
-                "guardTextBare", "guardStageBare",
+                "guardTextBare", "guardTimeBare", "guardNanoBare", "guardStageBare",
                 "guardWholeWrapped", "guardDenseWrapped", "guardDayWrapped", "guardMomentWrapped",
-                "guardTextWrapped", "guardStageWrapped"));
+                "guardTextWrapped", "guardTimeWrapped", "guardNanoWrapped", "guardStageWrapped"));
 
-        for (String carrier : List.of("Whole", "Dense", "Day", "Moment", "Text", "Stage")) {
+        for (String carrier : List.of("Whole", "Dense", "Day", "Moment", "Text", "Time", "Nano",
+                "Stage")) {
             assertEquals(all.get("guard" + carrier + "Bare"), all.get("guard" + carrier + "Wrapped"),
                     carrier + ": a newtype is the value it carries");
         }

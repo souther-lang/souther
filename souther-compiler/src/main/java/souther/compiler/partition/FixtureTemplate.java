@@ -170,6 +170,8 @@ public record FixtureTemplate(String text, Hir.Expr value) {
             // text. Spelled here as well, the two could differ at midnight and nowhere else.
             case Carrier.Days _ -> date(carrier.written(at));
             case Carrier.Seconds _ -> dateTime(carrier.written(at));
+            case Carrier.SecondsOfDay _ -> time(carrier.written(at));
+            case Carrier.Nanos _ -> instant(carrier.written(at));
             // Naming a case builds it, which is what a row writes at such a position — never the
             // place the case takes in its declaration.
             case Carrier.Ordinal ordinal ->
