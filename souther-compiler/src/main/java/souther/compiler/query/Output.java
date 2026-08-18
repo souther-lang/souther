@@ -498,7 +498,7 @@ public final class Output {
      * <p>Its own first, for the reason the loader has: a module being compiled here wins over one of
      * the same name on the path.
      */
-    static ClassFileDeclarations declarationsRead(Db db) {
+    public static ClassFileDeclarations declarationsRead(Db db) {
         Map<String, byte[]> generated = db.ask(new All()).value();
         ModulePath path = db.ask(new Front.Path()).value();
         return new ClassFileDeclarations(binaryName -> {
@@ -525,7 +525,7 @@ public final class Output {
      * branch. One loader, one version of every type, and a row that loops inside a dependency spends
      * the budget there rather than running until the wait ends.
      */
-    static ClassLoader evaluationLoader(Db db) {
+    public static ClassLoader evaluationLoader(Db db) {
         ModulePath path = db.ask(new Front.Path()).value();
         ClassLoader compiler = Output.class.getClassLoader();
         if (path == null) {
@@ -571,7 +571,7 @@ public final class Output {
      * it is for is stating that a particular row does not come back, rather than writing a model
      * that does not come back and racing a clock to observe it.
      */
-    static souther.compiler.examples.Deadline deadlineOf(Db db) {
+    public static souther.compiler.examples.Deadline deadlineOf(Db db) {
         souther.compiler.examples.Deadline said = db.ask(new Front.ExampleDeadline()).value();
         return said != null ? said
                 : souther.compiler.examples.Deadline.ofMillis(exampleBudgetMs(db),

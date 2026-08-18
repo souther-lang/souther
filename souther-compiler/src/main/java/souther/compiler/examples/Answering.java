@@ -1,7 +1,11 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.Sig;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
+
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Where a run's answerer comes from, and what makes the answerer and the values it is handed one
@@ -48,5 +52,30 @@ public interface Answering {
      *  applied, all in the loader the run built. */
     static Answering generatedHere() {
         return GeneratedImplementation::new;
+    }
+
+    /**
+     * {@code implementation} for the behaviors {@code answersFor} names, and {@link #generatedHere}
+     * for every other.
+     *
+     * <p>Which declarations it reads values by is worked out from the instance, by its own loader's
+     * class files, so a caller cannot state it wrongly. Which behaviors it answers for is not: it is
+     * handed over, because it is the caller's statement of what this instance is being supplied for.
+     *
+     * <p>Whether a behavior may be supplied for at all is a rule of whoever admits a binding and not
+     * of this seam. {@link SoutherExamples#bind} takes an instance and admits it only for behaviors
+     * written without a body, those being the ones whose rows had nothing to run them. This seam is
+     * lower down and answers the question it is asked: a run may be given an answerer that applies
+     * anything, which is what an answerer bringing a second loader's classes for a bodied behavior
+     * already does.
+     *
+     * <p>{@code sigs} is the module's, and is what a value crossing to the instance's classes is
+     * read as. It is the run's answer and not the instance's: what a row states is of the module the
+     * rows are written for, and holding that module's declarations against the instance's is
+     * {@code DeclarationAgreement}'s, done before any row is handed over.
+     */
+    static Answering bound(Object implementation, Set<String> answersFor, Map<String, Sig> sigs) {
+        return (generated, compiled) -> new BoundImplementation(implementation, answersFor, sigs,
+                new GeneratedImplementation(generated, compiled), generated.module());
     }
 }

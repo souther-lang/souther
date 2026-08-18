@@ -179,6 +179,7 @@ public enum DiagnosticCode {
     E1927("an-answer-is-of-the-module-being-evaluated", "check.example.title"),
     E1928("a-row-keeps-what-the-behavior-states", "check.example.title"),
     E1929("a-fake-row-keeps-what-the-dependency-states", "check.example.title"),
+    E1930("an-implementation-keeps-what-the-behavior-states", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),

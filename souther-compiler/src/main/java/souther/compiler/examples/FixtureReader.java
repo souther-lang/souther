@@ -1963,6 +1963,18 @@ public final class FixtureReader {
         return new NeutralValue(neutral.of(built, Position.at(FixtureShape.of(at).type()), what));
     }
 
+    /**
+     * The same, at a position named as a type rather than as a boundary shape.
+     *
+     * <p>What needs it is a value coming back the other way: an answer is read at the case it turned
+     * out to be, and that case is a type this module declares rather than a position a signature
+     * writes down. The walk is the one above — a neutral form is decided by a position — and only
+     * where the position comes from differs.
+     */
+    NeutralValue neutralAt(Object value, Type position, String what) {
+        return new NeutralValue(neutral.of(value, Position.at(position), what));
+    }
+
     /** Where what a row asserted and what came back differ, or null where they are the same value. */
     ValueMatch.Mismatch disagreement(Asserted asserted, Object result, Type position) {
         return new ValueMatch(neutral, new ValueRendering(neutral))

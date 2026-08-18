@@ -40,13 +40,13 @@ import java.util.Set;
  * it held                    COMPARED            HELD          NONE
  * a fixture's helper hung    NONE                INCOMPLETE    TIMEOUT
  * the behavior hung          INVOKED             INCOMPLETE    TIMEOUT
- * it could not be handed on  FIXTURES_VALIDATED  INCOMPLETE    INFRASTRUCTURE
+ * it could not be handed on  FIXTURES_VALIDATED  INCOMPLETE    VALUE_CROSSING
  * the answer was not this
  *   model's to hand it to    FIXTURES_VALIDATED  INCOMPLETE    ANSWERER_ESTABLISHMENT
  * </pre>
  *
  * <p>The last two share a stage and a disposition and are not the same thing, which is what the
- * phase is for. {@link FailurePhase#INFRASTRUCTURE} is a row that could not be handed on: the value
+ * phase is for. {@link FailurePhase#VALUE_CROSSING} is a row that could not be handed on: the value
  * it built could not be put in the form an answerer of other classes reads, and whether the answer
  * is of this model was never in question. {@link FailurePhase#ANSWERER_ESTABLISHMENT} is that
  * question answered badly: nothing could establish that what answers the behavior was built against
