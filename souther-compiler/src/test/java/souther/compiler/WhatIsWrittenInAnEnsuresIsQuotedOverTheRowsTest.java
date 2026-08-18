@@ -118,6 +118,40 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
     }
 
     /**
+     * The same where the file is indented with tabs.
+     *
+     * <p>What is taken off the lines under the first is a count of code units, which is what a column
+     * is, and a tab is one of them. Measured in the columns a tab advances to instead, the cut would
+     * start past the text on every line of a tab-indented clause.
+     */
+    @Test
+    void aClauseIndentedWithTabsKeepsItsShape() {
+        String block = block(("""
+                module example.todo
+
+                data TodoId = Int
+                \tinvariant value >= 0
+
+                data Todo = { id: TodoId }
+                data NotFound
+
+                behavior findTodo : (id: TodoId) -> Todo | NotFound
+                \tconstructs Todo
+                \tconstructs NotFound
+                \tensures both = Todo -> value.id.value == id.value
+                \t\t| NotFound -> id.value > 0
+
+                let findTodo (id) = if id.value > 0 then Todo { id = id } else NotFound
+                """));
+
+        assertTrue(block.contains("""
+                // `ensures` written for `findTodo`:
+                //     ensures both = Todo -> value.id.value == id.value
+                //     \t| NotFound -> id.value > 0
+                """), block.replace("\t", "<TAB>"));
+    }
+
+    /**
      * A clause this compiler refused is quoted all the same, which is the whole of why the words are
      * read off the settled module rather than off the contracts.
      *
@@ -166,6 +200,48 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 //     ensures nope = Other -> n.value > 0
                 """), block);
         assertTrue(block.contains("// example wrong"), block);
+    }
+
+    /**
+     * A clause that calls a helper is quoted as the call, and not as what the call was expanded to.
+     *
+     * <p>Which is the property the rest of this rests on. What a reader is shown is a slice of the
+     * file, so the passes that rewrite what a clause states — resolving its names, inlining the
+     * helpers it calls — cannot move it: each of them carries the clause's own position over, and
+     * the quote is taken from that.
+     *
+     * <p>The other reading is a live one and not a worry. The rule this model's clause becomes is an
+     * expansion holding the helper's body, at the helper's own positions, so anything built from the
+     * expression would print {@code id.value > 0} from line 6 where the author wrote
+     * {@code positive(id)} on line 10.
+     */
+    @Test
+    void aClauseCallingAHelperIsQuotedAsTheCallTheAuthorWrote() {
+        String block = block("""
+                module example.todo
+
+                data TodoId = Int
+                    invariant value >= 0
+
+                data Todo = { id: TodoId }
+                data NotFound
+
+                let positive (id: TodoId) = id.value > 0
+
+                behavior findTodo : (id: TodoId) -> Todo | NotFound
+                    constructs Todo
+                    constructs NotFound
+                    ensures asked = NotFound -> positive(id)
+
+                let findTodo (id) = if id.value > 0 then Todo { id = id } else NotFound
+                """);
+
+        assertTrue(block.contains("""
+                // `ensures` written for `findTodo`:
+                //     ensures asked = NotFound -> positive(id)
+                """), block);
+        assertFalse(block.contains("id.value > 0"),
+                "the helper's body is not what the author wrote here: " + block);
     }
 
     /** Nothing is quoted where nothing is asked. The clause is what a reader fills a {@code <?>}

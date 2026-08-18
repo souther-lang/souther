@@ -38,11 +38,15 @@ final class WrittenEnsures {
 
     /**
      * The clauses of each behavior of {@code module}, keyed by the name the behavior is declared
-     * under, in the order they are written. A behavior carrying none is not in the map.
+     * under, in the order they are written. A behavior carrying none is not in the map, and neither
+     * is one whose clauses an author did not write.
      *
-     * <p>All of a behavior's clauses or none of them. A behavior a pass wrote carries positions in
-     * no text anybody holds, and half a list under a heading saying what was written would say the
-     * clauses it could not cut were not there.
+     * <p>Those two absences are the same fact and are the only ones there are. Not being here means
+     * nothing was written, which is what the heading over the rows would have claimed; it never
+     * means a clause was written and this could not get at it. A clause the positions say is in a
+     * source this compile holds is one this can cut, so failing to is this compiler being wrong
+     * about its own store and is raised rather than dropped — dropping it would put "written and not
+     * quoted" under "not written", which is the reading this whole class exists to keep apart.
      */
     static Map<String, List<String>> of(Db db, String module) {
         Answer<Hir.Module> settled = db.ask(new Bodies.Settled(module));
@@ -62,24 +66,37 @@ final class WrittenEnsures {
         return out;
     }
 
-    /** Every clause of one behavior as it is written, or nothing where one of them is in a text this
-     *  compile cannot quote. */
+    /**
+     * Every clause of one behavior as it is written, or nothing where an author wrote none of them.
+     *
+     * <p>Asked of the clauses and not of the behavior's name, because it is the clauses that are
+     * being quoted. A behavior a pass wrote carries positions in no text anybody holds, and there is
+     * nothing of its author's to print; some of them written and some not is a shape nothing builds
+     * — a clause is read off the declaration it is written on, and the passes that rewrite what one
+     * states carry its position over — so it is said rather than half printed.
+     */
     private static List<String> quoted(Db db, Hir.SpecBehavior spec) {
+        long written = spec.ensures().stream()
+                .filter(clause -> clause.pos().quotedFrom()
+                        instanceof QuotedFrom.ASourceThisCompileHolds)
+                .count();
+        if (written == 0) {
+            return null;
+        }
+        if (written != spec.ensures().size()) {
+            throw new IllegalStateException("a behavior whose clauses are written in part: "
+                    + spec.name());
+        }
         List<String> out = new ArrayList<>();
         for (Hir.EnsuresClause clause : spec.ensures()) {
-            if (!(clause.pos().quotedFrom()
-                    instanceof QuotedFrom.ASourceThisCompileHolds(SourceId source))) {
-                return null;
-            }
+            SourceId source = ((QuotedFrom.ASourceThisCompileHolds) clause.pos().quotedFrom())
+                    .source();
             Answer<String> text = db.ask(new Front.Text(source));
             if (!text.present()) {
-                return null;
+                throw new IllegalStateException("no text for a source this compile holds: "
+                        + source + ", for a clause of " + spec.name());
             }
-            String cut = cut(text.value(), clause.region());
-            if (cut == null) {
-                return null;
-            }
-            out.add(cut);
+            out.add(cut(text.value(), clause.region(), spec.name()));
         }
         return List.copyOf(out);
     }
@@ -92,16 +109,21 @@ final class WrittenEnsures {
      * that indentation and the rest carry all of it. Taking the start column off the others is what
      * keeps a clause written over several lines the shape its author gave it — the arms stay where
      * they were put relative to the keyword — while letting the block indent the whole of it as one.
+     *
+     * <p>A region that does not fall inside the text is this compiler being wrong about a source it
+     * says it holds, so it is raised. Nothing about the model can put it here: the numbers were made
+     * by reading this same text, and the passes that rewrite what a clause states carry them over
+     * unchanged.
      */
-    private static String cut(String text, Region region) {
+    private static String cut(String text, Region region, String behavior) {
         if (region == null) {
-            return null;
+            throw new IllegalStateException("a written clause of " + behavior + " covers nothing");
         }
         List<String> lines = text.lines().toList();
         int first = region.start().line();
         int last = region.end().line();
         if (first < 1 || last > lines.size() || first > last) {
-            return null;
+            throw outside(region, behavior);
         }
         int declaredAt = region.start().column() - 1;
         StringBuilder out = new StringBuilder();
@@ -110,7 +132,7 @@ final class WrittenEnsures {
             int from = n == first ? declaredAt : Math.min(declaredAt, indentOf(line));
             int to = n == last ? region.end().column() - 1 : line.length();
             if (from > line.length() || to > line.length() || to < from) {
-                return null;
+                throw outside(region, behavior);
             }
             out.append(line, from, to);
             if (n < last) {
@@ -118,6 +140,11 @@ final class WrittenEnsures {
             }
         }
         return out.toString();
+    }
+
+    private static IllegalStateException outside(Region region, String behavior) {
+        return new IllegalStateException("a clause of " + behavior + " is written at " + region
+                + ", which is not in the text it was read from");
     }
 
     private static int indentOf(String line) {
