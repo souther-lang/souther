@@ -199,14 +199,24 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
     }
 
     /**
-     * A condition the reading could not take in is not among the reasons a proof gives.
+     * A proof names every condition the reading took something from, and not only the ones whose
+     * shape it read.
      *
-     * <p>The proof says which conditions leave nothing together. One that narrowed nothing did no
-     * part of that, and naming it says a line was holding where nothing here could tell whether it
-     * was.
+     * <p>{@code Proof.conditionsThatCannotAllHold} says these cannot all hold. That is a claim about
+     * the program, so it has to name everything the contradiction rests on — including a condition
+     * whose shape ran out, which still narrows the state through the subject it names. Left out, the
+     * proof would name the conditions it happened to read and say they cannot all hold when they
+     * plainly can, turning a limit of this compiler into a claim about the model.
+     *
+     * <p>Not a smallest such set. Cutting these down to the ones that actually did the ruling out is
+     * a different job, and one nothing here asks for.
+     *
+     * <p>Whether the reading understood a condition is the other question, and it is not this one.
+     * It has its own answer ({@code WhyUnsettled.aConditionWasNotRead}) and its own test, beside the
+     * guards it explains.
      */
     @Test
-    void aConditionNothingCouldReadIsNotAReasonForAnything() {
+    void aProofNamesEveryConditionItRestsOn() {
         List<Proof> proven = provenIn("""
                 module demo
 
@@ -227,7 +237,8 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
         assertEquals(1, proven.size(),
                 "nothing under fifty is eighty or more, and the guard above is what says so");
         List<PathDecision> why = WhatAnAnswerSays.conditionsIn(proven.get(0));
-        assertEquals(2, why.size(),
-                () -> "the two guards that were read, and not the one through a fold: " + why);
+        assertEquals(3, why.size(),
+                () -> "every guard the contradiction rests on, the one through a fold included: "
+                        + why);
     }
 }

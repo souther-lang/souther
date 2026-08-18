@@ -409,9 +409,14 @@ public final class PathReachability {
      * read to no effect is the ordinary state of a branch nobody built a value for, and no widening
      * touches it. Told apart by asking the reading, not by comparing the state it answered with to
      * the state it was given — that comparison says whether anything changed, which is neither.
+     *
+     * <p>The shape and not what was taken in. Since every value has an identity, a condition this
+     * could not read still narrows the state through the subject it names — so "something was taken
+     * in" stopped telling the two apart, and what an author is owed here is whether the reading
+     * reached what the condition says.
      */
     private static WhyUnsettled whyNot(Predicates.Assumed taken, Core cond) {
-        return taken.read() ? WhyUnsettled.noWitness()
+        return taken.shapeRead() ? WhyUnsettled.noWitness()
                 : WhyUnsettled.aConditionWasNotRead(cond.pos());
     }
 
@@ -419,13 +424,18 @@ public final class PathReachability {
      * The conditions on the way here, with this one — where it was taken in at all.
      *
      * <p>The only way one of these is made, so that a proof cannot name a condition the domains
-     * never read. A condition of a shape no rule here reads narrowed nothing: what came out is what
-     * went in, and listing it among the reasons would say a line was holding when nothing here
-     * could tell whether it was.
+     * never took in. A condition nothing was taken from narrowed nothing: what came out is what went
+     * in, and listing it among the reasons would say a line was holding when nothing here could tell
+     * whether it was.
+     *
+     * <p>What was taken in, and not what was read. A condition whose shape ran out still narrows the
+     * state through the subject it names, and it may be the whole of why nothing stands here — left
+     * out, this proof would name the conditions that <em>were</em> read and say they cannot all hold
+     * when they plainly can, which is a claim about the model made out of a limit of this compiler.
      */
     private static List<PathDecision> with(List<PathDecision> decided, Predicates.Assumed taken,
                                            SourcePos at, boolean held) {
-        if (!taken.read()) {
+        if (!taken.taken()) {
             return decided;
         }
         List<PathDecision> out = new ArrayList<>(decided);

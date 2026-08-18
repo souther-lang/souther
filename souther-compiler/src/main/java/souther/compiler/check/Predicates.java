@@ -547,16 +547,23 @@ final class Predicates {
      *
      * @param read whether any of these domains took the condition in
      */
-    record Assumed(Known known, boolean read) {
+    record Assumed(Known known, boolean taken, boolean shapeRead) {
 
-        Assumed alsoRead(boolean more) {
-            return more && !read ? new Assumed(known, true) : this;
+        Assumed alsoRead(boolean moreTaken, boolean moreShape) {
+            return moreTaken && !taken || moreShape && !shapeRead
+                    ? new Assumed(known, taken || moreTaken, shapeRead || moreShape) : this;
         }
     }
 
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         Core cond = asSizeComparison(rawCond);
-        boolean read = false;
+        // Two answers, and they were one until a condition could name something without this having
+        // read what it says. What was taken in is what a proof about this path may rest on; what was
+        // read is what an unsettled arm may be explained by. A condition whose shape ran out still
+        // narrows the state through the subject it names, and a proof that left it out would name a
+        // set of conditions that can all hold and say they cannot.
+        boolean taken = false;
+        boolean shapeRead = false;
         Core ordered = asOrderComparison(cond, at);
         if (ordered != cond) {
             // Both hold of the same values: the order the call decides, and the bound on the sign
@@ -564,7 +571,8 @@ final class Predicates {
             // read, so a guard states each of them rather than choosing here.
             Assumed first = assumeCond(ordered, k, at, positive);
             k = first.known();
-            read = first.read();
+            taken = first.taken();
+            shapeRead = first.shapeRead();
         }
         // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
         if (cond instanceof Core.Binary b
@@ -574,11 +582,11 @@ final class Predicates {
             // is not one nothing was read of, and calling it that would name this compiler's limit
             // where the limit was reached on one operand only.
             return assumeCond(b.right(), left.known(), at, positive)
-                    .alsoRead(left.read() || read);
+                    .alsoRead(left.taken() || taken, left.shapeRead() || shapeRead);
         }
         Core under = negated(cond);
         if (under != null) {
-            return assumeCond(under, k, at, !positive).alsoRead(read);
+            return assumeCond(under, k, at, !positive).alsoRead(taken, shapeRead);
         }
         Known out = k;
         // What holds of the sizes the condition names, and of what the operations in it answer,
@@ -599,9 +607,10 @@ final class Predicates {
         // which is handed the same facts, would not.
         if (noCaseSatisfies(cond, out, at, positive)) {
             // Read, and read to the end: what it comes to is that nothing enters here.
-            return new Assumed(out.reachingNothing(), true);
+            return new Assumed(out.reachingNothing(), true, true);
         }
-        read |= !known.isEmpty();
+        taken |= !known.isEmpty();
+        shapeRead |= !known.isEmpty();
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
             Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
@@ -610,7 +619,8 @@ final class Predicates {
             if (la != null && ra != null) {
                 LinearForm compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
-                read |= readsItsShape(b.left(), at) && readsItsShape(b.right(), at);
+                taken = true;
+                shapeRead |= readsItsShape(b.left(), at) && readsItsShape(b.right(), at);
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
@@ -621,14 +631,15 @@ final class Predicates {
         List<Quantified> quantified = new ArrayList<>();
         quantifiedBy(cond, at, positive, quantified);
         out = out.and(quantified);
-        read |= !quantified.isEmpty();
+        taken |= !quantified.isEmpty();
+        shapeRead |= !quantified.isEmpty();
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
         FactSubject key = terms.subjectOf(polar.expr(), at);
-        return key == null ? new Assumed(out, read)
-                : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH),
-                        read || readsItsShape(polar.expr(), at));
+        return key == null ? new Assumed(out, taken, shapeRead)
+                : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH), true,
+                        shapeRead || readsItsShape(polar.expr(), at));
     }
 
     /**
