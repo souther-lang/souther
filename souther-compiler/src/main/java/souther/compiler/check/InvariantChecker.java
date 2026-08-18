@@ -570,7 +570,7 @@ public final class InvariantChecker {
         }
         // Which of the clauses place an edge, asked once the positions have names to be recognised
         // by.
-        Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt);
+        Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took);
         // And which values each position is left, off the same clauses and at the same moment. What
         // reached this value is the walk's answer and is given to both readings; what each of them
         // makes of a clause is its own, so neither can widen the other's idea of what it was handed.
@@ -580,9 +580,10 @@ public final class InvariantChecker {
         // not two readings: the connectives belong to the clause, so an alternative nothing can
         // satisfy is dropped by asking the whole of what is known about it.
         StatedByClauses stated = StatedByClauses.top();
+        StatedByClauses.Reading reading2 =
+                StatedByClauses.readingOf(c.terms, at, positions, symbols);
         for (Written each : written) {
-            StatedByClauses one =
-                    StatedByClauses.ofOne(each.clause(), c.terms, at, positions, symbols);
+            StatedByClauses one = reading2.read(each.clause(), true);
             stated = stated.meet(one);
             // Which positions this clause reached, asked of the reading itself. Recorded per clause
             // because that is the granularity a question has: a clause the reading of values took
@@ -791,7 +792,8 @@ public final class InvariantChecker {
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                                   Map<String, FactSubject> held, Map<String, Type> typeAt) {
+                                   Map<String, FactSubject> held, Map<String, Type> typeAt,
+                                   ReadingEvidence took) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
@@ -810,14 +812,66 @@ public final class InvariantChecker {
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
         Map<Clause.Ref, Required> raised = new LinkedHashMap<>();
         stated.forEach(each ->
-                direct(each.clause(), each.from(), at, byName, out, narrowers, raised));
-        return new Reading(List.copyOf(out), Map.copyOf(narrowers), Map.copyOf(raised));
+                direct(each.clause(), each.from(), at, byName, out, narrowers, raised, took,
+                        typeAt));
+        // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
+        // what a report prints for a position is these in the order the declaration writes them.
+        return new Reading(List.copyOf(out), Map.copyOf(narrowers),
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)));
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
     private static void raises(Map<Clause.Ref, Required> into, Clause.Ref rule,
                                ClauseStates states) {
         into.merge(rule, Required.ofInvariant(states), Required::and);
+    }
+
+    /**
+     * What one part of {@code rule} raises, and — where this reading made nothing of it — whether
+     * anything else took that part in.
+     *
+     * <p>Asked of the part and not of the clause. A conjunction is one rule the author wrote and is
+     * read a conjunct at a time; evidence gathered for the whole answers a clause half of which
+     * nothing read on the strength of the half that was, which is how `value >= 1 && value * value
+     * >= 4` came back with nothing to say while the same two rules written apart were reported.
+     */
+    private void settle(Core part, Clause.Ref rule, ClauseStates states, Denotations at,
+                        Map<FactSubject, Coordinate> byName, Map<Clause.Ref, Required> raised,
+                        ReadingEvidence took, Map<String, Type> typeAt) {
+        raises(raised, rule, states);
+        if (!(states instanceof ClauseStates.SomethingElse other)) {
+            return;
+        }
+        // The positions this part is about, by every name each answers to, since a reading files a
+        // clause under whichever name it recognised.
+        Set<FactSubject> about = new LinkedHashSet<>();
+        for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
+            if (other.positions().contains(Owed.Subject.at(each.getValue().path()))) {
+                about.add(each.getKey());
+            }
+        }
+        if (about.isEmpty()) {
+            return;
+        }
+        Map<FactSubject, Type> positions = new LinkedHashMap<>();
+        byName.forEach((name, where) -> {
+            Type type = typeAt.get(where.path());
+            if (type != null) {
+                positions.put(name, type);
+            }
+        });
+        StatedByClauses here = StatedByClauses.ofOne(part, terms, at, positions, symbols);
+        Set<FactSubject> constrained =
+                Predicates.subjectsIn(predicates.obligations(part, Known.top(), at, false));
+        Set<FactSubject> standing = new LinkedHashSet<>();
+        for (FactSubject name : about) {
+            if (!here.tookIn(name) && !constrained.contains(name)) {
+                standing.add(name);
+            }
+        }
+        if (!standing.isEmpty()) {
+            took.leftStanding(rule, standing);
+        }
     }
 
     /**
@@ -832,19 +886,20 @@ public final class InvariantChecker {
     private void direct(Core clause, Clause.Ref from, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         Map<String, List<TypeSymbol>> narrowers,
-                        Map<Clause.Ref, Required> raised) {
+                        Map<Clause.Ref, Required> raised, ReadingEvidence took,
+                        Map<String, Type> typeAt) {
         if (!(clause instanceof Core.Binary bin)) {
-            raises(raised, from, states(clause, at, byName));
+            settle(clause, from, states(clause, at, byName), at, byName, raised, took, typeAt);
             return;
         }
         if (bin.op() == Hir.BinOp.AND) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
-            direct(bin.left(), from, at, byName, out, narrowers, raised);
-            direct(bin.right(), from, at, byName, out, narrowers, raised);
+            direct(bin.left(), from, at, byName, out, narrowers, raised, took, typeAt);
+            direct(bin.right(), from, at, byName, out, narrowers, raised, took, typeAt);
             return;
         }
         if (!InvariantBound.ordering(bin.op()) && bin.op() != Hir.BinOp.EQ) {
-            raises(raised, from, states(bin, at, byName));
+            settle(bin, from, states(bin, at, byName), at, byName, raised, took, typeAt);
             return;
         }
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
@@ -869,7 +924,7 @@ public final class InvariantChecker {
                 ? new InvariantBound.Read.NoEnd()
                 : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
         Coordinate about = found;
-        raises(raised, from, switch (end) {
+        settle(bin, from, switch (end) {
             // Two questions about two subjects: which values may stand at the position, and a line
             // on whichever number the rule measured it by.
             case InvariantBound.Read.AnEnd _ -> new ClauseStates.AnEnd(
@@ -880,7 +935,7 @@ public final class InvariantChecker {
             case InvariantBound.Read.PastWhereTheOrderStops _ ->
                     new ClauseStates.NoValueAtAll(Owed.Subject.at(about.path()));
             case InvariantBound.Read.NoEnd _ -> states(bin, at, byName);
-        });
+        }, at, byName, raised, took, typeAt);
         if (end instanceof InvariantBound.Read.NoEnd) {
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding

@@ -1136,6 +1136,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     ObjectNode one = standing.addObject();
                     one.put("rule", each.rule());
                     one.put("question", word(each.question()));
+                    one.put("subject", each.subject());
                 }
             }
             axis.classes().forEach(a.putArray("classes")::add);
@@ -1341,8 +1342,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARM_UNREACHED -> ArmVocabulary.label(armOf(finding));
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
                     PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
-                    PARTITION_RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
+                    PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
                     String.valueOf(args.get(0));
+            // The rule and what it was left saying. Named by the position alone, two rules nothing
+            // took in at one position serialised as two identical objects, and the human line named
+            // them while a consumer of the document could not tell them apart.
+            case PARTITION_RULE_UNACCOUNTED ->
+                    args.get(1) + " — " + args.get(2) + " " + args.get(0);
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";
             case BOUNDARY_UNMET -> args.get(0) + " = " + args.get(1);

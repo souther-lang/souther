@@ -182,6 +182,36 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     }
 
     /**
+     * A clause half of which nothing read is a clause nothing read.
+     *
+     * <p>A conjunction is one rule the author wrote and is read a conjunct at a time, so the
+     * questions its parts raise about one subject are one question. Answered on the strength of the
+     * part that was read, `value >= 1 && Int.abs(value) >= 2` came back with nothing to say while
+     * the same two rules written apart were reported — which is what #842 is about, one level down:
+     * a part of the clause standing for the whole of it.
+     *
+     * <p>The line the first half draws is owed a row all the same. What the two halves settle are
+     * different questions, and only one of them is left standing.
+     */
+    @Test
+    void aClauseHalfOfWhichNothingReadIsUnanswered() {
+        assertFalse(answered("value >= 1 && Int.abs(value) >= 2"),
+                "a bound beside a call nothing reads");
+        assertFalse(answered("value == 7 && Int.abs(value) >= 2"),
+                "and the values named beside it do not answer for it either");
+        assertTrue(answered("value >= 1 && value <= 100"),
+                "while a conjunction both halves of which were read is answered");
+
+        assertEquals(Set.of("BOUNDARY at the value"),
+                rule(accountingOf(beside("value >= 1 && Int.abs(value) >= 2"), "Length"), "said")
+                        .answers().entrySet().stream()
+                        .filter(e -> e.getValue() instanceof RuleAccounting.Outcome.Accounted)
+                        .map(e -> e.getKey().obligation() + " at " + e.getKey().subject())
+                        .collect(java.util.stream.Collectors.toSet()),
+                "the line the readable half drew is answered by the reading that placed it");
+    }
+
+    /**
      * A clause can be accounted for without becoming a bound.
      *
      * <p>The short circuit this is here to stop. {@code allRulesRead()} answers whether every clause

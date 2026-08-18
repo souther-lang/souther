@@ -294,7 +294,7 @@ class EverySchemaWordIsAccountedForTest {
                                 new PartitionEvidence.AxisCoverage.Reading.Standing(List.of(
                                         new PartitionEvidence.AxisCoverage.Unanswered("r",
                                                 souther.compiler.check.CoverageObligation
-                                                        .ADMITTED_VALUES))))),
+                                                        .ADMITTED_VALUES, "s"))))),
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "axes", "items",
                         "properties", "read", "properties", "extent")));
     }

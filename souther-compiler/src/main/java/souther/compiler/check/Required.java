@@ -144,11 +144,15 @@ public sealed interface Required {
         return switch (states) {
             // An end is a statement about the values and a line rows are owed at, both — and the
             // two are about different subjects, which is why they are carried apart.
-            case ClauseStates.AnEnd end -> new Some(Set.of(admittedValues(end.position()),
-                    new Owed(CoverageObligation.BOUNDARY, end.line())));
+            // A `LinkedHashSet` and not `Set.of`, which iterates in an order salted once per JVM
+            // run — the questions reach a document in the order they are written here.
+            case ClauseStates.AnEnd end -> new Some(new LinkedHashSet<>(java.util.List.of(
+                    admittedValues(end.position()),
+                    new Owed(CoverageObligation.BOUNDARY, end.line()))));
             // No line: there is no value to write a row at. The rule still says which values may
             // stand there, and what it says is that none may.
-            case ClauseStates.NoValueAtAll none -> new Some(Set.of(admittedValues(none.position())));
+            case ClauseStates.NoValueAtAll none -> new Some(new LinkedHashSet<>(
+                    java.util.List.of(admittedValues(none.position()))));
             case ClauseStates.SomethingElse other -> new Some(other.positions().stream()
                     .map(Required::admittedValues).collect(java.util.stream.Collectors
                             .toCollection(LinkedHashSet::new)));

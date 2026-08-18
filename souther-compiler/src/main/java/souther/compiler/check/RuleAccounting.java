@@ -39,13 +39,14 @@ public final class RuleAccounting {
     /**
      * The accounting of {@code rule}, with {@code answered} asked once for each question it raises.
      *
-     * <p>The only way to one of these. {@code answered} is asked for the questions and never handed
-     * the map, so what it returns cannot decide which questions there are — a reading that answered
-     * about something the rule does not raise, or quietly skipped one, would be describing a
-     * different rule.
+     * <p>The only way to one of these, and not one anything outside this package can take. What is
+     * closed here is which questions there are — {@code answered} is asked for them and never
+     * handed the map — and closing that while leaving the answers to whoever asked would let a
+     * caller hold a genuine {@link Required} beside answers it wrote itself. A reader outside wants
+     * a finished accounting, never a way to make one.
      */
-    public static RuleAccounting of(Clause.Ref rule, Required required,
-                                    Function<Owed, Outcome> answered) {
+    static RuleAccounting of(Clause.Ref rule, Required required,
+                             Function<Owed, Outcome> answered) {
         Map<Owed, Outcome> answers = new LinkedHashMap<>();
         for (Owed each : required.obligations()) {
             Outcome outcome = answered.apply(each);
@@ -91,12 +92,20 @@ public final class RuleAccounting {
     public List<Unanswered> unansweredQuestions() {
         return answers.entrySet().stream()
                 .filter(e -> e.getValue() instanceof Outcome.Unaccounted)
-                .map(e -> new Unanswered(rule, e.getKey(), ((Outcome.Unaccounted) e.getValue()).why()))
+                .map(e -> new Unanswered(rule, e.getKey()))
                 .toList();
     }
 
-    /** One question of one rule that nothing answered. */
-    public record Unanswered(Clause.Ref rule, Owed owed, UnreadReason why) {}
+    /**
+     * One question of one rule that nothing answered.
+     *
+     * <p>No reason beside it. What a reading records about why it stopped is about a position and
+     * this is about a rule at a subject, and putting the first here would be a fact at one
+     * granularity wearing another's name — which is the shape this whole accounting was written
+     * against. A reason belongs here once the readings say why per part of a clause, and until then
+     * an absent one is the honest answer.
+     */
+    public record Unanswered(Clause.Ref rule, Owed owed) {}
 
     @Override
     public String toString() {

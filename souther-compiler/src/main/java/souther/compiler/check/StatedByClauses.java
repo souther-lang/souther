@@ -4,6 +4,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.ValueSet;
 
 import java.util.List;
 import java.util.Map;
@@ -46,11 +47,20 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      */
     static StatedByClauses of(List<Core> clauses, Terms terms, Denotations at,
                               Map<FactSubject, Type> byName, Symbols symbols) {
+        Reading reading = readingOf(terms, at, byName, symbols);
         StatedByClauses out = top();
         for (Core clause : clauses) {
-            out = out.meet(ofOne(clause, terms, at, byName, symbols));
+            out = out.meet(reading.read(clause, true));
         }
         return out;
+    }
+
+    /** The reading of one value's positions, made once and used over however many clauses reach it.
+     *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
+    static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
+                             Symbols symbols) {
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols),
+                OrderedReading.of(terms, at, byName, symbols));
     }
 
     /**
@@ -64,8 +74,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      */
     static StatedByClauses ofOne(Core clause, Terms terms, Denotations at,
                                  Map<FactSubject, Type> byName, Symbols symbols) {
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols),
-                OrderedReading.of(terms, at, byName, symbols)).read(clause, true);
+        return readingOf(terms, at, byName, symbols).read(clause, true);
     }
 
     /**
@@ -76,7 +85,11 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      * mistake the whole accounting is written against.
      */
     boolean tookIn(FactSubject position) {
-        return (values.speaksFor(position) && values.whyUnread(position) == null)
+        // What this reading produced about the position, and not the absence of a recorded failure.
+        // `speaksFor` is `!unread.containsKey`, which is true of every position a clause never
+        // mentioned — so a clause that said nothing here would have read every position of the
+        // value.
+        return (values.whyUnread(position) == null && !values.at(position).equals(ValueSet.ANY))
                 || ordered.ranges().containsKey(position);
     }
 
@@ -96,7 +109,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
     }
 
     /** The two readings of one clause tree, run together so that the connectives are the clause's. */
-    private record Reading(AdmissibleReading values, OrderedReading ordered)
+    record Reading(AdmissibleReading values, OrderedReading ordered)
             implements ClauseReading<StatedByClauses> {
 
         @Override

@@ -345,8 +345,15 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
          *
          * @param rule     the rule, as a report names it
          * @param question what about the position it raised, in the words a document promises
+         * @param subject  what the question is about, spelled the way a report names it. Carried
+         *                 rather than worked out downstream from the axis: the questions do not
+         *                 share a subject — which values may stand somewhere is about a position,
+         *                 and a line is about a number taken of one — and a renderer choosing
+         *                 between the two is how a reading of a string's values came to be printed
+         *                 against its length
          */
-        public record Unanswered(String rule, souther.compiler.check.CoverageObligation question) {}
+        public record Unanswered(String rule, souther.compiler.check.CoverageObligation question,
+                                 String subject) {}
 
         /** Nothing standing, which is what a caller holding no account of its own says. */
         public static final Reading ANSWERED = new Reading.Answered();

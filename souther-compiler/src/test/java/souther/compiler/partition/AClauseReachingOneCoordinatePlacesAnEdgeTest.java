@@ -154,7 +154,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRecordsBoundOnItsOwnNumberPlacesAnEdge() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onTally/v.n = 1 (invariant Tally)"), report);
+        assertTrue(report.contains("no row is at onTally/v.n = 1 (invariant Tally #1)"), report);
     }
 
     /**
@@ -168,7 +168,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onBag/List.length(v.xs) = 1 (invariant Bag)"), report);
+                "no row is at onBag/List.length(v.xs) = 1 (invariant Bag #1)"), report);
     }
 
     /** Both ends, so that this is read as the rules being met and not as a floor being special. */
@@ -176,8 +176,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void bothEndsOfARecordsOwnBoundAreEdges() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onBoth/v.n = 1 (invariant Both)"), report);
-        assertTrue(report.contains("no row is at onBoth/v.n = 10 (invariant Both)"), report);
+        assertTrue(report.contains("no row is at onBoth/v.n = 1 (invariant Both #1)"), report);
+        assertTrue(report.contains("no row is at onBoth/v.n = 10 (invariant Both #2)"), report);
     }
 
     /** A clause governing the position from the declaration it sits inside reaches it, and names
@@ -187,7 +187,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onOuter/v.inner.n = 1 (invariant Inner)"), report);
+                "no row is at onOuter/v.inner.n = 1 (invariant Inner #1)"), report);
     }
 
     /** And the outer record's own clause where it is the tighter of the two. */
@@ -196,7 +196,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(MODEL);
 
         assertTrue(report.contains(
-                "no row is at onTight/v.inner.n = 5 (invariant Tight)"), report);
+                "no row is at onTight/v.inner.n = 5 (invariant Tight #1)"), report);
     }
 
     /**
@@ -260,8 +260,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aWrappersRuleReachesAPositionInsideARecord() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped", lines.get("onHeld/v.w.n = 1").rule().named());
-        assertEquals("invariant NonEmptyBag",
+        assertEquals("invariant Wrapped #1", lines.get("onHeld/v.w.n = 1").rule().named());
+        assertEquals("invariant NonEmptyBag #1",
                 lines.get("onHeldBag/List.length(v.b.xs) = 1").rule().named());
     }
 
@@ -270,7 +270,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aWrappersRuleReachesThroughAStackOfNames() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant W2", lines.get("onStacked/v.w.n = 2").rule().named());
+        assertEquals("invariant W2 #1", lines.get("onStacked/v.w.n = 2").rule().named());
     }
 
     /**
@@ -289,8 +289,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aNameWrappedRoundARecordReachesItsPositions() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals("invariant Wrapped", lines.get("onWrapped/v.n = 1").rule().named());
-        assertEquals("invariant NonEmptyBag",
+        assertEquals("invariant Wrapped #1", lines.get("onWrapped/v.n = 1").rule().named());
+        assertEquals("invariant NonEmptyBag #1",
                 lines.get("onNonEmpty/List.length(v.xs) = 1").rule().named());
     }
 
@@ -347,7 +347,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRangeNarrowedByAnotherPositionsBoundIsNotAnEdge() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onR/v.b = 10 (invariant R)"), report);
+        assertTrue(report.contains("no row is at onR/v.b = 10 (invariant R #2)"), report);
         assertFalse(report.contains("no row is at onR/v.a"), report);
     }
 
@@ -363,7 +363,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRangeNarrowedThroughAnotherPositionsTypeIsNotAnEdgeEither() {
         String report = report(MODEL);
 
-        assertTrue(report.contains("no row is at onUnder/v.b = 10 (invariant B)"), report);
+        assertTrue(report.contains("no row is at onUnder/v.b = 10 (invariant B #1)"), report);
         assertFalse(report.contains("no row is at onUnder/v.a"), report);
     }
 
@@ -374,10 +374,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         String report = report(ON_NEWTYPES);
 
         assertTrue(report.contains(
-                "no row is at onName/String.length(v) = 1 (invariant Name)"), report);
+                "no row is at onName/String.length(v) = 1 (invariant Name #1)"), report);
         assertTrue(report.contains(
-                "no row is at onCart/List.length(c) = 1 (invariant Cart)"), report);
-        assertTrue(report.contains("no row is at onHop/v.n = 1 (invariant Count)"), report);
+                "no row is at onCart/List.length(c) = 1 (invariant Cart #1)"), report);
+        assertTrue(report.contains("no row is at onHop/v.n = 1 (invariant Count #1)"), report);
     }
 
     /**
@@ -391,7 +391,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aTighterRecordClauseOwnsTheLineRatherThanNarrowingIt() {
         String report = report(ON_NEWTYPES);
 
-        assertTrue(report.contains("no row is at onMoved/v.n = 5 (invariant Moved)"), report);
+        assertTrue(report.contains("no row is at onMoved/v.n = 5 (invariant Moved #1)"), report);
         assertFalse(report.contains("within Moved"), report);
     }
 
@@ -438,7 +438,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRuleFromOutsideDoesNotChooseWhichCoordinateAPositionIsMeasuredAt() {
         String report = report(TWO_WAYS);
 
-        assertTrue(report.contains("no row is at onPerson/v.name = m (invariant Name)"),
+        assertTrue(report.contains("no row is at onPerson/v.name = m (invariant Name #1)"),
                 report);
         assertFalse(report.contains("String.length(v.name"),
                 "the record's clause states an end on a coordinate this position is not measured at:\n"
@@ -640,7 +640,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 "`a` stops where its own type stops when nothing narrows it: " + lines.keySet());
         assertTrue(lines.containsKey("onWrapped/v.a = 9"),
                 "and one step lower under the wrapper's clause: " + lines.keySet());
-        assertEquals("invariant A within Wrapped",
+        assertEquals("invariant A #1 within Wrapped",
                 lines.get("onWrapped/v.a = 9").rule().named(),
                 "the wrapper moved the edge `A` drew and did not draw one");
     }
@@ -658,7 +658,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aNarrowedEdgeNamesTheDeclarationThatMovedItAndNotTheValueItSitsIn() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
 
-        assertEquals("invariant A within Wrapped",
+        assertEquals("invariant A #1 within Wrapped",
                 lines.get("onHeld/v.w.a = 9").rule().named(),
                 "the clause is `Wrapped`'s wherever a `Wrapped` is held: " + lines.keySet());
     }
@@ -722,7 +722,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aRelationThatMovedNoEndDoesNotNameOne() {
         Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant A within Inner", lines.get("onOuter/v.a = 7").rule().named(),
+        assertEquals("invariant A #1 within Inner", lines.get("onOuter/v.a = 7").rule().named(),
                 "`Outer`'s clause reaches nothing `a` had not already passed");
     }
 
@@ -741,7 +741,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aCandidateThatHoldsNothingIsOutEvenWhereNoOneCandidateHoldsIt() {
         Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant A within Again or Twice",
+        assertEquals("invariant A #1 within Again or Twice",
                 lines.get("onIdle/v.a = 7").rule().named(),
                 "`Idle`'s clause moves this end nowhere");
     }
@@ -751,8 +751,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void eachEndIsHeldByWhicheverDeclarationHoldsIt() {
         Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
 
-        assertEquals("invariant N within Both", lines.get("onBoth/v.n = 3").rule().named());
-        assertEquals("invariant N within Upper", lines.get("onBoth/v.n = 7").rule().named());
+        assertEquals("invariant N #1 within Both", lines.get("onBoth/v.n = 3").rule().named());
+        assertEquals("invariant N #2 within Upper", lines.get("onBoth/v.n = 7").rule().named());
     }
 
     /** A length floor over an element type nothing inhabits. Its own module, since a declaration that

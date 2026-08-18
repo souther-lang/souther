@@ -134,8 +134,8 @@ class ALineIsNamedByTheClauseThatDrewItTest {
     void oneClauseIsOneRuleAndAnUnnamedOneIsNamedByItsDeclaration() {
         String human = humanOf(ONE_UNNAMED_CLAUSE);
 
-        assertTrue(human.contains("price/length = 1 (invariant Length)"), human);
-        assertTrue(human.contains("price/length = 100 (invariant Length)"), human);
+        assertTrue(human.contains("price/length = 1 (invariant Length #1)"), human);
+        assertTrue(human.contains("price/length = 100 (invariant Length #1)"), human);
 
         Axis length = axis(ONE_UNNAMED_CLAUSE);
         assertEquals(1, cutAt(length, 1L).origins().size(),

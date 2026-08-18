@@ -419,7 +419,9 @@ public final class FieldDomains {
         Map<Clause.Ref, RuleAccounting> out = new LinkedHashMap<>();
         raised.forEach((rule, required) ->
                 out.put(rule, RuleAccounting.of(rule, required, owed -> answered(rule, owed))));
-        accounting = Map.copyOf(out);
+        // Insertion order, which is the order the declaration writes its clauses. `Map.copyOf`
+        // iterates in an order salted once per JVM run, and these reach a checked-in document.
+        accounting = java.util.Collections.unmodifiableMap(out);
         return accounting;
     }
 
@@ -447,6 +449,13 @@ public final class FieldDomains {
      * {@code value == 7} written beside it was taken in whole.
      */
     private RuleAccounting.Outcome admissionAnswered(Clause.Ref rule, Owed.Subject where) {
+        List<FactSubject> named = named(where.path());
+        // A part of the rule nothing took in outranks everything else about it. An end placed by
+        // one conjunct is not an account of the conjunct written beside it.
+        if (took.anyLeftStanding(rule, named)) {
+            return new RuleAccounting.Outcome.Unaccounted(
+                    unreadByField.getOrDefault(where.path(), UnreadReason.FORM_NOT_READ));
+        }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
                 .anyMatch(d -> d.from().equals(rule) && d.path().equals(where.path()))) {
@@ -454,7 +463,7 @@ public final class FieldDomains {
         }
         // And the readings that hold what a clause says about the values themselves, each said by
         // that reading at the point it adopted the clause.
-        if (took.tookIn(rule, named(where.path()))) {
+        if (took.tookIn(rule, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
         UnreadReason why = unreadByField.get(where.path());

@@ -286,8 +286,13 @@ public sealed interface OriginRef {
      * name is then the whole of it.
      */
     private static String nameOf(InvariantOrigin i) {
+        // What the author called it, and where they called it nothing, which of the declaration's
+        // clauses it is — counted from one, as somebody reading the declaration counts them. Two
+        // unnamed clauses of one declaration are two rules, and rendered by the declaration alone
+        // they are one word twice, which is the thing this origin was changed to stop.
         return "invariant " + i.rule().id().declaredOn().name()
-                + i.rule().name().map(n -> " (" + n + ")").orElse("");
+                + i.rule().name().map(n -> " (" + n + ")")
+                        .orElse(" #" + (i.rule().id().ordinal() + 1));
     }
 
     private static String nameOf(EnsuresOrigin e) {

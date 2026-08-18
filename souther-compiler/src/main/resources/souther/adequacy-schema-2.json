@@ -206,17 +206,18 @@
                 "additionalProperties": false,
                 "properties": {
                   "extent": { "enum": ["complete", "partial"], "description": "Whether anything the rules raise about this position is left standing." },
-                  "rulesNotReached": { "type": "boolean", "description": "The walk never reached the rules written about this position, so what is written there is not known. Present exactly where that is so, and never beside `unanswered`: there is no rule to name, and a document listing none would say every rule was accounted for." },
+                  "rulesNotReached": { "type": "boolean", "description": "The walk never reached the rules written about this position, so what is written there is not known. Present exactly where that is so, and never beside `unanswered`: there is no rule to name, and a document listing none would say every rule was accounted for. `extent` is `partial` here too — a reader keying on the word is told the numbers rest on something unfinished either way, and which of the two it is is this key." },
                   "unanswered": {
                     "type": "array",
-                    "description": "The rules nothing took in, present exactly where `extent` is `partial`. Each names the rule, because a position is not what an author edits.",
+                    "description": "The rules nothing took in, each naming the rule because a position is not what an author edits. Present where `extent` is `partial` and `rulesNotReached` is absent: a position whose rules were never reached has no rule to name, and the two are never written together.",
                     "items": {
                       "type": "object",
-                      "required": ["rule", "question"],
+                      "required": ["rule", "question", "subject"],
                       "additionalProperties": false,
                       "properties": {
                         "rule": { "type": "string", "description": "The rule, as a report names it — `invariant Length (even)`." },
-                        "question": { "$ref": "#/$defs/coverageQuestion" }
+                        "question": { "$ref": "#/$defs/coverageQuestion" },
+                        "subject": { "type": "string", "description": "What the question is about, as a report names it. The questions do not share a subject: which values may stand somewhere is about the position, and a line is about a number taken of it — so a `String` bounded on its length raises one about `code` and one about `String.length(code)`, and `path` beside them is the second." }
                       }
                     }
                   }

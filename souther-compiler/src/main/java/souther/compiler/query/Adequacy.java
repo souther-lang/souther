@@ -1916,9 +1916,12 @@ public final class Adequacy {
                     // One per rule. A position was all a reader used to be given, and the rules a
                     // position carries are not one thing to act on.
                     for (PartitionEvidence.AxisCoverage.Unanswered each : open.questions()) {
+                        // The subject the question carries, and not the axis's own number. A
+                        // length bound says which strings may stand at the position and draws its
+                        // line on the count, and the axis is named after the second.
                         out.add(new Finding(Kind.PARTITION_RULE_UNACCOUNTED, behavior.name(),
                                 MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                                List.of(axis.path(), each.rule(), asked(each.question()))));
+                                List.of(each.subject(), each.rule(), asked(each.question()))));
                     }
                 }
             }

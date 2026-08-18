@@ -70,6 +70,42 @@ class TwoLinesAboutOneClauseDoNotContradictTest {
                 | "short" : (Length(49)) -> 2
             """;
 
+    /** A `String` bounded on its length, and a clause about that length nothing reads. */
+    private static final String MEASURED_AT_A_COUNT = """
+            module example.rooms
+
+            data Code = String
+                invariant nonEmpty = String.length(value) >= 1
+                invariant odd = Int.abs(String.length(value)) >= 2
+
+            behavior price : (code: Code) -> Int
+            let price (code) =
+                if String.length(code.value) >= 5 then 1 else 2
+
+            example price
+                | "long" : (Code("abcde")) -> 1
+                | "short" : (Code("abcd")) -> 2
+            """;
+
+    /**
+     * The line names what the question is about, which is not what the axis is measured at.
+     *
+     * <p>A length bound says which strings may stand at the position and draws its line on the
+     * count, and the axis is named after the second. A question about which values may stand
+     * somewhere is about `code`; printed against `String.length(code)` it is a reading of the
+     * string's values reported against its length, which is the other half of what #842 found.
+     */
+    @Test
+    void aQuestionIsPrintedAgainstItsOwnSubject() {
+        String human = humanOf(MEASURED_AT_A_COUNT);
+
+        assertTrue(human.contains(
+                        "not accounted for: invariant Code (odd) — which values may stand at code"),
+                human);
+        assertFalse(human.contains("which values may stand at String.length(code)"),
+                "the axis is measured at the length; the question is about the string: " + human);
+    }
+
     private static String humanOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());

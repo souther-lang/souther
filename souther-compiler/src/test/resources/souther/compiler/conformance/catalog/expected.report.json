@@ -61,7 +61,7 @@
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "discount/String.length(item.sku)",
-          "origin" : "invariant Sku",
+          "origin" : "invariant Sku #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -70,7 +70,7 @@
           "status" : "complete"
         }, {
           "axis" : "discount/item.price",
-          "origin" : "invariant Price",
+          "origin" : "invariant Price #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "0",
@@ -79,7 +79,7 @@
           "status" : "complete"
         }, {
           "axis" : "discount/item.weight",
-          "origin" : "invariant Weight",
+          "origin" : "invariant Weight #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -159,7 +159,7 @@
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "台帳へ書く/String.length(指示.番号)",
-          "origin" : "invariant 送り状番号",
+          "origin" : "invariant 送り状番号 #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -168,7 +168,7 @@
           "status" : "complete"
         }, {
           "axis" : "台帳へ書く/指示.重量",
-          "origin" : "invariant Weight",
+          "origin" : "invariant Weight #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -279,7 +279,7 @@
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "出荷する/String.length(指示.番号)",
-          "origin" : "invariant 送り状番号",
+          "origin" : "invariant 送り状番号 #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",
@@ -288,7 +288,7 @@
           "status" : "complete"
         }, {
           "axis" : "出荷する/指示.重量",
-          "origin" : "invariant Weight",
+          "origin" : "invariant Weight #1",
           "side" : "at",
           "kind" : "at_value",
           "value" : "1",

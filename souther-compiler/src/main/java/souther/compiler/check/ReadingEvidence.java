@@ -24,6 +24,13 @@ import java.util.Set;
  * in, so nothing here records it — what is written down is the point at which a reading adopted the
  * clause into what it holds.
  *
+ * <p>Every part of the clause, and not one of them. A conjunction is one rule the author wrote and
+ * is read one conjunct at a time; a clause half of which nothing took in is a clause nothing took
+ * in, and answering it on the strength of the half that was read is how {@code value >= 1 &&
+ * value * value >= 4} came back with nothing to say while the same two rules written apart were
+ * reported. The same reading {@code Predicates.Owed.and} makes of a clause it could not read all
+ * of.
+ *
  * <p><b>Every reading, and each one asked at its own adoption point.</b> There are more of them than
  * a reader notices: {@code value * 2 >= 4} is beyond the reading of ends and beyond the reading of
  * values, and the reading that builds the numeric constraints takes it in whole. An accounting that
@@ -35,9 +42,29 @@ final class ReadingEvidence {
     /** Where each reading took a clause in. */
     private final Map<Clause.Ref, Set<FactSubject>> spokenFor = new LinkedHashMap<>();
 
+    /** Where a part of a clause was taken in by nothing, which no other part makes up for. */
+    private final Map<Clause.Ref, Set<FactSubject>> left = new LinkedHashMap<>();
+
     /** A reading took {@code rule} in at {@code position}. */
     void record(Clause.Ref rule, FactSubject position) {
         spokenFor.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).add(position);
+    }
+
+    /**
+     * Whether a part of {@code rule} about one of {@code positions} was taken in by nothing.
+     *
+     * <p>Outranks every other answer about the rule. A clause half of which nothing read is a clause
+     * nothing read, however well the other half went — so an end placed by one conjunct does not
+     * answer for the conjunct beside it.
+     */
+    boolean anyLeftStanding(Clause.Ref rule, Collection<FactSubject> positions) {
+        Set<FactSubject> standing = left.get(rule);
+        return standing != null && positions.stream().anyMatch(standing::contains);
+    }
+
+    /** A part of {@code rule} was taken in by nothing, of the positions it named. */
+    void leftStanding(Clause.Ref rule, Set<FactSubject> positions) {
+        left.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(positions);
     }
 
     /**
@@ -48,6 +75,9 @@ final class ReadingEvidence {
      * reading recognised.
      */
     boolean tookIn(Clause.Ref rule, Collection<FactSubject> positions) {
+        if (anyLeftStanding(rule, positions)) {
+            return false;
+        }
         Set<FactSubject> here = spokenFor.get(rule);
         return here != null && positions.stream().anyMatch(here::contains);
     }

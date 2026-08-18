@@ -68,12 +68,17 @@ sealed interface ClauseStates {
     record SomethingElse(Set<Owed.Subject> positions) implements ClauseStates {
 
         public SomethingElse {
+            // Insertion order: `Set.of` and `Set.copyOf` iterate in an order salted once per JVM
+            // run, and what is built from these reaches a checked-in document.
             positions = positions.isEmpty()
-                    ? Set.of(Owed.Subject.at(FieldDomains.THE_VALUE)) : Set.copyOf(positions);
+                    ? java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(
+                            java.util.List.of(Owed.Subject.at(FieldDomains.THE_VALUE))))
+                    : java.util.Collections.unmodifiableSet(
+                            new java.util.LinkedHashSet<>(positions));
         }
 
         static SomethingElse naming(List<Owed.Subject> found) {
-            return new SomethingElse(Set.copyOf(found));
+            return new SomethingElse(new java.util.LinkedHashSet<>(found));
         }
     }
 }
