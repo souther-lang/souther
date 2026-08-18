@@ -84,7 +84,8 @@ public record ContractDischarge(List<RuleDischarge> rules,
             named.add(param.binding());
         }
         named.add(rule.value());
-        Denotations locations = Denotations.none().locations(named);
+        Denotations locations =
+                Denotations.none().locations(named, new Terms(symbols)::placeSubject);
 
         List<RuleDischarge> out = new ArrayList<>();
         for (StatedContract.Conjunct conjunct : rule.conjuncts()) {

@@ -140,7 +140,7 @@ final class PathEngine {
      * asked here.
      */
     Entered enter(Core.Read root, Known known, Denotations at) {
-        Denotations next = at.location(root.binding());
+        Denotations next = at.location(root.binding(), terms.placeSubject(root.binding()));
         return new Entered(seedAt(root, known, next, 0), next);
     }
 
@@ -172,7 +172,8 @@ final class PathEngine {
             return new Entered(k, at);
         }
         Denotes what = terms.denotationOf(li.value(), at);
-        return new Entered(k, at.binding(li.binder().id(), li.value(), what));
+        return new Entered(k, at.binding(li.binder().id(), li.value(),
+                terms.subjectOf(li.value(), at), what));
     }
 
     /**

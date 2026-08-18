@@ -40,7 +40,7 @@ class OneNameIsOneValueTest {
     void oneKeyIsRefusedASecondKindOfNumber() {
         Terms terms = new Terms(Symbols.none());
         BindingId binding = binding();
-        Denotations at = Denotations.none().location(binding);
+        Denotations at = Denotations.none().location(binding, AsPlaces.of(binding));
         FactSubject whole = terms.atomOf(new Core.Read("n", binding, Type.INT, POS), at);
         assertNotNull(whole, "a location is an atom");
         Terms.OneTermTwoKinds refused = assertThrows(Terms.OneTermTwoKinds.class,

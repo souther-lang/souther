@@ -205,7 +205,8 @@ public final class InvariantChecker {
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
         return c.capabilitiesOf(clause, read -> c.clauses.typed(read, named, data),
-                Denotations.none().locations(c.clauses.bindingsOf(named, data).values()),
+                Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
+                        c.terms::placeSubject),
                 data.name());
     }
 
@@ -484,7 +485,7 @@ public final class InvariantChecker {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
-        Denotations at = Denotations.none().locations(bindings.values());
+        Denotations at = Denotations.none().locations(bindings.values(), c.terms::placeSubject);
         Known k = Known.top();
         boolean read = true;
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
@@ -896,7 +897,8 @@ public final class InvariantChecker {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Core stated = c.typed(read -> c.clauses.typed(read, named, data), clause, data.name());
         for (ClauseDischarge.Kind read : c.kindsRead(stated,
-                Denotations.none().locations(c.clauses.bindingsOf(named, data).values()),
+                Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
+                        c.terms::placeSubject),
                 data.name())) {
             if (read != ClauseDischarge.Kind.DERIVABLE) {
                 return false;
