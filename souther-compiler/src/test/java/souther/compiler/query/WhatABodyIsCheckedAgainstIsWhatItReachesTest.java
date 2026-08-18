@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Which declarations a body is checked against, read as an answer of its own.
  *
- * <p>{@link Bodies.CallTargets} and {@link Bodies.ContractsForBody} exist so that this is something
+ * <p>{@link Bodies.BehaviorsReached} and {@link Bodies.ContractsForBody} exist so that this is something
  * to look at rather than something to work out from the shape of a {@code compute}, and this is what
  * looks at it. {@code IncrementalCompilationTest} holds the other end — that depending on less is
  * what an edit costs — and neither says what the other says: a frontier can be narrow and wrong, and
@@ -31,7 +31,7 @@ class WhatABodyIsCheckedAgainstIsWhatItReachesTest {
     }
 
     private static Set<ValueName.Behavior> reachedBy(Compilation c, String behavior) {
-        return c.db().ask(new Bodies.CallTargets("shop.orders", behavior)).value();
+        return c.db().ask(new Bodies.BehaviorsReached("shop.orders", behavior)).value();
     }
 
     private static Set<ValueName.Behavior> statedTo(Compilation c, String behavior) {
@@ -72,7 +72,7 @@ class WhatABodyIsCheckedAgainstIsWhatItReachesTest {
             """;
 
     @Test
-    void aBodyReachesTheBehaviorsItCallsAndNoOthers() {
+    void aBodyReachesTheBehaviorsItNamesAndNoOthers() {
         Compilation c = compiled(CALLING);
 
         assertEquals(Set.of(of("called")), reachedBy(c, "caller"),
@@ -95,6 +95,21 @@ class WhatABodyIsCheckedAgainstIsWhatItReachesTest {
                 "both are called");
         assertEquals(Set.of(of("called")), statedTo(c, "caller"),
                 "and only one of them said anything about its answer");
+    }
+
+    /**
+     * A behavior named where a value goes is reached whether or not anything applies it. Known and
+     * conservative: what a name becomes is the function it names, and which later step applies it is
+     * not something a walk of the body can see, so the frontier is what a contract lookup may ask
+     * about rather than what it will.
+     */
+    @Test
+    void aBehaviorNamedAsAValueIsReachedWhetherOrNotItIsApplied() {
+        Compilation c = compiled(CALLING.replace("let caller (n) = called(n)",
+                "let caller (n) = {\n    let f = called\n    f(n)\n}"));
+
+        assertEquals(Set.of(of("called")), reachedBy(c, "caller"),
+                "`called` is named here, and naming it is what brings its contract along");
     }
 
     /**

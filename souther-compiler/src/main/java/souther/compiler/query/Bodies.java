@@ -34,6 +34,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -416,10 +417,17 @@ public final class Bodies {
      * one clause elsewhere was written differently.
      *
      * <p>Recomputing this is not the same as its answer changing. It reads the module's table, so the
-     * table is rebuilt whenever any clause in that file is edited — and this comes out equal for
-     * every behavior but the edited one, which is where the fan-out stops. What is left is the cost
-     * of rebuilding the table, which is a question about this producer and not about who depends on
-     * it.
+     * table is rebuilt whenever any clause in that file is edited, and this stops the rebuild from
+     * reaching a reader wherever it comes out equal. What is left is the cost of rebuilding the
+     * table, which is a question about this producer and not about who depends on it.
+     *
+     * <p>How far that reaches is narrower than it looks, and measured: a contract carries the source
+     * positions of its terms and the coverage ordinals numbered over the module, so an edit above the
+     * declaration moves both — a blank line moves the positions, and a clause gaining a term moves
+     * every ordinal after it. Editing a behavior written <em>below</em> this one comes out equal here
+     * and stops; editing one written above does not. What a caller assumes of an answer is neither of
+     * those things, so the reach is a property of what the value happens to carry rather than of what
+     * a caller depends on.
      *
      * <p>Absent where the behavior states nothing, and where the module that declares it could not be
      * read. Absence is what a caller wanting to know "is there anything to assume" is asking, and an
@@ -457,13 +465,18 @@ public final class Bodies {
      * <p>An injected one is reached through the parameter {@code depends on} gave the body, so the
      * name written at the call denotes that parameter and not the behavior. What it stands for is
      * read off the declaration, which is the only place the two are put together before the call is
-     * typed; a name bound to something else in between is counted as well, which is a dependency the
-     * body has not got rather than one it has lost.
+     * typed, and it is the binding that says so: a binding in force wins over the declaration it
+     * shadows (spec §fn-rules), which is the same reading {@link Lower} takes of the same clause.
+     *
+     * <p>Every behavior a name reaches, applied or not. A behavior named where a value goes becomes
+     * the function it names, and whether some later step applies it is not something this can see;
+     * a name that is never applied brings a contract nobody consults, which costs a dependency the
+     * body has not got rather than losing one it has.
      *
      * <p>Empty where the body is not there to read: the analysis that reads contracts is skipped
      * then, so nothing is checked against one.
      */
-    public record CallTargets(String module, String behavior)
+    public record BehaviorsReached(String module, String behavior)
             implements Key<Set<ValueName.Behavior>> {
 
         @Override
@@ -472,7 +485,8 @@ public final class Bodies {
             if (!body.present()) {
                 return Answer.of(Set.of());
             }
-            Map<String, ValueName.Behavior> injected = injectedInto(db, module, behavior);
+            Map<BindingId, ValueName.Behavior> injected =
+                    injectedInto(db, module, behavior, body.value());
             Set<ValueName.Behavior> reached = new LinkedHashSet<>();
             List<Hir.Expr> todo = new ArrayList<>();
             todo.add(body.value().writtenBody());
@@ -486,7 +500,7 @@ public final class Bodies {
                     if (denotes instanceof ValueName.Behavior each) {
                         reached.add(each);
                     } else if (denotes instanceof ValueName.Local local) {
-                        ValueName.Behavior each = injected.get(local.name());
+                        ValueName.Behavior each = injected.get(local.id());
                         if (each != null) {
                             reached.add(each);
                         }
@@ -499,26 +513,38 @@ public final class Bodies {
     }
 
     /**
-     * The behaviors {@code depends on} hands {@code behavior}'s body, by the name of the parameter
-     * each arrives as — which is the behavior's own name (spec §depends-on).
+     * The behaviors {@code depends on} hands {@code body}, by the binding each arrives as.
+     *
+     * <p>By the binding and not by the spelling. A name in the body is one of these only when it was
+     * answered with that binding, because a binding in force wins over the declaration it shadows —
+     * which is the reading {@link Lower#body} takes of the same clause, and taking a different one
+     * here would be two answers to keep agreeing.
      *
      * <p>Not {@link #dependencyParams}, which asks the same clause a different question: that one is
      * which parameters the body has, and a clause naming something that is not a behavior still
      * names one of those. This is which behaviors those parameters stand for, and a clause that
      * names no behavior contributes none.
      */
-    private static Map<String, ValueName.Behavior> injectedInto(Db db, String module,
-                                                                String behavior) {
+    private static Map<BindingId, ValueName.Behavior> injectedInto(Db db, String module,
+                                                                   String behavior,
+                                                                   Hir.FnDef body) {
         Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
         if (!spec.present()) {
             return Map.of();
         }
-        Map<String, ValueName.Behavior> out = new LinkedHashMap<>();
+        Map<String, ValueName.Behavior> declared = new LinkedHashMap<>();
         for (Hir.Var req : spec.value().dependsOn()) {
             // Reported where it is written; it names no parameter for a body to reach it through.
             if (req.answered() instanceof Hir.Var.Denoting named
                     && named.denotes() instanceof ValueName.Behavior each) {
-                out.put(each.name(), each);
+                declared.put(each.name(), each);
+            }
+        }
+        Map<BindingId, ValueName.Behavior> out = new LinkedHashMap<>();
+        for (Hir.FnParam param : body.params()) {
+            ValueName.Behavior each = declared.get(param.name());
+            if (each != null) {
+                out.put(param.binder().id(), each);
             }
         }
         return out;
@@ -545,7 +571,7 @@ public final class Bodies {
 
         @Override
         public Answer<Map<ValueName.Behavior, StatedContract>> compute(Db db) {
-            Answer<Set<ValueName.Behavior>> targets = db.ask(new CallTargets(module, behavior));
+            Answer<Set<ValueName.Behavior>> targets = db.ask(new BehaviorsReached(module, behavior));
             if (!targets.present()) {
                 return Answer.absent();
             }

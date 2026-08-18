@@ -49,9 +49,10 @@ import java.util.Set;
  * is an index, and a question asked per definition depends on the entries it reaches rather than on
  * the index. Read whole, an index hands the finer question the coarser one's identity: an edit
  * anywhere in the module — or in a module it imports — arrives as an edit to every definition in it,
- * and no test of what the compiler answers can see the difference. Keeping the index is fine; what
- * a per-definition question may not do is read one as a value. {@link Bodies.ContractsForBody} is a
- * body's contracts asked that way, behavior by behavior. Checking a body still reads its module's
+ * and no test of what the compiler answers can see the difference. Keeping the index is fine, and
+ * so is reading one to answer a question about a single entry — {@link Bodies.Stated} does exactly
+ * that. What a per-definition question may not do is take the index as its own dependency.
+ * {@link Bodies.ContractsForBody} is a body's contracts asked entry by entry. Checking a body still reads its module's
  * {@link Shapes.Scope} and {@link Bodies.CalleeSigs} whole, so declaring a behavior re-checks every
  * body of the module; that is issue #829, and {@code IncrementalCompilationTest} pins both sides.
  *
