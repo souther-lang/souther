@@ -359,4 +359,261 @@ class IncrementalCompilationTest {
                 "nor its text");
         assertEquals(List.of("shop.prices", "shop.cart"), c.modules());
     }
+
+    // --- what a body's check depends on of the contracts around it -------------------------------
+
+    /**
+     * Two behaviors stating a relation, and a third calling one of them. The two clauses are
+     * written differently so that either can be edited on its own. The caller is written first and
+     * the two it may call after it, so that an edit to either of those moves the other without
+     * moving the caller — which is the arrangement the question is about.
+     */
+    private static final String STATING = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior caller : (n: Amount) -> Amount
+            let caller (n) = called(n)
+
+            behavior uncalled : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value > n.value - 1
+            let uncalled (n) = Amount(n.value * 3)
+
+            behavior called : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value >= n.value
+            let called (n) = Amount(n.value * 2)
+            """;
+
+    private static Compilation stating() {
+        Compilation c = Compilation.ofDocuments(Map.of("orders.sou", STATING), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+        return c;
+    }
+
+    /**
+     * What a caller may assume of an answer is what the behavior it called declared, so a relation
+     * declared by a behavior it does not call is none of its business. Handing a body every contract
+     * its module can see made each of them depend on all of them, so editing any `ensures` in a file
+     * re-checked every body in it.
+     */
+    @Test
+    void editingAnEnsuresDoesNotRecheckABodyThatDoesNotCallIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING.replace(
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` calls `called`, and what `uncalled` states is no part of that");
+    }
+
+    /** And the other way round: a relation the body did call for is what it was checked against. */
+    @Test
+    void editingAnEnsuresRechecksTheBodiesThatCallIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING.replace(
+                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` took what `called` states about its answer");
+    }
+
+    /** A module declaring two behaviors that state a relation, both of them borrowed below. */
+    private static final String CALC = """
+            module lib.calc exposing ( Amount, doubled, tripled )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior tripled : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value > n.value - 1
+            let tripled (n) = Amount(n.value * 3)
+
+            behavior doubled : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value >= n.value
+            let doubled (n) = Amount(n.value * 2)
+            """;
+
+    /** One body per borrowed behavior, so both imports are named and neither body names both. */
+    private static final String USES = """
+            module app.use exposing ( Out )
+
+            import lib.calc ( Amount, doubled, tripled )
+
+            data Out = Int
+                invariant value >= 0
+
+            behavior viaDoubled : (n: Amount) -> Out
+                constructs Out
+            let viaDoubled (n) = Out(doubled(n).value)
+
+            behavior viaTripled : (n: Amount) -> Out
+                constructs Out
+            let viaTripled (n) = Out(tripled(n).value)
+            """;
+
+    private static Map<String, String> borrowing(String calc) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("calc.sou", calc);
+        byId.put("use.sou", USES);
+        return byId;
+    }
+
+    private static Compilation borrowing() {
+        Compilation c = Compilation.ofDocuments(borrowing(CALC), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
+        return c;
+    }
+
+    /**
+     * The same across a module boundary, which is where it is felt: a library behavior's `ensures`
+     * is read by whoever calls it, so editing one re-checked every body of every module that
+     * imported anything from there.
+     */
+    @Test
+    void editingABorrowedEnsuresDoesNotRecheckABodyThatDoesNotCallIt() {
+        Compilation c = borrowing();
+        Answer<?> viaDoubled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled"));
+
+        c.update(borrowing(CALC.replace(
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+        c.answerEverything();
+
+        assertSame(viaDoubled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled")),
+                "`viaDoubled` borrows `tripled` as its module does, and calls `doubled`");
+    }
+
+    @Test
+    void editingABorrowedEnsuresRechecksTheBodiesThatCallIt() {
+        Compilation c = borrowing();
+        Answer<?> viaTripled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaTripled"));
+
+        c.update(borrowing(CALC.replace(
+                "ensures value.value > n.value - 1", "ensures value.value >= n.value")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(viaTripled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaTripled")),
+                "`viaTripled` took what `tripled` states about its answer");
+    }
+
+    /**
+     * And an edit above a called behavior that states nothing at all. A contract carries where its
+     * terms were written and the ordinals its module numbered them with, so a blank line above the
+     * declaration moves the first and a clause above it gaining a term moves the second — both of
+     * which reach every caller through a value nobody reads either of them from.
+     */
+    @Test
+    void aBlankLineAboveACalledBehaviorDoesNotRecheckItsCallers() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou",
+                STATING.replace("let uncalled (n) = Amount(n.value * 3)\n",
+                        "let uncalled (n) = Amount(n.value * 3)\n\n")), Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`called` says what it said, one line further down the file");
+    }
+
+    /** The same across a module boundary, where the caller cannot see the line at all. */
+    @Test
+    void aBlankLineAboveABorrowedBehaviorDoesNotRecheckItsCallers() {
+        Compilation c = borrowing();
+        Answer<?> viaDoubled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled"));
+
+        c.update(borrowing(CALC.replace("let tripled (n) = Amount(n.value * 3)\n",
+                "let tripled (n) = Amount(n.value * 3)\n\n")), Set.of());
+        c.answerEverything();
+
+        assertSame(viaDoubled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled")),
+                "`doubled` says what it said, one line further down a file this module never reads");
+    }
+
+    /** A behavior reached by being injected rather than by being built and called. */
+    private static final String INJECTING = """
+            module shop.injecting exposing ( Amount, Out, findIt )
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Out = Int
+                invariant value >= 0
+
+            behavior findIt : (n: Amount) -> Amount
+                ensures value.value >= n.value
+
+            behavior use : (n: Amount) -> Out
+                depends on findIt
+                constructs Out
+            let use (n, findIt) = Out(findIt(n).value)
+
+            behavior beside : (n: Amount) -> Out
+                constructs Out
+            let beside (n) = Out(n.value)
+            """;
+
+    /**
+     * An injected behavior is called too, and what it states reaches the body it is injected into.
+     * The two ways a behavior is reached are a difference in how a call is typed and not in whose
+     * contract is read, so the frontier a body depends on cannot be the callable behaviors alone.
+     */
+    @Test
+    void editingAnInjectedEnsuresRechecksTheBodyItIsInjectedIntoAndNothingBeside() {
+        Compilation c = Compilation.ofDocuments(Map.of("injecting.sou", INJECTING), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+        Answer<?> use = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "use"));
+        Answer<?> beside = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "beside"));
+
+        c.update(Map.of("injecting.sou", INJECTING.replace(
+                "ensures value.value >= n.value", "ensures value.value > n.value - 1")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(use, c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "use")),
+                "`use` took what `findIt` states about its answer");
+        assertSame(beside, c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "beside")),
+                "`beside` calls nothing, so nothing states anything to it");
+    }
+
+    /**
+     * Known and not narrowed: declaring a behavior re-checks every body of the module. A body reads
+     * its module's scope and the signatures of everything callable there as whole tables, so adding
+     * one changes both and reaches all of them — issue #829.
+     *
+     * <p>Written down so that narrowing either of them is a change that shows, and so that the
+     * contract dependency above is not read as having made an edit to a declaration local. It did
+     * not: it made an edit to an `ensures` local, which is a different edit.
+     */
+    @Test
+    void declaringABehaviorRechecksTheBodiesBesideIt() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                behavior added : (n: Amount) -> Amount
+                    constructs Amount
+                let added (n) = Amount(n.value * 4)
+                """), Set.of());
+        c.answerEverything();
+
+        assertNotSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`caller` neither calls `added` nor names anything of it");
+    }
 }

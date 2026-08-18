@@ -737,7 +737,7 @@ public final class SpecChecker {
      * two are read together rather than paired by name: an implementation names its own parameters,
      * and two modules may declare a behavior of one name.
      */
-    static Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencyBindings(
+    public static Map<souther.compiler.types.BindingId, ValueName.Behavior> dependencyBindings(
             Hir.SpecBehavior spec, Hir.FnDef fn) {
         Map<souther.compiler.types.BindingId, ValueName.Behavior> bound = new LinkedHashMap<>();
         int business = spec.params().size();

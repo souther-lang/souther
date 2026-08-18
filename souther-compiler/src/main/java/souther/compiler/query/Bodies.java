@@ -24,6 +24,7 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
 import souther.compiler.check.Sig;
+import souther.compiler.check.SpecChecker;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
@@ -34,6 +35,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -407,44 +409,155 @@ public final class Bodies {
     }
 
     /**
-     * What every behavior a body of this module may call states about its answer, by the name it is
-     * called under — this module's own and the ones it borrows.
+     * What one behavior states about its answer, asked of the module that declares it.
      *
-     * <p>What a caller may assume of an answer is what the module that declared the behavior said,
-     * so a borrowed one is read from the module that declares it and not from anything this one
-     * holds. A module reached through its published classes answers the same question: the
-     * declaration it published is read back by this front end, and what its author wrote is what
-     * comes back (spec §published-modules).
+     * <p>The unit a reader depends on. A body is checked against the contracts of the behaviors it
+     * reaches, so what it depends on is those behaviors one at a time. A table of every contract its
+     * module can see is an index, and reading one as a value makes an edit to any entry an edit to
+     * all of them: every body of the module, and of every module importing it, is re-checked because
+     * one clause elsewhere was written differently.
      *
-     * <p>A behavior that states nothing is not here, and neither is one whose module could not be
+     * <p>Recomputing this is not the same as its answer changing. It reads the module's table, so the
+     * table is rebuilt whenever any clause in that file is edited, and this stops the rebuild from
+     * reaching a reader wherever it comes out equal. What is left is the cost of rebuilding the
+     * table, which is a question about this producer and not about who depends on it.
+     *
+     * <p>Answered without its places, which is the whole of what a caller assumes. A contract as the
+     * declaration holds it carries where its terms were written and the ordinals the module numbered
+     * them with, and on that value nothing below an edit ever comes out equal: a blank line moves
+     * every position under it, and a clause gaining a term moves every ordinal under it. A caller
+     * reads neither — it substitutes its own arguments into the terms and reads what they say.
+     *
+     * <p>Taken out here rather than ignored when comparing. An answer whose equality says one thing
+     * and whose value says another is one a reader can tell apart after the store has decided they
+     * are the same, and the store decides that on behalf of everything downstream. So the two are
+     * one value: what this hands over is what it is compared by. The declaration's own reading, with
+     * its places, is {@link StatedContracts}, which is what an editor and a diagnostic want.
+     *
+     * <p>Absent where the behavior states nothing, and where the module that declares it could not be
      * read. Absence is what a caller wanting to know "is there anything to assume" is asking, and an
      * empty contract would be a second way to say it.
      */
-    public record ContractsInSight(String name)
-            implements Key<Map<ValueName.Behavior, StatedContract>> {
+    public record Stated(ValueName.Behavior behavior) implements Key<StatedContract> {
         @Override
         public String module() {
-            return name;
+            return behavior.module();
         }
 
         @Override
+        public Answer<StatedContract> compute(Db db) {
+            Map<String, StatedContract> declared =
+                    db.ask(new StatedContracts(behavior.module())).value();
+            StatedContract stated = declared == null ? null : declared.get(behavior.name());
+            return stated == null ? Answer.absent()
+                    : Answer.of(stated.withoutItsPlace());
+        }
+    }
+
+    /**
+     * The behaviors a call in one body can reach — this module's own and the ones it borrows.
+     *
+     * <p>Read off the body the discharge analysis is given, because that is the tree the contract
+     * lookup runs over: what it finds is a call whose function is a name denoting a behavior, so what
+     * it can find is what is written there. That tree has its helper calls expanded, which widens
+     * nothing on its own — a helper cannot call a behavior (E1818). What reading it buys is that the
+     * frontier is taken from the tree the lookup walks rather than from one that agrees with it.
+     *
+     * <p>Every behavior a name reaches, and not the ones that may be called by name. A behavior
+     * arrives at a body by being built and called or by being injected, and which of the two decides
+     * how the call is typed rather than whose contract is read — {@link CalleeSigs} and
+     * {@link ReqSigs} split them for the first question, and this is the second.
+     *
+     * <p>An injected one is reached through the parameter {@code depends on} gave the body, so the
+     * name written at the call denotes that parameter and not the behavior. Which parameter stands
+     * for which behavior is {@link SpecChecker#dependencyBindings}, asked rather than worked out
+     * again: the clause and the parameter list are read together in order and not paired by name,
+     * because two modules may declare a behavior of one name, and the answer is a binding because a
+     * binding in force wins over the declaration it shadows (spec §fn-rules). Neither is a
+     * difference a program can show here — a {@code depends on} its body never calls is refused
+     * (E1603), so a shadow of that spelling has the parameter beside it — which is why it is asked
+     * of the one place that decides it rather than settled again by whatever agrees today.
+     *
+     * <p>Every name, and not every application. A behavior named where a value goes becomes the
+     * function it names, and what applies it may be a binding away, so a walk that only read
+     * applications would miss one the body really does call. Measured: reached through a binding
+     * that is then applied, and not reached at all where nothing reads the binding — a binding
+     * nothing reads is not in the tree this walks. So the frontier is drawn wider than the
+     * applications and comes out the same size, and a name that could be left in it costs a
+     * dependency this body has not got rather than losing one it has.
+     *
+     * <p>Absent where the body or the declaration is not there to read, which is not the same
+     * answer as reaching nothing: the check that reads contracts is skipped where the body is,
+     * and a body that reaches no behavior is checked with none. Saying "nothing" for both would
+     * let a reader take the first for the second.
+     */
+    public record BehaviorsReached(String module, String behavior)
+            implements Key<Set<ValueName.Behavior>> {
+
+        @Override
+        public Answer<Set<ValueName.Behavior>> compute(Db db) {
+            Answer<Hir.FnDef> body = db.ask(new BodyForInvariantDischarge(module, behavior));
+            Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
+            if (!body.present() || !spec.present()) {
+                return Answer.absent();
+            }
+            Map<BindingId, ValueName.Behavior> injected =
+                    SpecChecker.dependencyBindings(spec.value(), body.value());
+            Set<ValueName.Behavior> reached = new LinkedHashSet<>();
+            List<Hir.Expr> todo = new ArrayList<>();
+            todo.add(body.value().writtenBody());
+            while (!todo.isEmpty()) {
+                Hir.Expr at = todo.remove(todo.size() - 1);
+                if (at == null) {
+                    continue;
+                }
+                if (at instanceof Hir.Var.Denoting name) {
+                    ValueName denotes = name.denotes();
+                    if (denotes instanceof ValueName.Behavior each) {
+                        reached.add(each);
+                    } else if (denotes instanceof ValueName.Local local) {
+                        ValueName.Behavior each = injected.get(local.id());
+                        if (each != null) {
+                            reached.add(each);
+                        }
+                    }
+                }
+                Hir.forEachChild(at, todo::add);
+            }
+            return Answer.of(Ordered.set(reached));
+        }
+    }
+
+    /**
+     * What the behaviors one body reaches state about their answers, by the name each is called
+     * under.
+     *
+     * <p>A caller that has matched a case may take the rules about that case as holding, which is
+     * what a declared relation is for (spec §ensures). What it may take is what the module that
+     * declared the behavior said, so a borrowed one is read from the module that declares it and not
+     * from anything this one holds. A module reached through its published classes answers the same
+     * question: the declaration it published is read back by this front end, and what its author
+     * wrote is what comes back (spec §published-modules).
+     *
+     * <p>Asked as a question of its own rather than assembled where it is used, so what a body was
+     * checked against is a named answer in the graph: which behaviors it depends on the declarations
+     * of is then something to read and to hold a test to, rather than something to work out from the
+     * shape of a {@code compute}.
+     */
+    public record ContractsForBody(String module, String behavior)
+            implements Key<Map<ValueName.Behavior, StatedContract>> {
+
+        @Override
         public Answer<Map<ValueName.Behavior, StatedContract>> compute(Db db) {
-            Answer<Map<String, StatedContract>> own = db.ask(new StatedContracts(name));
-            if (!own.present()) {
+            Answer<Set<ValueName.Behavior>> targets = db.ask(new BehaviorsReached(module, behavior));
+            if (!targets.present()) {
                 return Answer.absent();
             }
             Map<ValueName.Behavior, StatedContract> out = new LinkedHashMap<>();
-            own.value().forEach((behavior, stated) ->
-                    out.put(new ValueName.Behavior(name, behavior), stated));
-            for (ValueName.Behavior each : borrowed(db, name)) {
-                if (each.module().equals(name)) {
-                    continue;
-                }
-                Map<String, StatedContract> theirs =
-                        db.ask(new StatedContracts(each.module())).value();
-                StatedContract stated = theirs == null ? null : theirs.get(each.name());
-                if (stated != null) {
-                    out.put(each, stated);
+            for (ValueName.Behavior each : targets.value()) {
+                Answer<StatedContract> stated = db.ask(new Stated(each));
+                if (stated.present()) {
+                    out.put(each, stated.value());
                 }
             }
             return Answer.of(Ordered.map(out));
@@ -1403,11 +1516,11 @@ public final class Bodies {
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
             Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeInvariants =
                     db.ask(new Shapes.InvariantsForDischarge(module));
-            // What the behaviors this body may call state about their answers. A caller that has
-            // matched a case may take the rules about that case as holding, which is what a declared
-            // relation is for (spec §ensures).
+            // What the behaviors this body reaches state about their answers, and only those: a
+            // relation declared by a behavior it does not call is no part of what it is checked
+            // against, and depending on one would re-check this body whenever that one was edited.
             Answer<Map<ValueName.Behavior, StatedContract>> contracts =
-                    db.ask(new ContractsInSight(module));
+                    db.ask(new ContractsForBody(module, behavior));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !inliner.present()
                     || !sigs.present() || !constructs.present()) {

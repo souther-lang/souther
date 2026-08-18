@@ -60,6 +60,29 @@ public record StatedContract(ValueName.Behavior behavior, List<ContractParam> pa
     public record Conjunct(SourcePos at, Core stated) {}
 
     /**
+     * The same contract with the places taken out of its terms — what a caller depends on, told
+     * apart from where the author wrote it.
+     *
+     * <p>A caller substitutes its own arguments into the terms and reads what they say. It does not
+     * read where they were written, and it does not read the coverage ordinals the module numbered
+     * them with. Both are on the terms all the same, and both move when anything above the
+     * declaration is edited, so a reader comparing the whole of this is a reader an unrelated edit
+     * reaches. Nothing else about a contract carries a place: a rule is told by its
+     * {@link RuleId}, a parameter by its binding, and neither is where it stands.
+     */
+    public StatedContract withoutItsPlace() {
+        List<StatedRule> out = new ArrayList<>();
+        for (StatedRule rule : rules) {
+            List<Conjunct> conjuncts = new ArrayList<>();
+            for (Conjunct each : rule.conjuncts()) {
+                conjuncts.add(new Conjunct(null, Core.withoutItsPlace(each.stated())));
+            }
+            out.add(new StatedRule(rule.id(), rule.guard(), rule.value(), rule.clause(), conjuncts));
+        }
+        return new StatedContract(behavior, params, output, out);
+    }
+
+    /**
      * {@code contract} read as the analysis reads it.
      *
      * <p>Types each conjunct over the behavior's own names: the parameters as the contract says they
