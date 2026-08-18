@@ -527,9 +527,15 @@ public final class ExampleStatements {
         if (rows == null || sig == null) {
             return;
         }
-        // The whole table, built the one way the proxy builds it.
+        // The whole table, built the one way the proxy builds it, and held to the dependency's
+        // declaration the one way a table is held to it. Inside the reading because holding it runs
+        // the module's code, which is what a reading is what it costs of.
         Read<BuiltTable> read = within(
-                reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
+                reader -> {
+                    BuiltTable made = standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>());
+                    return made == null || !notKept(ensures, module.name(), fk, made).isEmpty()
+                            ? null : made;
+                },
                 new Deadline.Work.Table(fk.target(), fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
@@ -564,8 +570,16 @@ public final class ExampleStatements {
             }
             case Read.Got(BuiltTable _) -> { }
         }
-        // The whole table or nothing: a table with a row that will not build answers nothing here,
-        // and what is wrong with it is reported where the fake is written ({@link #fakeTables}).
+        // The whole table or nothing, and two ways to have nothing: a table with a row that will not
+        // build, and one with a row stating what the dependency declares cannot happen. Both answer
+        // nothing here, and what is wrong with either is reported where the fake is written
+        // ({@link #fakeTables}).
+        //
+        // The second is not only a duplicate spared. A disagreement says two descriptions of one
+        // behavior differ and neither is the right one (ADR-0093); a refused row says the
+        // declaration decides and the fake is the side that is wrong. Said about one pair, the two
+        // contradict each other — so once the declaration has ruled a table out, there is no
+        // description left here for a recorded row to disagree with.
         BuiltTable built = read.orNull();
         if (built == null) {
             return;

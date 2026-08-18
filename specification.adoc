@@ -3087,6 +3087,8 @@ What is held is decided by what the row wrote, and an arm is part of what it wro
 
 Where only one side is written there is no relation to hold. A `+_+` row of a `+fake+` states no input, and a `+with+` supplies an answer for whatever it is asked; what either states is held where the behavior answers.
 
+A table with a refused row answers nothing wherever else it is read. Nothing stands in with it (<<example-fakes>>), and it is not compared with the rows recorded for the behavior (<<stand-in-and-recorded-row-agree>>): that comparison names neither side as the right one, and this has already named one. The two cannot both be said about one pair.
+
 A bare case name that carries fields is not held today. The arm names the answer, so a rule reading only the inputs is decidable from such a row — what stands in the way is that the check is asked about an answer rather than about an arm, and closing it is a check that can be asked the second way.
 
 [#example-placement]
@@ -6011,6 +6013,8 @@ Emitted at a row of a `+fake+` table whose input and output do not keep an `+ens
 A `+_+` row states no input, so there is nothing here to relate its answer to; what it answers is held at the crossing into generated code, like any other answer arriving from outside.
 
 A table with such a row is not one to stand in with, as a table that will not build is not (<<example-fakes>>). A row reaching it stops without a fake and says nothing of its own: running it would put the rest of the behavior in a state the model rules out, and what the row then reported would be about a run that cannot happen.
+
+Neither is it compared with the rows recorded for the behavior (<<e1919>>). That comparison is written for two descriptions with nothing to choose between them, and this is a description held to a declaration — reported together they would say of one pair both that the fake is the side that is wrong and that neither side is.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

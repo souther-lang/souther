@@ -44,7 +44,9 @@ is a whole answer and is held; a `_` row of a fake and a `with` write only one s
 and are held only where the behavior answers. A bare case name carrying fields is not held yet: the
 arm names the answer, but the check is asked about an answer rather than about an arm, so a rule
 reading only the inputs is decidable from such a row and is not decided. A table with a row that is
-refused is not one to stand in with, as a table that will not build is not.
+refused is not one to stand in with, as a table that will not build is not, and is not compared with
+the rows recorded for the behavior either: ADR-0093's comparison names neither side as right, and
+this has named one, so the two cannot be said about one pair.
 
 Callers seed a clause only after the output arm is known and only where parameter-to-argument
 substitution leaves terms the existing analysis can name. Classification uses the invariant

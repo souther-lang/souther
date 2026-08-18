@@ -365,6 +365,37 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
                 + "none of: " + codes);
     }
 
+    /**
+     * A table with a refused row is not compared against the rows recorded for the behavior either.
+     *
+     * <p>The two diagnostics say incompatible things. <em>E1929</em> says the declaration decides and
+     * the fake is the side that is wrong; <em>E1919</em> says two descriptions disagree and neither is
+     * named as right. Said about one pair they contradict each other — so a table the declaration has
+     * already ruled out answers nothing here, as a table that will not build does.
+     */
+    @Test
+    void aRefusedTableIsNotComparedWithTheRowsRecordedForTheBehavior() {
+        List<String> codes = codesOf(Compilation.ofSource("""
+                module example.clash
+
+                data Id = Int
+                data Found = { id: Id }
+
+                behavior lookup : (id: Id) -> Found
+                    ensures asked = value.id.value == id.value
+
+                fake lookup
+                    | (Id(1)) -> Found { id = Id(2) }
+
+                example lookup
+                    | "found for the one asked" : (Id(1)) -> Found { id = Id(1) }
+                """, "Main"));
+
+        assertTrue(codes.contains("E1929"), "the fake states what the declaration rules out: " + codes);
+        assertFalse(codes.contains("E1919"),
+                "the declaration has already said which side is wrong: " + codes);
+    }
+
     // --- harness --------------------------------------------------------------------------------
 
     private static CompileException err(String model) {
