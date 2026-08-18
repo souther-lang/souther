@@ -71,7 +71,7 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
         BindingId b = binding(1);
-        Denotations at = Denotations.none().location(a).location(b);
+        Denotations at = Denotations.none().location(a, AsPlaces.of(a)).location(b, AsPlaces.of(b));
         Core.Read left = new Core.Read("a", a, Type.INT, POS);
         Core.Read right = new Core.Read("b", b, Type.INT, POS);
         NumericDomain.LinearForm<FactSubject> product = terms.affineOf(
@@ -89,7 +89,7 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
     void anAtomComputedFromItselfIsRefused() {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
-        Denotations at = Denotations.none().location(a);
+        Denotations at = Denotations.none().location(a, AsPlaces.of(a));
         FactSubject atom = terms.atomOf(new Core.Read("a", a, Type.INT, POS), at);
 
         assertThrows(DerivedBounds.AnAtomComputedFromItself.class,

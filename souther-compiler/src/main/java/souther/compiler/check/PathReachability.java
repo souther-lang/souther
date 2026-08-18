@@ -304,7 +304,7 @@ public final class PathReachability {
                 // is not recorded as a decision: nothing was assumed from it, and a proof naming it
                 // would claim work the domains did not do.
                 for (Core.Case arm : match.cases()) {
-                    PathEngine.Entered in = engine.enteringArm(arm, k, at);
+                    PathEngine.Entered in = engine.enteringArm(arm, match.scrutinee(), k, at);
                     walk(arm.body(), in.known(), in.at(), reads, decided, false);
                 }
             }

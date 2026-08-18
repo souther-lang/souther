@@ -186,7 +186,7 @@ final class Terms {
             // by the spelling it came out one: `gross` was read through to the arithmetic behind it
             // and `gross.value` was an atom of its own, so a guard over the one settled nothing about
             // a construction over the other (#676).
-            case Core.FieldAccess fa when locationOf(fa.target(), at) == null
+            case Core.FieldAccess fa when !isAPlace(fa.target(), at)
                     && !Location.isStep(fa.target().type(), fa.field(), symbols) ->
                     affine(fa.target(), at, leaf);
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what an
@@ -680,6 +680,31 @@ final class Terms {
     }
 
     /**
+     * The subject the place {@code binding} is: what a fact about a binding nothing else names is
+     * about.
+     *
+     * <p>Here because identity is built here and nowhere else. {@link Denotations} records what each
+     * binding's subject is and is handed it; asked to work it out from what the binding denotes, it
+     * would be a second authority on which value something is, and the two would answer differently
+     * the moment a binding names a value that is not a place.
+     */
+    FactSubject placeSubject(BindingId binding) {
+        return FactSubject.of(interned.at(Location.of(binding)));
+    }
+
+    /**
+     * The subject of what the present optional {@code optional} holds.
+     *
+     * <p>An optional and what stands under it are two values, so opening one is the only place a
+     * {@code match} arm names something other than the value it was given. Which value that is
+     * follows from the optional's own — two arms opening one optional open one value — and it is
+     * asked here for the same reason every other identity is.
+     */
+    FactSubject heldBy(FactSubject optional) {
+        return optional == null ? null : FactSubject.of(interned.held(optional.identity()));
+    }
+
+    /**
      * The subject one evaluation of {@code e} is — the same one every time this occurrence is asked
      * about, and one no other occurrence can be given.
      *
@@ -789,17 +814,6 @@ final class Terms {
             case Denotes.At _ -> true;
             case Denotes.Computed _ -> affineOf(e, at) != null || namedByRule(e, at);
             case Denotes.Written _, Denotes.Nothing _ -> false;
-        };
-    }
-
-    /** What {@code d} is named by, or null where it is named by nothing. Said here because a place is
-     * named by the term it is, and only this holds the terms. */
-    private Term termOf(Denotes d) {
-        return switch (d) {
-            case Denotes.At located -> interned.at(located.where());
-            case Denotes.Computed computed -> computed.term();
-            case Denotes.Written written -> written.term();
-            case Denotes.Nothing ignored -> null;
         };
     }
 
@@ -1083,16 +1097,58 @@ final class Terms {
     }
 
     /**
-     * The key of a chain rooted at a binding: the location it is, or, where the binding was given a
-     * term rather than a location, that term with the fields read from it.
+     * The key of a chain rooted at a binding: what the binding at its head is about, with the fields
+     * read from it.
      *
-     * <p>A newtype's {@code .value} is the same location as the newtype, which is {@link Location}'s
-     * rule and is read here of a term too, so a value keyed one way through a binding and the other
+     * <p>Which value the head is, is the walk's answer and not this one's. A binding is entered with
+     * the subject facts about it are filed under ({@link Denotations.Means}), and reading it back is
+     * all that happens here — where working it out again from what the binding denotes was a second
+     * authority on identity, and one that cannot answer for a binding that names a value the grammar
+     * has no term for. That is what a {@code match} arm needs: the value it opens is the one the
+     * scrutinee already is, and a reading that derives identity from how the binding was introduced
+     * has no way to say so.
+     *
+     * <p>Asked of the identity reading only. What the term grammar can name without taking an atom
+     * is a different question with a different answer — a call to a behavior is named by nothing —
+     * and {@link Leaf#SYMBOLIC} is where it is asked, so that reading still works from what the
+     * binding denotes.
+     *
+     * <p>A newtype's {@code .value} is the same value as the newtype, which is {@link Location}'s
+     * rule and is read here of any subject, so a value keyed one way through a binding and the other
      * way through a field is one value.
      */
     Term pathKey(Core e, Denotations at, Leaf leaf) {
+        if (leaf == Leaf.AN_EVALUATION) {
+            return subjectKey(e, at);
+        }
         Location located = locationOf(e, at);
-        return located != null ? interned.at(located) : keyOfNowhere(e, at, leaf);
+        return located != null ? interned.at(located) : keyOfNowhere(e, at);
+    }
+
+    /**
+     * The subject of a chain: what its head was entered as, with the fields read off it.
+     *
+     * <p>A head nothing entered is a value this reading knows nothing about, and it takes an atom of
+     * its own — the same answer a shape outside the grammar gets, for the same reason.
+     *
+     * <p>Always answers. Every value has an identity, whether or not anything can be said about it,
+     * so there is no reading here that comes back with nothing and no step that has to allow for one.
+     * The reading beside this one does — what the term grammar can name runs out, and says so with
+     * {@code null} — and the two are not the same question.
+     */
+    private Term subjectKey(Core e, Denotations at) {
+        return switch (e) {
+            case Core.Read r -> {
+                FactSubject subject = at.subject(r.binding());
+                yield subject != null ? subject.identity()
+                        : interned.evaluated(evaluationIdOf(e));
+            }
+            case Core.FieldAccess fa ->
+                    Location.isStep(fa.target().type(), fa.field(), symbols)
+                            ? interned.on(subjectKey(fa.target(), at), List.of(fa.field()))
+                            : subjectKey(fa.target(), at);
+            default -> interned.evaluated(evaluationIdOf(e));
+        };
     }
 
     /**
@@ -1105,31 +1161,47 @@ final class Terms {
      * step — asked at each step it walks what is left of the chain each time, and a chain costs more
      * than the chain is long (#826).
      */
-    private Term keyOfNowhere(Core e, Denotations at, Leaf leaf) {
+    private Term keyOfNowhere(Core e, Denotations at) {
         return switch (e) {
-            case Core.Read r -> {
-                Term named = termOf(at.of(r.binding()));
-                if (named != null || leaf == Leaf.SYMBOLIC) {
-                    yield named;
-                }
-                // A name is the expression it was given, so it is that expression's identity and not
-                // one of its own. Given nothing, the name is all there is, and it takes an atom.
-                Core given = at.valueOf(r.binding());
-                yield given != null && given != e ? termKey(given, at, Map.of(), 0, leaf)
-                        : interned.evaluated(evaluationIdOf(e));
-            }
+            case Core.Read r -> switch (at.of(r.binding())) {
+                case Denotes.Computed computed -> computed.term();
+                case Denotes.Written written -> written.term();
+                // A chain is asked of this only once it has been found not to be a place, so the
+                // binding at its head does not denote one and nothing here names it.
+                case Denotes.At ignored -> null;
+                case Denotes.Nothing ignored -> null;
+            };
             case Core.FieldAccess fa -> {
                 if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
-                    yield keyOfNowhere(fa.target(), at, leaf);
+                    yield keyOfNowhere(fa.target(), at);
                 }
-                Term base = keyOfNowhere(fa.target(), at, leaf);
+                Term base = keyOfNowhere(fa.target(), at);
                 yield base == null ? null : interned.on(base, List.of(fa.field()));
             }
-            default -> leaf == Leaf.AN_EVALUATION ? interned.evaluated(evaluationIdOf(e)) : null;
+            default -> null;
         };
     }
 
-    /** The location {@code e} is, or {@code null} where it is a computed value rather than a place. */
+    /**
+     * Whether {@code e} is a place: somewhere the seeding writes about, whatever value happens to be
+     * there.
+     *
+     * <p>Asked as a question about what may be done with it, and not by taking the location and
+     * reading nothing off it but whether there was one. The two came apart when an arm stopped making
+     * a value of its own: what a {@code match} opens is a place, so a clause may be read against it
+     * and the seeding writes about it, while which value it is, is the one the scrutinee already was.
+     * A reader wanting the second asks {@link #subjectOf}, and a reader holding a {@link Location} to
+     * decide the first is one step away from deciding the second from it too.
+     */
+    boolean isAPlace(Core e, Denotations at) {
+        return locationOf(e, at) != null;
+    }
+
+    /** The location {@code e} is, or {@code null} where it is a computed value rather than a place.
+     *
+     * <p>For the two readings that want the location itself: what a binding denotes, and what the
+     * term grammar names a chain by. A reader that only wants to know whether there is one asks
+     * {@link #isAPlace}. */
     Location locationOf(Core e, Denotations at) {
         return Location.of(e, symbols,
                 binding -> at.of(binding) instanceof Denotes.At located ? located.where() : null);
@@ -1220,7 +1292,7 @@ final class Terms {
      * naming it, and its construction is left to the run-time check.
      */
     boolean namedByRule(Core e, Denotations at) {
-        if (locationOf(e, at) != null) {
+        if (isAPlace(e, at)) {
             return true;
         }
         if (e instanceof Core.Read r) {

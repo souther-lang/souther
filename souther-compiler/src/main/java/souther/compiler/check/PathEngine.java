@@ -5,6 +5,7 @@ import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
+import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -140,7 +141,7 @@ final class PathEngine {
      * asked here.
      */
     Entered enter(Core.Read root, Known known, Denotations at) {
-        Denotations next = at.location(root.binding());
+        Denotations next = at.location(root.binding(), terms.placeSubject(root.binding()));
         return new Entered(seedAt(root, known, next, 0), next);
     }
 
@@ -172,7 +173,12 @@ final class PathEngine {
             return new Entered(k, at);
         }
         Denotes what = terms.denotationOf(li.value(), at);
-        return new Entered(k, at.binding(li.binder().id(), li.value(), what));
+        // What the name is about is what it was given is about. Where even the identity reading has
+        // nothing to name — an expression answering nothing at all — the name is what there is, and
+        // it is one value however many times it is read.
+        FactSubject about = terms.subjectOf(li.value(), at);
+        return new Entered(k, at.binding(li.binder().id(), li.value(),
+                about != null ? about : terms.placeSubject(li.binder().id()), what));
     }
 
     /**
@@ -192,9 +198,9 @@ final class PathEngine {
      * What a {@code match} arm's body is read under.
      *
      * <p>A sum has no fields of its own, so the scrutinee is not a location any clause could have
-     * named — the case's value names only itself. What the arm binds is a value of the case's type,
-     * reached only here, so it is a location this arm introduces and it carries what that type
-     * guarantees.
+     * named — the case's value names only itself. What the arm binds is a place, which is what lets
+     * a clause be read against it and what makes it carry what its type guarantees. Which value it
+     * is is a second answer and comes from what was opened ({@link #opening}).
      *
      * <p>An arm that binds nothing introduces nothing, and its body is read as the arm's own. Held
      * here rather than at each walk: two readings deciding it apart is two chances to forget, and
@@ -203,19 +209,83 @@ final class PathEngine {
     Entered enteringArm(Core.Case arm, Core scrutinee, Known k, Denotations at) {
         Entered in = arm.binding() == null || arm.bindType() == null
                 ? new Entered(k, at)
-                : enter(Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+                : opening(arm, scrutinee, k, at);
         return assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
                 guard -> impliedBy(guard, arm.pattern()), in);
     }
 
     /**
-     * The same arm, where the answer it is opening came from nowhere this can name.
+     * The arm's binding entered as the value it opens.
      *
-     * <p>Kept as the shorter question a caller with no scrutinee to hand asks — a conditional lifted
-     * out of a body is read where it stood, and what it stood in front of is not being re-decided
-     * here.
+     * <p>An arm that names one case of a declared sum, and one that names several, bind the value
+     * they were given — the case's own class is what is tested and the value read is that instance
+     * ({@link Refinement.Direct}). So the arm is not introducing a value; it is saying which case the
+     * one already there is, and what it binds is about that same value. Entered as a place all the
+     * same, because a place is what a clause may be read against and what the seeding writes about,
+     * and which value it is and what may be done with it are two answers.
+     *
+     * <p>Introduced afresh where the two are really different values, and where there is nothing to
+     * be the same as. An optional's present carrier binds what stands under it, which is not the
+     * optional. A conditional lifted out of a body is read with no scrutinee to hand, so there is no
+     * value here to be about.
+     *
+     * <p>Held one way and not two: an arm that made a second subject for the value it opened had
+     * every fact about the answer filed under one and every fact the arm added under the other, and
+     * the two agreed only for as long as nothing could tell them apart (#824).
      */
-    Entered enteringArm(Core.Case arm, Known k, Denotations at) {
+    private Entered opening(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        Core.Read root = Terms.read(arm.binding(), arm.bindType(), arm.pos());
+        Opens opens = opens(arm, scrutinee, at);
+        Denotations next = opens == null
+                ? at.location(root.binding(), terms.placeSubject(root.binding()))
+                : at.opened(root.binding(), opens.value(), opens.subject());
+        return new Entered(seedAt(root, k, next, 0), next);
+    }
+
+    /** What an arm's binding stands for: the value the walk reached where the two are one value, and
+     * the subject facts about it are filed under. Taken together because they are one answer about
+     * one binding, and handing them over apart is how one of them was left behind. */
+    private record Opens(Core value, FactSubject subject) {}
+
+    /**
+     * What the arm's binding opens, or null where nothing here says.
+     *
+     * <p>Asked of what the pattern binds and not of what the arm looks like. A case whose carrier is
+     * the value binds that value, so the binding stands for the scrutinee and is about it. An
+     * optional's present carrier binds what stands under it: a different value, named as what that
+     * optional holds, and one no expression here is — so it is about something while standing for
+     * nothing. An absent carrier binds nothing at all. That is the whole of it — {@link Refinement}
+     * has three answers and each one settles this.
+     */
+    private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
+        if (scrutinee == null) {
+            return null;
+        }
+        FactSubject of = terms.subjectOf(scrutinee, at);
+        if (of == null) {
+            return null;
+        }
+        return switch (arm.pattern().binding()) {
+            case Refinement.Direct ignored -> new Opens(scrutinee, of);
+            case Refinement.OptionPresent ignored -> new Opens(null, terms.heldBy(of));
+            case Refinement.OptionAbsent ignored -> null;
+        };
+    }
+
+    /**
+     * An arm entered without the value it opens.
+     *
+     * <p>Not the same question with an argument left out. A conditional found past a {@code match} is
+     * read where it stood, which means replaying the binders it is inside without reading what those
+     * binders stood in front of — so there is no scrutinee here, and there is not meant to be one.
+     * What the arm binds is introduced as a value of its own, and every rule the answer carries goes
+     * unread, because nothing here says which value the arm opened.
+     *
+     * <p>That is this reading's limit and not the model's: an arm entered with its scrutinee says the
+     * value it opens is the one already there ({@link #opening}). Named apart so the difference is in
+     * the code rather than in whether a caller remembered to pass something.
+     */
+    Entered enteringLiftedArm(Core.Case arm, Known k, Denotations at) {
         return enteringArm(arm, null, k, at);
     }
 
