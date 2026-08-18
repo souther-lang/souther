@@ -122,6 +122,48 @@ class WhatABehaviorGuaranteesOfItsAnswerReachesTheCallerTest {
     }
 
     /**
+     * And where the behavior is reached by being injected rather than by being built and called.
+     *
+     * <p>Which of the two a call is decides how it is typed and not whose contract is read. Held
+     * here because the name written at an injected call denotes the parameter {@code depends on}
+     * gave the body rather than the behavior itself, so anything working out which declarations a
+     * body was checked against has to put the two back together — and would pass every test above
+     * without doing it.
+     */
+    @Test
+    void anEnsuresOnAnInjectedBehaviorReachesTheBodyItIsInjectedInto() {
+        String source = """
+                module m.f exposing ( Id, Found, Ranked, findIt, use )
+
+                data Id     = Int
+                data Found  = { rank: Int }
+                data Ranked = Int
+                    invariant value > 0
+
+                behavior findIt : (id: Id) -> Found
+                    ensures value.rank > id.value
+
+                behavior use : (id: Id) -> Ranked
+                    depends on findIt
+                    constructs Ranked
+                let use (id, findIt) = {
+                    guard id.value >= 0
+                        else Ranked(1)
+                    let answer = findIt(id)
+                    Ranked(answer.rank)
+                }
+                """;
+
+        assertEquals(List.of(), unproven(source),
+                "what an injected behavior states holds of the answer it handed back");
+        assertEquals("E2010", refusedWith(source.replace(
+                        "    ensures value.rank > id.value\n",
+                        "    ensures value.rank + id.value < 0\n")),
+                "and a relation that refutes the construction refuses it, which it can only do "
+                        + "by having reached it");
+    }
+
+    /**
      * And what the answer's own type states, which needs nothing declared at the behavior.
      *
      * <p>The same value handed in as a parameter carried its type's invariant all along; handed back
