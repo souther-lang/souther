@@ -140,6 +140,31 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
+    /**
+     * A time of day is read, which it was not.
+     *
+     * <p>Ordered and held to the second, so the line and the value beside it are both there. What
+     * was missing was the way back from a count, which is a conversion and not a fact about the
+     * values.
+     */
+    @Test
+    void aLineDrawnOnATimeIsRead() {
+        GuardThresholds.Guards guards = read("at: Time", "at < Time(\"16:00:00\")");
+
+        assertEquals(List.of(), guards.unread());
+        assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
+    }
+
+    /** A moment is read, at its own unit. */
+    @Test
+    void aLineDrawnOnAnInstantIsRead() {
+        GuardThresholds.Guards guards =
+                read("at: Instant", "at < Instant(\"2026-01-01T00:00:00Z\")");
+
+        assertEquals(List.of(), guards.unread());
+        assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
+    }
+
     /** One position said once, however many comparisons in the body name it. */
     @Test
     void aPositionIsNamedOnceRatherThanPerComparison() {

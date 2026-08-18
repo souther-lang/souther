@@ -77,9 +77,15 @@ public final class DateTimes {
      * fraction is floored rather than written as a date-time no model could have named, which is
      * what lets the round-trip that asks whether this carrier holds a count answer no. */
     public static String written(Place count) {
-        LocalDateTime at = LocalDateTime.ofEpochSecond(
+        return written(LocalDateTime.ofEpochSecond(
                 Count.number(count).at().setScale(0, RoundingMode.FLOOR).longValueExact(),
-                0, ZoneOffset.UTC);
+                0, ZoneOffset.UTC));
+    }
+
+    /** The same text, for a caller holding the value rather than the count. Every place a date-time
+     * is written down goes through here, so a line's label and the value a report says came back
+     * are the same text for the same value. */
+    public static String written(LocalDateTime at) {
         return at.format(WRITTEN);
     }
 

@@ -1,15 +1,17 @@
 package souther.compiler.numeric;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 
 /**
  * A moment on the timeline as an order can hold it.
  *
- * <p>One direction only, for the reason {@link Times} is: counting is what a rule about where an
- * {@code Instant} stops needs, and writing a count back is what a line drawn at one would need. No
- * line is drawn at an {@code Instant} (spec §a-line-is-drawn-where-the-values-can-carry-one).
+ * <p>Both directions, for the reason {@link Times} has both: counting is what a rule about where an
+ * {@code Instant} stops needs, and writing a count back is what a line drawn at one needs (spec
+ * §a-line-is-drawn-where-the-values-can-carry-one).
  *
  * <p><b>Nanoseconds, and this is why it is not the date-time's carrier.</b> An {@code Instant} is
  * held to the nanosecond (spec §an-instant-carries-what-a-timestamp-said) where a {@code DateTime}
@@ -41,6 +43,23 @@ public final class Instants {
         } catch (DateTimeParseException _) {
             return null;
         }
+    }
+
+    /**
+     * The moment {@code count} counts to, written the way a model writes one.
+     *
+     * <p>Split rather than handed over whole because the count runs past what a {@code long} holds
+     * at either end of the timeline, and {@code ofEpochSecond} takes two of them. Which way the
+     * division goes does not matter: below the epoch it leaves a negative count of nanoseconds
+     * within the second, and {@code ofEpochSecond} normalises that onto the second before — the
+     * same moment a division towards the count below would have named.
+     */
+    public static String written(Place count) {
+        BigInteger nanos = Count.number(count).at()
+                .setScale(0, RoundingMode.FLOOR).toBigIntegerExact();
+        BigInteger[] parts = nanos.divideAndRemainder(PER_SECOND.toBigIntegerExact());
+        return Instant.ofEpochSecond(parts[0].longValueExact(), parts[1].longValueExact())
+                .toString();
     }
 
     private Instants() {}

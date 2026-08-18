@@ -45,10 +45,20 @@ class ObservedValuesTest {
         assertEquals(new ObservedValue.Text("hello"), observe("hello"));
     }
 
+    /**
+     * A temporal is a temporal and not the text of one.
+     *
+     * <p>Spelled to the second where the type is held to it, which is what writes the value
+     * everywhere else. {@code toString} drops the seconds at zero, and an observation carrying
+     * {@code 09:00} sat in the same report as a line drawn at the same value and named
+     * {@code 09:00:00}.
+     */
     @Test
     void aTemporalIsNotText() {
         assertEquals(new ObservedValue.Temporal("2026-07-25"), observe(LocalDate.parse("2026-07-25")));
-        assertEquals(new ObservedValue.Temporal("2026-07-25T09:00"),
+        assertEquals(new ObservedValue.Temporal("09:00:00"),
+                observe(java.time.LocalTime.parse("09:00")));
+        assertEquals(new ObservedValue.Temporal("2026-07-25T09:00:00"),
                 observe(LocalDateTime.parse("2026-07-25T09:00")));
     }
 
