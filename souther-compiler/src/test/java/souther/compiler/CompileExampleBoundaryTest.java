@@ -121,7 +121,7 @@ class CompileExampleBoundaryTest {
         BoundaryAssessment hundred = at(evidence, "100").get(0);
         assertEquals(MeasurementStatus.COMPLETE, hundred.status());
         assertTrue(hundred.coverage().hit(), "the row wrote 100 and the guard compared it");
-        assertTrue(hundred.rule().isAGuard(), hundred.rule().named());
+        assertTrue(hundred.rule().wasDrawnInABodyFork(), hundred.rule().named());
     }
 
     /**
@@ -158,7 +158,7 @@ class CompileExampleBoundaryTest {
                 """);
 
         BoundaryAssessment first = at(evidence, "0").stream()
-                .filter(b -> b.rule().isAGuard()).findFirst().orElseThrow();
+                .filter(b -> b.rule().wasDrawnInABodyFork()).findFirst().orElseThrow();
         BoundaryAssessment second = at(evidence, "100").get(0);
 
         assertEquals(MeasurementStatus.COMPLETE, second.status(), "the arms were measured");

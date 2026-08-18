@@ -244,29 +244,45 @@ public sealed interface ExampleMessage extends Message {
     record NoRowIsAtThatBoundary(String at, String value, String rule) implements ExampleMessage, Reported {}
 
     /**
-     * The same, where a guard drew the line.
+     * The same, where a fork of a body drew the line.
      *
-     * <p>A rule of its own because a guard has no name to put in the other one's slot. What went
+     * <p>A rule of its own because a fork has no name to put in the other one's slot. What went
      * there was a phrase built in Java — `a guard` — which is a rendering, so it read as English in
-     * every language the rest of the sentence was written in. A type and an invariant have names,
-     * and a name is the same in every language; this has none, so the words are the catalog's.
+     * every language the rest of the sentence was written in, and it named one construct where three
+     * draw a line this way. A type and an invariant have names, and a name is the same in every
+     * language; this has none, so the words are the catalog's.
      *
-     * <p>Where the guard is written is not here either. It is a place, and a place is pointed at.
+     * <p>Which construct it was is a {@link souther.compiler.diag.Localizable}, and not three rules
+     * of this one. What the sentence says does not turn on it — the phrase is a noun dropped into one
+     * wording, which is what a token category already is — so what varies is a catalog entry rather
+     * than a sentence written twice.
+     *
+     * <p>Where the construct is written is not here either. It is a place, and a place is pointed at.
      */
     @Code(DiagnosticCode.E1916)
-    record NoRowIsAtTheLineAGuardDrew(String at, String value)
+    record NoRowIsAtTheLineAConstructDrew(String at, String value,
+                                          souther.compiler.diag.Localizable construct)
             implements ExampleMessage, Reported {}
 
-    /** Said beside the guard a line was drawn by, the sentence naming the rule without a place —
-     *  a guard has no name, and where it is written is a place a renderer resolves a file for. */
-    record TheGuardThatDrawsTheLine() implements ExampleMessage, Supporting {}
+    /** Said beside the construct a line was drawn in, the sentence naming the rule without a place —
+     *  a fork has no name, and where it is written is a place a renderer resolves a file for. */
+    record TheConstructThatDrawsTheLine(souther.compiler.diag.Localizable construct)
+            implements ExampleMessage, Supporting {}
 
     /** What a row on the line tells apart. */
     record ARowOnTheLineTellsTwoRulesApart() implements ExampleMessage, Supporting {}
 
-    /** No row goes through an arm of the body. */
+    /**
+     * No row goes through an arm of the body.
+     *
+     * <p>{@code arm} is localized where the sentence is. What an outcome is called depends on the
+     * construct it belongs to — an {@code if} has a {@code then} to quote, a {@code guard} has the
+     * rest of its block and no word for it — and the analysis that found the arm has no reader and
+     * so no language to name it in.
+     */
     @Code(DiagnosticCode.E1918)
-    record NoRowGoesThroughThatArm(String arm, String behavior) implements ExampleMessage, Reported {}
+    record NoRowGoesThroughThatArm(souther.compiler.diag.Localizable arm, String behavior)
+            implements ExampleMessage, Reported {}
 
     /** Which of the two that is. */
     record EitherARowIsMissingOrNothingReachesIt() implements ExampleMessage, Supporting {}

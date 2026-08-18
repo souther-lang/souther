@@ -198,6 +198,11 @@ public sealed interface OriginRef {
      * from the place instead, one compile reported a guard of {@code Int.abs} as {@code guard@7:22}
      * two lines under an arm of that same body saying where it was.
      *
+     * <p>Which word the place is written under is the construct the author wrote, taken off the
+     * origin the fork carries rather than off the lowered node. Three constructs draw a line this way
+     * and one of them is spelled {@code guard}, so a report that called all three that sent two of
+     * their readers looking for a form that is not there.
+     *
      * <p>A type and an invariant have names, and a name is the same wherever it is read, so they take
      * no resolver and are given one only because this is one question.
      */
@@ -208,12 +213,31 @@ public sealed interface OriginRef {
             case EnsuresOrigin e -> nameOf(e);
             case GuardOrigin g -> switch (g.at()) {
                 case Citation.Written _, Citation.Unplaced _ ->
-                        "guard@" + g.at().said(names, sectionSource);
-                case Citation.Elsewhere _ -> "guard in " + g.at().said(names, sectionSource);
+                        wordFor(g) + "@" + g.at().said(names, sectionSource);
+                case Citation.Elsewhere _ -> wordFor(g) + " in " + g.at().said(names, sectionSource);
             };
             case NarrowedOrigin n -> n.bound().describe(names, sectionSource) + " within "
                     + n.within().stream().map(TypeSymbol::name)
                             .collect(java.util.stream.Collectors.joining(" or "));
+        };
+    }
+
+    /**
+     * What a report calls the construct a line was drawn in.
+     *
+     * <p>English, like every other word this method writes. What a diagnostic says instead is chosen
+     * in the reader's language, from the same construct.
+     */
+    private static String wordFor(GuardOrigin g) {
+        return switch (g.constructThatDrewIt()) {
+            case IF -> "if";
+            case GUARD -> "guard";
+            case COMPREHENSION -> "comprehension";
+            // A line is read off a fork's condition, and these are not forks. Reaching one is this
+            // reader and the walk that numbered the fork disagreeing about what drew the line.
+            case MATCH, BINARY, NOT_WRITTEN -> throw new IllegalStateException(
+                    "a line was drawn in something that is not a fork: "
+                            + g.guard().origin().kind());
         };
     }
 
@@ -232,8 +256,10 @@ public sealed interface OriginRef {
             case EnsuresOrigin e -> nameOf(e);
             // Never rendered to a reader: a rule with no name gets a sentence of its own, so the
             // catalog holds those words in every language rather than this building them in one.
-            // What reaches this is a caller that wanted something to call the rule anyway.
-            case GuardOrigin _ -> "a guard";
+            // What reaches this is a caller that wanted something to call the rule anyway, and what
+            // it gets is the construct the source wrote rather than one of the three standing for
+            // all of them.
+            case GuardOrigin g -> "the " + wordFor(g);
             case NarrowedOrigin n -> n.bound().named() + " within "
                     + n.within().stream().map(TypeSymbol::name)
                             .collect(java.util.stream.Collectors.joining(" or "));
@@ -255,13 +281,44 @@ public sealed interface OriginRef {
                 + (e.clause().isEmpty() ? "" : " (" + e.clause() + ")");
     }
 
-    /** Whether a guard drew this line, through however many narrowings. Asked rather than matched
-     *  on the text: what a rule is called is a rendering, and two of them read the same word. */
-    default boolean isAGuard() {
+    /**
+     * Whether a fork of a body drew this line, through however many narrowings.
+     *
+     * <p>Not whether the author wrote {@code guard}. Three constructs put a line on a condition and
+     * one of them is spelled that way, so a predicate reading as the keyword would be answered
+     * {@code true} about an {@code if} — and the next reader to notice the mismatch would repair the
+     * name into a test of the construct and break the other two. What this separates is a rule with a
+     * place from a rule with a name, which is what every caller wants of it.
+     *
+     * <p>Asked rather than matched on the text: what a rule is called is a rendering, and two of them
+     * read the same word.
+     */
+    default boolean wasDrawnInABodyFork() {
         return switch (this) {
             case GuardOrigin _ -> true;
-            case NarrowedOrigin n -> n.bound().isAGuard();
+            case NarrowedOrigin n -> n.bound().wasDrawnInABodyFork();
             case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> false;
+        };
+    }
+
+    /**
+     * Which construct of the language drew this line, through however many narrowings.
+     *
+     * <p>Asked of the rule rather than worked out from the shape the fork was lowered to. Three
+     * constructs draw a line off a condition and one of them is spelled {@code guard}; the tree that
+     * runs holds one node for all three, and the answer travels with the fork's origin from where the
+     * source was read.
+     *
+     * @throws IllegalStateException where no fork drew the line. An invariant, a type and a clause
+     *                               have names rather than places, and {@link #wasDrawnInABodyFork}
+     *                               is what tells them apart from this
+     */
+    default souther.compiler.types.CoverageConstruct constructThatDrewIt() {
+        return switch (this) {
+            case GuardOrigin g -> g.guard().origin().kind();
+            case NarrowedOrigin n -> n.bound().constructThatDrewIt();
+            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> throw new IllegalStateException(
+                    "no fork of a body drew this line: " + named());
         };
     }
 

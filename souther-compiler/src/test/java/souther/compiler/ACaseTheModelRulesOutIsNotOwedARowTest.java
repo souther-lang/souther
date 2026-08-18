@@ -731,7 +731,8 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      * this is about which case was named. */
     private static List<String> messages(String source) {
         return reported(source).stream()
-                .map(d -> d.values().values().stream().map(String::valueOf)
+                .map(d -> d.values().values().stream()
+                        .map(v -> souther.compiler.diag.Messages.text(v, java.util.Locale.ENGLISH))
                         .collect(java.util.stream.Collectors.joining(" ")))
                 .toList();
     }

@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EverySlotIsAChildTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final CoverageOrigin ORIGIN = CoverageOrigin.written("t", 0);
+    private static final CoverageOrigin ORIGIN = CoverageOrigin.written("t", 0, souther.compiler.types.CoverageConstruct.IF);
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "go");
 
     private static final Hir.Binders BINDERS = new Hir.Binders(OWNER);

@@ -3,6 +3,7 @@ package souther.compiler.frontend;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
@@ -99,8 +100,15 @@ public final class AstBuilder {
 
     /** The next construct of this source a coverage obligation can be about. Called once where a
      * construct is recognised, never per node the construct is built as. */
-    private CoverageOrigin construct() {
-        return CoverageOrigin.written(moduleName, constructCounter++);
+    /**
+     * The next construct of this source, said as what the author wrote it as.
+     *
+     * <p>The kind is taken here and nowhere else. This is the one place that has the syntax in front
+     * of it — every stage below reads a tree that has already been lowered, where a {@code guard},
+     * an {@code if} and a comprehension's condition are the same node.
+     */
+    private CoverageOrigin construct(CoverageConstruct kind) {
+        return CoverageOrigin.written(moduleName, constructCounter++, kind);
     }
 
     // --- module ---
@@ -825,7 +833,7 @@ public final class AstBuilder {
         // Anchored at the operator, which is what a report about the operation is about, and written
         // over both operands, which is what the operation is.
         return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)),
-                construct(), posOf(op), region(n));
+                construct(CoverageConstruct.BINARY), posOf(op), region(n));
     }
 
     private static Ast.BinOp binOp(SyntaxKind k) {
@@ -883,7 +891,8 @@ public final class AstBuilder {
         for (int i = 1; i < exprs.size(); i++) {
             guards.add(expr(exprs.get(i)));
         }
-        return new Ast.ListComp(element, guards, construct(), pos(n), region(n));
+        return new Ast.ListComp(element, guards, construct(CoverageConstruct.COMPREHENSION),
+                pos(n), region(n));
     }
 
     private Ast.Expr ifExpr(SyntaxNode n) {
@@ -892,7 +901,7 @@ public final class AstBuilder {
         String binder = as == null ? null : ident(as);
         List<Ast.ElseArm> arms = elseArms(n, binder);
         // One construct, so one origin whichever of the three shapes it is written as.
-        CoverageOrigin origin = construct();
+        CoverageOrigin origin = construct(CoverageConstruct.IF);
         if (arms != null) {
             return new Ast.IfConstructed(expr(exprs.get(0)),
                     binderOf(as), expr(exprs.get(1)), arms, origin, pos(n), region(n));
@@ -1049,7 +1058,8 @@ public final class AstBuilder {
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
             cases.add(matchCase(c));
         }
-        return new Ast.Match(scrutinee, cases, construct(), pos(n), region(n));
+        return new Ast.Match(scrutinee, cases, construct(CoverageConstruct.MATCH), pos(n),
+                region(n));
     }
 
     /** A name as the source wrote it — bare, or qualified through a module or an import alias — read
@@ -1353,7 +1363,7 @@ public final class AstBuilder {
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 // One construct, so one origin whichever of the three shapes it is written as.
-                CoverageOrigin origin = construct();
+                CoverageOrigin origin = construct(CoverageConstruct.GUARD);
                 if (arms != null) {
                     yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, origin,
                             pos, held);

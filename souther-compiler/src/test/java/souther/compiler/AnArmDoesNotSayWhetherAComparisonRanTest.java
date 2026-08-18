@@ -145,6 +145,6 @@ class AnArmDoesNotSayWhetherAComparisonRanTest {
 
         assertEquals(List.of("then", "else"),
                 branches.get("gate").all().stream()
-                        .map(souther.compiler.coverage.CoverageSites.Site::label).toList());
+                        .map(souther.compiler.report.ArmVocabulary::label).toList());
     }
 }

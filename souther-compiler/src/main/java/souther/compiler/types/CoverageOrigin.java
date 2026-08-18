@@ -27,12 +27,27 @@ package souther.compiler.types;
  * @param ordinal which construct of that source, by the builder's own count over it
  * @param lowered which fork of that construct, where a lowering makes more than one out of it. Zero
  *                is the construct's own fork, which is every fork an author writes as one
+ * @param kind    what the author wrote there. Not part of what tells one construct from another —
+ *                the builder takes a fresh ordinal for every construct it reads, so no two origins
+ *                share one and nothing here can disagree about a construct two values name. It is
+ *                the answer a report needs and the tree that runs no longer holds
  */
-public record CoverageOrigin(String module, int ordinal, int lowered) {
+public record CoverageOrigin(String module, int ordinal, int lowered, CoverageConstruct kind) {
 
-    /** The construct a source wrote. */
-    public static CoverageOrigin written(String module, int ordinal) {
-        return new CoverageOrigin(module, ordinal, 0);
+    public CoverageOrigin {
+        // Two spellings of one fact, held together rather than left to agree. `isWritten` is asked
+        // by readers that have no use for the kind, and a value answering it one way and carrying a
+        // construct the other way is one either reader can be right about.
+        if ((ordinal < 0) != (kind == CoverageConstruct.NOT_WRITTEN)) {
+            throw new IllegalArgumentException(
+                    "an origin says both whether a source wrote it and what was written: "
+                            + ordinal + " with " + kind);
+        }
+    }
+
+    /** The construct a source wrote, said as {@code kind}. */
+    public static CoverageOrigin written(String module, int ordinal, CoverageConstruct kind) {
+        return new CoverageOrigin(module, ordinal, 0, kind);
     }
 
     /**
@@ -47,7 +62,8 @@ public record CoverageOrigin(String module, int ordinal, int lowered) {
         return UNWRITTEN;
     }
 
-    private static final CoverageOrigin UNWRITTEN = new CoverageOrigin("", -1, 0);
+    private static final CoverageOrigin UNWRITTEN =
+            new CoverageOrigin("", -1, 0, CoverageConstruct.NOT_WRITTEN);
 
     /** Whether a source wrote the construct this names. False only for {@link #unwritten}. */
     public boolean isWritten() {
@@ -70,6 +86,9 @@ public record CoverageOrigin(String module, int ordinal, int lowered) {
             throw new IllegalStateException(
                     "a lowered fork cannot be lowered again: " + this + " part " + part);
         }
-        return new CoverageOrigin(module, ordinal, part + 1);
+        // The kind comes along. A guard of a comprehension is a fork of that comprehension, and a
+        // fork that arrived saying it was written as something else would be the construct this
+        // whole value exists to keep hold of, lost one lowering in.
+        return new CoverageOrigin(module, ordinal, part + 1, kind);
     }
 }

@@ -398,7 +398,13 @@ public final class GeneratedRows {
     private static String about(Adequacy.Finding gap) {
         return switch (gap.kind()) {
             case BOUNDARY_UNMET -> gap.args().get(0) + " = " + gap.args().get(1);
-            case ARM_UNREACHED, INPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNSPECIFIED ->
+            // The arm's own short name, which is what the report writes and what the document's
+            // `subject` joins on. The finding carries the arm rather than words about it, so that
+            // the sentence a diagnostic says in the reader's language and the words written here
+            // are two readings of one arm rather than one of them being handed the other's.
+            case ARM_UNREACHED -> ArmVocabulary.label(
+                    (souther.compiler.coverage.CoverageSites.Site) gap.args().get(0));
+            case INPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNSPECIFIED ->
                     String.valueOf(gap.args().get(0));
             // Not gaps a build refuses, and a disposition is not held for one. Listed rather than
             // defaulted so that a kind added later has to be given words here.

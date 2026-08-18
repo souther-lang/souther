@@ -60,7 +60,7 @@ class CoverageSitesTest {
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {
-        return plan.sites().stream().map(CoverageSites.Site::label).toList();
+        return plan.sites().stream().map(souther.compiler.report.ArmVocabulary::label).toList();
     }
 
     @Test
@@ -68,9 +68,8 @@ class CoverageSitesTest {
         CoverageSites.Plan plan = planOf(MODEL);
 
         assertEquals(List.of("case UnderThirty", "then", "else"), labels(plan));
-        assertEquals(List.of(CoverageSites.Site.Kind.CASE, CoverageSites.Site.Kind.THEN,
-                        CoverageSites.Site.Kind.ELSE),
-                plan.sites().stream().map(CoverageSites.Site::kind).toList());
+        assertEquals(List.of(OutcomeName.CASE, OutcomeName.THEN, OutcomeName.ELSE),
+                plan.sites().stream().map(CoverageSites.Site::name).toList());
     }
 
     /**
@@ -296,8 +295,8 @@ class CoverageSitesTest {
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
-        assertEquals("then", plan.site(guard.siteIndexThen()).label());
-        assertEquals("else", plan.site(guard.siteIndexElse()).label());
+        assertEquals("then", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexThen())));
+        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
     }
 
     /** The comparison was evaluated to reach the arm that is left, so the line it draws is still one
@@ -310,7 +309,7 @@ class CoverageSitesTest {
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
         assertEquals(CoverageSites.NO_SITE, guard.siteIndexThen());
-        assertEquals("else", plan.site(guard.siteIndexElse()).label());
+        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
     }
 
     /**
@@ -358,7 +357,7 @@ class CoverageSitesTest {
         int[] arms = plan.probesOf(match);
         assertNotNull(arms, "the plan is keyed by the instances it was built from");
         assertEquals(2, arms.length);
-        assertEquals("case UnderThirty", plan.site(arms[0]).label());
+        assertEquals("case UnderThirty", souther.compiler.report.ArmVocabulary.label(plan.site(arms[0])));
 
         Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
                 match.type(), match.pos());
@@ -418,7 +417,7 @@ class CoverageSitesTest {
                 """);
 
         List<CoverageSites.Obligation> inner = plan.sites().stream()
-                .filter(s -> s.label().equals("case Yes"))
+                .filter(s -> souther.compiler.report.ArmVocabulary.label(s).equals("case Yes"))
                 .map(CoverageSites.Site::obligation).toList();
         assertEquals(inner.size(), inner.stream().distinct().count(),
                 "the two inner `case Yes` arms are two arms the author wrote");

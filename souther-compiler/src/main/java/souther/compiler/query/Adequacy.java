@@ -1930,8 +1930,12 @@ public final class Adequacy {
                 return;
             }
             for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
+                // The arm itself and not words about it. What to call one differs between a report,
+                // which is written in one language, and a diagnostic, which is written in the
+                // reader's — and the two readings ask the same arm rather than one of them being
+                // handed the other's answer.
                 out.add(new Finding(Kind.ARM_UNREACHED, behavior.name(), branch.status(),
-                        arm.at(), List.of(arm.label(), arm.behavior())));
+                        arm.at(), List.of(arm, arm.behavior())));
             }
         }
     }
@@ -1996,15 +2000,16 @@ public final class Adequacy {
                                 text(said, 0), text(said, 1), text(said, 2));
                         // The rule named without a place. Nothing here knows what to call a
                         // source, so a line and a column written into the sentence would be read
-                        // against whichever file the reader has in mind. Where the rule is a
-                        // guard, the place is pointed at rather than said.
-                        case BOUNDARY_UNMET -> rule(said).isAGuard()
-                                ? new ExampleMessage.NoRowIsAtTheLineAGuardDrew(
-                                        text(said, 0), text(said, 1))
+                        // against whichever file the reader has in mind. Where a fork of a body
+                        // drew the line, the place is pointed at rather than said, and which
+                        // construct it was is a phrase the catalog holds in every language.
+                        case BOUNDARY_UNMET -> rule(said).wasDrawnInABodyFork()
+                                ? new ExampleMessage.NoRowIsAtTheLineAConstructDrew(
+                                        text(said, 0), text(said, 1), constructOf(said))
                                 : new ExampleMessage.NoRowIsAtThatBoundary(
                                         text(said, 0), text(said, 1), rule(said).named());
                         case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
-                                text(said, 0), text(said, 1));
+                                phraseFor(arm(said)), text(said, 1));
                         default -> throw new IllegalArgumentException(
                                 "no message for " + finding.kind());
                     });
@@ -2026,10 +2031,12 @@ public final class Adequacy {
                         switch (cited) {
                             case souther.compiler.diag.Citation.Written w ->
                                     built.secondary(souther.compiler.diag.Region.point(w.at()),
-                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                                            new ExampleMessage.TheConstructThatDrawsTheLine(
+                                                    constructOf(said)));
                             case souther.compiler.diag.Citation.Reached r ->
                                     built.secondary(souther.compiler.diag.Region.point(r.at()),
-                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                                            new ExampleMessage.TheConstructThatDrawsTheLine(
+                                                    constructOf(said)));
                             // Nowhere this compilation can put a marker. Where the guard is written
                             // out of sight the label says so instead; where it is in a text the
                             // caller handed over there is no declaration to name and nothing to say,
@@ -2037,7 +2044,8 @@ public final class Adequacy {
                             // a place a reader is sent to names its source, and this one cannot.
                             case souther.compiler.diag.Citation.Elsewhere e ->
                                     built.secondaryOutOfSight(e.provenance(),
-                                            new ExampleMessage.TheGuardThatDrawsTheLine());
+                                            new ExampleMessage.TheConstructThatDrawsTheLine(
+                                                    constructOf(said)));
                             case souther.compiler.diag.Citation.Unplaced _ -> { }
                         }
                     });
@@ -2078,6 +2086,63 @@ public final class Adequacy {
          *  which cannot. */
         private static souther.compiler.partition.OriginRef rule(List<Object> said) {
             return (souther.compiler.partition.OriginRef) said.get(2);
+        }
+
+        /** The arm an arm finding is about, which it carries as itself for the same reason a
+         *  boundary finding carries its rule: what to call it is the reader's question. */
+        private static souther.compiler.coverage.CoverageSites.Site arm(List<Object> said) {
+            return (souther.compiler.coverage.CoverageSites.Site) said.get(0);
+        }
+
+        /** Which construct of the language drew a boundary's line, as a phrase the reader's
+         *  language supplies. Asked of the rule, which is where the source's own answer is. */
+        private static souther.compiler.diag.Localizable constructOf(List<Object> said) {
+            return rule(said).constructThatDrewIt().said();
+        }
+
+        /**
+         * What a sentence calls one arm, as a phrase the catalog holds in every language.
+         *
+         * <p>Chosen here and not where the arm was found. The measurement answers what the arm is —
+         * a construct and a way through it — and what to call one is a question only a sentence with
+         * a reader has; the report writes a short word for the same arm and this writes a phrase, and
+         * neither is the other's to decide. Written off the name the pair already settles, so a
+         * construct added to the language arrives here as a case with no phrase rather than as one
+         * quietly answered with a neighbour's.
+         */
+        private static souther.compiler.diag.Localizable phraseFor(
+                souther.compiler.coverage.CoverageSites.Site arm) {
+            return switch (arm.name()) {
+                case THEN -> souther.compiler.diag.Localizable.of("arm.then");
+                case ELSE -> souther.compiler.diag.Localizable.of("arm.else");
+                case CONTINUED -> souther.compiler.diag.Localizable.of("arm.continued");
+                case KEPT -> souther.compiler.diag.Localizable.of("arm.kept");
+                case DROPPED -> souther.compiler.diag.Localizable.of("arm.dropped");
+                case CONSTRUCTED -> souther.compiler.diag.Localizable.of("arm.constructed");
+                case CASE -> souther.compiler.diag.Localizable.of("arm.case", casesOf(arm));
+                case DEPARTURE -> clauseOf(arm)
+                        .map(c -> souther.compiler.diag.Localizable.of("arm.departure.clause", c))
+                        .orElseGet(() -> souther.compiler.diag.Localizable.of("arm.departure"));
+                // Not an arm, so no warning is about one. Reaching this is the branch measure and
+                // this sentence disagreeing about what it counts.
+                case COMPARISON -> throw new IllegalStateException(
+                        "no arm was unreached here: " + arm);
+            };
+        }
+
+        private static String casesOf(souther.compiler.coverage.CoverageSites.Site arm) {
+            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Matched matched
+                    ? matched.cases().stream()
+                            .map(souther.compiler.types.TypeSymbol::name)
+                            .collect(java.util.stream.Collectors.joining(" | "))
+                    : "";
+        }
+
+        private static java.util.Optional<String> clauseOf(
+                souther.compiler.coverage.CoverageSites.Site arm) {
+            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Failed(
+                    souther.compiler.coverage.SourceOutcome.FailedBy.Construction(var clause))
+                    ? clause : java.util.Optional.empty();
         }
 
         /** What a finding put at {@code at}, as the text a message carries. */
