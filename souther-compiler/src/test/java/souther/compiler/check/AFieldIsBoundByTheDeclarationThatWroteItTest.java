@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
 
@@ -94,7 +95,7 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
 
     /** The clauses as the module named {@code reading} reads them. */
     private static Clauses readBy(Compilation c, String reading) {
-        return new Clauses(Names.resolvedSymbols(c.db(), reading).value(), Map.of());
+        return new Clauses(Scopes.resolved(c.db(), reading).value(), Map.of());
     }
 
     /**

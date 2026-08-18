@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -15,7 +16,6 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.Partitions;
-import souther.compiler.query.Names;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -69,7 +69,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");

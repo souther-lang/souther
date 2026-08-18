@@ -116,7 +116,7 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         souther.compiler.check.Symbols symbols =
-                souther.compiler.query.Names.derivedSymbols(compilation.db(), module).value();
+                souther.compiler.query.Scopes.derived(compilation.db(), module).value();
 
         assertNull(Carrier.ofValue(
                 souther.compiler.types.Type.ref(TypeSymbols.declared(new TypeKey("example.onecase", "Qualified"))),

@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Names;
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeSymbol;
 
@@ -33,7 +33,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 "the model this reads has to be one somebody could write");
         return UninhabitableTypes.withNoValueOfTheirOwn(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
                         TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(),
-                                Names.derivedSymbols(compilation.db(), "demo").value()))
+                                Scopes.derived(compilation.db(), "demo").value()))
                 .stream().map(each -> each.members().stream().map(TypeSymbol::name).toList()).toList();
     }
 

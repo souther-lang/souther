@@ -6,6 +6,7 @@ import net.unit8.raoh.decode.Decoder;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
@@ -13,7 +14,6 @@ import souther.compiler.observe.Applied;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
-import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -224,7 +224,7 @@ class AnAnswererInAnotherLoaderRunsARowTest {
         answerer.hereLoaded = loaded(new MemoryClassLoader(classes, parent), answerer.hereNamed);
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                Names.derivedSymbols(c.db(), name).value(),
+                Scopes.derived(c.db(), name).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifact,
                 // The crossing here is between two loaders of one build, so what the answerer reads

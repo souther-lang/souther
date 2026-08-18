@@ -2,11 +2,11 @@ package souther.compiler.frontend;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
-import souther.compiler.query.Names;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 
@@ -150,7 +150,7 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
             return new Read(said, false);
         }
         String module = compilation.modules().get(0);
-        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         if (symbols == null) {
             return new Read(said, false);
         }

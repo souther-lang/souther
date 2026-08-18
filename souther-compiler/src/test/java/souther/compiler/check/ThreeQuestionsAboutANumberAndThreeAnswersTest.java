@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.query.Names;
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -48,7 +48,7 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
         Compilation compilation = Compilation.ofSource(TYPES, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         Type t = switch (type) {
             case "Int" -> Type.INT;

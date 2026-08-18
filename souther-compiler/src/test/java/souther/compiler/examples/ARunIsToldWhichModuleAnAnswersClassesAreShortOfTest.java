@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Note;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -11,7 +12,6 @@ import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.PublishedClasses;
-import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -210,7 +210,7 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
                 "the model whose rows are run compiles");
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                Names.derivedSymbols(c.db(), name).value(),
+                Scopes.derived(c.db(), name).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifact,
                 () -> declarationsOf(List.of(SHARED, ROOT)),

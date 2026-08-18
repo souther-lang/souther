@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Carrier;
@@ -10,7 +11,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
-import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -197,7 +197,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         return Partitions.representativesOf(
                         souther.compiler.types.Type.ref(
                                 souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))), symbols)
@@ -210,7 +210,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");

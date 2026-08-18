@@ -2,8 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.meta.ModulePath;
-import souther.compiler.query.Names;
 import souther.compiler.query.Compilation;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Denotation;
@@ -71,7 +71,7 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
     private static Symbols scopeOf(String module, String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
         compilation.answerEverything();
-        return Names.derivedSymbols(compilation.db(), module).value();
+        return Scopes.derived(compilation.db(), module).value();
     }
 
     /** Every declaration this compilation has, which is what a position here may turn out to be. */

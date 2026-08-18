@@ -444,12 +444,12 @@ public final class Names {
 
     /** What names mean in a module over the declarations as resolution left them — what
      * {@link Resolved} is resolved against. */
-    public static Answer<Symbols> resolvedSymbols(Db db, String name) {
+    static Answer<Symbols> resolvedSymbols(Db db, String name) {
         return symbols(db, name, resolvedRegistry(db));
     }
 
     /** The same over the derived declarations — what everything below the check reads. */
-    public static Answer<Symbols> derivedSymbols(Db db, String name) {
+    static Answer<Symbols> derivedSymbols(Db db, String name) {
         return symbols(db, name, derivedRegistry(db));
     }
 

@@ -4,7 +4,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.IdentityHashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -49,9 +49,16 @@ record Divergence(String path, String cause, Divergence.Kind kind) {
 
     private static final class Walk {
 
-        /** Pairs already walked, so a graph that loops is walked once. */
-        private final Set<Object> seen =
-                java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        /**
+         * Pairs already walked, so a graph that loops is walked once.
+         *
+         * <p>A set that compares its members and not their addresses, because a pair is made where
+         * it is asked about and is never the same object twice. What is compared is what
+         * {@link Pair} says: the two sides by address, which is the question — whether these two
+         * objects have been walked together — and not whether two objects are equal, which is what
+         * the walk is here to find out.
+         */
+        private final Set<Pair> seen = new HashSet<>();
         private final List<Divergence> out;
         /** A walk of two whole answers is bounded, so a graph nobody meant to walk stops. */
         private int budget = 400_000;

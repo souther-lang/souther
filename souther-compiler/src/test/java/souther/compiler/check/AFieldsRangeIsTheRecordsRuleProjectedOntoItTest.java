@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.query.Names;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -33,7 +33,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
@@ -297,7 +297,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 data Forecast = { total: Amount }
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = Names.derivedSymbols(compilation.db(), "example.report").value();
+        Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
@@ -364,7 +364,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = Names.derivedSymbols(compilation.db(), "example.pair").value();
+        Symbols symbols = Scopes.derived(compilation.db(), "example.pair").value();
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
 
@@ -465,7 +465,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = Names.derivedSymbols(compilation.db(), "example.report").value();
+        Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         TypeSymbol named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
         FieldDomains domains = FieldDomains.of(named, (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
 

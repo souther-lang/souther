@@ -6,7 +6,7 @@ import net.unit8.raoh.decode.Decoder;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Names;
+import souther.compiler.query.Scopes;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
@@ -65,7 +65,7 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
             """;
 
     private final Compilation compilation = compiled(MODULE);
-    private final Symbols symbols = Names.derivedSymbols(compilation.db(), "demo").value();
+    private final Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
     private final NeutralForm neutral = new NeutralForm(symbols);
 
     private static Compilation compiled(String module) {
@@ -190,7 +190,7 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
     @Test
     void anotherSumListingTheCaseDoesNotMoveWhatAPlaceNothingReadsWrites() throws Exception {
         Compilation with = compiled(AND_ANOTHER_SUM);
-        Symbols theirs = Names.derivedSymbols(with.db(), "demo").value();
+        Symbols theirs = Scopes.derived(with.db(), "demo").value();
         NeutralForm and = new NeutralForm(theirs);
         assertEquals(Map.of(), neutral.of(unit("Filed"), Position.UNREAD, "h"));
         assertEquals(Map.of(), and.of(value(with, "Filed", Map.of()), Position.UNREAD, "h"));

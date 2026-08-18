@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Names;
+import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -51,7 +51,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
                 .flatMap(List::stream)
                 .map(each -> each.diagnostic().code())
                 .toList(), "the model this reads has to be one somebody could write");
-        Symbols symbols = Names.derivedSymbols(compilation.db(), "demo").value();
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
                 (Hir.Data) symbols.declarations().declaration(name.key()), symbols), symbols);
@@ -68,7 +68,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         compilation.answerEverything();
         assertFalse(compilation.diagnostics().values().stream().flatMap(List::stream).toList()
                 .isEmpty(), "this model is meant to be refused");
-        Symbols symbols = Names.derivedSymbols(compilation.db(), "demo").value();
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
                 (Hir.Data) symbols.declarations().declaration(name.key()), symbols);

@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Names;
+import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -55,7 +55,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                         .map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        Symbols symbols = Names.derivedSymbols(compilation.db(), "demo").value();
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         Map<TypeSymbol, Cardinality> solution = new HashMap<>();
         for (int each = 0; each < assumed.length; each += 2) {
             solution.put(TypeSymbols.declared(new TypeKey(symbols.module(), (String) assumed[each])), (Cardinality) assumed[each + 1]);
