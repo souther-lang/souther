@@ -80,7 +80,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     private static String written(Generator.GenerationResult result) {
         return GeneratedRows.of("example.trip",
                 Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE, List.of())),
-                false, SourceNameResolver.identity());
+                Map.of(), false, SourceNameResolver.identity());
     }
 
     /**

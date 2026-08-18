@@ -82,7 +82,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         Map<String, Adequacy.Filling> generated =
                 compilation.db().ask(new Adequacy.Generated(module)).value();
         assertNotNull(generated, "the model under test compiles");
-        return GeneratedRows.of(module, generated, true, SourceNameResolver.identity());
+        return GeneratedRows.of(module, generated, Map.of(), true, SourceNameResolver.identity());
     }
 
     /** Where each row starts. A row the formatter wrapped is still one row, and one {@code |}. */

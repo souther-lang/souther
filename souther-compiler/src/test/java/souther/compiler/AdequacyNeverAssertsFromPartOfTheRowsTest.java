@@ -263,7 +263,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     compilation.db().ask(new Adequacy.Generated(module)).value();
             assertNotNull(generated);
 
-            String written = GeneratedRows.of(module, generated, true, SourceNameResolver.identity());
+            String written = GeneratedRows.of(module, generated, Map.of(), true, SourceNameResolver.identity());
             assertFalse(written.contains("example "),
                     module + " offers a row that may already be written: " + written);
             // Either word, because the two models get here differently: one has rows nothing read
@@ -317,7 +317,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()
                 .get("take").unreached().isEmpty(), "an arm nothing goes through");
         assertFalse(GeneratedRows.of(module,
-                compilation.db().ask(new Adequacy.Generated(module)).value(), true,
+                compilation.db().ask(new Adequacy.Generated(module)).value(), Map.of(), true,
                 SourceNameResolver.identity()).isEmpty(),
                 "and rows offered for them");
     }
