@@ -72,8 +72,7 @@ record Denotations(Map<BindingId, Means> bound) {
     /** What {@code binding} denotes, which is nothing where nothing entered it. */
     Denotes of(BindingId binding) {
         Means given = bound.get(binding);
-        return given != null ? given.denotes()
-                : new Denotes.Nothing(new Naming.Opaque(Naming.Reason.A_BINDING_STANDS_FOR_NOTHING));
+        return given != null ? given.denotes() : new Denotes.Nothing();
     }
 
     /** The value {@code binding} was given, or null where nothing recorded one. */

@@ -36,8 +36,16 @@ sealed interface Denotes {
      */
     record Written(Term term, Core value) implements Denotes {}
 
-    /** Nothing this check can name, and why it can name none of it ({@link Naming}). Kept rather
-     * than dropped because the two reasons a value has no name are not one reason: what an injected
-     * behavior answered is unnameable, and a shape this compiler has no term for is unfinished. */
-    record Nothing(Naming.Unnamed why) implements Denotes {}
+    /**
+     * Nothing this check can name.
+     *
+     * <p>Why it can name none of it is {@link Naming}'s, and it is asked there. The two reasons are
+     * not one reason — what an injected behavior answered is unnameable, and a shape this compiler
+     * has no term for is unfinished — and that distinction earns its place where the naming is done,
+     * where telling them apart is what stops an analysis this compiler could not follow from reading
+     * as one it followed to nothing (#722). Carried past that point it was read by no one: a
+     * distinction is worth holding where something asks it, and a reader that wants the reason has
+     * to be given one, which is a question of its own to introduce with whatever asks it.
+     */
+    record Nothing() implements Denotes {}
 }

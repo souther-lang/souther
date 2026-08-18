@@ -1223,8 +1223,8 @@ final class Terms {
             return new Denotes.At(located);
         }
         Naming named = naming(e, at, Map.of(), 0, Leaf.SYMBOLIC);
-        if (named instanceof Naming.Unnamed absent) {
-            return new Denotes.Nothing(absent);
+        if (named instanceof Naming.Unnamed) {
+            return new Denotes.Nothing();
         }
         Term term = named.term();
         return new Denotes.Computed(term);
