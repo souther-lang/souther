@@ -1059,21 +1059,15 @@ public final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     /**
-     * Reads what the answers standing under {@code e} guarantee, and walks {@code e} over it.
+     * Reads what the answers under {@code e} guarantee, and walks {@code e} over it — which is
+     * {@link #walk}'s one requirement, met here.
      *
-     * <p>The reading runs ahead of the walk because a construction is judged at its own step while
-     * the answers it is built from stand underneath it: read at each call's own step instead, the
-     * construction would be judged before the value it was handed had said anything. How far ahead
-     * is {@link PathEngine#answering}'s question, and it stops where reading ahead would be wrong
-     * rather than merely early — at a branch, at a block, and at a binding's body, each of which is
-     * read with something further settled. Those are the places that come back through here, and
-     * they are all of them: everything the reading covered is walked by {@link #walk}, over what
-     * this settled.
-     *
-     * <p>So a call is seeded once, where it stands, and not once for every node above it. What is
-     * read here is threaded down, and seeding the same call again from a descendant lands on the
-     * subjects it already holds — it decided nothing, and it cost the depth of a body over again at
-     * every node of it (#826).
+     * <p>How far the reading runs is {@link PathEngine#answering}'s question, and it stops where
+     * reading ahead would be wrong rather than merely early: at a branch, at a block, and at a
+     * binding's body, each of which is read with something further settled. Those are the places
+     * that come back through here, so a call is read once, where it stands, and not once for every
+     * node standing over it — read again from a descendant it lands on the subjects it already
+     * holds, and costs the depth of a body over again at every node of it (#826).
      *
      * <p>Nothing reaches what this was handed, so there is nothing under it to be about. Asked here
      * and again of the reading, because the reading is itself a place the conditions can come to
@@ -1084,22 +1078,25 @@ public final class InvariantChecker {
     }
 
     /**
-     * The same, where part of what is being walked has already been read: {@code unread} is what has
-     * not, and {@code given} is what holds of the rest.
+     * The same, where {@code given} already meets that requirement over part of {@code e}:
+     * {@code unread} is the part it does not, or null where there is no such part.
      *
-     * <p>The two places that rebuild an expression are where this is so: a binding standing inside a
-     * value is walked with its body put where it was, and a conditional given to a value is walked
-     * once with each of its branches there. Either way the tree is the whole of the expression —
-     * which is what the source would have written without the helper or the conditional, and what
-     * the rest of this walk reads — and only the part put in is new.
+     * <p>Which is what a walk that rebuilds an expression is owed. Entering a binding that stood
+     * inside a value walks the expression with the binding's body put where the binding was, and
+     * opening a conditional a value is handed walks it once with each branch put there. Either way
+     * the tree is the whole expression — what the source would have written without the helper or
+     * the conditional, and what the rest of this walk reads — while everything but the part put in
+     * was read where the region was entered.
      *
-     * <p>What stands beside it was read where the region was entered, and reading it again under
-     * what was put in lands on the same subjects. A binder an expansion introduced was written
-     * around its own body, and the binders a conditional stands inside scope over the conditional
-     * and no further, so nothing standing beside either was written where it could name them.
+     * <p>Reading that part again would land on the subjects it already holds, under a denotation it
+     * cannot tell apart: a binder an expansion introduced was written around its own body, and the
+     * binders a conditional stands inside scope over the conditional and no further, so nothing
+     * standing beside either was written where it could name them.
      *
-     * <p>{@code unread} is null where none of it is: what was put in stands somewhere the reading
-     * had already stopped, and the region that owns it reads it when this walk arrives there.
+     * <p>And nothing is unread where what was put in went somewhere the reading had already stopped.
+     * The requirement is over what the reading reaches from here, which is not past a region
+     * boundary; a branch put in beyond one is read by the region that owns it, when the walk arrives
+     * there. Which of the two a conditional is, is what {@link ConditionalSite#read} answers.
      */
     private void entering(Core e, Core unread, Known given, Denotations at, int depth) {
         if (given.reachesNothing()) {
@@ -1109,11 +1106,17 @@ public final class InvariantChecker {
     }
 
     /**
-     * One step of a region, over what the {@link #entering} that owns it read.
+     * One step of a region, over facts that already hold of it.
      *
-     * <p>Every descent from here that is not a region of its own hands {@code k} on unchanged, so a
-     * step that reaches nothing stands in a region that reached nothing and the question is settled
-     * where the region was entered.
+     * <p>What every step is handed, and the one thing every caller owes: {@code k} holds what
+     * {@link PathEngine#answering} derives over {@code e}, as far as that reading goes from
+     * {@code e}. It is owed because a construction is judged at its own step while the answers it is
+     * built from stand underneath it — judged against {@code k} alone, it would be judged before the
+     * value it was handed had said anything. {@link #entering} is where it is met.
+     *
+     * <p>Every descent from here that is not a region of its own hands {@code k} on unchanged, and
+     * may: a reading that covers this step covers a child exactly as far. So a step that reaches
+     * nothing stands in a region that reached nothing, and that was settled where it was entered.
      */
     private void walk(Core e, Known k, Denotations at, int depth) {
         if (k.reachesNothing()) {

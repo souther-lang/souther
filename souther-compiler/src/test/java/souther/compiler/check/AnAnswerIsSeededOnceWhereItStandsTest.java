@@ -13,18 +13,25 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A call is seeded where it stands, and not once for every node standing over it.
+ * An answer is read once for each reading of its region that it stands in.
  *
  * <p>What a behavior's answer guarantees is read ahead of the walk, because a construction is judged
- * at its own step while the answers it is built from stand underneath it. Read from every node of
- * the walk as well, it is read again over the whole of each node's subtree — which decides nothing,
- * since the reading is threaded down and the second lands on the subjects the first wrote, and costs
- * the depth of a body over again at every node of it.
+ * at its own step while the answers it is built from stand underneath it. How far ahead is where the
+ * reading stops, and everything it covered is then walked over what it settled — so reading it again
+ * from a descendant, or from an expression rebuilt around it, lands on the subjects it already holds.
+ * It decides nothing, and it costs the depth of a body over again at every node of it (#826).
  *
- * <p>Held as a count and not as a duration. What is wrong with reading it again is that the work is
- * quadratic in the depth of a body, and a body twice as deep is the input that says so; a
- * millisecond figure would say it on this machine on this day. Bodies of a nesting the source can
- * write, so what is measured is what an author can hand over.
+ * <p>Nothing else decides the count. Not how deep the answer stands, not how many stand beside it,
+ * not whether a binding an expansion introduced or a branch of a conditional was put in above it.
+ * What does decide it is how many readings of its region there are, and that is a conditional a value
+ * is handed: opening one reads the expression once with each branch standing where it stood, so an
+ * answer in a region standing under it is read by both — which is the same two that judge every
+ * construction inside it and say what they found once ({@link InvariantChecker.Judgment#of}).
+ *
+ * <p>Held as a count and not as a duration, and against a growing number of answers rather than at
+ * one size: what is wrong with reading them again is that the work grows with what it is read over,
+ * and a body with twice the answers is the input that says so. A millisecond figure would say it on
+ * this machine on this day.
  *
  * <p>Nothing here reports anything, so this is read off {@link PathEngine#SEEDED} — two readings
  * that differ only in how often they seed answer exactly alike about every program, and a difference
@@ -32,35 +39,127 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AnAnswerIsSeededOnceWhereItStandsTest {
 
-    /**
-     * A body whose whole of it is one region: {@code depth} calls nested inside one another, with no
-     * branch, no block and no binding between them to end the reading early. Each call answers a type
-     * with an invariant, so each of them is an answer the seeding reads.
-     */
-    private static String nested(int depth) {
+    /** {@code answers} nested calls, each of them an answer the seeding reads. */
+    private static String answers(int answers) {
         StringBuilder call = new StringBuilder("a");
-        for (int i = 0; i < depth; i++) {
+        for (int i = 0; i < answers; i++) {
             call.insert(0, "step(").append(")");
         }
-        return """
-                module demo exposing ( Amount, step, run )
-
-                data Amount = Int
-                    invariant value >= 0
-
-                behavior step : (a: Amount) -> Amount
-                    constructs Amount
-
-                let step (a) = Amount(a.value + 1)
-
-                behavior run : (a: Amount) -> Amount
-                    constructs Amount
-
-                let run (a) = Amount(%s.value + 1)
-                """.formatted(call);
+        return call.toString();
     }
 
-    /** Every answer the check seeded while compiling {@code source}, one entry per seeding. */
+    /**
+     * The declarations every body below is written against. {@code bump} is a helper and not a
+     * behavior, so a call to it is written out as bindings around its body — which is a binding
+     * standing inside a value, and one of the two places the walk rebuilds an expression to enter.
+     */
+    private static final String DECLARATIONS = """
+            module demo exposing ( Amount, Pair, Box, Tag, step, run )
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Pair = { l: Amount, r: Amount }
+
+            data Box = { p: Pair, q: Amount }
+
+            data Tag = Lo | Hi
+
+            behavior step : (a: Amount) -> Amount
+                constructs Amount
+
+            let step (a) = Amount(a.value + 1)
+
+            let bump (x: Amount): Amount = Amount(x.value + 1)
+
+            behavior run : (a: Amount, t: Tag) -> Box
+                constructs Box, Pair, Amount
+
+            """;
+
+    /** Somewhere an answer can stand, and how many readings of the region it stands in there are.
+     * {@code $A} is where the answers go. */
+    private record Place(String what, int readings, String body) {}
+
+    private static Place read(String what, String body) {
+        return new Place(what, 1, body);
+    }
+
+    private static Place readTwice(String what, String body) {
+        return new Place(what, 2, body);
+    }
+
+    /**
+     * Every place an answer can stand relative to what makes the walk rebuild an expression.
+     *
+     * <p>A binding an expansion introduced and a conditional a value is handed are the two, and an
+     * answer can stand on its own, beside one, in what decides one, in what one puts in, or in a
+     * region standing under one. Only the last is read twice, and it is read twice because there are
+     * two readings of it and not because anything read it again.
+     */
+    private static final List<Place> PLACES = List.of(
+            read("standing on its own",
+                    "let run (a, t) = Box { p = Pair { l = $A, r = a }, q = Amount(0) }\n"),
+            read("beside a binding an expansion introduced",
+                    "let run (a, t) = Box { p = Pair { l = bump(bump(a)), r = $A }, q = a }\n"),
+            read("in the condition a conditional is decided by",
+                    "let run (a, t) = Box { p = Pair { l = if $A.value > 3 then Amount(1)"
+                            + " else Amount(2), r = a }, q = a }\n"),
+            read("beside a conditional, in the region it is opened in",
+                    "let run (a, t) = Box { p = Pair { l = if a.value > 3 then Amount(1)"
+                            + " else Amount(2), r = $A }, q = a }\n"),
+            read("in a branch of that conditional",
+                    "let run (a, t) = Box { p = Pair { l = if a.value > 3 then Amount($A.value)"
+                            + " else Amount(2), r = a }, q = a }\n"),
+            read("in the condition of a conditional an arm stands over", """
+                    let run (a, t) = Box
+                        { p = Pair
+                                { l = match t with
+                                        | Lo -> if $A.value > 3 then Amount(1) else Amount(2)
+                                        | Hi -> Amount(9)
+                                , r = a
+                                }
+                        , q = a
+                        }
+                    """),
+            read("in a branch of a conditional an arm stands over", """
+                    let run (a, t) = Box
+                        { p = Pair
+                                { l = match t with
+                                        | Lo -> if a.value > 3 then Amount($A.value) else Amount(2)
+                                        | Hi -> Amount(9)
+                                , r = a
+                                }
+                        , q = a
+                        }
+                    """),
+            read("in an arm, with no conditional anywhere", """
+                    let run (a, t) = Box
+                        { p = match t with
+                                | Lo -> Pair { l = $A, r = a }
+                                | Hi -> Pair { l = Amount(9), r = a }
+                        , q = a
+                        }
+                    """),
+            readTwice("in an arm standing under a conditional", """
+                    let run (a, t) = Box
+                        { p = match t with
+                                | Lo -> Pair { l = $A, r = a }
+                                | Hi -> Pair { l = Amount(9), r = a }
+                        , q = if a.value > 3 then Amount(1) else Amount(2)
+                        }
+                    """),
+            readTwice("in an arm standing under a conditional written in that arm", """
+                    let run (a, t) = Box
+                        { p = match t with
+                                | Lo -> Pair { l = if a.value > 3 then Amount(1) else Amount(2)
+                                             , r = $A }
+                                | Hi -> Pair { l = Amount(9), r = a }
+                        , q = a
+                        }
+                    """));
+
+    /** Every answer seeded while compiling {@code source}, one entry per seeding. */
     private static List<Core> seededIn(String source) {
         List<Core> seeded = Collections.synchronizedList(new ArrayList<>());
         PathEngine.SEEDED = seeded;
@@ -72,169 +171,64 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
         return List.copyOf(seeded);
     }
 
-    /**
-     * A construction given a helper call in one field and an answer in another. {@code HelperInliner}
-     * writes the call out as bindings around the helper's body, so the first field holds a binding
-     * standing inside a value — which the walk enters by putting the body where the binding was and
-     * reading the whole expression from there. The answer in the second field is standing beside it,
-     * and was read where the region was entered.
-     */
-    private static String beside(int helpers, int answers) {
-        StringBuilder left = new StringBuilder("a");
-        for (int i = 0; i < helpers; i++) {
-            left.insert(0, "bump(").append(")");
-        }
-        StringBuilder right = new StringBuilder("a");
-        for (int i = 0; i < answers; i++) {
-            right.insert(0, "step(").append(")");
-        }
-        return """
-                module demo exposing ( Amount, Pair, step, run )
-
-                data Amount = Int
-                    invariant value >= 0
-
-                data Pair = { l: Amount, r: Amount }
-
-                behavior step : (a: Amount) -> Amount
-                    constructs Amount
-
-                let step (a) = Amount(a.value + 1)
-
-                let bump (x: Amount): Amount = Amount(x.value + 1)
-
-                behavior run : (a: Amount) -> Pair
-                    constructs Pair, Amount
-
-                let run (a) = Pair { l = %s, r = %s }
-                """.formatted(left, right);
-    }
-
-    /** Every answer seeded while compiling {@code source} is a distinct one, and there are
-     * {@code expected} of them. */
-    private static void seededOnce(int expected, String source, String what) {
+    /** {@code answers} distinct answers were seeded over {@code source}, each of them
+     * {@code readings} times. */
+    private static void seeded(int answers, int readings, String source, String what) {
         List<Core> seeded = seededIn(source);
         Map<Core, Boolean> distinct = new IdentityHashMap<>();
         seeded.forEach(answer -> distinct.put(answer, true));
-        assertEquals(expected, distinct.size(), "answers seeded over " + what);
-        assertEquals(distinct.size(), seeded.size(), "an answer was seeded twice over " + what);
+        assertEquals(answers, distinct.size(), "answers seeded over " + what);
+        assertEquals(answers * readings, seeded.size(),
+                "seedings of " + answers + " answers over " + what);
     }
 
+    /**
+     * Where an answer stands does not decide how often it is read, and how many readings of its
+     * region there are does.
+     *
+     * <p>Read against a growing number of answers, so what is held is that the seedings follow the
+     * answers one for one: a body of one answer read twice and a body of two read once are the same
+     * two seedings, and only the slope tells them apart.
+     */
     @Test
-    void anAnswerBesideAnEnteredBindingIsNotReadAgain() {
-        for (int helpers : List.of(1, 2, 3)) {
+    void anAnswerIsReadOncePerReadingOfTheRegionItStandsIn() {
+        for (Place place : PLACES) {
             for (int answers : List.of(1, 2, 4)) {
-                seededOnce(answers, beside(helpers, answers),
-                        answers + " answers beside " + helpers + " expanded helper calls");
+                seeded(answers, place.readings(),
+                        DECLARATIONS + place.body().replace("$A", answers(answers)),
+                        answers + " answers " + place.what());
             }
         }
     }
 
     /**
-     * A conditional in one field, and answers standing beside it in another. A conditional given to
-     * a value is one of its two branches, so the walk reads the expression once with each branch put
-     * where the conditional stood — two readings of the branch, and one of everything else.
+     * A body whose whole of it is one region: {@code depth} calls nested inside one another, with no
+     * branch, no block and no binding between them to end the reading early.
+     *
+     * <p>Beside the places above rather than one of them, because it holds the other half. They vary
+     * where an answer stands; this varies how far the reading runs to reach it, which is what came
+     * out quadratic when every node standing over an answer read it again.
      */
-    private static String besideAConditional(int answers) {
-        StringBuilder right = new StringBuilder("a");
-        for (int i = 0; i < answers; i++) {
-            right.insert(0, "step(").append(")");
-        }
-        return """
-                module demo exposing ( Amount, Pair, step, run )
-
-                data Amount = Int
-                    invariant value >= 0
-
-                data Pair = { l: Amount, r: Amount }
-
-                behavior step : (a: Amount) -> Amount
-                    constructs Amount
-
-                let step (a) = Amount(a.value + 1)
-
-                behavior run : (a: Amount) -> Pair
-                    constructs Pair, Amount
-
-                let run (a) = Pair { l = if a.value > 3 then Amount(1) else Amount(2), r = %s }
-                """.formatted(right);
-    }
-
     @Test
-    void anAnswerBesideAnOpenedConditionalIsNotReadAgain() {
-        for (int answers : List.of(1, 2, 4)) {
-            seededOnce(answers, besideAConditional(answers),
-                    answers + " answers beside a conditional in a value");
-        }
-    }
-
-    /**
-     * Where a conditional is, and where the answer stands relative to it. The walk opens a
-     * conditional a value is handed by reading the expression once with each branch put where it
-     * stood, so every one of these is a place the same answer could be read twice.
-     */
-    private static final String SUM = """
-            module demo exposing ( Amount, Pair, Tag, step, run )
-
-            data Amount = Int
-                invariant value >= 0
-
-            data Pair = { l: Amount, r: Amount }
-
-            data Tag = Lo | Hi
-
-            behavior step : (a: Amount) -> Amount
-                constructs Amount
-
-            let step (a) = Amount(a.value + 1)
-
-            behavior run : (a: Amount, t: Tag) -> Pair
-                constructs Pair, Amount
-
-            """;
-
-    @Test
-    void anAnswerAConditionalIsDecidedByIsNotReadAgain() {
-        seededOnce(1, SUM + """
-                let run (a, t) = Pair
-                    { l = if step(a).value > 3 then Amount(1) else Amount(2)
-                    , r = a
-                    }
-                """, "an answer in the condition of a conditional in a value");
-    }
-
-    @Test
-    void anAnswerPastWhereTheReadingStoppedIsReadByTheRegionThatOwnsIt() {
-        seededOnce(1, SUM + """
-                let run (a, t) = Pair
-                    { l = match t with
-                            | Lo -> if step(a).value > 3 then Amount(1) else Amount(2)
-                            | Hi -> Amount(9)
-                    , r = a
-                    }
-                """, "an answer in a condition an arm stands over");
-        seededOnce(1, SUM + """
-                let run (a, t) = Pair
-                    { l = match t with
-                            | Lo -> if a.value > 3 then Amount(1) else Amount(step(a).value)
-                            | Hi -> Amount(9)
-                    , r = a
-                    }
-                """, "an answer in a branch an arm stands over");
-        seededOnce(1, SUM + """
-                let run (a, t) = Pair
-                    { l = match t with
-                            | Lo -> if a.value > 3 then Amount(1) else Amount(2)
-                            | Hi -> Amount(9)
-                    , r = step(a)
-                    }
-                """, "an answer beside a conditional an arm stands over");
-    }
-
-    @Test
-    void aCallNestedInsideAnotherIsSeededOnce() {
+    void anAnswerIsReadOnceHoweverFarTheReadingRunsToReachIt() {
         for (int depth : List.of(1, 2, 4, 8, 16)) {
-            seededOnce(depth, nested(depth), "a body of " + depth + " nested calls");
+            String source = """
+                    module demo exposing ( Amount, step, run )
+
+                    data Amount = Int
+                        invariant value >= 0
+
+                    behavior step : (a: Amount) -> Amount
+                        constructs Amount
+
+                    let step (a) = Amount(a.value + 1)
+
+                    behavior run : (a: Amount) -> Amount
+                        constructs Amount
+
+                    let run (a) = Amount(%s.value + 1)
+                    """.formatted(answers(depth));
+            seeded(depth, 1, source, "a body of " + depth + " nested calls");
         }
     }
 }
