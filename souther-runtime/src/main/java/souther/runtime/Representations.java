@@ -14,8 +14,9 @@ import java.util.Map;
 /**
  * The order a boundary writes a collection's members in, and it is the order of their <em>external
  * representations</em> — not of the Souther values behind them. A {@code Set}'s element is only
- * required to answer equality, so most of them have no ordering at all ({@code TypeOps.isOrdered}
- * gives one to five primitives and nothing else); ordering by what is written instead is defined for
+ * required to answer equality, so most of them have no ordering at all (the compiler's
+ * {@code Ordering} finds one for seven primitives, an enumeration and a newtype over either, and for
+ * nothing else); ordering by what is written instead is defined for
  * every member a boundary can carry, because having an external representation is what being a
  * boundary type means.
  *

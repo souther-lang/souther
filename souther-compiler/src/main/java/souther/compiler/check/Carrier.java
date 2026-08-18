@@ -160,19 +160,25 @@ public sealed interface Carrier {
                 case BOOL, RAW -> null;
             };
         }
-        // The enumeration itself, and not an order a value of it can be compared on. Which order
-        // two operands are comparable by is a wider question and has its own answer
-        // ({@link TypeOps#comparisonEnumeration}): a case and a union of cases are both comparable
-        // on their sum's order without ranging over it. Answered with that wider order, a position
-        // declared as one case took the whole enumeration's counts, and the line drawn on it asked
-        // for a row at a value the position cannot hold.
-        if (!(base instanceof Type.Ref ref)
-                || !(symbols.declarations().declaration(ref.name().key()) instanceof Hir.SumData sum)
-                || !TypeOps.isUnitOnlySum(base, symbols)) {
+        // Which order a value of this type is compared on is {@link Ordering}'s, and this asks it
+        // rather than deciding what an enumeration is a second time. What is left here is the one
+        // thing a carrier asks that an order does not: whether the position's values range over the
+        // whole of it. A case and a union of cases are comparable on their sum's order without
+        // ranging over it, and a position declared as one case, given the sum's counts, was asked
+        // for a row at a value it cannot hold.
+        if (!(Ordering.of(type, symbols) instanceof Ordering how)
+                || !(how.opened() instanceof Ordering.Places places)
+                || !(base instanceof Type.Ref ref)
+                || !ref.name().equals(places.enumeration())) {
+            return null;
+        }
+        // The cases in the order they are declared, which is the order itself and not a set. The
+        // declaration is read for that list alone: whether this is an enumeration was settled above.
+        if (!(symbols.declarations().declaration(places.enumeration().key()) instanceof Hir.SumData sum)) {
             return null;
         }
         List<TypeSymbol> cases = TypeOps.leafCases(sum, symbols);
-        return cases.isEmpty() ? null : new Ordinal(ref.name(), cases);
+        return cases.isEmpty() ? null : new Ordinal(places.enumeration(), cases);
     }
 
     /** How the counts on this carrier are spaced, which is what decides whether a strict bound has a

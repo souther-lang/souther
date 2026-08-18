@@ -1,8 +1,9 @@
 # ADR-0047: A single-value newtype is compared by the value it wraps
 
-Status: Accepted. Amended twice — arithmetic, deferred at the time of this decision, was added later
-(see the "Arithmetic" paragraph below and spec §newtype-arithmetic / §invariant-discharge), and the
-sort family was brought onto the same reading (see "Sorting"). The ordered primitives are
+Status: Accepted. Amended three times — arithmetic, deferred at the time of this decision, was added
+later (see the "Arithmetic" paragraph below and spec §newtype-arithmetic / §invariant-discharge), the
+sort family was brought onto the same reading (see "Sorting"), and the ordered set the rule composes
+with grew an enumeration (see "What the wrapped type may be"). The ordered primitives are
 eight since ADR-0103, not the five this reasons about.
 
 ## Context
@@ -61,6 +62,28 @@ domain sense. **Arithmetic was added subsequently**, resolving those questions:
 
 See spec §newtype-arithmetic. The re-wrap/invariant question is answered by the invariant-discharge
 check, and the operator question by "dimension-preserving only".
+
+## What the wrapped type may be
+
+The decision says the wrapped type must be ordered and lists which types those are, and the list is
+of primitives because those were the ordered types when this was written. ADR-0069 then made an
+enumeration ordered, by the order its cases are declared in. Nothing was decided about the two
+together, and the compiler answered both ways: `data StageN = Stage` was measured on `Stage`'s
+declaration order and generated as `Comparable<StageN>`, while `StageN < StageN` did not typecheck
+and `sort` would not take a list of them (issue #856).
+
+**The rule is `Ordered(Newtype<T>) = Ordered(T)`, and `T` is whatever is ordered at the time.** The
+list in the decision above is the ordered set as it stood, not a second condition on top of being
+ordered — so a newtype over an enumeration is ordered, and nothing had to be decided to get that
+answer. Excepting the enumeration would have been the new decision, and there is no reason for one:
+the wrapped value has an order and the name over it does not take that away.
+
+Two things follow that the primitive cases did not raise. The order of an enumeration lives on the
+sum rather than on the case value, because one unit data may be a case of two sums (ADR-0069), so a
+newtype over a bare *case* has no order to carry either and is refused; a newtype over the *sum*
+names one enumeration and is ordered by it. And the generated `Comparable` cannot delegate to the
+wrapped value's own `compareTo`, there being none — it reads the sum's declaration order, which is
+the wrapper being the place a Java reader gets an ordering the case values do not have.
 
 ## Sorting
 

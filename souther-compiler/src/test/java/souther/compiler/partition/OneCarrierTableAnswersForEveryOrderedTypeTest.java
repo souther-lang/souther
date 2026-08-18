@@ -217,9 +217,10 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             let guardTextBuilt (x) = { guard x < TextN("2026-08") else Ok
                 No }
 
-            // No `guardStageBuilt`. A newtype over an enumeration is not comparable against
-            // itself — `StageN < StageN` is refused where it is written (E1319) — so the form does
-            // not exist to measure. The wrapped row is how such a position is compared.
+            behavior guardStageBuilt : (x: StageN) -> Verdict
+                constructs Ok, No, StageN, Qualified
+            let guardStageBuilt (x) = { guard x < StageN(Qualified) else Ok
+                No }
 
             behavior boundWhole  : (x: WholeI)  -> Ok
                 constructs Ok
@@ -352,6 +353,10 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardMomentBuilt", read(2));
         expected.put("guardTimeBuilt", read(2));
         expected.put("guardNanoBuilt", read(2));
+        // The eighth built row. It could not be written while a newtype over an enumeration was
+        // measured here and refused by `<`, and the gap was the last cell where a name changed what
+        // a rule means (issue #856). It answers what the bare and the wrapped rows answer.
+        expected.put("guardStageBuilt", readBesideItsClasses(2));
         expected.put("guardTextBuilt", read(1));
 
         assertEquals(expected, measured(expected.keySet()));

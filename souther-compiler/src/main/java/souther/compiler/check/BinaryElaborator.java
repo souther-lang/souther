@@ -188,22 +188,34 @@ public final class BinaryElaborator {
                 || (e instanceof Hir.Neg n && isLiteralExpr(n.operand()));
     }
 
-    /** Whether {@code <}/{@code <=}/{@code >}/{@code >=} may compare the operands: both must reduce to
-     * the same ordered base, and be either the same nominal type or a newtype paired with a bare
-     * literal of its base (so {@code 金額 <= 金額} and {@code 金額 <= 100} pass, {@code 金額 <= 数量}
-     * and {@code 金額 <= (Int variable)} do not). */
+    /**
+     * Whether {@code <}/{@code <=}/{@code >}/{@code >=} may compare the operands.
+     *
+     * <p>Three ways, and every one of them is asked of the operands <em>as written</em>. That is the
+     * rule and not an implementation detail: the nominal boundary is the type, so {@code data
+     * StageA = Stage} and {@code data StageB = Stage} open to one order and are still not comparable
+     * (ADR-0047). A reading that reduced both sides first and then asked what orders them would
+     * admit that pair, which is why {@link Ordering#ofComparison} — the reading that does reduce
+     * first — is the backend's and says so.
+     */
     static boolean orderedComparable(Type lt, Type rt, Hir.Expr le, Hir.Expr re,
                                              Symbols symbols) {
-        Type lb = TypeOps.base(lt, symbols);
-        if (!TypeOps.isOrdered(lb) || !lb.equals(TypeOps.base(rt, symbols))) {
-            // An enumeration is ordered by its declaration, and a case value is a value of its sum
-            // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
-            return TypeOps.comparisonEnumeration(lt, rt, symbols) != null;
-        }
+        // Two of the same type, where that type has an order: 金額 <= 金額, Stage <= Stage, and
+        // StageN <= StageN, whose order is the enumeration it wraps (ADR-0047 over ADR-0069).
         if (lt.equals(rt)) {
+            return TypeOps.supportsOrdering(lt, symbols);
+        }
+        // Two values of one enumeration that are not one type: a case value is a value of its sum
+        // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
+        if (TypeOps.comparisonEnumeration(lt, rt, symbols) != null) {
             return true;
         }
-        return literalPairsNewtype(lt, rt, le, re, symbols);
+        // A newtype and a source literal of what it wraps: 金額 <= 100, but not 金額 <= n for an
+        // Int variable, and not 金額 <= 数量. Ordering asks in addition that the wrapped value be
+        // ordered, which the equality rule this shares does not.
+        return TypeOps.supportsOrdering(lt, symbols)
+                && TypeOps.base(lt, symbols).equals(TypeOps.base(rt, symbols))
+                && literalPairsNewtype(lt, rt, le, re, symbols);
     }
 
     /** Whether {@code ==}/{@code /=} may pair a newtype with a bare literal of its base type (the
