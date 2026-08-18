@@ -1216,7 +1216,7 @@ final class Terms {
     Denotes denotationOf(Core e, Denotations at) {
         Core written = writtenValue(e, at);
         if (written != null) {
-            return new Denotes.Written(bodyKey(written, at), written);
+            return new Denotes.Written(bodyKey(written, at));
         }
         Location located = locationOf(e, at);
         if (located != null) {
@@ -1230,11 +1230,27 @@ final class Terms {
         return new Denotes.Computed(term);
     }
 
-    /** What {@code e} is written as, where it is a written value or a name given one — and
-     * {@code null} where it is computed from anything. */
+    /**
+     * What {@code e} is written as, where it is a written value or a name given one — and
+     * {@code null} where it is computed from anything.
+     *
+     * <p>Found by following what a name was given, however many names deep, and asked of what the
+     * following ends at. A name is what it was given whatever kind of thing that is, so this is one
+     * rule and not one per kind of binding: a {@code match} arm opening a value written into the
+     * source opens that written value, for the same reason a {@code let} given it does.
+     *
+     * <p>{@code seen} ends a chain that has no end. Nothing the walk records is one — a binding is
+     * entered under what stood before it — but a reading that follows what it is handed says what it
+     * does with a chain it was handed, rather than leaving it to whoever built it.
+     */
     static Core writtenValue(Core e, Denotations at) {
+        return writtenValue(e, at, new HashSet<>());
+    }
+
+    private static Core writtenValue(Core e, Denotations at, Set<BindingId> seen) {
         if (e instanceof Core.Read r) {
-            return at.of(r.binding()) instanceof Denotes.Written w ? w.value() : null;
+            Core given = seen.add(r.binding()) ? at.valueOf(r.binding()) : null;
+            return given == null || given == e ? null : writtenValue(given, at, seen);
         }
         return isWritten(e) ? e : null;
     }

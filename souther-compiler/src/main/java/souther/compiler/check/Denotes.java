@@ -30,11 +30,16 @@ sealed interface Denotes {
     record Computed(Term term) implements Denotes {}
 
     /**
-     * A value written out, kept as what was written. There is no guard an author could add about
-     * it, so it is never named at a construction; what it is, though, still has to travel with
-     * the name, or the same text would fold where it is written and not where it is bound.
+     * A value written out. There is no guard an author could add about it, so it is never named at a
+     * construction.
+     *
+     * <p>What was written is not held here. A name is what it was given, and the walk records that
+     * one binding at a time, so the text is however many names away it was written and following
+     * what a name was given reaches it ({@link Terms#writtenValue}). Held here as well, the same
+     * fact was written down twice — once as what the binding stands for and once as the text a
+     * reading of it folds — and the two had to be kept agreeing wherever a binding is entered.
      */
-    record Written(Term term, Core value) implements Denotes {}
+    record Written(Term term) implements Denotes {}
 
     /**
      * Nothing this check can name.
