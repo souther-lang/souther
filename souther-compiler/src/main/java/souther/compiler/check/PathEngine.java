@@ -173,8 +173,12 @@ final class PathEngine {
             return new Entered(k, at);
         }
         Denotes what = terms.denotationOf(li.value(), at);
+        // What the name is about is what it was given is about. Where even the identity reading has
+        // nothing to name — an expression answering nothing at all — the name is what there is, and
+        // it is one value however many times it is read.
+        FactSubject about = terms.subjectOf(li.value(), at);
         return new Entered(k, at.binding(li.binder().id(), li.value(),
-                terms.subjectOf(li.value(), at), what));
+                about != null ? about : terms.placeSubject(li.binder().id()), what));
     }
 
     /**
@@ -194,9 +198,9 @@ final class PathEngine {
      * What a {@code match} arm's body is read under.
      *
      * <p>A sum has no fields of its own, so the scrutinee is not a location any clause could have
-     * named — the case's value names only itself. What the arm binds is a value of the case's type,
-     * reached only here, so it is a location this arm introduces and it carries what that type
-     * guarantees.
+     * named — the case's value names only itself. What the arm binds is a place, which is what lets
+     * a clause be read against it and what makes it carry what its type guarantees. Which value it
+     * is is a second answer and comes from what was opened ({@link #opening}).
      *
      * <p>An arm that binds nothing introduces nothing, and its body is read as the arm's own. Held
      * here rather than at each walk: two readings deciding it apart is two chances to forget, and
@@ -231,29 +235,39 @@ final class PathEngine {
      */
     private Entered opening(Core.Case arm, Core scrutinee, Known k, Denotations at) {
         Core.Read root = Terms.read(arm.binding(), arm.bindType(), arm.pos());
-        FactSubject opened = opened(arm, scrutinee, at);
-        Denotations next = at.location(root.binding(),
-                opened != null ? opened : terms.placeSubject(root.binding()));
+        Opens opens = opens(arm, scrutinee, at);
+        Denotations next = opens == null
+                ? at.location(root.binding(), terms.placeSubject(root.binding()))
+                : at.opened(root.binding(), opens.value(), opens.subject());
         return new Entered(seedAt(root, k, next, 0), next);
     }
 
+    /** What an arm's binding stands for: the value the walk reached where the two are one value, and
+     * the subject facts about it are filed under. Taken together because they are one answer about
+     * one binding, and handing them over apart is how one of them was left behind. */
+    private record Opens(Core value, FactSubject subject) {}
+
     /**
-     * Which value the arm's binding is, worked out from the one it opened, or null where nothing
-     * here says.
+     * What the arm's binding opens, or null where nothing here says.
      *
      * <p>Asked of what the pattern binds and not of what the arm looks like. A case whose carrier is
-     * the value binds that value; an optional's present carrier binds what stands under it, which is
-     * a different value and is named as what that optional holds; an absent carrier binds nothing.
-     * That is the whole of it — {@link Refinement} has three answers and each one settles this.
+     * the value binds that value, so the binding stands for the scrutinee and is about it. An
+     * optional's present carrier binds what stands under it: a different value, named as what that
+     * optional holds, and one no expression here is — so it is about something while standing for
+     * nothing. An absent carrier binds nothing at all. That is the whole of it — {@link Refinement}
+     * has three answers and each one settles this.
      */
-    private FactSubject opened(Core.Case arm, Core scrutinee, Denotations at) {
+    private Opens opens(Core.Case arm, Core scrutinee, Denotations at) {
         if (scrutinee == null) {
             return null;
         }
         FactSubject of = terms.subjectOf(scrutinee, at);
+        if (of == null) {
+            return null;
+        }
         return switch (arm.pattern().binding()) {
-            case Refinement.Direct ignored -> of;
-            case Refinement.OptionPresent ignored -> terms.heldBy(of);
+            case Refinement.Direct ignored -> new Opens(scrutinee, of);
+            case Refinement.OptionPresent ignored -> new Opens(null, terms.heldBy(of));
             case Refinement.OptionAbsent ignored -> null;
         };
     }

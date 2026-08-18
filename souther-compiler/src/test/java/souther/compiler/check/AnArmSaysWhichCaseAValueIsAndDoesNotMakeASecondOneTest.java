@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ReachName;
@@ -11,15 +12,19 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
+import souther.compiler.check.BehaviorContract.Guard;
+import souther.compiler.check.BehaviorContract.RuleId;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Opening a value says which case it is. It does not produce a second value.
@@ -42,6 +47,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     private static final ValueName.Behavior FIND = new ValueName.Behavior("demo", "findIt");
     private static final TypeSymbol FOUND = TypeSymbols.declared(new TypeKey("demo", "Found"));
     private static final TypeSymbol MISSING = TypeSymbols.declared(new TypeKey("demo", "Missing"));
+
+    private static final TypeSymbol AN_INT = TypeSymbol.primitive("Int");
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
@@ -99,7 +106,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
      * holds — not a value the arm made up. */
     @Test
     void whatAnOptionalHoldsIsWhatThatOptionalHolds() {
-        Core answer = answer();
+        Core answer = optionalAnswer();
         Hir.Binder x = binders.binder("x", POS);
 
         PathEngine.Entered in = engine.enteringArm(
@@ -117,7 +124,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
      * level up. Left alone, an optional would have kept the defect its own answer was given. */
     @Test
     void twoArmsOverOneOptionalOpenOneValue() {
-        Core answer = answer();
+        Core answer = optionalAnswer();
         Hir.Binder first = binders.binder("a", POS);
         Hir.Binder second = binders.binder("b", POS);
 
@@ -160,6 +167,64 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         assertEquals(engine.terms().placeSubject(x.id()), in.at().subject(x.id()));
     }
 
+    /** The arm's name stands for the value it opened, and not for nothing. A reader following what a
+     * name was given has to reach whatever produced it. */
+    @Test
+    void anArmsNameStandsForTheValueItOpened() {
+        Core answer = answer();
+        Hir.Binder x = binders.binder("x", POS);
+
+        PathEngine.Entered in = engine.enteringArm(
+                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                answer, Known.top(), Denotations.none());
+
+        assertEquals(answer, in.at().valueOf(x.id()),
+                "what the arm opened is what its name was given");
+    }
+
+    /**
+     * A {@code match} over what an outer arm bound finds the call underneath it.
+     *
+     * <p>The whole of why the name has to stand for the value and not only be about it: an arm
+     * naming several cases says only that the answer is one of them, so what a rule states of one
+     * case is taken in at the arm that names that case — which is a second {@code match}, over a
+     * name, and the rule is found by following what that name was given.
+     */
+    @Test
+    void aRuleAboutACaseReachesAMatchOverWhatAnOuterArmBound() {
+        Core answer = numericAnswer();
+        Hir.Binder x = binders.binder("x", POS);
+        Hir.Binder y = binders.binder("y", POS);
+        PathEngine reading = new PathEngine(Symbols.none(), Map.of(),
+                Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE);
+
+        Denotations outer = reading.enteringArm(
+                arm(new Core.ResolvedPattern.AnyOf(
+                        List.of(CaseSelector.direct(AN_INT), CaseSelector.direct(MISSING)),
+                        answer.type()), x),
+                answer, Known.top(), Denotations.none()).at();
+        Core.Case inner = arm(new Core.ResolvedPattern.Single(CaseSelector.direct(AN_INT)), y);
+        PathEngine.Entered in = reading.enteringArm(inner,
+                new Core.Read("x", x.id(), answer.type(), POS), Known.top(), outer);
+
+        FactSubject opened = in.at().subject(y.id());
+        assertTrue(in.known().speaksOf(opened),
+                "the rule the behavior stated about its Int case was taken in here");
+    }
+
+    /** {@code ensures | Int v -> v > 0}, as the analysis holds it. */
+    private static StatedContract statesThatTheIntIsPositive() {
+        BindingId value = new Hir.Binders(new BindingOwner.OfValue("demo", "findIt"))
+                .binder("v", POS).id();
+        Core states = new Core.Binary(Hir.BinOp.GT,
+                new Core.Read("v", value, Type.INT, POS), new Core.Int(0, Type.INT, POS),
+                souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, POS);
+        return new StatedContract(FIND, List.of(), Type.INT,
+                List.of(new StatedContract.StatedRule(new RuleId(FIND, 0, 0, AN_INT),
+                        new Guard.Case(CaseSelector.direct(AN_INT)), value, Optional.empty(),
+                        List.of(new StatedContract.Conjunct(POS, states)))));
+    }
+
     private Core.Case arm(Core.ResolvedPattern pattern, Hir.Binder binder) {
         return new Core.Case(pattern, binder, new Core.Read(binder.name(), binder.id(),
                 pattern.bindType(), POS), POS);
@@ -168,5 +233,17 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     private static Core answer() {
         return new Core.Call(ReachName.of(FIND, "findIt", "demo"), FIND, List.of(),
                 Type.ref(FOUND), POS);
+    }
+
+    /** The same call, answering an optional — what an arm naming a present carrier is written over. */
+    private static Core optionalAnswer() {
+        return new Core.Call(ReachName.of(FIND, "findIt", "demo"), FIND, List.of(),
+                Type.option(Type.INT), POS);
+    }
+
+    /** A call answering {@code Int | Missing}, which an arm may name either case of. */
+    private static Core numericAnswer() {
+        return new Core.Call(ReachName.of(FIND, "findIt", "demo"), FIND, List.of(),
+                Type.union(new java.util.LinkedHashSet<>(List.of(AN_INT, MISSING))), POS);
     }
 }
