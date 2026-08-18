@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every word the shipped schema allows is one somebody accounted for.
  *
- * <p>Every enumerated field of {@code adequacy-schema-1.json} is a second spelling of a Java enum.
+ * <p>Every enumerated field of {@code adequacy-schema-2.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
  * one moved: `ROW_TIMED_OUT` became `ROW_UNDECIDED` when a row stopped being held to a clock, the
  * rename was right, and the schema went on promising a word that had not been emitted since.
@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySchemaWordIsAccountedForTest {
 
-    private static final String SCHEMA = "/souther/adequacy-schema-1.json";
+    private static final String SCHEMA = "/souther/adequacy-schema-2.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -172,6 +172,11 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "branch", "properties", "unreached", "items", "properties",
                             "construct"),
                     souther.compiler.types.CoverageConstruct.class, constructWords(), Set.of()),
+            // What a rule of the model raises. Only the questions this compiler issues today: a
+            // word arrives here in the same change that starts raising it, so the enum and the
+            // schema move together or the compile stops.
+            new Vocabulary("coverageQuestion", List.of("$defs", "coverageQuestion"),
+                    souther.compiler.check.CoverageObligation.class),
             new Vocabulary("partition.axesMeasure.reason",
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
@@ -284,11 +289,12 @@ class EverySchemaWordIsAccountedForTest {
     @Test
     void theOtherFieldWithNoEnumBehindItIsWrittenFromTheArmsOfAReading() {
         assertEquals(Set.of(AdequacyReport.readingWord(
-                        new PartitionEvidence.AxisCoverage.Reading.InFull()),
+                        new PartitionEvidence.AxisCoverage.Reading.Answered()),
                         AdequacyReport.readingWord(
-                                new PartitionEvidence.AxisCoverage.Reading.InPart(
-                                        souther.compiler.partition.UndividedPosition.Reason
-                                                .DEPTH_LIMIT))),
+                                new PartitionEvidence.AxisCoverage.Reading.Standing(List.of(
+                                        new PartitionEvidence.AxisCoverage.Unanswered("r",
+                                                souther.compiler.check.CoverageObligation
+                                                        .ADMITTED_VALUES))))),
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "axes", "items",
                         "properties", "read", "properties", "extent")));
     }
@@ -444,7 +450,7 @@ class EverySchemaWordIsAccountedForTest {
 
     private static JsonNode schema() {
         try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
-            assertNotNull(in, "adequacy-schema-1.json ships beside the compiler");
+            assertNotNull(in, "adequacy-schema-2.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
             throw new AssertionError(e);

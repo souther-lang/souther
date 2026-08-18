@@ -11,9 +11,9 @@ import java.util.Objects;
  * {@code Set<String>} that came out empty reads as "no clause", which is the one thing it never
  * means.
  */
-record ClauseName(String value) {
+public record ClauseName(String value) {
 
-    ClauseName {
+    public ClauseName {
         Objects.requireNonNull(value, "a clause name is the name that was written");
     }
 

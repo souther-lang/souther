@@ -394,8 +394,8 @@ public final class InvariantChecker {
      *                 that is not its own
      */
     record Seeded(ConstraintState constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
-                  Map<String, FactSubject> held, Reading reading, boolean everyClauseRead,
-                  Set<String> notGathered) {
+                  Map<String, FactSubject> held, Reading reading, ReadingEvidence took,
+                  boolean everyClauseRead, Set<String> notGathered) {
 
         public Seeded {
             notGathered = Set.copyOf(notGathered);
@@ -405,7 +405,8 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), Map.of()), false, Set.of(FieldDomains.THE_VALUE));
+                    new Reading(List.of(), Map.of(), Map.of()), new ReadingEvidence(), false,
+                    Set.of(FieldDomains.THE_VALUE));
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -494,11 +495,13 @@ public final class InvariantChecker {
         // than about any one reading, and it is recorded here where the handing over happens.
         Set<String> notGathered = new LinkedHashSet<>();
         List<Written> written = new ArrayList<>();
+        ReadingEvidence took = new ReadingEvidence();
         Gathering gathering = new Gathering() {
 
             @Override
-            public void gathered(TypeSymbol from, Core clause) {
+            public void gathered(Clause.Ref from, Core clause, Set<FactSubject> spokenFor) {
                 written.add(new Written(from, clause));
+                spokenFor.forEach(spoken -> took.record(from, spoken));
             }
 
             @Override
@@ -514,16 +517,22 @@ public final class InvariantChecker {
                 // this declaration can name any position of it.
                 gathering.missed(FieldDomains.THE_VALUE);
             }
-            for (Hir.InvariantClause clause :
-                    own ? c.clauses.of(named, data) : List.<Hir.InvariantClause>of()) {
-                Core stated = c.clauses.typed(clause.expr(), named, data);
+            for (TypeOps.Declared declared :
+                    own ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
+                Core stated = c.clauses.typed(declared.clause().expr(), named, data);
                 if (stated == null) {
                     read = false;
                     notGathered.add(FieldDomains.THE_VALUE);
                     continue;
                 }
-                written.add(new Written(named, stated));
+                written.add(new Written(Clause.Ref.of(declared), stated));
                 Predicates.Owed owed = c.predicates.obligations(stated, k, at, false);
+                // And the reading that builds the numeric constraints, said by what it produced.
+                // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
+                // position itself; `value * value >= 4` comes back about an atom standing for the
+                // product, which is not the position and is not a reading of it.
+                Predicates.subjectsIn(owed)
+                        .forEach(spoken -> took.record(Clause.Ref.of(declared), spoken));
                 read &= !owed.unreadable();
                 k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
             }
@@ -565,13 +574,26 @@ public final class InvariantChecker {
         // And which values each position is left, off the same clauses and at the same moment. What
         // reached this value is the walk's answer and is given to both readings; what each of them
         // makes of a clause is its own, so neither can widen the other's idea of what it was handed.
-        List<Core> reaching = written.stream().map(Written::clause).toList();
         Map<FactSubject, Type> positions = positions(atoms, keys, typeAt);
         // And what the same clauses say about which values each position may hold and where each
         // position stops, off the same list at the same moment. One reading in two languages and
         // not two readings: the connectives belong to the clause, so an alternative nothing can
         // satisfy is dropped by asking the whole of what is known about it.
-        StatedByClauses stated = StatedByClauses.of(reaching, c.terms, at, positions, symbols);
+        StatedByClauses stated = StatedByClauses.top();
+        for (Written each : written) {
+            StatedByClauses one =
+                    StatedByClauses.ofOne(each.clause(), c.terms, at, positions, symbols);
+            stated = stated.meet(one);
+            // Which positions this clause reached, asked of the reading itself. Recorded per clause
+            // because that is the granularity a question has: a clause the reading of values took
+            // in whole sat beside one it could not, and the position-wide account said both had
+            // gone unread.
+            for (FactSubject position : positions.keySet()) {
+                if (one.tookIn(position)) {
+                    took.record(each.from(), position);
+                }
+            }
+        }
         ConstraintState constraints = k.constraints()
                 .taking(stated.values())
                 .taking(stated.ordered());
@@ -587,7 +609,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(constraints, atoms, keys, held, reading, read,
+        return new Seeded(constraints, atoms, keys, held, reading, took, read,
                 Set.copyOf(notGathered));
     }
 
@@ -700,13 +722,16 @@ public final class InvariantChecker {
      *
      * @param path     where the coordinate sits, read from the value these are of
      * @param measured whether the coordinate is a count taken of the position rather than its value
-     * @param from     the declaration the clause is written on, which is what names the line
+     * @param from     the clause that placed it, which is what names the line. The clause and not
+     *                 the declaration it is on: two clauses of one declaration placing an end at
+     *                 one value are two rules a row could be owed to, and held as declarations
+     *                 they came back as one
      */
-    record Direct(String path, boolean measured, TypeSymbol from, InvariantBound bound) {}
+    record Direct(String path, boolean measured, Clause.Ref from, InvariantBound bound) {}
 
-    /** One clause reaching a value, rebased onto the positions of that value, and the declaration it
-     * is written on. */
-    private record Written(TypeSymbol from, Core clause) {}
+    /** One clause reaching a value, rebased onto the positions of that value, and which clause it
+     * is. */
+    private record Written(Clause.Ref from, Core clause) {}
 
     /**
      * Told what a walk over a value gathers, as it gathers it.
@@ -719,8 +744,16 @@ public final class InvariantChecker {
      */
     interface Gathering {
 
-        /** A clause of {@code from}, rebased onto the positions of the value being read. */
-        void gathered(TypeSymbol from, Core clause);
+        /**
+         * The clause {@code from}, rebased onto the positions of the value being read.
+         *
+         * @param spokenFor the positions the reading that builds the numeric constraints took it in
+         *                  about, said by that reading. Handed over here rather than worked out
+         *                  afterwards: what a reading adopted is the reading's to say, and a caller
+         *                  deciding it from the clause's shape is guessing at another reader's
+         *                  semantics
+         */
+        void gathered(Clause.Ref from, Core clause, Set<FactSubject> spokenFor);
 
         /**
          * A rule of this value that reached no reading, either because it could not be stated or
@@ -748,8 +781,13 @@ public final class InvariantChecker {
      *
      * @param narrowers the declarations whose clauses compare each coordinate to something without
      *                  placing an end on it, outermost first
+     * @param raised    what each clause reaching this value raises, keyed on the clause. Beside the
+     *                  ends rather than derived from them: a clause that placed no end may have
+     *                  raised a question all the same, and a clause that placed one raised more than
+     *                  the line. Nothing here says whether anything answered
      */
-    record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers) {}
+    record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers,
+                   Map<Clause.Ref, Required> raised) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
@@ -770,8 +808,16 @@ public final class InvariantChecker {
         held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
         Map<String, List<TypeSymbol>> narrowers = new LinkedHashMap<>();
-        stated.forEach(each -> direct(each.clause(), each.from(), at, byName, out, narrowers));
-        return new Reading(List.copyOf(out), Map.copyOf(narrowers));
+        Map<Clause.Ref, Required> raised = new LinkedHashMap<>();
+        stated.forEach(each ->
+                direct(each.clause(), each.from(), at, byName, out, narrowers, raised));
+        return new Reading(List.copyOf(out), Map.copyOf(narrowers), Map.copyOf(raised));
+    }
+
+    /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
+    private static void raises(Map<Clause.Ref, Required> into, Clause.Ref rule,
+                               ClauseStates states) {
+        into.merge(rule, Required.ofInvariant(states), Required::and);
     }
 
     /**
@@ -783,18 +829,22 @@ public final class InvariantChecker {
      * asked once — read apart, the second would be a walk that had to agree with this one about which
      * comparisons it had already accounted for.
      */
-    private void direct(Core clause, TypeSymbol from, Denotations at,
+    private void direct(Core clause, Clause.Ref from, Denotations at,
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
-                        Map<String, List<TypeSymbol>> narrowers) {
+                        Map<String, List<TypeSymbol>> narrowers,
+                        Map<Clause.Ref, Required> raised) {
         if (!(clause instanceof Core.Binary bin)) {
+            raises(raised, from, states(clause, at, byName));
             return;
         }
         if (bin.op() == Hir.BinOp.AND) {
-            direct(bin.left(), from, at, byName, out, narrowers);
-            direct(bin.right(), from, at, byName, out, narrowers);
+            // One rule the author wrote, so what it raises is what its conjuncts raise together.
+            direct(bin.left(), from, at, byName, out, narrowers, raised);
+            direct(bin.right(), from, at, byName, out, narrowers, raised);
             return;
         }
         if (!InvariantBound.ordering(bin.op()) && bin.op() != Hir.BinOp.EQ) {
+            raises(raised, from, states(bin, at, byName));
             return;
         }
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
@@ -818,13 +868,72 @@ public final class InvariantChecker {
         InvariantBound.Read end = found == null || !InvariantBound.ordering(op)
                 ? new InvariantBound.Read.NoEnd()
                 : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
+        Coordinate about = found;
+        raises(raised, from, switch (end) {
+            // Two questions about two subjects: which values may stand at the position, and a line
+            // on whichever number the rule measured it by.
+            case InvariantBound.Read.AnEnd _ -> new ClauseStates.AnEnd(
+                    Owed.Subject.at(about.path()),
+                    new Owed.Subject(about.path(), about.measured()));
+            // A rule this read perfectly, and what it says is that no value stands here. No line
+            // follows: there is no value for a row to be written at.
+            case InvariantBound.Read.PastWhereTheOrderStops _ ->
+                    new ClauseStates.NoValueAtAll(Owed.Subject.at(about.path()));
+            case InvariantBound.Read.NoEnd _ -> states(bin, at, byName);
+        });
         if (end instanceof InvariantBound.Read.NoEnd) {
-            relating(clause, from, at, byName, narrowers);
+            // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
+            // names beside a line, and what a reader is sent to look at is the declaration holding
+            // the relation.
+            relating(clause, from.id().declaredOn(), at, byName, narrowers);
             return;
         }
         if (end instanceof InvariantBound.Read.AnEnd placed) {
             out.add(new Direct(found.path(), found.measured(), from, placed.bound()));
         }
+    }
+
+    /**
+     * What a comparison that placed no end is about.
+     *
+     * <p>Asked of the shape and not of what the reading managed. A rule relating two coordinates was
+     * read to the end — both sides were recognised — and raises no question about one position; a
+     * rule this made nothing of raises the same question every other rule about a position's values
+     * raises, and is answered or not by whichever reading could take it in.
+     */
+    private ClauseStates states(Core clause, Denotations at,
+                                Map<FactSubject, Coordinate> byName) {
+        if (Relates.twoPositions(clause, e -> {
+            FactSubject named = nameOf(e, at);
+            return named != null && byName.containsKey(named) ? named : null;
+        })) {
+            return new ClauseStates.ARelation();
+        }
+        List<Owed.Subject> found = new ArrayList<>();
+        namedIn(clause, at, byName, found);
+        return ClauseStates.SomethingElse.naming(found);
+    }
+
+    /**
+     * The positions {@code e} names, which is what a clause this made nothing of can cost.
+     *
+     * <p>It cannot cost a position it does not name: nothing here relates one position to another —
+     * that is the arm above — so a rule narrowing a position names it. The same walk
+     * {@link #relating} makes, and for the same reason: a coordinate names itself, and nothing under
+     * it is a coordinate of its own.
+     */
+    private void namedIn(Core e, Denotations at, Map<FactSubject, Coordinate> byName,
+                         List<Owed.Subject> out) {
+        FactSubject named = nameOf(e, at);
+        Coordinate here = named == null ? null : byName.get(named);
+        if (here != null) {
+            Owed.Subject where = Owed.Subject.at(here.path());
+            if (!out.contains(where)) {
+                out.add(where);
+            }
+            return;
+        }
+        Core.forEachChild(e, child -> namedIn(child, at, byName, out));
     }
 
     /**

@@ -409,7 +409,8 @@ public final class GeneratedRows {
             // Not gaps a build refuses, and a disposition is not held for one. Listed rather than
             // defaulted so that a kind added later has to be given words here.
             case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                    PARTITION_NOT_READ, PARTITION_READ_IN_PART, PARTITION_OMITTED ->
+                    PARTITION_NOT_READ, PARTITION_RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
+                            PARTITION_OMITTED ->
                     throw new IllegalStateException("not a gap a build refuses: " + gap);
         };
     }

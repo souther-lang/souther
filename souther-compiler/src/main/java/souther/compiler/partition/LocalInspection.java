@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Position;
@@ -55,7 +56,8 @@ final class LocalInspection {
         // that value can be refused, wherever in it the rule is written.
         CutEvidence drawn = cuts.isEmpty() ? new CutEvidence.None()
                 : new CutEvidence.Present(cuts, !position.everyRuleOfTheValueWasRead());
-        return new LocalPartition.Divided(classes, drawn, position.completeness());
+        return new LocalPartition.Divided(classes, drawn, position.unansweredQuestions(),
+                position.rulesNotReached());
     }
 
     /**
@@ -106,14 +108,14 @@ final class LocalInspection {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
-        cut(byValue, bounds.min(), own == null ? null : own.min(), "min", bounds.carrier(), under);
-        cut(byValue, bounds.max(), own == null ? null : own.max(), "max", bounds.carrier(), over);
+        cut(byValue, bounds.min(), own == null ? null : own.min(), bounds.carrier(), under);
+        cut(byValue, bounds.max(), own == null ? null : own.max(), bounds.carrier(), over);
         return List.copyOf(byValue.values());
     }
 
     /** One end as a cut, owed once to each rule that put it there. */
     private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
-                            String clause, Carrier carrier, List<TypeSymbol> within) {
+                            Carrier carrier, List<TypeSymbol> within) {
         if (end == null) {
             return;
         }
@@ -121,14 +123,14 @@ final class LocalInspection {
         // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
-        for (TypeSymbol from : end.from()) {
-            put(into, carrier, end.value(), from, clause, moved ? within : List.<TypeSymbol>of());
+        for (Clause.Ref from : end.from()) {
+            put(into, carrier, end.value(), from, moved ? within : List.<TypeSymbol>of());
         }
     }
 
-    private static void put(Map<String, Cut> into, Carrier carrier, Place at, TypeSymbol type,
-                            String clause, List<TypeSymbol> narrowedBy) {
-        OriginRef origin = new OriginRef.InvariantOrigin(type, clause);
+    private static void put(Map<String, Cut> into, Carrier carrier, Place at, Clause.Ref rule,
+                            List<TypeSymbol> narrowedBy) {
+        OriginRef origin = new OriginRef.InvariantOrigin(rule);
         if (!narrowedBy.isEmpty()) {
             origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
         }

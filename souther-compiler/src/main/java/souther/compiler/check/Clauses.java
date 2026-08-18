@@ -138,7 +138,7 @@ final class Clauses {
             declared++;
             Core one = statedAt(inv.clause().expr(), named, data, given);
             if (one != null) {
-                stated.add(new Stated(clauseOf(inv), one));
+                stated.add(new Stated(Clause.of(inv), one));
             }
         }
         return new StatedClauses(List.copyOf(stated), stated.size() == declared);
@@ -162,14 +162,6 @@ final class Clauses {
         /** What a reading told to leave a declaration's clauses out gets: none of them, and nothing
          * lost. */
         static final StatedClauses NONE_ASKED_FOR = new StatedClauses(List.of(), true);
-    }
-
-    /** What a diagnostic can say about the clause {@code inv} is, and what tells it apart from the
-     * declaration's others. */
-    private static Clause clauseOf(TypeOps.Declared inv) {
-        return new Clause(new Clause.Id(inv.declaredOn(), inv.ordinal()),
-                inv.clause().name().map(ClauseName::new),
-                souther.compiler.diag.DiagnosticPlace.of(inv.clause().reportedAt()));
     }
 
     /**

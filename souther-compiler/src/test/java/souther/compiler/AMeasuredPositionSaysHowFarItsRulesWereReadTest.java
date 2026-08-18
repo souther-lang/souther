@@ -86,18 +86,18 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
         assertEquals("i.assignee", axis.get("path").asText());
         assertEquals(2, axis.get("classes").size(), axis.toString());
         assertEquals("partial", axis.get("read").get("extent").asText(),
-                "the axis says how much of what its position's rules say was read");
-        // The word, and not only that there is one. What stopped this reading is that it never
-        // reached the rules behind the option — which is not a rule it read and could not use, and
-        // saying so would publish a cause this was not observed to have.
-        assertEquals("rules_not_read_at_all", axis.get("read").get("stoppedBy").asText(),
-                axis.toString());
+                "the axis says that something about its position's rules is left standing");
+        // Which of the two it is, and not only that there is one. Nothing here reached the rules
+        // behind the option — which is not a rule this read and could not use, and saying so would
+        // publish a cause this was not observed to have.
+        assertTrue(axis.get("read").get("rulesNotReached").asBoolean(), axis.toString());
+        assertFalse(axis.get("read").has("unanswered"),
+                "there is no rule to name, because nothing was seen: " + axis);
 
         String human = humanOf(MEASURED_IN_PART);
-        assertTrue(human.contains(
-                        "read in part: i.assignee (the rules written about it were not reached"),
-                "a measured position says it is read in part, which a position with no axis"
-                        + " does not: " + human);
+        assertTrue(human.contains("rules not reached: i.assignee"),
+                "a measured position says its rules were never reached, which a position with no"
+                        + " axis does not: " + human);
         assertFalse(human.contains("not read: i.assignee"),
                 "and is not said as one nothing divided: " + human);
     }
@@ -106,10 +106,10 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
     @Test
     void aPositionWhoseRulesWereReadInFullGainsNoLine() {
         String human = humanOf(READ_IN_FULL);
-        assertFalse(human.contains("read in part"), human);
 
         JsonNode read = partitionOf(READ_IN_FULL).get("axes").get(0).get("read");
         assertEquals("complete", read.get("extent").asText());
-        assertFalse(read.has("stoppedBy"), "nothing stopped it, so nothing says what did: " + read);
+        assertFalse(read.has("rulesNotReached"), "nothing was left standing: " + read);
+        assertFalse(read.has("unanswered"), "nothing was left standing: " + read);
     }
 }

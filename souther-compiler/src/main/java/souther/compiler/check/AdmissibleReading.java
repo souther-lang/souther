@@ -118,25 +118,14 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubj
     /**
      * Whether {@code e} is a comparison this reading recognised, of one position against another.
      *
-     * <p>Another, and not a position on each side. {@code value == value} has two operands and one
-     * position, and the word this is projected to says the rule relates the position to another —
-     * which the model did not write. What is true of such a rule is that this reading did not take
-     * it in, which is what every other unrecognised shape says.
+     * <p>Which shapes those are is {@link Relates}'s and not this reading's, because the check that
+     * classifies a clause for what it raises asks the same thing — and a shape counted here and not
+     * there tells an author two different things about one clause. What stays here is how this
+     * reading looks a position up.
      */
     private boolean relatesTwoPositions(Core e) {
-        if (!(e instanceof Core.Binary b) || !COMPARES.contains(b.op())) {
-            return false;
-        }
-        FactSubject left = positionIn(b.left());
-        FactSubject right = positionIn(b.right());
-        return left != null && right != null && !left.equals(right);
+        return Relates.twoPositions(e, this::positionIn);
     }
-
-    /** The comparisons a rule relating two positions is written with. Everything else is read as a
-     * form rather than as a relation, since what a call or a pattern says about the positions in it
-     * is what this reading could not work out. */
-    private static final Set<Hir.BinOp> COMPARES = Set.of(Hir.BinOp.EQ, Hir.BinOp.NE,
-            Hir.BinOp.LT, Hir.BinOp.LE, Hir.BinOp.GT, Hir.BinOp.GE);
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */

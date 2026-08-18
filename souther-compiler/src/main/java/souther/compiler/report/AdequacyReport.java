@@ -58,7 +58,7 @@ import java.util.Set;
 public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Level askedLevel,
                              MeasurementStatus status, List<ModuleReport> modules) {
 
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
 
     /**
      * Whether the rows meet what the asked measures require of them.
@@ -735,13 +735,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("      %s not read: %s (%s)%n",
                     mark(f), f.args().get(0), f.args().get(1)));
         }
-        // And a third thing, said apart from both: a position the axes did measure, on a reading
-        // that did not run to the end. The classes beside it are what the model was read to say,
-        // and a rule that went unread may yet refuse one of them — which is a different thing to
-        // act on from a position nothing established anything about.
-        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_READ_IN_PART)) {
-            out.append(String.format("      %s read in part: %s (%s)%n",
-                    mark(f), f.args().get(0), f.args().get(1)));
+        // And a third thing, said apart from both: a rule written about a position the axes did
+        // measure that nothing took in. The classes beside it are what the model was read to say,
+        // and this rule may yet refuse one of them — which is a different thing to act on from a
+        // position nothing established anything about. Named by the rule, since a position is not
+        // what an author edits.
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULES_NOT_REACHED)) {
+            out.append(String.format("      %s rules not reached: %s%n", mark(f), f.args().get(0)));
+        }
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_RULE_UNACCOUNTED)) {
+            out.append(String.format("      %s not accounted for: %s — %s %s%n",
+                    mark(f), f.args().get(1), f.args().get(2), f.args().get(0)));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      %s omitted: %s (axis limit)%n",
@@ -933,8 +937,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
         return switch (read) {
-            case PartitionEvidence.AxisCoverage.Reading.InFull _ -> "complete";
-            case PartitionEvidence.AxisCoverage.Reading.InPart _ -> "partial";
+            case PartitionEvidence.AxisCoverage.Reading.Answered _ -> "complete";
+            case PartitionEvidence.AxisCoverage.Reading.Standing _ -> "partial";
+            // Partial too, and told apart by what is written beside it. A reader keying on the word
+            // is told the numbers rest on something unfinished either way, which is what the word
+            // is for; which of the two it is is a different key.
+            case PartitionEvidence.AxisCoverage.Reading.NotReached _ -> "partial";
         };
     }
 
@@ -1119,8 +1127,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Under one pair of keys a consumer would read one as the other.
             ObjectNode read = a.putObject("read");
             read.put("extent", readingWord(axis.read()));
-            if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.InPart short_) {
-                read.put("stoppedBy", word(short_.why()));
+            if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.NotReached) {
+                read.put("rulesNotReached", true);
+            }
+            if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.Standing open) {
+                ArrayNode standing = read.putArray("unanswered");
+                for (PartitionEvidence.AxisCoverage.Unanswered each : open.questions()) {
+                    ObjectNode one = standing.addObject();
+                    one.put("rule", each.rule());
+                    one.put("question", word(each.question()));
+                }
             }
             axis.classes().forEach(a.putArray("classes")::add);
             axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
@@ -1298,7 +1314,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARM_UNREACHED -> finding.at();
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, INPUT_CASE_UNSPECIFIED,
                     AXIS_CLASS_UNCOVERED, BOUNDARY_UNMET, PARTITION_NOT_DERIVABLE,
-                    PARTITION_NOT_READ, PARTITION_READ_IN_PART, PARTITION_OMITTED -> null;
+                    PARTITION_NOT_READ, PARTITION_RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED,
+                            PARTITION_OMITTED -> null;
         };
     }
 
@@ -1324,7 +1341,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARM_UNREACHED -> ArmVocabulary.label(armOf(finding));
             case OUTPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED,
                     PARTITION_NOT_DERIVABLE, PARTITION_NOT_READ,
-                    PARTITION_READ_IN_PART, PARTITION_OMITTED ->
+                    PARTITION_RULE_UNACCOUNTED, PARTITION_RULES_NOT_REACHED, PARTITION_OMITTED ->
                     String.valueOf(args.get(0));
             case INPUT_CASE_UNSPECIFIED ->
                     String.valueOf(args.get(0)) + " (in #" + args.get(1) + ")";

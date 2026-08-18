@@ -149,7 +149,7 @@ class PartitionsTest {
                 axis(span, "span.from").cuts().stream().map(Cut::value).toList());
         assertEquals(List.of(new ObservedValue.Integer(1L), new ObservedValue.Integer(1440L)),
                 axis(span, "span.to").cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of("invariant Minute (min)", "invariant Minute (max) within Span"),
+        assertEquals(List.of("invariant Minute (withinDay)", "invariant Minute (withinDay) within Span"),
                 axis(span, "span.from").cuts().stream()
                         .map(c -> c.origins().get(0).named()).toList(),
                 "the rule that drew each end is the one that wrote it, not the outermost name");
@@ -186,10 +186,10 @@ class PartitionsTest {
 
         assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(10L)),
                 o.cuts().stream().map(Cut::value).toList());
-        assertEquals(List.of("invariant Outer (min)", "invariant Inner (min)"),
+        assertEquals(List.of("invariant Outer (outerMin)", "invariant Inner (innerMin)"),
                 o.cuts().get(0).origins().stream().map(OriginRef::named).toList(),
                 "one value, two rules, and a row is owed to each");
-        assertEquals(List.of("invariant Outer (max)"),
+        assertEquals(List.of("invariant Outer (outerMax)"),
                 o.cuts().get(1).origins().stream().map(OriginRef::named).toList());
     }
 
@@ -234,7 +234,7 @@ class PartitionsTest {
         OriginRef.InvariantOrigin invariant =
                 org.junit.jupiter.api.Assertions.assertInstanceOf(OriginRef.InvariantOrigin.class,
                         origin);
-        assertEquals("Amount", invariant.type().name());
+        assertEquals("Amount", invariant.rule().id().declaredOn().name());
     }
 
     /** A record is taken apart, and only so far: two levels reach a field of a record a parameter

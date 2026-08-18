@@ -20,6 +20,7 @@ import java.util.Map;
 import souther.compiler.values.AdmissibleSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -381,10 +382,11 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         Partitions.Partitioning base =
                 Partitions.of(read.spec().name(), InputDomain.of(read.spec(), read.sig(), read.symbols()), read.symbols());
 
-        assertInstanceOf(AdmissibleSet.Completeness.Partial.class, only(base).read(),
-                "a rule about this position went unread, and the classes were made anyway");
-        assertEquals(only(base).read(), only(withThresholdsOf(read, base)).read(),
-                "what a body draws does not change what was read about the position's values");
+        assertFalse(only(base).unanswered().isEmpty(),
+                "a rule about this position was taken in by nothing, and the classes were made"
+                        + " anyway");
+        assertEquals(only(base).unanswered(), only(withThresholdsOf(read, base)).unanswered(),
+                "what a body draws does not change which of the position's rules stand unanswered");
     }
 
     /** The same partitioning, with what the behavior's body draws taken in. */

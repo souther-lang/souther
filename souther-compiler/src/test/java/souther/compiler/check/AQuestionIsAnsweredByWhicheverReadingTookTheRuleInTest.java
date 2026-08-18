@@ -1,0 +1,207 @@
+package souther.compiler.check;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Scopes;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+/**
+ * A question is answered by whichever reading took the rule in, and by no other test.
+ *
+ * <p>Which is what issue #842 is about, and the trap it sets. The reading that turns a clause into a
+ * set of values has no word for a range, so it is short of the rules at every numeric position an
+ * invariant bounds — and the report was printing that as the model having gone unread, two lines
+ * above the boundary drawn from one of the very rules the sentence was about.
+ *
+ * <p>The trap is that there are more readings than the two a reader notices. {@code value * 2 >= 4}
+ * is beyond the reading of ends and beyond the reading of values, and the reading that builds the
+ * numeric constraints takes it in whole — so a model carrying it is fully read, and an accounting
+ * that consulted two readings would report it exactly as #842 reports a bound. The table below is
+ * what separates them, and every row of it was measured before it was written down.
+ */
+class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
+
+    /** One clause beside a bound, so that what changes is the clause and nothing else. */
+    private static String beside(String clause) {
+        return """
+                module example.rooms
+
+                data Length = Int
+                    invariant floor = value >= 1
+                    invariant said = %s
+                """.formatted(clause);
+    }
+
+    private static Map<Clause.Ref, RuleAccounting> accountingOf(String source, String type) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        assertNotNull(symbols);
+        TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
+        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+        assertNotNull(data, "no `" + type + "` declared");
+        return FieldDomains.of(named, data, symbols).accounting();
+    }
+
+    private static RuleAccounting rule(Map<Clause.Ref, RuleAccounting> accounting, String clause) {
+        return accounting.entrySet().stream()
+                .filter(e -> e.getKey().name().map(ClauseName::value)
+                        .filter(clause::equals).isPresent())
+                .map(Map.Entry::getValue).findFirst()
+                .orElseThrow(() -> new AssertionError("no clause called `" + clause + "`; had "
+                        + accounting.keySet()));
+    }
+
+    /** Whether anything took the clause written beside the bound in. */
+    private static boolean answered(String clause) {
+        return rule(accountingOf(beside(clause), "Length"), "said").unaccounted().isEmpty();
+    }
+
+    /**
+     * A clause the reading of values takes in is answered, though it places no end.
+     *
+     * <p>{@code value /= 5} takes 5 out of what the position admits and draws no line. An accounting
+     * that asked only the reading of ends would call it a rule this compiler could not read.
+     */
+    @Test
+    void aDenialIsAnsweredThoughItPlacesNoEnd() {
+        assertTrue(answered("value /= 5"), "the reading of values holds it");
+    }
+
+    /**
+     * The clauses nothing takes in.
+     *
+     * <p>Neither moves the position's floor and neither narrows the values it admits, measured
+     * through a record holding one: {@code Int.abs(value) >= 2} and {@code value * value >= 4} leave
+     * the floor where {@code floor} put it. So nothing read them, which is the one thing a report
+     * may say about a rule.
+     */
+    @Test
+    void aClauseNothingTookInIsUnanswered() {
+        assertEquals(List.of(false, false),
+                List.of(answered("Int.abs(value) >= 2"), answered("value * value >= 4")),
+                "a call and a product of the position with itself");
+    }
+
+    /**
+     * A clause only the numeric constraints hold is answered, and its near neighbour is not.
+     *
+     * <p>The pair the accounting has to get right, and the reason it cannot be got right from the
+     * clause's spelling. {@code value * 2 >= 4} and {@code value * value >= 4} are one shape — a
+     * comparison of a product against a number — and the first moves the position's floor to 2 while
+     * the second leaves it where {@code floor} put it. What separates them is what the reading
+     * produced: a form over the position's own atom, or one over an atom standing for the whole
+     * product, which is not the position.
+     *
+     * <p>Both halves are asserted, the accounting's answer and the measurement it has to agree with,
+     * so that a change moving one without the other fails here.
+     */
+    @Test
+    void aClauseOnlyTheConstraintsHoldIsAnswered() {
+        assertEquals("2", floorOfAFieldOf("value * 2 >= 4"),
+                "the constraints took it in: the floor moved from 1 to 2");
+        assertTrue(answered("value * 2 >= 4"), "so the question it raises is answered");
+
+        assertEquals("1", floorOfAFieldOf("value * value >= 4"),
+                "and left this one where `floor` put it");
+        assertFalse(answered("value * value >= 4"), "so its question stands");
+    }
+
+    /** Where a field of type {@code Length} stops from below, which is where the clauses reaching it
+     * leave it. Read through a record, since a newtype's own value is at no path of its own. */
+    private static String floorOfAFieldOf(String clause) {
+        String source = beside(clause) + "\ndata Holder = { len: Length }\n";
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        TypeSymbol holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
+        return FieldDomains.of(holder,
+                        (Hir.Data) symbols.declarations().declaration(holder.key()), symbols)
+                .at("len").min().at().toString();
+    }
+
+    /**
+     * One clause's failure is not the account of the clause beside it.
+     *
+     * <p>The granularity of a question is the clause. Asked per position, the reading of values
+     * being short because of {@code floor} made {@code seven} — which it took in whole, down to the
+     * single value — a rule nothing had read.
+     */
+    @Test
+    void aFailureAtAPositionIsNotTheAccountOfTheClausesBesideIt() {
+        Map<Clause.Ref, RuleAccounting> accounting = accountingOf("""
+                module example.rooms
+
+                data Length = Int
+                    invariant floor = value >= 1
+                    invariant seven = value == 7
+                """, "Length");
+
+        assertEquals(Set.of(), rule(accounting, "seven").unaccounted(),
+                "the reading of values took `value == 7` in, whatever it made of `value >= 1`");
+        assertEquals(Set.of(), rule(accounting, "floor").unaccounted(),
+                "and the bound is answered by the reading that placed its end");
+    }
+
+    /**
+     * A bound's two questions are about two subjects, and both are answered.
+     *
+     * <p>A length bound says which strings may stand at the position and draws a line on the count.
+     * Held under one subject, a report names the count where it means the string — which is the
+     * other half of what #842 found.
+     */
+    @Test
+    void aBoundOnACountRaisesTwoQuestionsAboutTwoSubjects() {
+        RuleAccounting nonEmpty = rule(accountingOf("""
+                module example.rooms
+
+                data Code = String
+                    invariant nonEmpty = String.length(value) >= 1
+                """, "Code"), "nonEmpty");
+
+        assertEquals(Set.of("ADMITTED_VALUES at the value", "BOUNDARY at count of the value"),
+                nonEmpty.answers().keySet().stream()
+                        .map(o -> o.obligation() + " at " + o.subject())
+                        .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(Set.of(), nonEmpty.unaccounted());
+    }
+
+    /**
+     * A clause can be accounted for without becoming a bound.
+     *
+     * <p>The short circuit this is here to stop. {@code allRulesRead()} answers whether every clause
+     * became one of the constraints the bounds are read from, which is a question about how far an
+     * edge can be trusted; {@code value * 2 >= 4} is read whole and becomes no bound, so the two
+     * answers differ — and reaching for the older one to say whether the model was read would report
+     * a rule as unread on the strength of a question nobody asked.
+     */
+    @Test
+    void aClauseCanBeAccountedForWithoutBecomingABound() {
+        Compilation compilation = Compilation.ofSource(beside("value * 2 >= 4"), "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        TypeSymbol named = TypeSymbols.declared(new TypeKey(module, "Length"));
+        FieldDomains read = FieldDomains.of(named,
+                (Hir.Data) symbols.declarations().declaration(named.key()), symbols);
+
+        assertFalse(read.allRulesRead(), "no bound came of it");
+        assertEquals(Set.of(), rule(read.accounting(), "said").unaccounted(),
+                "and it was read all the same");
+    }
+}

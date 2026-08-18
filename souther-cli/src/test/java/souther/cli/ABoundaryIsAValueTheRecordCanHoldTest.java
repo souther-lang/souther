@@ -125,10 +125,10 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         List<String> asked = boundariesOf(TIMESHEET);
 
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 1439")
-                        && l.contains("invariant MinuteOfDay (max) within WorkInterval")),
+                        && l.contains("invariant MinuteOfDay (withinDay) within WorkInterval")),
                 () -> "asked for " + asked);
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 0")
-                        && l.contains("(invariant MinuteOfDay (min))")),
+                        && l.contains("(invariant MinuteOfDay (withinDay))")),
                 () -> "an end the record left alone names only the rule that put it there: " + asked);
     }
 

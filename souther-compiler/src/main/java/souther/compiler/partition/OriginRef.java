@@ -19,11 +19,22 @@ import java.util.Optional;
  */
 public sealed interface OriginRef {
 
-    /** The cases of a sum, or the two values of a {@code Bool}: the type itself says the partition. */
-    record TypeOrigin(TypeSymbol type) implements OriginRef {}
+    /**
+     * A clause of a {@code data}'s invariant, as the clause it is.
+     *
+     * <p>The clause and not the end it placed. This used to be the declaration together with the
+     * word {@code min} or {@code max}, which says what the clause did: two clauses of one
+     * declaration bounding a position at one value came out as one origin, and the cut kept one
+     * rule where ADR-0090 says it keeps every rule that drew it.
+     */
+    record InvariantOrigin(souther.compiler.check.Clause.Ref rule) implements OriginRef {
 
-    /** A clause of a {@code data}'s invariant. */
-    record InvariantOrigin(TypeSymbol type, String clause) implements OriginRef {}
+        public InvariantOrigin {
+            if (rule == null) {
+                throw new IllegalArgumentException("a bound drawn by no clause");
+            }
+        }
+    }
 
     /**
      * A comparison in a behavior's body, and the {@code if} it is the condition of.
@@ -208,8 +219,7 @@ public sealed interface OriginRef {
      */
     default String describe(SourceNameResolver names, SourceId sectionSource) {
         return switch (this) {
-            case TypeOrigin t -> "type " + t.type().name();
-            case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
+            case InvariantOrigin i -> nameOf(i);
             case EnsuresOrigin e -> nameOf(e);
             case GuardOrigin g -> switch (g.at()) {
                 case Citation.Written _, Citation.Unplaced _ ->
@@ -251,8 +261,7 @@ public sealed interface OriginRef {
      */
     default String named() {
         return switch (this) {
-            case TypeOrigin t -> "type " + t.type().name();
-            case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
+            case InvariantOrigin i -> nameOf(i);
             case EnsuresOrigin e -> nameOf(e);
             // Never rendered to a reader: a rule with no name gets a sentence of its own, so the
             // catalog holds those words in every language rather than this building them in one.
@@ -276,6 +285,11 @@ public sealed interface OriginRef {
      * about. Only a clause stating one rule over every answer has neither, and the behavior's own
      * name is then the whole of it.
      */
+    private static String nameOf(InvariantOrigin i) {
+        return "invariant " + i.rule().id().declaredOn().name()
+                + i.rule().name().map(n -> " (" + n + ")").orElse("");
+    }
+
     private static String nameOf(EnsuresOrigin e) {
         return "ensures " + e.rule().behavior().name()
                 + (e.clause().isEmpty() ? "" : " (" + e.clause() + ")");
@@ -297,7 +311,7 @@ public sealed interface OriginRef {
         return switch (this) {
             case GuardOrigin _ -> true;
             case NarrowedOrigin n -> n.bound().wasDrawnInABodyFork();
-            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> false;
+            case InvariantOrigin _, EnsuresOrigin _ -> false;
         };
     }
 
@@ -309,15 +323,15 @@ public sealed interface OriginRef {
      * runs holds one node for all three, and the answer travels with the fork's origin from where the
      * source was read.
      *
-     * @throws IllegalStateException where no fork drew the line. An invariant, a type and a clause
-     *                               have names rather than places, and {@link #wasDrawnInABodyFork}
-     *                               is what tells them apart from this
+     * @throws IllegalStateException where no fork drew the line. An invariant and a clause have
+     *                               names rather than places, and {@link #wasDrawnInABodyFork} is
+     *                               what tells them apart from this
      */
     default souther.compiler.types.CoverageConstruct constructThatDrewIt() {
         return switch (this) {
             case GuardOrigin g -> g.guard().origin().kind();
             case NarrowedOrigin n -> n.bound().constructThatDrewIt();
-            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> throw new IllegalStateException(
+            case InvariantOrigin _, EnsuresOrigin _ -> throw new IllegalStateException(
                     "no fork of a body drew this line: " + named());
         };
     }
@@ -327,7 +341,7 @@ public sealed interface OriginRef {
         return switch (this) {
             case GuardOrigin g -> java.util.Optional.of(g.at());
             case NarrowedOrigin n -> n.bound().citation();
-            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+            case InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
         };
     }
 
@@ -349,7 +363,7 @@ public sealed interface OriginRef {
         return switch (this) {
             case GuardOrigin g -> java.util.OptionalInt.of(g.site());
             case NarrowedOrigin n -> n.bound().comparisonSite();
-            case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> java.util.OptionalInt.empty();
+            case InvariantOrigin _, EnsuresOrigin _ -> java.util.OptionalInt.empty();
         };
     }
 
@@ -376,7 +390,7 @@ public sealed interface OriginRef {
                             ? BoundaryObligation.BoundarySide.ABOVE
                             : BoundaryObligation.BoundarySide.BELOW);
             case NarrowedOrigin n -> n.bound().besideTheCut();
-            case TypeOrigin _, InvariantOrigin _ -> java.util.Optional.empty();
+            case InvariantOrigin _ -> java.util.Optional.empty();
         };
     }
 }

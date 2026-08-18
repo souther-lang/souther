@@ -26,9 +26,9 @@ import java.util.Optional;
  * Where a clause is written is settled where its text became positions and follows from the
  * declaration it is on, so a walk reaching it down two branches finds one answer twice.
  */
-record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
+public record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
 
-    Clause {
+    public Clause {
         Objects.requireNonNull(id, "a clause is one clause");
         Objects.requireNonNull(name, "a clause was written with a name or without one");
         Objects.requireNonNull(at, "a clause is written somewhere, quotable here or not");
@@ -41,6 +41,54 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
         }
     }
 
+
+    /**
+     * The clause a walk over a declaration's invariants arrived at.
+     *
+     * <p>The one way to make one. Everything that names a clause — a diagnostic about what it could
+     * not prove, a line a bound of it drew — is naming the same rule, and a second construction is a
+     * second chance for two surfaces to call one clause by different words.
+     */
+    public static Clause of(TypeOps.Declared declared) {
+        return new Clause(new Id(declared.declaredOn(), declared.ordinal()),
+                declared.clause().name().map(ClauseName::new),
+                DiagnosticPlace.of(declared.clause().reportedAt()));
+    }
+
+    /** This clause, as what identifies it and what to call it. */
+    public Ref ref() {
+        return new Ref(id, name);
+    }
+
+    /**
+     * Which clause it is and what a report calls it, without where a reader can be sent.
+     *
+     * <p>Two of the four questions above, for the readers that ask only those. What names a line is
+     * which clause drew it, and where a reader can be sent is a question only a diagnostic asks —
+     * asked of every clause a bound was read from, a clause whose region names no source could not
+     * be recorded at all, and the rule that placed the edge would go unnamed for want of an answer
+     * nobody wanted.
+     */
+    public record Ref(Id id, Optional<ClauseName> name) {
+
+        public Ref {
+            Objects.requireNonNull(id, "a clause is one clause");
+            Objects.requireNonNull(name, "a clause was written with a name or without one");
+        }
+
+        /** The clause a walk over a declaration's invariants arrived at. */
+        public static Ref of(TypeOps.Declared declared) {
+            return new Ref(new Id(declared.declaredOn(), declared.ordinal()),
+                    declared.clause().name().map(ClauseName::new));
+        }
+
+        @Override
+        public String toString() {
+            return id.declaredOn().name() + "#" + id.ordinal()
+                    + name.map(n -> " (" + n + ")").orElse("");
+        }
+    }
+
     /**
      * Which clause: the declaration that wrote it, and which of that declaration's clauses it is.
      *
@@ -49,9 +97,9 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
      * separately under one key and reports one of them. Two spreads bringing one clause in twice
      * answer with one of these, which is what makes them one clause again.
      */
-    record Id(TypeSymbol declaredOn, int ordinal) {
+    public record Id(TypeSymbol declaredOn, int ordinal) {
 
-        Id {
+        public Id {
             Objects.requireNonNull(declaredOn, "a clause is written on a declaration");
         }
     }
@@ -78,7 +126,7 @@ record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
      * and "no place at all" is not a thing a reading can produce. Measured over the whole suite: no
      * compile produces two readings of one clause that differ.
      */
-    static Clause merge(Clause a, Clause b) {
+    public static Clause merge(Clause a, Clause b) {
         if (!a.id.equals(b.id)) {
             throw new NotOneClause("two clauses, " + a.id + " and " + b.id + ", merged as one");
         }

@@ -288,36 +288,68 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                Reading read) {
 
         /**
-         * How much of what this position's rules say was read.
+         * Which of this position's rules nothing accounted for.
          *
-         * <p>It qualifies the classes and nothing else says it. A class arrived at from part of the
-         * rules is a value the model singled out, and a rule that went unread may yet refuse it —
-         * so the classes are the denominator the model states and not one every class of which is
-         * known to be inhabited.
+         * <p>It qualifies the classes and nothing else says it. A rule nothing took in may yet
+         * refuse a value one of the classes holds, so the classes are the denominator the model
+         * states and not one every class of which is known to be inhabited.
          *
-         * <p>Said in the vocabulary the document promises, and taken from what the axis already
-         * carries rather than worked out a second time from the lists beside it. Those answer about
-         * rules; this answers about a position.
+         * <p><b>The questions the model raises, not a reading's account of itself.</b> There are
+         * several readings of a clause and they are short of different things: the one that turns
+         * clauses into sets of values has no word for a range, so it is short at every numeric
+         * position an invariant bounds while two others have those rules whole. Written off that
+         * reading, this line said a model had gone unread on the strength of a fact about this
+         * compiler, two rows above a boundary drawn from the very rule it was about (issue #842).
+         *
+         * <p>Each entry names the rule. A position was all a reader used to be given, which left
+         * them looking for a rule the sentence never named.
          */
         public sealed interface Reading {
 
-            /** Every rule about the position was read. */
-            record InFull() implements Reading {}
+            /** Nothing the rules raise about this position is left standing. */
+            record Answered() implements Reading {}
 
-            /** Something about the position was left unread, and what stopped it. */
-            record InPart(souther.compiler.partition.UndividedPosition.Reason why) implements Reading {
+            /**
+             * The walk never reached the rules written about this position, so what is written
+             * there is not known.
+             *
+             * <p>Its own answer beside the one below, and not a list that came back empty. Nothing
+             * was found here because nothing looked: a position whose rules were never enumerated
+             * has no rule to name and is not a position whose rules were all accounted for, and
+             * telling an author the second sends them away from the one thing worth knowing
+             * (issue #791).
+             */
+            record NotReached() implements Reading {}
 
-                public InPart {
-                    if (why == null) {
+            /** Some of it is, and which rules raised it. */
+            record Standing(List<Unanswered> questions) implements Reading {
+
+                public Standing {
+                    if (questions.isEmpty()) {
                         throw new IllegalArgumentException(
-                                "a reading short of the rules says what stopped it");
+                                "nothing standing is a different answer");
                     }
+                    questions = List.copyOf(questions);
                 }
             }
         }
 
-        /** Every rule read, which is what a caller holding no account of its own says. */
-        public static final Reading READ_IN_FULL = new Reading.InFull();
+        /**
+         * One question a rule raised that nothing answered.
+         *
+         * <p>The rule as words and not as whatever identifies it. Which rules there are is a
+         * question with more than one answer in it — an invariant's clause, a comparison in a body —
+         * and a reader downstream that took one of them apart would have to be taught the next; the
+         * words come from the one place that names a rule, and everything here is a string by the
+         * time it arrives.
+         *
+         * @param rule     the rule, as a report names it
+         * @param question what about the position it raised, in the words a document promises
+         */
+        public record Unanswered(String rule, souther.compiler.check.CoverageObligation question) {}
+
+        /** Nothing standing, which is what a caller holding no account of its own says. */
+        public static final Reading ANSWERED = new Reading.Answered();
 
         /** Why a position has no coverage numbers. */
         public enum Reason implements souther.compiler.observe.MeasureReason {

@@ -46,13 +46,38 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      */
     static StatedByClauses of(List<Core> clauses, Terms terms, Denotations at,
                               Map<FactSubject, Type> byName, Symbols symbols) {
-        Reading reading = new Reading(AdmissibleReading.of(terms, at, byName, symbols),
-                OrderedReading.of(terms, at, byName, symbols));
         StatedByClauses out = top();
         for (Core clause : clauses) {
-            out = out.meet(reading.read(clause, true));
+            out = out.meet(ofOne(clause, terms, at, byName, symbols));
         }
         return out;
+    }
+
+    /**
+     * What one clause says on its own.
+     *
+     * <p>The same reading as {@link #of}, run over one clause, so that a caller can tell which
+     * clauses a reading took in rather than which positions it ended up short of. The two are
+     * different questions and reading the second for the first is what let one clause's failure
+     * spoil the account of every clause beside it: {@code value >= 1} leaves the reading of values
+     * short at a position, and {@code value == 7} written beside it was taken in whole.
+     */
+    static StatedByClauses ofOne(Core clause, Terms terms, Denotations at,
+                                 Map<FactSubject, Type> byName, Symbols symbols) {
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols),
+                OrderedReading.of(terms, at, byName, symbols)).read(clause, true);
+    }
+
+    /**
+     * Whether this reading of one clause took it into either of its languages at {@code position}.
+     *
+     * <p>Said of the reading and not of the shape. A caller working out from the clause's spelling
+     * which reading ought to have managed it is guessing at another reader's semantics, which is the
+     * mistake the whole accounting is written against.
+     */
+    boolean tookIn(FactSubject position) {
+        return (values.speaksFor(position) && values.whyUnread(position) == null)
+                || ordered.ranges().containsKey(position);
     }
 
     /**
@@ -66,7 +91,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
         return values.isBottom() || ordered.isBottom();
     }
 
-    private StatedByClauses meet(StatedByClauses other) {
+    StatedByClauses meet(StatedByClauses other) {
         return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered));
     }
 

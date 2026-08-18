@@ -14,6 +14,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.partition.AxisId;
+import souther.compiler.check.Clause;
+import souther.compiler.check.ClauseName;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.types.TypeKey;
@@ -266,8 +268,10 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 new BoundaryObligation(
                         new BoundaryTarget.AtPlace(new AxisId("weigh", "w.a"), Carrier.WHOLE,
                                 Count.of(100)),
-                        new OriginRef.InvariantOrigin(
-                                TypeSymbols.declared(new TypeKey("example.rate", "Amount")), "value <= 100"),
+                        new OriginRef.InvariantOrigin(new Clause.Ref(
+                                new Clause.Id(TypeSymbols.declared(
+                                        new TypeKey("example.rate", "Amount")), 0),
+                                java.util.Optional.of(new ClauseName("cap")))),
                         BoundaryObligation.BoundarySide.AT),
                 new BoundaryAssessment.Coverage.Hit(),
                 new BoundaryAssessment.Writability.WitnessedByRow(),

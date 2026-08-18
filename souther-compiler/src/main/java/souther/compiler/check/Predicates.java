@@ -726,7 +726,17 @@ final class Predicates {
 
 
     /** Every subject the clauses in {@code owed} say something about. */
-    private static Set<FactSubject> subjectsIn(Owed owed) {
+    /**
+     * The positions this reading took {@code owed}'s clause in about.
+     *
+     * <p>What the reading produced and not what it was handed. A comparison it could not put in
+     * linear form still comes back as a statement — over an atom standing for the whole expression,
+     * which is not the position — so a caller asking whether this reading adopted a clause at a
+     * position asks this and gets the reading's own answer. Worked out from the clause's spelling
+     * instead, {@code value * 2 >= 4} and {@code value * value >= 4} are one shape, and the first is
+     * read whole while the second is read about nothing.
+     */
+    static Set<FactSubject> subjectsIn(Owed owed) {
         Set<FactSubject> named = new LinkedHashSet<>();
         for (Clause c : owed.clauses()) {
             for (Constraint known : c.known()) {
