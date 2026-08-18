@@ -414,8 +414,8 @@ public final class CoverageSites {
             // nothing inside it can do either.
             boolean inside = reachable && answers(e);
             switch (e) {
-                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Read _,
-                     Core.UnitValue _, Core.OptionNone _ -> { }
+                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
+                     Core.Read _, Core.UnitValue _, Core.OptionNone _ -> { }
                 // A leaf, and one holding no fork. Whether the arm it stands in is an arm to cover is
                 // decided where that arm is made, not here.
                 case Core.Unreachable _ -> { }

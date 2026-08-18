@@ -50,7 +50,7 @@ class EveryTermCanBeReadWithoutItsPlaceTest {
             data Small = Int
                 invariant value > 0
 
-            data In  = { xs: List<Int>, s: String, k: Int, note: String? }
+            data In  = { xs: List<Int>, s: String, k: Int, note: String?, on: Date }
             data Out = { n: Int, label: String, pair: Int, kept: String? }
             data Bag = { items: List<Int> }
 
@@ -89,9 +89,10 @@ class EveryTermCanBeReadWithoutItsPlaceTest {
                 let picked = if Small(negated) as ok then ok.value else noted
                 let fs: List<(Int) -> Int> = [(x) -> x + 1, (x) -> x + 2]
                 let applied = all((f) -> f(i.k) > 0, fs)
+                let dated = if i.on < Date("2026-01-01") then 1 else 0
                 Out {
                     n = left + right + picked + length([1, 2, 3])
-                            + (if every then 1 else 0) + (if applied then 1 else 0),
+                            + (if every then 1 else 0) + (if applied then 1 else 0) + dated,
                     label = "fixed",
                     kept = "here",
                     pair = negated

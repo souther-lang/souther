@@ -368,8 +368,8 @@ public sealed interface Carrier {
                 case null, default -> null;
             };
             case Days _, Seconds _, SecondsOfDay _, Nanos _ ->
-                    constructedFrom(bare) instanceof Core.Str iso
-                            ? placeOf(new ObservedValue.Temporal(iso.value())) : null;
+                    bare instanceof Core.Temporal written
+                            ? placeOf(new ObservedValue.Temporal(written.text())) : null;
             // A case, which is named rather than written. Where the position counts in some other
             // enumeration's declaration this is a value of neither, and that is said by `at`.
             case Ordinal ordinal ->
@@ -403,36 +403,20 @@ public sealed interface Carrier {
                 ? bare(nd.values().get(0).value(), symbols) : e;
     }
 
-    /**
-     * The text a temporal construction was written with, or null where {@code e} is not one.
-     *
-     * <p>What makes it one is the callee, and never the type of what comes back. A call answering
-     * with a {@code Time} is not a {@code Time} anyone here wrote down: an injected behavior
-     * {@code openingAt("16:00:00")} answers whatever its implementation makes of that text, and read
-     * off the answer's type the argument became a line — a boundary this compiler made up, at a
-     * value no rule in the model states, reported as one the model drew.
-     *
-     * <p>A construction is a library namespace applied ({@link ValueName.Stdlib}), which is the one
-     * shape that builds a value rather than computing one, and {@code isNamespace} is how that is
-     * asked. Not by the name: an operation a library gave its own module's name renders the same
-     * either way, which is the reading-a-name-back-out that type exists to stop.
-     */
-    private static Core constructedFrom(Core e) {
-        return e instanceof Core.Call call
-                && call.fn() instanceof Core.Reached reached
-                && reached.denotes() instanceof ValueName.Stdlib lib && lib.isNamespace()
-                && call.args().size() == 1
-                ? call.args().get(0) : null;
-    }
-
     /** The count a written temporal is, or null where the expression is not one of that kind. A
      *  temporal is written as a literal with its text spelled out (spec
      *  §a-temporal-value-is-written-as-a-literal), so it is read here rather than run. Which
-     *  construction it is comes from the callee, for the reason {@link #written} gives. */
+     *  construction it is comes from the callee, for the reason {@link #written} gives.
+     *
+     *  <p>Whether the callee builds anything is {@link ValueName.Stdlib#constructs}, which is where
+     *  that is settled. Being the namespace rather than an operation of it is the wider question: a
+     *  namespace that builds nothing is one of these too, and the text handed to {@code countOf}
+     *  would then be parsed as a moment because of where it stands. */
     private static Count temporal(Hir.Expr e,
                                   java.util.function.Function<String, Count> countOf) {
         return e instanceof Hir.Apply call && call.answered() != null
-                && call.answered().denotes() instanceof ValueName.Stdlib lib && lib.isNamespace()
+                && call.answered().denotes() instanceof ValueName.Stdlib lib
+                && lib.constructs() != null
                 && call.args().size() == 1 && call.args().get(0) instanceof Hir.StringLit iso
                 ? countOf.apply(iso.value()) : null;
     }
