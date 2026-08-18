@@ -1244,14 +1244,55 @@ final class Terms {
      * entered under what stood before it — but a reading that follows what it is handed says what it
      * does with a chain it was handed, rather than leaving it to whoever built it.
      */
-    static Core writtenValue(Core e, Denotations at) {
+    Core writtenValue(Core e, Denotations at) {
         return writtenValue(e, at, new HashSet<>());
     }
 
-    private static Core writtenValue(Core e, Denotations at, Set<BindingId> seen) {
+    /** Where a test counts the steps this takes following what a name was given, and null everywhere
+     * else. What a chain of names costs is not something an answer says. */
+    static long[] FOLLOWED;
+
+    /**
+     * What the end of the chain from {@code binding} was written as, and the value it was given when
+     * that was worked out.
+     *
+     * <p>Kept because the answer is about the binding and not about the ask. A reading of arithmetic
+     * follows a name, then follows what that name was given, and so on down, so a chain of names was
+     * walked once per link and cost the square of its length. What is remembered is the following and
+     * not the fact — a binding still stands for what it was given, and this says only that the
+     * following of it has been done.
+     *
+     * <p>Held against the environment it was worked out in, and thrown away when that is not the one
+     * being asked about. What a name was given is the walk's answer, and the walk answers differently
+     * as it goes: a name whose chain reaches a binding the walk had not entered yet reaches nothing,
+     * and the same name reaches text once it has. Remembered across the two, the earlier answer would
+     * stand where the later one is owed — and it did, over three constructions, until the environment
+     * became part of what is remembered.
+     */
+    private record Followed(Denotations at, Core given, Core written) {}
+
+    private final Map<BindingId, Followed> followed = new HashMap<>();
+
+    private Core writtenValue(Core e, Denotations at, Set<BindingId> seen) {
+        long[] counting = FOLLOWED;
+        if (counting != null) {
+            counting[0]++;
+        }
         if (e instanceof Core.Read r) {
-            Core given = seen.add(r.binding()) ? at.valueOf(r.binding()) : null;
-            return given == null || given == e ? null : writtenValue(given, at, seen);
+            Core given = at.valueOf(r.binding());
+            if (given == null || given == e) {
+                return null;
+            }
+            Followed had = followed.get(r.binding());
+            if (had != null && had.at() == at && had.given() == given) {
+                return had.written();
+            }
+            if (!seen.add(r.binding())) {
+                return null;
+            }
+            Core written = writtenValue(given, at, seen);
+            followed.put(r.binding(), new Followed(at, given, written));
+            return written;
         }
         return isWritten(e) ? e : null;
     }

@@ -1331,7 +1331,7 @@ public final class InvariantChecker {
             }
             // A name given a value written out hands over that value: the clause folds over what
             // was written, wherever the writing was done.
-            Core written = Terms.writtenValue(fv.value(), at);
+            Core written = terms.writtenValue(fv.value(), at);
             given.put(field, written != null ? written : fv.value());
         }
         return verdictOf(nd.typeName(), type, given, k, at, !constantlyBuilt(type, nd));

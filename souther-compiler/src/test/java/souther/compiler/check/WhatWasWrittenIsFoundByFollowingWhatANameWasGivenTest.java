@@ -54,7 +54,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Hir.Binder a = binders.binder("a", POS);
         Denotations at = given(a, three, Denotations.none());
 
-        assertSame(three, Terms.writtenValue(read(a), at));
+        assertSame(three, engine.terms().writtenValue(read(a), at));
     }
 
     /** However many names away. Each link records what it was given, so the text is at the end of the
@@ -69,7 +69,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         at = given(b, read(a), at);
         at = given(c, read(b), at);
 
-        assertSame(three, Terms.writtenValue(read(c), at));
+        assertSame(three, engine.terms().writtenValue(read(c), at));
     }
 
     /** A place stands for no value the walk reached, so there is no text behind it. */
@@ -79,7 +79,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Denotations at = engine.enter(Terms.read(x, Type.INT, POS), Known.top(),
                 Denotations.none()).at();
 
-        assertNull(Terms.writtenValue(read(x), at));
+        assertNull(engine.terms().writtenValue(read(x), at));
     }
 
     /** An arm opening a value written into the source opens that written value: the arm's name was
@@ -93,7 +93,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
                 written, Known.top(), Denotations.none()).at();
 
-        assertSame(written, Terms.writtenValue(read(x), at));
+        assertSame(written, engine.terms().writtenValue(read(x, Type.ref(FOUND)), at));
     }
 
     /** And an arm opening an answer opens nothing written, however the arm was entered. */
@@ -107,7 +107,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
                 arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
                 answer, Known.top(), Denotations.none()).at();
 
-        assertNull(Terms.writtenValue(read(x), at));
+        assertNull(engine.terms().writtenValue(read(x, Type.ref(FOUND)), at));
     }
 
     /** A name given itself is a chain with no end, and following it is still an answer. Nothing the
@@ -121,11 +121,12 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
                 .binding(a.id(), read(b), engine.terms().placeSubject(a.id()), null, null)
                 .binding(b.id(), read(a), engine.terms().placeSubject(b.id()), null, null);
 
-        assertNull(Terms.writtenValue(read(a), at));
+        assertNull(engine.terms().writtenValue(read(a), at));
     }
 
     /** What the check reads it for: a written value folds where it is written and where it is bound
-     * alike, so a name given text is that text at the construction it is handed to. */
+     * alike, so a name given text is that text at the construction it is handed to — and neither the
+     * text nor the name it was given is a site an author could be asked to guard. */
     @Test
     void aNameGivenTextIsWrittenWhereverItIsRead() {
         Core three = new Core.Int(3, Type.INT, POS);
@@ -151,6 +152,10 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     }
 
     private static Core read(Hir.Binder binder) {
-        return new Core.Read(binder.name(), binder.id(), Type.INT, POS);
+        return read(binder, Type.INT);
+    }
+
+    private static Core read(Hir.Binder binder, Type type) {
+        return new Core.Read(binder.name(), binder.id(), type, POS);
     }
 }
