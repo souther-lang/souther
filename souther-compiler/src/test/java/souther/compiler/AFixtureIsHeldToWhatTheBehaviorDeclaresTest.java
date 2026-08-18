@@ -163,7 +163,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      * A bare case name that carries fields is not held, and this records where that limit is rather
      * than claiming it is right. The arm does name the answer, so a rule reading only the inputs is
      * decidable here — but the check is handed the answer as a value, and this row wrote none. What
-     * would close it is a check that can be asked about an arm rather than about a value.
+     * would close it is a check that can be asked about an arm rather than about a value (#821).
      */
     @Test
     void aRowStatingOnlyACaseThatCarriesFieldsIsNotHeldYet() {
