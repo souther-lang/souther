@@ -55,15 +55,15 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         return new Core.Binary(op, left, right, CoverageOrigin.unwritten(), Type.INT, POS);
     }
 
-    private static LinearForm<Term> num(long n) {
+    private static LinearForm<FactSubject> num(long n) {
         return LinearForm.constant(BigDecimal.valueOf(n));
     }
 
     /** A domain in which each of {@code atoms} is at or above zero. */
-    private static NumericDomain<Term> atOrAboveZero(Terms terms, Term... atoms) {
-        NumericDomain<Term> d = NumericDomain.top();
-        for (Term atom : atoms) {
-            LinearForm<Term> form = LinearForm.atom(atom);
+    private static NumericDomain<FactSubject> atOrAboveZero(Terms terms, FactSubject... atoms) {
+        NumericDomain<FactSubject> d = NumericDomain.top();
+        for (FactSubject atom : atoms) {
+            LinearForm<FactSubject> form = LinearForm.atom(atom);
             d = d.assume(form, Rel.GE, terms.kindsOf(form));
         }
         return d;
@@ -80,17 +80,18 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a).location(b);
 
-        LinearForm<Term> product = terms.affineOf(
+        LinearForm<FactSubject> product = terms.affineOf(
                 arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
 
         assertNotNull(product, "a product is one value, whatever is known of it");
-        Term atom = product.coefs().keySet().iterator().next();
-        NumericDomain<Term> guarded = atOrAboveZero(terms,
-                terms.bodyKey(read("a", a), at), terms.bodyKey(read("b", b), at));
+        FactSubject atom = product.coefs().keySet().iterator().next();
+        NumericDomain<FactSubject> guarded = atOrAboveZero(terms,
+                FactSubject.of(terms.bodyKey(read("a", a), at)),
+                FactSubject.of(terms.bodyKey(read("b", b), at)));
         assertTrue(guarded.boundsOf(atom).isEmpty(),
                 "nothing was said about the product itself");
 
-        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
         assertNull(derived.boundsOf(atom).max(), "nothing bounds either factor above");
@@ -111,11 +112,11 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a).location(b);
 
-        LinearForm<Term> product = terms.affineOf(
+        LinearForm<FactSubject> product = terms.affineOf(
                 arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
-        Term atom = product.coefs().keySet().iterator().next();
+        FactSubject atom = product.coefs().keySet().iterator().next();
 
-        NumericDomain<Term> derived = DerivedBounds.refine(NumericDomain.top(), terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedBounds.refine(NumericDomain.top(), terms, Set.of(atom));
 
         assertTrue(derived.boundsOf(atom).isEmpty());
     }
@@ -136,13 +137,13 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Core scaled = arithmetic(Hir.BinOp.MUL, read("x", x), new Core.Int(30, Type.INT, POS));
         Core quotient = arithmetic(Hir.BinOp.DIV, scaled, new Core.Int(100, Type.INT, POS));
 
-        LinearForm<Term> form = terms.affineOf(quotient, at);
+        LinearForm<FactSubject> form = terms.affineOf(quotient, at);
 
         assertNotNull(form);
-        Term atom = form.coefs().keySet().iterator().next();
-        NumericDomain<Term> guarded = atOrAboveZero(terms, terms.bodyKey(read("x", x), at));
+        FactSubject atom = form.coefs().keySet().iterator().next();
+        NumericDomain<FactSubject> guarded = atOrAboveZero(terms, FactSubject.of(terms.bodyKey(read("x", x), at)));
 
-        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
     }
@@ -160,11 +161,11 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Core product = arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b));
         Core quotient = arithmetic(Hir.BinOp.DIV, product, new Core.Int(100, Type.INT, POS));
 
-        LinearForm<Term> form = terms.affineOf(quotient, at);
-        Term atom = form.coefs().keySet().iterator().next();
-        Term factorA = terms.bodyKey(read("a", a), at);
-        Term factorB = terms.bodyKey(read("b", b), at);
-        NumericDomain<Term> guarded = NumericDomain.<Term>top()
+        LinearForm<FactSubject> form = terms.affineOf(quotient, at);
+        FactSubject atom = form.coefs().keySet().iterator().next();
+        FactSubject factorA = FactSubject.of(terms.bodyKey(read("a", a), at));
+        FactSubject factorB = FactSubject.of(terms.bodyKey(read("b", b), at));
+        NumericDomain<FactSubject> guarded = NumericDomain.<FactSubject>top()
                 .assume(LinearForm.atom(factorA), Rel.GE,
                         terms.kindsOf(LinearForm.atom(factorA)))
                 .assume(LinearForm.atom(factorA).minus(num(10)), Rel.LE,
@@ -174,7 +175,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
                 .assume(LinearForm.atom(factorB).minus(num(1000)), Rel.LE,
                         terms.kindsOf(LinearForm.atom(factorB)));
 
-        NumericDomain<Term> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
+        NumericDomain<FactSubject> derived = DerivedBounds.refine(guarded, terms, Set.of(atom));
 
         assertEquals(Endpoint.inclusive(Count.of(0)), derived.boundsOf(atom).min());
         assertEquals(Endpoint.inclusive(Count.of(100)), derived.boundsOf(atom).max(),
@@ -190,8 +191,8 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a).location(b);
 
-        Term first = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
-        Term second = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
+        FactSubject first = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
+        FactSubject second = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
 
         assertEquals(first, second);
         assertEquals(1, terms.derivations().size());
@@ -205,9 +206,9 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a).location(b);
 
-        LinearForm<Term> product = terms.affineOf(
+        LinearForm<FactSubject> product = terms.affineOf(
                 arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
-        Term atom = product.coefs().keySet().iterator().next();
+        FactSubject atom = product.coefs().keySet().iterator().next();
 
         assertEquals(Map.of(atom, Granularity.DISCRETE), terms.kindsOf(product));
     }

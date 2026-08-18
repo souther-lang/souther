@@ -16,4 +16,4 @@ import java.util.Set;
  * them. The predicate is kept as the block it is, already read where the relation was stated, so
  * every name in it means there what it meant there.
  */
-record Quantified(Term container, Set<Shape> through, Core.Block predicate) {}
+record Quantified(FactSubject container, Set<Shape> through, Core.Block predicate) {}

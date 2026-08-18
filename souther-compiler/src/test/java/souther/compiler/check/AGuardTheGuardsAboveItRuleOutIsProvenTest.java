@@ -5,6 +5,7 @@ import souther.compiler.coverage.ControlPointId;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.reach.PathDecision;
 import souther.compiler.reach.Proof;
 import souther.compiler.reach.Reachability;
 
@@ -351,5 +352,56 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
                         "this reading proves nothing arrives, never that something does");
             }
         }
+    }
+
+    /**
+     * A condition whose shape this could not read may still be the whole of why nothing stands here,
+     * and where it is, the proof names it.
+     *
+     * <p>The two questions this reading answers came apart when every value got an identity. A guard
+     * over an answer nothing may share is a condition whose shape runs out — there is no reading of
+     * what {@code opaque()} computes — and it narrows the state all the same, through the subject the
+     * answer is. So it is not among the reasons and among them at once: not read, and taken in.
+     *
+     * <p>Answered from the wrong one of the two, this proof said the readable guard cannot hold, and
+     * that guard can hold perfectly well. A proof is a claim about the program; a limit of this
+     * compiler is not, and the one must not be written out of the other.
+     */
+    @Test
+    void aProofRestsOnAConditionWhoseShapeWasNotRead() {
+        String source = """
+                module d
+
+                data Amount = Int invariant value >= 0 && value <= 1000
+                data Free
+                data Charged = { yen: Int }
+
+                behavior opaque : () -> Int
+
+                behavior charge : (a: Amount) -> Free | Charged
+                    constructs Free, Charged
+                    depends on opaque
+                let charge (a, opaque) = {
+                    let x = opaque()
+                    guard a.value < 900 else Free
+                    guard x < 5 else Free
+                    guard x < 6 else Free
+                    Charged { yen = 1 }
+                }
+                """;
+
+        List<Proof> proven = provenIn(source, "charge");
+        assertEquals(1, proven.size(), "nothing under five is six or more, whatever `x` is");
+        List<PathDecision> why = WhatAnAnswerSays.conditionsIn(proven.get(0));
+        assertEquals(3, why.size(),
+                () -> "the guard over the answer is what rules this out, so it is named: " + why);
+
+        // And the other half: the same guard is still one this reading did not read, which is what
+        // an arm it leaves unsettled is owed as an explanation.
+        assertTrue(armsOf(source, "charge").stream()
+                        .filter(Reachability.Unsettled.class::isInstance)
+                        .map(each -> ((Reachability.Unsettled) each).why())
+                        .anyMatch(WhatAnAnswerSays::isAConditionNotRead),
+                "its shape ran out, and an arm left unsettled by it says so");
     }
 }

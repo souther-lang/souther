@@ -44,8 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhetherAValueExistsIsAskedOfEveryDomainTest {
 
     private static final Term.Interner NAMES = new Term.Interner();
-    private static final Term A_PREDICATE = NAMES.written("some predicate");
-    private static final Term A_POSITION = NAMES.written("some position");
+    private static final FactSubject A_PREDICATE = FactSubject.of(NAMES.written("some predicate"));
+    private static final FactSubject A_POSITION = FactSubject.of(NAMES.written("some position"));
 
     /** Nothing taken in leaves every value there was. */
     @Test
@@ -157,6 +157,6 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
      * domain in it has nothing to say. */
     @Test
     void aDomainWithNothingToSayIsNotADomainThatHoldsNothing() {
-        assertFalse(NumericDomain.<Term>top().isBottom());
+        assertFalse(NumericDomain.<FactSubject>top().isBottom());
     }
 }

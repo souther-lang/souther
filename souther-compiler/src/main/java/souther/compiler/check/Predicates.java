@@ -57,7 +57,7 @@ final class Predicates {
         Set<Shape> crossed = EnumSet.noneOf(Shape.class);
         Core source = container;
         while (true) {
-            Term key = terms.bodyKey(source, at);
+            FactSubject key = terms.subjectOf(source, at);
             if (key != null) {
                 for (Quantified q : k.quantified()) {
                     if (key.equals(q.container()) && q.through().containsAll(crossed)) {
@@ -122,7 +122,7 @@ final class Predicates {
         // The container is the carrying rule's, which is the one argument this predicate is about.
         // What the operation hands its closure answers the same question about the same argument, and
         // is asked here only for the closure.
-        Term container = terms.bodyKey(carried.container(), at);
+        FactSubject container = terms.subjectOf(carried.container(), at);
         if (container == null) {
             return;
         }
@@ -139,10 +139,10 @@ final class Predicates {
         return found[0];
     }
 
-    record Constraint(LinearForm<Term> form, Rel rel) {
+    record Constraint(LinearForm<FactSubject> form, Rel rel) {
 
         /** The atoms this relation is written over. */
-        Set<Term> atoms() {
+        Set<FactSubject> atoms() {
             return form.coefs().keySet();
         }
     }
@@ -154,10 +154,10 @@ final class Predicates {
      * about a list built from it. {@code positive} is false for a clause written under a negation,
      * and such a clause carries nowhere, since the implication runs the other way.
      */
-    record Fact(List<Term> keys, boolean positive) {
+    record Fact(List<FactSubject> keys, boolean positive) {
 
         boolean entailedBy(PredicateFacts facts) {
-            for (Term key : keys) {
+            for (FactSubject key : keys) {
                 if (facts.entails(key, positive)) {
                     return true;
                 }
@@ -177,7 +177,7 @@ final class Predicates {
      * @param kinds how the values of every atom either of them names are spaced, so that a case can
      *              be taken into a domain without asking anything further of the caller
      */
-    record Case(Constraint numeric, List<Constraint> given, Map<Term, Granularity> kinds) {
+    record Case(Constraint numeric, List<Constraint> given, Map<FactSubject, Granularity> kinds) {
 
         /**
          * Every atom this case is decided by.
@@ -189,13 +189,13 @@ final class Predicates {
          * a condition names and never answers is an atom of this case all the same, and today no
          * operation in the table has such an argument.
          */
-        Set<Term> atomsItIsDecidedBy() {
+        Set<FactSubject> atomsItIsDecidedBy() {
             return kinds.keySet();
         }
 
         /** {@code d} with this case's conditions on the arguments taken as holding. */
-        private NumericDomain<Term> in(NumericDomain<Term> d) {
-            NumericDomain<Term> out = d;
+        private NumericDomain<FactSubject> in(NumericDomain<FactSubject> d) {
+            NumericDomain<FactSubject> out = d;
             for (Constraint one : given) {
                 out = out.assume(one.form(), one.rel(), kinds);
             }
@@ -233,18 +233,18 @@ final class Predicates {
         /** Every atom any case of this is decided by. A case that is never reached is one the
          * conditions rule out, and which those are is what the domain answers — so every case is
          * counted here, including the ones a reading will drop. */
-        Set<Term> atomsItIsDecidedBy() {
-            Set<Term> out = new LinkedHashSet<>();
+        Set<FactSubject> atomsItIsDecidedBy() {
+            Set<FactSubject> out = new LinkedHashSet<>();
             for (Case one : cases) {
                 out.addAll(one.atomsItIsDecidedBy());
             }
             return out;
         }
 
-        boolean entailedBy(NumericDomain<Term> d) {
+        boolean entailedBy(NumericDomain<FactSubject> d) {
             boolean reached = false;
             for (Case one : cases) {
-                NumericDomain<Term> here = one.in(d);
+                NumericDomain<FactSubject> here = one.in(d);
                 if (here.isBottom()) {
                     continue;
                 }
@@ -256,10 +256,10 @@ final class Predicates {
             return reached;
         }
 
-        boolean refutedBy(NumericDomain<Term> d) {
+        boolean refutedBy(NumericDomain<FactSubject> d) {
             boolean reached = false;
             for (Case one : cases) {
-                NumericDomain<Term> here = one.in(d);
+                NumericDomain<FactSubject> here = one.in(d);
                 if (here.isBottom()) {
                     continue;
                 }
@@ -303,8 +303,8 @@ final class Predicates {
          * about the caller, and answering by what some caller does is how the answer comes to be
          * wrong for the next one.
          */
-        Set<Term> atomsItIsDecidedBy() {
-            Set<Term> out = new LinkedHashSet<>();
+        Set<FactSubject> atomsItIsDecidedBy() {
+            Set<FactSubject> out = new LinkedHashSet<>();
             if (numeric != null) {
                 out.addAll(numeric.atoms());
             }
@@ -317,13 +317,13 @@ final class Predicates {
             return out;
         }
 
-        boolean dischargedBy(NumericDomain<Term> d, PredicateFacts facts) {
+        boolean dischargedBy(NumericDomain<FactSubject> d, PredicateFacts facts) {
             return numeric != null && d.entails(numeric.form(), numeric.rel())
                     || fact != null && fact.entailedBy(facts)
                     || piecewise != null && !decidedAsWritten(d, facts) && piecewise.entailedBy(d);
         }
 
-        boolean refutedBy(NumericDomain<Term> d, PredicateFacts facts) {
+        boolean refutedBy(NumericDomain<FactSubject> d, PredicateFacts facts) {
             return numeric != null && d.refutes(numeric.form(), numeric.rel())
                     || fact != null && fact.refutedBy(facts)
                     || piecewise != null && !decidedAsWritten(d, facts) && piecewise.refutedBy(d);
@@ -340,7 +340,7 @@ final class Predicates {
          * contradicting itself rather than an answer. What the cases are for is a clause the reading
          * that takes the call as an unknown cannot settle, and that is untouched.
          */
-        private boolean decidedAsWritten(NumericDomain<Term> d, PredicateFacts facts) {
+        private boolean decidedAsWritten(NumericDomain<FactSubject> d, PredicateFacts facts) {
             return numeric != null
                     && (d.entails(numeric.form(), numeric.rel())
                             || d.refutes(numeric.form(), numeric.rel()))
@@ -382,14 +382,40 @@ final class Predicates {
      * elsewhere, and that check names the clause that failed rather than only saying one did, so it
      * is left to say it. */
     Owed obligations(Core inv, Known k, Denotations at, boolean decidesFalse) {
-        return obligations(inv, k, at, Set.of(), true, decidesFalse);
+        return obligations(inv, k, at, Set.of(), true, decidesFalse, Read.AN_ASSUMPTION);
+    }
+
+    /**
+     * Whether a clause is being read as something that makes knowledge or as something that spends
+     * it. Not a direction of travel: the two read one expression through one reader, which is what
+     * keeps them from drifting, and this is the single thing they cannot share.
+     *
+     * <p>An assumption produces. A guard holds because the branch was taken, an {@code ensures}
+     * holds because the callee established it, and an invariant holds because the value was built
+     * through a checked constructor — none of them needs anything to have been said about the value
+     * beforehand, and each is how something first comes to be said about it.
+     *
+     * <p>An obligation spends. It asks the author to account for a value, and asking that about a
+     * value nothing has ever said anything of is asking for something no guard they could write
+     * would settle; the run-time check stands for such a clause instead.
+     *
+     * <p>Requiring an assumption to spend what it produces is the circle it looks like: to be spoken
+     * of, a value would have to already be spoken of. It is not a theoretical worry — written that
+     * way, a declaration that refutes a construction stopped refusing it, because the declaration was
+     * turned away for want of the knowledge it was carrying.
+     */
+    enum Read {
+        /** Knowledge being made: a guard, an invariant, a declared guarantee. */
+        AN_ASSUMPTION,
+        /** Knowledge being spent: a clause this construction has to account for. */
+        AN_OBLIGATION
     }
 
     /** The same, where {@code unnamed} holds the values the site hands over that no clause may be
      * read against. */
     Owed obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
                      boolean decidesFalse) {
-        return obligations(inv, k, at, unnamed, true, decidesFalse);
+        return obligations(inv, k, at, unnamed, true, decidesFalse, Read.AN_OBLIGATION);
     }
 
     /**
@@ -400,29 +426,29 @@ final class Predicates {
      * taken. Reading a predicate never takes a reading away.
      */
     private Owed obligations(Core rawInv, Known k, Denotations at, Set<Core> unnamed,
-                             boolean positive, boolean decidesFalse) {
+                             boolean positive, boolean decidesFalse, Read way) {
         Core sized = asSizeComparison(rawInv);
         Core ordered = asOrderComparison(sized, at);
-        Owed read = read(ordered, k, at, unnamed, positive, decidesFalse);
+        Owed read = read(ordered, k, at, unnamed, positive, decidesFalse, way);
         return ordered != sized && read.unreadable()
-                ? read(sized, k, at, unnamed, positive, decidesFalse) : read;
+                ? read(sized, k, at, unnamed, positive, decidesFalse, way) : read;
     }
 
     /** What {@code inv} owes, read as it stands. Its parts are read through {@link #obligations},
      * which is where each of them is taken as the comparison it states. */
     private Owed read(Core inv, Known k, Denotations at, Set<Core> unnamed,
-                      boolean positive, boolean decidesFalse) {
+                      boolean positive, boolean decidesFalse, Read way) {
         if (inv instanceof Core.Binary b && b.op() == Hir.BinOp.AND && positive) {
             // Each conjunct on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
             // That it stands is carried rather than dropped — the other conjunct being discharged is
             // not the invariant proven.
-            return obligations(b.left(), k, at, unnamed, true, decidesFalse)
-                    .and(obligations(b.right(), k, at, unnamed, true, decidesFalse));
+            return obligations(b.left(), k, at, unnamed, true, decidesFalse, way)
+                    .and(obligations(b.right(), k, at, unnamed, true, decidesFalse, way));
         }
         Core under = negated(inv);
         if (under != null) {
-            return obligations(under, k, at, unnamed, !positive, decidesFalse);
+            return obligations(under, k, at, unnamed, !positive, decidesFalse, way);
         }
         Boolean folded = decidedAt(inv);
         if (folded != null) {
@@ -441,10 +467,15 @@ final class Predicates {
         Piecewise piecewise = null;
         if (inv instanceof Core.Binary b && relOf(b.op()) != null) {
             Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
-            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at);
-            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at);
-            if (la != null && ra != null) {
-                numeric = new Constraint(la.minus(ra), eff);
+            LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
+            LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
+            // Asked of the relation, not of its two sides. An atom on both sides cancels, and one
+            // that is not in the relation is not something the relation depends on — turning a clause
+            // away for a value it does not actually rest on would report nothing about a value the
+            // author was never asked about.
+            LinearForm<FactSubject> between = la == null || ra == null ? null : la.minus(ra);
+            if (between != null && canBeDischargedFrom(between, k, way)) {
+                numeric = new Constraint(between, eff);
                 // The same clause read as the cases of whatever chooses inside it. Both readings are
                 // kept: a guard may name the call itself, which the clause as it stands is what
                 // settles, and reading it case by case never takes that away.
@@ -455,7 +486,7 @@ final class Predicates {
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
-        List<Term> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed)
+        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed)
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
@@ -468,6 +499,28 @@ final class Predicates {
         return Owed.of(new Clause(numeric, fact, known, piecewise));
     }
 
+    /**
+     * Whether there is anything for a clause written over {@code form} to be discharged from.
+     *
+     * <p>The same question {@link Terms#reportableSite} asks of a value, asked here of the atoms a
+     * clause is written over — and it has to be asked here as well, because a clause reaches atoms
+     * the site's own value never mentions. An atom is either one the check writes about of its own
+     * accord, which is what a place is, or one something on this path has spoken of. There is no
+     * third kind, and for an atom the first reduces to a single test: only an atom standing on one
+     * evaluation is outside what the seeding writes about.
+     *
+     * <p>Asked at all only because identity closed. A form being built used to be evidence that
+     * something was known, because a value nothing could be said of could not be composed into a form
+     * either; now every value has an identity and arithmetic composes over any of them, so the
+     * coincidence is gone and the rule it stood for has to be stated. Left unstated, a clause over a
+     * value nothing has ever mentioned would be owed here, and owing it would mean reporting a
+     * construction no guard an author could write would ever settle.
+     */
+    private static boolean canBeDischargedFrom(LinearForm<FactSubject> form, Known k, Read way) {
+        return way == Read.AN_ASSUMPTION || form.coefs().keySet().stream()
+                .allMatch(atom -> !atom.identity().standsOnAnEvaluation() || k.speaksOf(atom));
+    }
+
     /** Whether {@code inv} is decided outright: the clause, with the construction's own values
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
      * every clause reading anything computed at run time. */
@@ -476,7 +529,7 @@ final class Predicates {
         return folded instanceof Boolean b ? b : null;
     }
 
-    static List<Term> firstOnly(List<Term> keys) {
+    static List<FactSubject> firstOnly(List<FactSubject> keys) {
         return keys.isEmpty() ? keys : List.of(keys.get(0));
     }
 
@@ -494,16 +547,23 @@ final class Predicates {
      *
      * @param read whether any of these domains took the condition in
      */
-    record Assumed(Known known, boolean read) {
+    record Assumed(Known known, boolean taken, boolean shapeRead) {
 
-        Assumed alsoRead(boolean more) {
-            return more && !read ? new Assumed(known, true) : this;
+        Assumed alsoRead(boolean moreTaken, boolean moreShape) {
+            return moreTaken && !taken || moreShape && !shapeRead
+                    ? new Assumed(known, taken || moreTaken, shapeRead || moreShape) : this;
         }
     }
 
     Assumed assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         Core cond = asSizeComparison(rawCond);
-        boolean read = false;
+        // Two answers, and they were one until a condition could name something without this having
+        // read what it says. What was taken in is what a proof about this path may rest on; what was
+        // read is what an unsettled arm may be explained by. A condition whose shape ran out still
+        // narrows the state through the subject it names, and a proof that left it out would name a
+        // set of conditions that can all hold and say they cannot.
+        boolean taken = false;
+        boolean shapeRead = false;
         Core ordered = asOrderComparison(cond, at);
         if (ordered != cond) {
             // Both hold of the same values: the order the call decides, and the bound on the sign
@@ -511,7 +571,8 @@ final class Predicates {
             // read, so a guard states each of them rather than choosing here.
             Assumed first = assumeCond(ordered, k, at, positive);
             k = first.known();
-            read = first.read();
+            taken = first.taken();
+            shapeRead = first.shapeRead();
         }
         // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
         if (cond instanceof Core.Binary b
@@ -521,11 +582,11 @@ final class Predicates {
             // is not one nothing was read of, and calling it that would name this compiler's limit
             // where the limit was reached on one operand only.
             return assumeCond(b.right(), left.known(), at, positive)
-                    .alsoRead(left.read() || read);
+                    .alsoRead(left.taken() || taken, left.shapeRead() || shapeRead);
         }
         Core under = negated(cond);
         if (under != null) {
-            return assumeCond(under, k, at, !positive).alsoRead(read);
+            return assumeCond(under, k, at, !positive).alsoRead(taken, shapeRead);
         }
         Known out = k;
         // What holds of the sizes the condition names, and of what the operations in it answer,
@@ -546,42 +607,70 @@ final class Predicates {
         // which is handed the same facts, would not.
         if (noCaseSatisfies(cond, out, at, positive)) {
             // Read, and read to the end: what it comes to is that nothing enters here.
-            return new Assumed(out.reachingNothing(), true);
+            return new Assumed(out.reachingNothing(), true, true);
         }
-        read |= !known.isEmpty();
+        taken |= !known.isEmpty();
+        shapeRead |= !known.isEmpty();
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
             Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            LinearForm<Term> la = eff == null ? null : terms.affineOf(b.left(), at);
-            LinearForm<Term> ra = eff == null ? null : terms.affineOf(b.right(), at);
+            LinearForm<FactSubject> la = eff == null ? null : terms.affineOf(b.left(), at);
+            LinearForm<FactSubject> ra = eff == null ? null : terms.affineOf(b.right(), at);
             if (la != null && ra != null) {
                 LinearForm compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
-                read = true;
+                taken = true;
+                shapeRead |= readsItsShape(b.left(), at) && readsItsShape(b.right(), at);
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
-            Set<Term> named = new HashSet<>(spokenOf(b.left(), at, la));
+            Set<FactSubject> named = new HashSet<>(spokenOf(b.left(), at, la));
             named.addAll(spokenOf(b.right(), at, ra));
             out = out.speaking(named);
         }
         List<Quantified> quantified = new ArrayList<>();
         quantifiedBy(cond, at, positive, quantified);
         out = out.and(quantified);
-        read |= !quantified.isEmpty();
+        taken |= !quantified.isEmpty();
+        shapeRead |= !quantified.isEmpty();
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
-        Term key = terms.bodyKey(polar.expr(), at);
-        return key == null ? new Assumed(out, read)
-                : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH), true);
+        FactSubject key = terms.subjectOf(polar.expr(), at);
+        return key == null ? new Assumed(out, taken, shapeRead)
+                : new Assumed(out.taking(key, polar.positive(), Known.Held.ON_THE_PATH), true,
+                        shapeRead || readsItsShape(polar.expr(), at));
+    }
+
+    /**
+     * Whether a rule here read the shape {@code e} is written in.
+     *
+     * <p>Not what a fact about {@code e} is filed under, which is {@link Terms#subjectOf}'s and is
+     * now an answer for every expression there is. This is the other question, and the only place
+     * the symbolic reading is the right one to ask: whether the check reached what the condition
+     * <em>says</em>, or only which value it says it of.
+     *
+     * <p>What it decides is what an unsettled arm is explained by. A condition of a shape no rule
+     * reads is this compiler's limit and widening the reading removes it; a condition read to no
+     * effect is the ordinary state of a branch nobody built a value for, and no widening touches it.
+     * Since identity closed, every condition names something and a fact about that something is
+     * always recorded — so answering this from whether anything was recorded made the first kind
+     * vanish, and every limit of this compiler was reported as a fact about the model. Measured:
+     * over the whole suite the first kind stopped occurring at all.
+     *
+     * <p>The knowledge is taken in either way. What a guard says about a value is true whether or not
+     * this check could read the shape it was written in, and a clause naming that value is still
+     * discharged by it. This says only what may be claimed about the reading.
+     */
+    private boolean readsItsShape(Core e, Denotations at) {
+        return terms.bodyKey(e, at) != null;
     }
 
     /** The terms one side of a compared pair names: the expression itself, and each atom of the form it
      * reduced to — {@code leftover + 1} says something about {@code leftover}. */
-    Collection<Term> spokenOf(Core side, Denotations at, LinearForm<Term> form) {
-        Set<Term> named = new HashSet<>(form == null ? Set.of() : form.coefs().keySet());
-        Term written = terms.bodyKey(side, at);
+    Collection<FactSubject> spokenOf(Core side, Denotations at, LinearForm<FactSubject> form) {
+        Set<FactSubject> named = new HashSet<>(form == null ? Set.of() : form.coefs().keySet());
+        FactSubject written = terms.subjectOf(side, at);
         if (written != null) {
             named.add(written);
         }
@@ -636,12 +725,36 @@ final class Predicates {
     }
 
 
+    /** Every subject the clauses in {@code owed} say something about. */
+    private static Set<FactSubject> subjectsIn(Owed owed) {
+        Set<FactSubject> named = new LinkedHashSet<>();
+        for (Clause c : owed.clauses()) {
+            for (Constraint known : c.known()) {
+                named.addAll(known.form().coefs().keySet());
+            }
+            if (c.numeric() != null) {
+                named.addAll(c.numeric().form().coefs().keySet());
+            }
+            if (c.fact() != null) {
+                named.addAll(c.fact().keys());
+            }
+        }
+        return named;
+    }
+
     /** {@code k} with everything {@code owed} states taken as holding, as far as {@code held}
      * reaches. What a clause owes at a construction is what it guarantees where it is already
      * established, so the two read the same clauses through the same rule and differ only in
      * direction. */
     Known assume(Owed owed, Known k, Known.Held held) {
         Known out = k;
+        // Every subject this takes something in about is one something has been said about. Recorded
+        // for the same reason a guard's subjects are: what makes a clause readable against a value is
+        // that something speaks of it, and the seeding speaks. A place did not need it — the seeding
+        // writes about places, which is a rule of its own — but an evaluation has no such rule, and
+        // saying nothing here would leave a value its own type guarantees something about looking
+        // like one nothing is known of.
+        out = out.speaking(subjectsIn(owed));
         // What could not be read says nothing here: a clause left to the run-time check is not one
         // the seeding may assume, and the flag saying so is the construction site's to act on.
         for (Clause c : owed.clauses()) {
@@ -681,7 +794,9 @@ final class Predicates {
         }
         Core container = DischargeRules.sizeArgOf(call);
         if (container != null) {
-            Term atom = terms.sizeAtomOf(call, arg -> terms.bodyKey(arg, at));
+            // The subject and not the symbolic key: a size is never negative whatever it is taken
+            // of, and a count over something the term grammar cannot read is still a count.
+            FactSubject atom = terms.subjectOf(call, at);
             if (atom != null) {
                 out.add(new Constraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
                 bounds(call.operation(), DischargeRules.sizeSource(container), at, out);
@@ -713,11 +828,11 @@ final class Predicates {
             Core.forEachChild(e, child -> resultFacts(child, at, out));
             return;
         }
-        Term result = terms.atomOf(call, at);
+        FactSubject result = terms.atomOf(call, at);
         if (result != null) {
             for (DischargeRules.ResultBound bound
                     : DischargeRules.boundsOn(call, arg -> constantOf(arg, at))) {
-                LinearForm<Term> against = bound.against() == null
+                LinearForm<FactSubject> against = bound.against() == null
                         ? LinearForm.constant(bound.offset())
                         : addTo(terms.affineOf(bound.against().of(call), at), bound.offset());
                 if (against != null) {
@@ -746,8 +861,8 @@ final class Predicates {
             return false;
         }
         Rel stated = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
-        LinearForm<Term> la = stated == null ? null : terms.affineOf(b.left(), at);
-        LinearForm<Term> ra = stated == null ? null : terms.affineOf(b.right(), at);
+        LinearForm<FactSubject> la = stated == null ? null : terms.affineOf(b.left(), at);
+        LinearForm<FactSubject> ra = stated == null ? null : terms.affineOf(b.right(), at);
         if (la == null || ra == null) {
             return false;
         }
@@ -766,39 +881,39 @@ final class Predicates {
      * first and leave the second saying nothing.
      */
     private Piecewise piecewiseOf(Constraint owed, Core inv, Denotations at) {
-        Map<Term, Core.PreservedCall> choosing = new LinkedHashMap<>();
+        Map<FactSubject, Core.PreservedCall> choosing = new LinkedHashMap<>();
         chosenCalls(inv, at, choosing);
         choosing.keySet().retainAll(owed.form().coefs().keySet());
         if (choosing.size() != 1) {
             return null;
         }
-        Term atom = choosing.keySet().iterator().next();
+        FactSubject atom = choosing.keySet().iterator().next();
         Core.PreservedCall call = choosing.get(atom);
         BigDecimal coefficient = owed.form().coefs().get(atom);
         List<Case> cases = new ArrayList<>();
         for (DischargeRules.Choice one : DischargeRules.chosenBy(call).cases()) {
-            LinearForm<Term> answered = terms.affineOf(one.answers().of(call), at);
+            LinearForm<FactSubject> answered = terms.affineOf(one.answers().of(call), at);
             if (answered == null) {
                 return null;
             }
-            LinearForm<Term> instead = owed.form()
+            LinearForm<FactSubject> instead = owed.form()
                     .minus(LinearForm.atom(atom).times(coefficient))
                     .plus(answered.times(coefficient));
             List<Constraint> given = new ArrayList<>(one.given().size() + 1);
-            Map<Term, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
+            Map<FactSubject, Granularity> kinds = new HashMap<>(terms.kindsOf(instead));
             // What the call answers here, said of the call itself: in this case the two are one
             // value. Without it a guard written about the call would stand outside the cases, and a
             // clause could come out established by these and refused by that.
-            LinearForm<Term> answeredHere = LinearForm.atom(atom).minus(answered);
+            LinearForm<FactSubject> answeredHere = LinearForm.atom(atom).minus(answered);
             given.add(new Constraint(answeredHere, Rel.EQ));
             kinds.putAll(terms.kindsOf(answeredHere));
             for (DischargeRules.ArgumentsStand stands : one.given()) {
-                LinearForm<Term> left = terms.affineOf(stands.left().of(call), at);
-                LinearForm<Term> right = terms.affineOf(stands.right().of(call), at);
+                LinearForm<FactSubject> left = terms.affineOf(stands.left().of(call), at);
+                LinearForm<FactSubject> right = terms.affineOf(stands.right().of(call), at);
                 if (left == null || right == null) {
                     return null;
                 }
-                LinearForm<Term> between = left.minus(right);
+                LinearForm<FactSubject> between = left.minus(right);
                 given.add(new Constraint(between, stands.rel()));
                 kinds.putAll(terms.kindsOf(between));
             }
@@ -810,13 +925,13 @@ final class Predicates {
 
     /** Every call inside {@code e} that answers one of the values it was given, by the atom it keys
      * as. A name is what it was given, as everywhere else a value is read. */
-    private void chosenCalls(Core e, Denotations at, Map<Term, Core.PreservedCall> out) {
+    private void chosenCalls(Core e, Denotations at, Map<FactSubject, Core.PreservedCall> out) {
         if (e instanceof Core.Read r && at.valueOf(r.binding()) != null) {
             chosenCalls(at.valueOf(r.binding()), at, out);
             return;
         }
         if (e instanceof Core.PreservedCall call && DischargeRules.chosenBy(call) != null) {
-            Term atom = terms.atomOf(call, at);
+            FactSubject atom = terms.atomOf(call, at);
             if (atom != null) {
                 out.put(atom, call);
             }
@@ -839,7 +954,7 @@ final class Predicates {
         }
         Term from = terms.bodyKey(shift.of().of(call), at);
         Term to = terms.bodyKey(call, at);
-        LinearForm<Term> amount = terms.affineOf(shift.amount().of(call), at);
+        LinearForm<FactSubject> amount = terms.affineOf(shift.amount().of(call), at);
         if (from == null || to == null || amount == null) {
             return;
         }
@@ -850,13 +965,13 @@ final class Predicates {
     }
 
     /** {@code form} with {@code offset} added, or null where the form could not be read. */
-    private static LinearForm<Term> addTo(LinearForm<Term> form, BigDecimal offset) {
+    private static LinearForm<FactSubject> addTo(LinearForm<FactSubject> form, BigDecimal offset) {
         return form == null ? null : form.plus(LinearForm.constant(offset));
     }
 
     /** The constant {@code e} reads as, or null where it reads as none. */
     private BigDecimal constantOf(Core e, Denotations at) {
-        LinearForm<Term> form = terms.affineOf(e, at);
+        LinearForm<FactSubject> form = terms.affineOf(e, at);
         return form == null || !form.coefs().isEmpty() ? null : form.constant();
     }
 
@@ -911,12 +1026,12 @@ final class Predicates {
     /** The keys a guard could have settled to establish this clause: the predicate as written, and
      * the same predicate of each container the written one was built from by a construction that
      * carries it. Stating {@code List.all(p, xs)} is stating it of every sublist of {@code xs}. */
-    List<Term> factKeys(Core inv, Denotations at) {
-        Term written = terms.bodyKey(inv, at);
+    List<FactSubject> factKeys(Core inv, Denotations at) {
+        FactSubject written = terms.subjectOf(inv, at);
         if (written == null) {
             return List.of();
         }
-        List<Term> keys = new ArrayList<>();
+        List<FactSubject> keys = new ArrayList<>();
         keys.add(written);
         if (!(inv instanceof Core.PreservedCall call)) {
             return keys;
@@ -939,7 +1054,7 @@ final class Predicates {
                 break;
             }
             Core source = built.container();
-            Term key = terms.bodyKey(carried.over(next, source), at);
+            FactSubject key = terms.subjectOf(carried.over(next, source), at);
             if (key == null) {
                 break;
             }

@@ -119,8 +119,8 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
     // --- the question itself -------------------------------------------------------------------
 
     private static final Term.Interner NAMES = new Term.Interner();
-    private static final Term A_PREDICATE = NAMES.written("some predicate");
-    private static final Term A_POSITION = NAMES.written("some position");
+    private static final FactSubject A_PREDICATE = FactSubject.of(NAMES.written("some predicate"));
+    private static final FactSubject A_POSITION = FactSubject.of(NAMES.written("some position"));
 
     /**
      * Each domain at its own bottom, asked of the walk's own question.

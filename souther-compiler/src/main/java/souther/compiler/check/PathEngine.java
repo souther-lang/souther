@@ -159,7 +159,7 @@ final class PathEngine {
         if (at.valueOf(li.binder().id()) == li.value()) {
             return new Entered(k, at);
         }
-        Denotes what = terms.denotationOf(li.value(), at, k);
+        Denotes what = terms.denotationOf(li.value(), at);
         return new Entered(k, at.binding(li.binder().id(), li.value(), what));
     }
 
@@ -352,6 +352,100 @@ final class PathEngine {
     }
 
     // --- seeding -------------------------------------------------------------------------------
+
+    /**
+     * {@code k} with what every answer read here guarantees taken as holding of it: what its type
+     * states of any value of that type, and what its behavior declared of every answer it gives.
+     *
+     * <p>An answer is a value of its type, built through that type's checked constructor — the same
+     * argument {@link #enter} rests on for a parameter, for what a {@code match} arm binds, and for
+     * what a combinator hands its closure. It was not asked of an answer only because an answer had
+     * nothing to be asked about: no subject, so nothing to write the guarantee under. It has one now.
+     *
+     * <p>What makes an answer one of these is not the shape of the node. It is that whoever produced
+     * it had already established what its type states before handing it over — a boundary this check
+     * read on its own, or one another compile read and published. A call to a behavior is that today,
+     * and if another way of invoking one turns out to carry the same guarantee it belongs here too. A
+     * construction written here is not: it is the very thing being judged, and seeding it assumes
+     * what the judgement is about. Written that way first, a construction over a value nothing was
+     * known of came out proved — and came out proved with the clause meant to establish it taken
+     * away, which is the shape of a check that has stopped checking.
+     *
+     * <p>Only what holds of every answer. A rule under a case is about an answer that is that case,
+     * and nothing here has opened one; that rule is taken in where the case is known, which is at the
+     * arm ({@link #enteringArm}). A rule under no case holds of whatever the behavior answered, so
+     * the call is where it is known.
+     *
+     * <p>Sound for a behavior that reaches outside the language, and for the same reason it is sound
+     * for one that does not. Two writings of such a call are two evaluations and so two subjects, but
+     * each invocation answers something its own declaration holds of it. What the effect decides is
+     * whether the two may be identified, not whether either of them was declared about.
+     *
+     * <p>Held of the value and not of the path. What is guaranteed of a value is true wherever that
+     * value is named, and an evaluation is named at one place, so there is no branch on which it is
+     * less true.
+     *
+     * <p>Read over the expression rather than at each call's own step in the walk, because a
+     * construction is judged when the walk reaches it and the answers it is built from stand
+     * underneath it.
+     *
+     * <p>As far as the expression is <em>reached</em>, and no further. Standing in the subtree is not
+     * standing where the walk is: a branch is read under the condition that chose it, and a call in
+     * the arm beside it is one this path never evaluates. Taken in from there, what that call
+     * guarantees is a fact about a value that was never produced — and since a guarantee constrains
+     * the arguments it relates the answer to, it lands on the very values the condition is about. One
+     * arm's answer then contradicts the other arm's condition, the reading comes out reaching
+     * nothing, and the arm is walked no further: its constructions are not judged and nothing is
+     * said. So this stops where the walk branches, and each branch's own reading seeds what stands in
+     * it. Blocks stop it too — what a closure's body answers is decided where the closure is applied,
+     * and what a binding inside one holds is not settled from out here.
+     */
+    Known answering(Core e, Known k, Denotations at) {
+        if (e instanceof Core.Block) {
+            return k;
+        }
+        Known out = k;
+        if (isACheckedProducer(e)) {
+            out = seedAt(e, out, at, 0);
+        }
+        out = assuming(answeredBy(e, at), e, guard -> guard instanceof Guard.Always,
+                new Entered(out, at)).known();
+        // Only what is evaluated by reaching here. What each branch holds is that branch's to read.
+        return switch (e) {
+            case Core.If x -> answering(x.cond(), out, at);
+            case Core.Match x -> answering(x.scrutinee(), out, at);
+            case Core.IfConstructed x -> answering(x.construct(), out, at);
+            // A binding's body is read once the binding is entered, and not from out here: what its
+            // initializer denotes is not settled until `bindLet` has run, so an answer read through a
+            // name from here would be given a subject the name does not have yet.
+            case Core.LetIn x -> answering(x.value(), out, at);
+            default -> {
+                Known[] threaded = {out};
+                Core.forEachChild(e, child -> threaded[0] = answering(child, threaded[0], at));
+                yield threaded[0];
+            }
+        };
+    }
+
+    /**
+     * Whether reaching {@code e} means reaching a value whose type's invariant something already
+     * established.
+     *
+     * <p>Asked of what produced the value, and of nothing else. Not of the subject it was given: what
+     * kind of subject a value has says whether two writings of it may be identified, which is a
+     * different question with a different answer, and reading one as the other would take the
+     * guarantee away from any answer that turned out to be shareable. Not of whether a contract was
+     * declared either — that is what an {@code ensures} is, and a behavior with none still answers a
+     * value of its type.
+     *
+     * <p>A call to a behavior is one: its implementation is a body this check read, or one another
+     * compile read and published, and either way the construction was checked there. A construction
+     * written here is not — it is the very thing being judged.
+     */
+    private boolean isACheckedProducer(Core e) {
+        return e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                && reached.denotes() instanceof ValueName.Behavior;
+    }
 
     /**
      * Seeds a reading with what the type of the value at {@code root} guarantees: a numeric

@@ -48,7 +48,7 @@ final class DerivedBounds {
      * a reading that derived three of them answers. So the property has nowhere else to be read,
      * and one that nothing reads stops being true without anything failing.
      */
-    static List<List<Term>> WATCHING;
+    static List<List<FactSubject>> WATCHING;
 
     /**
      * {@code base} with what follows about the arithmetic outside the affine fragment that this
@@ -75,17 +75,17 @@ final class DerivedBounds {
      * graph names it, and never through a relation this domain holds between the two — which is the
      * interval reasoning that tightens under its own answers that this declines to be.
      */
-    static NumericDomain<Term> refine(NumericDomain<Term> base, Terms terms, Set<Term> asked) {
-        Map<Term, Derivation> recipes = terms.derivations();
-        Map<Term, Bounds> derived = new LinkedHashMap<>();
+    static NumericDomain<FactSubject> refine(NumericDomain<FactSubject> base, Terms terms, Set<FactSubject> asked) {
+        Map<FactSubject, Derivation> recipes = terms.derivations();
+        Map<FactSubject, Bounds> derived = new LinkedHashMap<>();
         if (!recipes.isEmpty() && !base.isBottom()) {
-            for (Term atom : roots(recipes, base, asked)) {
+            for (FactSubject atom : roots(recipes, base, asked)) {
                 derive(atom, base, terms, derived, new LinkedHashSet<>());
             }
         }
         watched(derived.keySet());
-        NumericDomain<Term> out = base;
-        for (Map.Entry<Term, Bounds> one : derived.entrySet()) {
+        NumericDomain<FactSubject> out = base;
+        for (Map.Entry<FactSubject, Bounds> one : derived.entrySet()) {
             out = taking(out, one.getKey(), one.getValue(), terms);
         }
         return out;
@@ -94,15 +94,15 @@ final class DerivedBounds {
     /** The atoms this reading is to derive from: the ones it can reach that were recorded as
      * arithmetic. Walked from the reaching side rather than from {@code recipes}, so what it costs
      * is what the question is about and not how much arithmetic the behavior contains. */
-    private static Set<Term> roots(Map<Term, Derivation> recipes, NumericDomain<Term> base,
-                                   Set<Term> asked) {
-        Set<Term> out = new LinkedHashSet<>();
-        for (Term atom : asked) {
+    private static Set<FactSubject> roots(Map<FactSubject, Derivation> recipes, NumericDomain<FactSubject> base,
+                                   Set<FactSubject> asked) {
+        Set<FactSubject> out = new LinkedHashSet<>();
+        for (FactSubject atom : asked) {
             if (recipes.containsKey(atom)) {
                 out.add(atom);
             }
         }
-        for (Term atom : base.atomsSpokenOf()) {
+        for (FactSubject atom : base.atomsSpokenOf()) {
             if (recipes.containsKey(atom)) {
                 out.add(atom);
             }
@@ -113,8 +113,8 @@ final class DerivedBounds {
     /** Records the recipes this reading evaluated, where a test is reading them. Every atom here
      * had its recipe put through {@link Intervals}: {@link #derive} answers a second ask from what
      * it remembered, so an atom is written once however many forms name it. */
-    private static void watched(Set<Term> evaluated) {
-        List<List<Term>> watching = WATCHING;
+    private static void watched(Set<FactSubject> evaluated) {
+        List<List<FactSubject>> watching = WATCHING;
         if (watching != null) {
             watching.add(List.copyOf(evaluated));
         }
@@ -128,8 +128,8 @@ final class DerivedBounds {
      * the recipes make a graph with no way back to where it started; reaching one that is already
      * being answered would mean the naming built an atom out of itself.
      */
-    private static Bounds derive(Term atom, NumericDomain<Term> base, Terms terms,
-                                 Map<Term, Bounds> done, Set<Term> deriving) {
+    private static Bounds derive(FactSubject atom, NumericDomain<FactSubject> base, Terms terms,
+                                 Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
         Bounds had = done.get(atom);
         if (had != null) {
             return had;
@@ -159,10 +159,10 @@ final class DerivedBounds {
      * atoms this form names are derived, so what is read is the expression's own structure and not
      * everything else the reading has recorded.
      */
-    private static Bounds boundsOf(LinearForm<Term> form, NumericDomain<Term> base, Terms terms,
-                                   Map<Term, Bounds> done, Set<Term> deriving) {
-        NumericDomain<Term> with = base;
-        for (Term atom : form.coefs().keySet()) {
+    private static Bounds boundsOf(LinearForm<FactSubject> form, NumericDomain<FactSubject> base, Terms terms,
+                                   Map<FactSubject, Bounds> done, Set<FactSubject> deriving) {
+        NumericDomain<FactSubject> with = base;
+        for (FactSubject atom : form.coefs().keySet()) {
             if (terms.derivations().containsKey(atom)) {
                 with = taking(with, atom, derive(atom, base, terms, done, deriving), terms);
             }
@@ -173,11 +173,11 @@ final class DerivedBounds {
     /** {@code d} with {@code atom} taken to lie between {@code bounds}. An end the range does not
      * reach is asserted as the strict comparison it is, which is what the domain reads a range's
      * ends as. */
-    private static NumericDomain<Term> taking(NumericDomain<Term> d, Term atom, Bounds bounds,
+    private static NumericDomain<FactSubject> taking(NumericDomain<FactSubject> d, FactSubject atom, Bounds bounds,
                                               Terms terms) {
-        LinearForm<Term> form = LinearForm.atom(atom);
-        Map<Term, Granularity> kinds = terms.kindsOf(form);
-        NumericDomain<Term> out = d;
+        LinearForm<FactSubject> form = LinearForm.atom(atom);
+        Map<FactSubject, Granularity> kinds = terms.kindsOf(form);
+        NumericDomain<FactSubject> out = d;
         if (bounds.min() != null) {
             out = out.assume(form.minus(LinearForm.constant(count(bounds.min()))),
                     bounds.min().inclusive() ? Rel.GE : Rel.GT, kinds);
@@ -211,7 +211,7 @@ final class DerivedBounds {
 
         private static final long serialVersionUID = 1L;
 
-        AnAtomComputedFromItself(Term atom) {
+        AnAtomComputedFromItself(FactSubject atom) {
             super("atom `" + atom.rendered() + "` is computed from itself");
         }
     }

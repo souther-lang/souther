@@ -20,10 +20,10 @@ final class PredicateFacts {
     private static final PredicateFacts BOTTOM = new PredicateFacts(true, Set.of(), Set.of());
 
     private final boolean bottom;    // contradictory guards — this path is not taken
-    private final Set<Term> holds;
-    private final Set<Term> fails;
+    private final Set<FactSubject> holds;
+    private final Set<FactSubject> fails;
 
-    private PredicateFacts(boolean bottom, Set<Term> holds, Set<Term> fails) {
+    private PredicateFacts(boolean bottom, Set<FactSubject> holds, Set<FactSubject> fails) {
         this.bottom = bottom;
         this.holds = holds;
         this.fails = fails;
@@ -47,14 +47,14 @@ final class PredicateFacts {
     }
 
     /** The facts with {@code key} settled. Settling it both ways makes the path infeasible. */
-    PredicateFacts assume(Term key, boolean positive) {
+    PredicateFacts assume(FactSubject key, boolean positive) {
         if (bottom) {
             return this;
         }
         if ((positive ? fails : holds).contains(key)) {
             return BOTTOM;
         }
-        Set<Term> next = new HashSet<>(positive ? holds : fails);
+        Set<FactSubject> next = new HashSet<>(positive ? holds : fails);
         next.add(key);
         return positive
                 ? new PredicateFacts(false, Set.copyOf(next), fails)
@@ -62,12 +62,12 @@ final class PredicateFacts {
     }
 
     /** Whether the guards prove {@code key} (or its negation, when {@code positive} is false). */
-    boolean entails(Term key, boolean positive) {
+    boolean entails(FactSubject key, boolean positive) {
         return bottom || (positive ? holds : fails).contains(key);
     }
 
     /** Whether the guards prove the opposite of what {@code positive} asks of {@code key}. */
-    boolean refutes(Term key, boolean positive) {
+    boolean refutes(FactSubject key, boolean positive) {
         return !bottom && (positive ? fails : holds).contains(key);
     }
 

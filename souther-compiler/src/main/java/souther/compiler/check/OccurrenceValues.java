@@ -70,7 +70,7 @@ public final class OccurrenceValues {
         if (seeded == null) {
             return Cardinality.UNKNOWN;
         }
-        Term atom = seeded.atoms().get(path);
+        FactSubject atom = seeded.atoms().get(path);
         if (atom == null) {
             return Cardinality.UNKNOWN;
         }

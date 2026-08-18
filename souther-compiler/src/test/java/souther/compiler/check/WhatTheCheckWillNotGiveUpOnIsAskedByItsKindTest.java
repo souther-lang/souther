@@ -74,10 +74,10 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
         Denotations at = Denotations.none().location(a).location(b);
         Core.Read left = new Core.Read("a", a, Type.INT, POS);
         Core.Read right = new Core.Read("b", b, Type.INT, POS);
-        NumericDomain.LinearForm<Term> product = terms.affineOf(
+        NumericDomain.LinearForm<FactSubject> product = terms.affineOf(
                 new Core.Binary(Hir.BinOp.MUL, left, right, CoverageOrigin.unwritten(), Type.INT,
                         POS), at);
-        Term atom = product.coefs().keySet().iterator().next();
+        FactSubject atom = product.coefs().keySet().iterator().next();
 
         assertThrows(Terms.OneTermTwoDerivations.class, () -> InvariantChecker.gaveUp("a test",
                 new Terms.OneTermTwoDerivations("atom `" + atom.rendered() + "` two ways")));
@@ -90,7 +90,7 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
         Denotations at = Denotations.none().location(a);
-        Term atom = terms.atomOf(new Core.Read("a", a, Type.INT, POS), at);
+        FactSubject atom = terms.atomOf(new Core.Read("a", a, Type.INT, POS), at);
 
         assertThrows(DerivedBounds.AnAtomComputedFromItself.class,
                 () -> InvariantChecker.gaveUp("a test",

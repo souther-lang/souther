@@ -26,22 +26,22 @@ import java.util.Set;
  * it is not claimed either.
  */
 record Known(ConstraintState constraints, List<Quantified> quantified,
-                     Set<Term> spoken, Unguarded unguarded) {
+                     Set<FactSubject> spoken, Unguarded unguarded) {
 
     /** What holds of the values here whatever the path did — what a type guarantees of a value and
      * what a name was given. It carries no quantifiers and no spoken terms: those decide which
      * clauses are read at all, and both readings are asked about the same clauses. */
     record Unguarded(ConstraintState constraints) {
 
-        Unguarded taking(LinearForm<Term> f, Rel rel, Map<Term, Granularity> kinds) {
+        Unguarded taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, Granularity> kinds) {
             return new Unguarded(constraints.taking(f, rel, kinds));
         }
 
-        Unguarded taking(Term key, boolean positive) {
+        Unguarded taking(FactSubject key, boolean positive) {
             return new Unguarded(constraints.taking(key, positive));
         }
 
-        NumericDomain<Term> numbers() {
+        NumericDomain<FactSubject> numbers() {
             return constraints.numbers();
         }
 
@@ -54,7 +54,7 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
      * answer — a bound is read off one and off nothing else — and for nothing about the state as a
      * whole. Whether a value exists and whether a path is reached are both
      * {@link ConstraintState#isBottom}, and neither is assembled from this. */
-    NumericDomain<Term> numbers() {
+    NumericDomain<FactSubject> numbers() {
         return constraints.numbers();
     }
 
@@ -90,14 +90,14 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
-    Known taking(LinearForm<Term> f, Rel rel, Held held, Map<Term, Granularity> kinds) {
+    Known taking(LinearForm<FactSubject> f, Rel rel, Held held, Map<FactSubject, Granularity> kinds) {
         return new Known(constraints.taking(f, rel, kinds), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
      * is false — as far as {@code held} reaches. */
-    Known taking(Term key, boolean positive, Held held) {
+    Known taking(FactSubject key, boolean positive, Held held) {
         return new Known(constraints.taking(key, positive), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded);
     }
@@ -121,17 +121,17 @@ record Known(ConstraintState constraints, List<Quantified> quantified,
      * spoke about is known exactly then, and reading it back out of a domain would mean matching
      * key text, which is how a term that merely reads like another gets mistaken for it.
      */
-    Known speaking(Collection<Term> terms) {
+    Known speaking(Collection<FactSubject> terms) {
         if (terms.isEmpty()) {
             return this;
         }
-        Set<Term> all = new HashSet<>(spoken);
+        Set<FactSubject> all = new HashSet<>(spoken);
         all.addAll(terms);
         return new Known(constraints, quantified, all, unguarded);
     }
 
     /** Whether an assumption on this path named {@code term}. */
-    boolean speaksOf(Term term) {
+    boolean speaksOf(FactSubject term) {
         return spoken.contains(term);
     }
 
