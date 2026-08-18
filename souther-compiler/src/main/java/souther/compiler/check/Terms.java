@@ -780,21 +780,22 @@ final class Terms {
      * such an invariant. Widening it is a matter of naming more values here.
      */
     FactSubject reportableSite(Core e, Denotations at, Known k) {
-        Denotes d = denotationOf(e, at);
         // A value written out is not a site at all. There is nothing to state of `"xyz"` that the
         // text does not already say, so there is no guard an author could add — and this is a rule
-        // about what is worth reporting, not about what is known. Kept out of the judgment below
-        // rather than answered as "not readable": a written value's key is one a guard naming a
-        // literal puts in `spoken` (`x == "xyz"` speaks of both sides), so folded into the judgment
-        // it would come back readable through the second half of it.
-        if (d instanceof Denotes.Written) {
+        // about what is worth reporting, not about what is known. Asked of the text rather than of
+        // which arm a denotation is, since what was written is a fact about the value however it is
+        // reached. Kept out of the judgment below rather than answered as "not readable": a written
+        // value's key is one a guard naming a literal puts in `spoken` (`x == "xyz"` speaks of both
+        // sides), so folded into the judgment it would come back readable through the second half.
+        if (writtenValue(e, at) != null) {
             return null;
         }
         FactSubject subject = subjectOf(e, at);
         if (subject == null) {
             return null;
         }
-        return intrinsicallyReadable(d, e, at) || k.speaksOf(subject) ? subject : null;
+        return intrinsicallyReadable(denotationOf(e, at), e, at) || k.speaksOf(subject)
+                ? subject : null;
     }
 
     /**
