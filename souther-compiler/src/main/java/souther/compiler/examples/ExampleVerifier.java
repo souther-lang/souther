@@ -80,8 +80,9 @@ import java.util.function.Supplier;
  * <p>Two things a row needs are not here, because they are not about what an example means:
  * {@link FixtureReader} reads what a fixture states as the value it states — through
  * {@link NeutralForm} for the form a decoder reads and {@link OperandRunner} for an operand run as the
- * method its module emits — and {@link RowEvaluation} owns the state one row builds up while it is
- * evaluated.
+ * method its module emits — and {@code RowWork} owns the state one row builds up while it is
+ * evaluated. {@link RowEvaluation} is what a caller running one row is answered with, which is a
+ * different thing from either.
  *
  * <p>What a module <em>wrote</em> is not here either. {@link ExampleStatements} reads a module's
  * written statements against each other and reports where two of them answer differently, which is a
@@ -215,9 +216,10 @@ public final class ExampleVerifier {
     /**
      * One row of {@code behavior}, run now.
      *
-     * <p>What it answers is the row's outcome and nothing beside it. A row's diagnostics are what a
-     * compile says about a model, and a row run here is being run against something a compile never
-     * saw: the outcome says what happened, and what that means for whoever asked is theirs.
+     * <p>What it answers is what the run observed and what was said about it. The observation is
+     * what a machine decides from; the diagnostics say which value differed and where, which the
+     * outcome does not carry — a comparison that failed inside one arm is the same outcome as one
+     * that held. What either means for whoever asked is theirs.
      *
      * <p>Read the same way as in a bulk run, by the same call — so a row does not mean one thing when
      * a compile runs it and another when a caller does.

@@ -84,23 +84,30 @@ public interface Deadline {
     }
 
     /**
-     * No clock and no worker: the work runs on the thread that asked for it.
+     * A worker of this compile's own, and no clock: what the row hands outside runs on the thread
+     * that asked.
      *
-     * <p>For a run whose answers come from outside the compile. What such an implementation answers
-     * out of is the caller's world, and a thread is part of a world — a transaction bound to one, a
-     * security or request context, an MDC, a scoped value. Moving the work to a worker moves it out
-     * of the world the caller arranged, and nothing in a synchronous {@code evaluate(row)} says that
-     * is happening.
+     * <p>For a run whose answers come from outside the compile. Two things have to hold at once and
+     * they look like they conflict. A row is one thread's from beginning to end — what it spends is
+     * counted there, and how deep it may recurse is decided by the stack that thread was made with,
+     * which is why {@link EvaluationPolicy#workerStackBytes} is said outright rather than inherited
+     * from whatever {@code -Xss} the surrounding JVM has. And a supplied implementation answers out
+     * of the caller's world, of which a thread is part — a transaction bound to one, a security or
+     * request context, an MDC, a scoped value — so it has to run where the caller called from.
      *
-     * <p>What is given up is the clock, and only the clock. A row's counted limits are counted in
-     * the code and thrown from it, so they arrive here as {@link Outcome.Threw} and are answered
-     * exactly as they are on a worker; what a build guards against with a wall clock is code it
-     * generated, and there is none of that on this side of the crossing. An implementation that does
-     * not return does not return, which is what calling one synchronously is: what bounds a database
-     * query, an HTTP call or a whole test run belongs to whoever owns the world, and each of those
-     * has its own way of saying so.
+     * <p>Both hold once the boundary is drawn at what each side owns rather than at the row. The row
+     * runs on the worker and stays there; the application crosses back through {@link Handoff}, which
+     * this thread services while the worker waits. So a model's recursion limit means the same thing
+     * here as in a build, and the implementation still runs in the world the caller arranged.
+     *
+     * <p>What is given up is the clock, and only the clock. A row's counted limits are counted in the
+     * code and thrown from it, so they arrive as {@link Outcome.Threw} exactly as they do on a build's
+     * worker; a wall clock guards code this compile generated, and there is none of that past the
+     * crossing. An implementation that does not return does not return, which is what calling one
+     * synchronously is: what bounds a database query, an HTTP call or a whole test run belongs to
+     * whoever owns the world, and each of those has its own way of saying so.
      */
-    static Deadline onTheCallersThread() {
+    static Deadline crossingBackToTheCaller(long stackBytes) {
         return new Deadline() {
 
             @Override
@@ -110,10 +117,23 @@ public interface Deadline {
 
             @Override
             public <T> Outcome<T> given(Work work, Callable<T> body) {
+                Handoff handoff = new Handoff();
+                java.util.concurrent.FutureTask<T> task =
+                        new java.util.concurrent.FutureTask<>(() -> handoff.installedFor(body));
+                Thread worker = new Thread(null, task, "souther-reading", stackBytes);
+                worker.setDaemon(true);
+                worker.start();
                 try {
-                    return new Outcome.Finished<>(body.call());
-                } catch (Throwable cause) {
-                    return new Outcome.Threw<>(cause);
+                    handoff.serviceUntilDone();
+                    return new Outcome.Finished<>(task.get());
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    return new Outcome.Threw<>(ee.getCause());
+                } catch (InterruptedException _) {
+                    task.cancel(true);
+                    Thread.currentThread().interrupt();
+                    return new Outcome.Threw<>(
+                            new java.util.concurrent.CancellationException(
+                                    "interrupted while reading " + work.target()));
                 }
             }
         };

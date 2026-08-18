@@ -162,6 +162,11 @@ class AnEntryIsHandedOverOnTheTermsARowIsTest {
      *
      * <p>Both operations, because both observe a world the caller arranged between calls. One of
      * them running elsewhere would be the binding meaning two things again.
+     *
+     * <p>The row around it is not here: it runs on a worker of this compile's own and stays there,
+     * and only the application crosses back. What holds that boundary is
+     * {@code TheRowStaysOnItsWorkerAndTheApplicationDoesNotTest}; what this holds is the half a
+     * caller sees.
      */
     @Test
     void aBoundImplementationRunsWhereItWasCalledFrom() throws Exception {

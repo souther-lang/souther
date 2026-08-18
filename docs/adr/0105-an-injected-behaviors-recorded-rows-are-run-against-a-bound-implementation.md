@@ -118,12 +118,23 @@ compared.
 `observe` and not a second `evaluate`, because one adjudicates an obligation and the other relates two
 answers, and spelling them apart keeps a consumer from sliding a fake entry into the row default.
 
-**A bound implementation is applied on the thread that asked for it.** A run of this compile's own
-code goes to a worker of its own, on a clock, because what it runs is code that may not stop and
-cannot be interrupted. A supplied implementation is not that. What it answers out of is the caller's
-world, and a thread is part of a world — a transaction bound to one, a security or request context,
-an MDC, a scoped value — so moving the work to a worker takes it out of the world the caller
-arranged, with nothing in a synchronous `evaluate(row)` to say that is happening.
+**A bound implementation is applied on the thread that asked for it, and the row is not.** Two
+things have to hold at once. A row is one thread's from beginning to end: what it spends is counted
+there, what it went through is collected there, and how deep it may recurse is decided by the stack
+that thread was made with — which is why `EvaluationPolicy.workerStackBytes` is said outright rather
+than inherited from whatever `-Xss` the surrounding JVM has, so that a counted depth limit is
+reached before the stack runs out. And a supplied implementation answers out of the caller's world,
+of which a thread is part — a transaction bound to one, a security or request context, an MDC, a
+scoped value — so it has to run where the caller called from, with nothing in a synchronous
+`evaluate(row)` saying otherwise.
+
+Running the whole row on the caller's thread satisfies the second and gives up the first, and gives
+it up silently: the same model's recursion would be held to this compile's limit in a build and to
+the caller's stack here, so one row could be decided in one run and undecided in the other. So the
+boundary is drawn at what each side owns rather than at the row. The row runs on this compile's own
+worker and stays there; when it reaches the crossing it hands the application over to the thread
+that asked, which services it while the worker waits. One hand-off per application, the worker alive
+on either side of it, and nothing the row was counting interrupted.
 
 What is given up is the clock, and knowingly. A row's counted limits are counted in the code and
 thrown from it, so they hold either way; a wall clock guards code this compile generated, and there

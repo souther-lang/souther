@@ -135,15 +135,22 @@ public final class SoutherExamples {
     private static SoutherExamples settled(Compilation compiled) {
         compiled.db().ask(new Output.All());
         refuseIfItDoesNotCompile(compiled);
-        // Every binding made here answers out of the caller's world, and a thread is part of a
-        // world. What a build runs its rows on is a worker of its own; what this runs them on is
-        // whoever called.
-        compiled.withDeadline(Deadline.onTheCallersThread());
+        // A row runs on a worker of this compile's own, so what it spends is counted on one thread
+        // and how deep it may recurse is this compile's answer; what it hands outside runs on
+        // whoever called, because that is the world a supplied implementation answers out of.
+        compiled.withDeadline(Deadline.crossingBackToTheCaller(
+                EvaluationPolicy.DEFAULT.workerStackBytes()));
         return new SoutherExamples(compiled);
     }
 
     /**
-     * These rows, with {@code implementation} answering for whatever behavior it implements.
+     * These rows, with {@code implementation} answering for each behavior written without a body
+     * that it implements.
+     *
+     * <p>Written without a body, and said here rather than left to be read off "whatever behavior it
+     * implements" — which is the wording this took first, and under which the code went on to answer
+     * for a behavior with a `let` as readily as for one without. What a binding makes runnable is the
+     * rows that had nothing to run them.
      *
      * <p>The instance and nothing else. Which behavior it is for is settled by the binary name the
      * ABI gives that behavior's base, looked for in the instance's supertypes; which declarations it
@@ -152,6 +159,10 @@ public final class SoutherExamples {
      *
      * <p>Which module the rows are of comes from the same answer. A source set may declare more than
      * one, and taking the first would bind a model by the order its files were handed over.
+     *
+     * @throws IllegalArgumentException where the instance implements no behavior of these sources,
+     *                                  where it implements behaviors of two modules, or where a
+     *                                  behavior it implements has an implementation of its own
      */
     public BoundExamples bind(Object implementation) {
         if (implementation == null) {
