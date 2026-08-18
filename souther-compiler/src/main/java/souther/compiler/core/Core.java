@@ -438,6 +438,101 @@ public sealed interface Core {
      * {@link #forEachChild} are derived from it. Exhaustive over {@code Core}: a node kind added
      * later stops the build here.
      */
+    /**
+     * {@code e} with every place taken out of it: the position each node was written at, the
+     * coverage ordinal the module numbered it with, and the same of the binders and names inside.
+     *
+     * <p>For comparing two readings of one term, and for nothing else. A term says what it says
+     * wherever in a file it stands, but the tree carries where, and a module numbers its constructs
+     * from one end — so a blank line above a declaration, or a clause somewhere above gaining a
+     * term, makes every term below it a different value. A reader that depends on what a term says
+     * would be recomputed by both. Comparing this instead is what tells the two apart.
+     *
+     * <p>Every place comes out null rather than blank, so a tree that escapes here and is asked
+     * where it is says so at once. Nothing emits one of these, reports on one, or measures one.
+     *
+     * <p>Written out a case at a time, like {@link #atSlots}: a node's place is on the node, so
+     * there is no slot to hand a rewrite. The switch is over a sealed type, so a node kind added
+     * later arrives here as a compile error rather than as a term that quietly kept its place.
+     */
+    public static Core withoutItsPlace(Core e) {
+        if (e == null) {
+            return null;
+        }
+        return switch (e) {
+            case Int x -> new Int(x.value(), x.type(), null);
+            case Decimal x -> new Decimal(x.value(), x.type(), null);
+            case Str x -> new Str(x.value(), x.type(), null);
+            case Bool x -> new Bool(x.value(), x.type(), null);
+            case Read x -> readWithoutItsPlace(x);
+            case UnitValue x -> new UnitValue(x.data(), x.type(), null);
+            case OptionNone x -> new OptionNone(x.type(), null);
+            case Unreachable x -> new Unreachable(x.reason(), x.type(), null);
+            case Neg n -> new Neg(withoutItsPlace(n.operand()), n.type(), null);
+            case FieldAccess fa ->
+                    new FieldAccess(withoutItsPlace(fa.target()), fa.field(), fa.type(), null);
+            case Binary b -> new Binary(b.op(), withoutItsPlace(b.left()),
+                    withoutItsPlace(b.right()), null, b.type(), null);
+            case Call c -> new Call(c.fn(), allWithoutTheirPlace(c.args()), c.type(), null);
+            case PreservedCall p ->
+                    new PreservedCall(p.operation(), allWithoutTheirPlace(p.args()), p.type(), null);
+            case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
+            case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
+                    withoutItsPlace(iff.els()), null, iff.type(), null);
+            case IfConstructed ic -> new IfConstructed(constructWithoutItsPlace(ic.construct()),
+                    binderWithoutItsPlace(ic.binder()), withoutItsPlace(ic.then()),
+                    ic.els().stream()
+                            .map(arm -> new ElseArm(arm.clause(), withoutItsPlace(arm.body())))
+                            .toList(),
+                    null, ic.type(), null);
+            case LetIn li -> new LetIn(binderWithoutItsPlace(li.binder()), withoutItsPlace(li.value()),
+                    withoutItsPlace(li.body()), li.type(), null);
+            case Block b -> new Block(b.params().stream().map(Core::binderWithoutItsPlace).toList(),
+                    withoutItsPlace(b.body()), b.type(), null);
+            case ListLit lit -> new ListLit(allWithoutTheirPlace(lit.elements()), lit.type(), null);
+            case OptionSome so -> new OptionSome(withoutItsPlace(so.value()), so.type(), null);
+            case Tuple t -> new Tuple(allWithoutTheirPlace(t.elements()), t.type(), null);
+            case TupleGet tg -> new TupleGet(withoutItsPlace(tg.tuple()), tg.index(), tg.arity(),
+                    tg.type(), null);
+            case Construct nd -> constructWithoutItsPlace(nd);
+            case Match m -> new Match(withoutItsPlace(m.scrutinee()),
+                    m.cases().stream()
+                            .map(c -> new Case(c.pattern(), binderWithoutItsPlace(c.binding()),
+                                    withoutItsPlace(c.body()), null))
+                            .toList(),
+                    null, m.type(), null);
+        };
+    }
+
+    private static List<Core> allWithoutTheirPlace(List<Core> es) {
+        return es.stream().map(Core::withoutItsPlace).toList();
+    }
+
+    private static Read readWithoutItsPlace(Read r) {
+        return new Read(r.name(), r.binding(), r.type(), null);
+    }
+
+    private static Construct constructWithoutItsPlace(Construct nd) {
+        return new Construct(nd.typeName(),
+                nd.values().stream()
+                        .map(v -> new FieldValue(v.field(), withoutItsPlace(v.value()), null))
+                        .toList(),
+                nd.type(), null);
+    }
+
+    /** A binder with its place taken out. What it is stays: a binding is told from another by its
+     *  {@link BindingId}, which is what it was answered with and not where it was written. */
+    private static Hir.Binder binderWithoutItsPlace(Hir.Binder b) {
+        return b == null ? null
+                : new Hir.Binder(nameWithoutItsPlace(b.written()), b.binding(), null);
+    }
+
+    private static souther.compiler.ast.WrittenName nameWithoutItsPlace(
+            souther.compiler.ast.WrittenName n) {
+        return n == null ? null
+                : new souther.compiler.ast.WrittenName(n.canonical(), n.spelling(), List.of(), null);
+    }
+
     private static Core atSlots(Core e, java.util.function.UnaryOperator<Core> atExpr,
                                 java.util.function.UnaryOperator<Read> atName,
                                 java.util.function.UnaryOperator<Construct> atConstruction) {

@@ -364,7 +364,9 @@ class IncrementalCompilationTest {
 
     /**
      * Two behaviors stating a relation, and a third calling one of them. The two clauses are
-     * written differently so that either can be edited without touching the other.
+     * written differently so that either can be edited on its own. The caller is written first and
+     * the two it may call after it, so that an edit to either of those moves the other without
+     * moving the caller — which is the arrangement the question is about.
      */
     private static final String STATING = """
             module shop.orders exposing ( Amount )
@@ -372,18 +374,18 @@ class IncrementalCompilationTest {
             data Amount = Int
                 invariant value >= 0
 
-            behavior called : (n: Amount) -> Amount
-                constructs Amount
-                ensures value.value >= n.value
-            let called (n) = Amount(n.value * 2)
+            behavior caller : (n: Amount) -> Amount
+            let caller (n) = called(n)
 
             behavior uncalled : (n: Amount) -> Amount
                 constructs Amount
                 ensures value.value > n.value - 1
             let uncalled (n) = Amount(n.value * 3)
 
-            behavior caller : (n: Amount) -> Amount
-            let caller (n) = called(n)
+            behavior called : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value >= n.value
+            let called (n) = Amount(n.value * 2)
             """;
 
     private static Compilation stating() {
@@ -434,15 +436,15 @@ class IncrementalCompilationTest {
             data Amount = Int
                 invariant value >= 0
 
-            behavior doubled : (n: Amount) -> Amount
-                constructs Amount
-                ensures value.value >= n.value
-            let doubled (n) = Amount(n.value * 2)
-
             behavior tripled : (n: Amount) -> Amount
                 constructs Amount
                 ensures value.value > n.value - 1
             let tripled (n) = Amount(n.value * 3)
+
+            behavior doubled : (n: Amount) -> Amount
+                constructs Amount
+                ensures value.value >= n.value
+            let doubled (n) = Amount(n.value * 2)
             """;
 
     /** One body per borrowed behavior, so both imports are named and neither body names both. */
@@ -506,6 +508,40 @@ class IncrementalCompilationTest {
 
         assertNotSame(viaTripled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaTripled")),
                 "`viaTripled` took what `tripled` states about its answer");
+    }
+
+    /**
+     * And an edit above a called behavior that states nothing at all. A contract carries where its
+     * terms were written and the ordinals its module numbered them with, so a blank line above the
+     * declaration moves the first and a clause above it gaining a term moves the second — both of
+     * which reach every caller through a value nobody reads either of them from.
+     */
+    @Test
+    void aBlankLineAboveACalledBehaviorDoesNotRecheckItsCallers() {
+        Compilation c = stating();
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
+
+        c.update(Map.of("orders.sou",
+                STATING.replace("let uncalled (n) = Amount(n.value * 3)\n",
+                        "let uncalled (n) = Amount(n.value * 3)\n\n")), Set.of());
+        c.answerEverything();
+
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
+                "`called` says what it said, one line further down the file");
+    }
+
+    /** The same across a module boundary, where the caller cannot see the line at all. */
+    @Test
+    void aBlankLineAboveABorrowedBehaviorDoesNotRecheckItsCallers() {
+        Compilation c = borrowing();
+        Answer<?> viaDoubled = c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled"));
+
+        c.update(borrowing(CALC.replace("let tripled (n) = Amount(n.value * 3)\n",
+                "let tripled (n) = Amount(n.value * 3)\n\n")), Set.of());
+        c.answerEverything();
+
+        assertSame(viaDoubled, c.db().ask(new Bodies.CheckedBehavior("app.use", "viaDoubled")),
+                "`doubled` says what it said, one line further down a file this module never reads");
     }
 
     /** A behavior reached by being injected rather than by being built and called. */
