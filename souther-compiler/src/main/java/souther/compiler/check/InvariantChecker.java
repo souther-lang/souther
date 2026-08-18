@@ -607,14 +607,18 @@ public final class InvariantChecker {
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, FactSubject> atoms, Map<String, Type> typeAt,
                       Map<String, FactSubject> held, Map<String, FactSubject> keys) {
-        FactSubject atom = terms.atomOf(value, at);
+        // What the position is called, and the atom it is. Asked together, because where a position
+        // is a number the domain carries the two are one identity read once — and this asks it of
+        // every level of a chain, so reading it twice costs more than the chain is long.
+        //
+        // Both, because only some positions are numbers. An enumeration is ordered and carries no
+        // atom, so a clause bounding one is recognised by what it is called and by nothing above it.
+        Terms.Position position = terms.positionOf(value, at);
+        FactSubject atom = position.atom();
         if (atom != null) {
             atoms.put(path, atom);
         }
-        // What the position is called, which every position has and only some are numbers. An
-        // enumeration is ordered and carries no atom, so a clause bounding one is recognised by this
-        // and by nothing above it.
-        FactSubject key = terms.subjectOf(value, at);
+        FactSubject key = position.key();
         if (key != null) {
             keys.put(path, key);
         }
@@ -1014,7 +1018,7 @@ public final class InvariantChecker {
                 in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
                         body.pos()), in.known(), in.at());
             }
-            c.walk(body, in.known(), in.at(), 0);
+            c.entering(body, in.known(), in.at(), 0);
         } catch (RuntimeException why) {
             // fail-open: the run-time invariant check remains the backstop
             gaveUp("analyze", why);
@@ -1054,20 +1058,45 @@ public final class InvariantChecker {
 
     // --- the walk ------------------------------------------------------------------------------
 
-    private void walk(Core e, Known given, Denotations at, int depth) {
-        // Nothing reaches here, so there is nothing here to be about. Asked once, at the one door
-        // every reading goes through: a branch, an arm, a departure, an attempt's success and a
-        // closure's body are each walked with something further settled, and each of them is a place
-        // the conditions can come to contradict. Asked at the reports instead, a reading added to
-        // this walk would be one more that has to remember.
+    /**
+     * Reads what the answers standing under {@code e} guarantee, and walks {@code e} over it.
+     *
+     * <p>The reading runs ahead of the walk because a construction is judged at its own step while
+     * the answers it is built from stand underneath it: read at each call's own step instead, the
+     * construction would be judged before the value it was handed had said anything. How far ahead
+     * is {@link PathEngine#answering}'s question, and it stops where reading ahead would be wrong
+     * rather than merely early — at a branch, at a block, and at a binding's body, each of which is
+     * read with something further settled. Those are the places that come back through here, and
+     * they are all of them: everything the reading covered is walked by {@link #walk}, over what
+     * this settled.
+     *
+     * <p>So a call is seeded once, where it stands, and not once for every node above it. What is
+     * read here is threaded down, and seeding the same call again from a descendant lands on the
+     * subjects it already holds — it decided nothing, and it cost the depth of a body over again at
+     * every node of it (#826).
+     *
+     * <p>Nothing reaches what this was handed, so there is nothing under it to be about. Asked here
+     * and again of the reading, because the reading is itself a place the conditions can come to
+     * contradict.
+     */
+    private void entering(Core e, Known given, Denotations at, int depth) {
         if (given.reachesNothing()) {
             return;
         }
-        // What the answers read here guarantee, before anything is judged against them. One door,
-        // because a construction is judged at its own step and the answers it is built from stand
-        // underneath it: taken in at each call's own step instead, the construction would be judged
-        // before the value it was handed said anything.
-        Known k = engine.answering(e, given, at);
+        walk(e, engine.answering(e, given, at), at, depth);
+    }
+
+    /**
+     * One step of a region, over what the {@link #entering} that owns it read.
+     *
+     * <p>Every descent from here that is not a region of its own hands {@code k} on unchanged, so a
+     * step that reaches nothing stands in a region that reached nothing and the question is settled
+     * where the region was entered.
+     */
+    private void walk(Core e, Known k, Denotations at, int depth) {
+        if (k.reachesNothing()) {
+            return;
+        }
         Core.LetIn standing = bindingInValueIn(e);
         if (standing != null) {
             // A call this analysis expanded is a binding holding what it was given, and where that
@@ -1082,7 +1111,7 @@ public final class InvariantChecker {
                 walk(standing.value(), k, at, depth);
             }
             Entered in = bindLet(standing, k, at);
-            walk(without(e, Set.of(standing), standing.body()), in.known(), in.at(), depth);
+            entering(without(e, Set.of(standing), standing.body()), in.known(), in.at(), depth);
             return;
         }
         ConditionalSite site = conditionalValueIn(e);
@@ -1100,7 +1129,7 @@ public final class InvariantChecker {
             Entered inside = scopeOf(site, k, at);
             Known within = inside.known();
             Denotations there = inside.at();
-            walk(value.cond(), within, there, depth);
+            entering(value.cond(), within, there, depth);
             Set<Core> alike = sameConditional(e, value, there);
             // The readings start from where the conditional stood, not from outside it. The tree each
             // is given still holds those binders and walks into them again, which is why entering one
@@ -1118,8 +1147,10 @@ public final class InvariantChecker {
             }
             case Core.If iff -> {
                 walk(iff.cond(), k, at, depth);
-                walk(iff.then(), predicates.assumeCond(iff.cond(), k, at, true).known(), at, depth);
-                walk(iff.els(), predicates.assumeCond(iff.cond(), k, at, false).known(), at, depth);
+                entering(iff.then(), predicates.assumeCond(iff.cond(), k, at, true).known(), at,
+                        depth);
+                entering(iff.els(), predicates.assumeCond(iff.cond(), k, at, false).known(), at,
+                        depth);
             }
             case Core.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
@@ -1135,10 +1166,10 @@ public final class InvariantChecker {
                 // expression it cannot name denotes nothing, and inheriting that would drop the one
                 // thing reaching this branch established.
                 Entered in = engine.enteringBuilt(ic, k, at);
-                walk(ic.then(), in.known(), in.at(), depth);
+                entering(ic.then(), in.known(), in.at(), depth);
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
-                ic.els().forEach(arm -> walk(arm.body(), k, at, depth));
+                ic.els().forEach(arm -> entering(arm.body(), k, at, depth));
             }
             case Core.LetIn li -> {
                 // A closure is read where it is applied: what its parameter holds is decided there,
@@ -1147,7 +1178,7 @@ public final class InvariantChecker {
                     walk(li.value(), k, at, depth);
                 }
                 Entered in = bindLet(li, k, at);
-                walk(li.body(), in.known(), in.at(), depth);
+                entering(li.body(), in.known(), in.at(), depth);
             }
             case Core.Match m -> {
                 walk(m.scrutinee(), k, at, depth);
@@ -1160,10 +1191,14 @@ public final class InvariantChecker {
                     // decided by which behavior answered and which case this arm opened, and the
                     // first of those is a question about what is being matched.
                     Entered in = engine.enteringArm(c, m.scrutinee(), k, at);
-                    walk(c.body(), in.known(), in.at(), depth);
+                    entering(c.body(), in.known(), in.at(), depth);
                 }
             }
             case Core.PreservedCall call -> walkCall(call, k, at, depth);
+            // A closure the reading stopped at, reached as a value like any other. What its body
+            // answers is decided where the closure is applied, so nothing out here read it, and it
+            // is a region of its own however it was arrived at.
+            case Core.Block block -> Core.forEachChild(block, b -> entering(b, k, at, depth));
             default -> Core.forEachChild(e, child -> walk(child, k, at, depth));
         }
     }
@@ -1199,7 +1234,7 @@ public final class InvariantChecker {
             for (Quantified q : relations) {
                 k2 = predicates.instantiate(q, element, k2, in.at());
             }
-            walk(handed.step().body(), k2, in.at(), depth);
+            entering(handed.step().body(), k2, in.at(), depth);
         }
     }
 
@@ -1775,7 +1810,7 @@ public final class InvariantChecker {
         Capture mine = Capture.empty();
         capturing = mine;
         try {
-            walk(e, k, at, depth + 1);
+            entering(e, k, at, depth + 1);
         } finally {
             capturing = outer;
         }

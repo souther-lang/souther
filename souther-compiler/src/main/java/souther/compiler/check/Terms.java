@@ -344,13 +344,47 @@ final class Terms {
         if (size != null) {
             return size;
         }
-        if (affineScalarBase(e.type()) == null) {
-            return null;
+        // Read where it is going to be an answer, and not before: an identity is a walk of the whole
+        // expression, and a value of a type the domain carries nothing of takes no atom however it
+        // was written.
+        return carriesANumber(e) ? atomOfIdentity(FactSubject.of(identityOf(e, at)), e, at) : null;
+    }
+
+    /**
+     * What a position is called, and the atom it is where the numeric domain carries one.
+     *
+     * <p>Both from one reading. Where a value is a number the domain carries, its atom <em>is</em>
+     * its subject — the same identity, recorded with how that type's values are spaced. Asked
+     * separately the expression is read once for each, and a caller asking it of every level of a
+     * field chain pays more than the chain is long (#826).
+     *
+     * <p>Not every position is both. A size takes an atom the symbolic reader builds over the
+     * container it counts, which is not what the position is called; and a position of a type the
+     * domain carries nothing of — an enumeration, a string — is called something and is no number.
+     */
+    Position positionOf(Core e, Denotations at) {
+        FactSubject size = sizeAtomOf(e, arg -> bodyKey(arg, at));
+        FactSubject key = subjectOf(e, at);
+        if (size != null) {
+            return new Position(key, size);
         }
-        // A number the term grammar cannot read is still a number, and still one value: it takes an
-        // atom of its own, and what is built over it composes with that atom rather than starting
-        // again. Which is why this asks for the identity and not for the symbolic key.
-        FactSubject atom = named(FactSubject.of(identityOf(e, at)), granularityOf(e.type()));
+        return new Position(key, carriesANumber(e) ? atomOfIdentity(key, e, at) : null);
+    }
+
+    /** What a position is called, and the atom it is — either may be absent. */
+    record Position(FactSubject key, FactSubject atom) {}
+
+    /** Whether the numeric domain carries values of what {@code e} answers at all. A number the term
+     * grammar cannot read is still a number, which is why an atom asks this of the type and not of
+     * whether the expression has a symbolic key. */
+    private boolean carriesANumber(Core e) {
+        return affineScalarBase(e.type()) != null;
+    }
+
+    /** {@code identity} as the atom of the value at {@code e}: held to how that type's values are
+     * spaced, and recorded against the arithmetic it was built by. */
+    private FactSubject atomOfIdentity(FactSubject identity, Core e, Denotations at) {
+        FactSubject atom = named(identity, granularityOf(e.type()));
         if (atom != null) {
             recording(atom, e, at);
         }
@@ -1058,9 +1092,20 @@ final class Terms {
      */
     Term pathKey(Core e, Denotations at, Leaf leaf) {
         Location located = locationOf(e, at);
-        if (located != null) {
-            return interned.at(located);
-        }
+        return located != null ? interned.at(located) : keyOfNowhere(e, at, leaf);
+    }
+
+    /**
+     * The same, for a chain already found to be nowhere — so what it is read from is nowhere too.
+     *
+     * <p>A chain names a location exactly when the binding at its head does ({@link Location#of}
+     * answers {@code x.a.b} by answering {@code x} and then reading the fields off it, and reading a
+     * field off somewhere never reaches nowhere). So a chain that is nowhere is one whose every step
+     * is nowhere, and the question is answered once for the whole of it rather than again at each
+     * step — asked at each step it walks what is left of the chain each time, and a chain costs more
+     * than the chain is long (#826).
+     */
+    private Term keyOfNowhere(Core e, Denotations at, Leaf leaf) {
         return switch (e) {
             case Core.Read r -> {
                 Term named = termOf(at.of(r.binding()));
@@ -1075,9 +1120,9 @@ final class Terms {
             }
             case Core.FieldAccess fa -> {
                 if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
-                    yield pathKey(fa.target(), at, leaf);
+                    yield keyOfNowhere(fa.target(), at, leaf);
                 }
-                Term base = pathKey(fa.target(), at, leaf);
+                Term base = keyOfNowhere(fa.target(), at, leaf);
                 yield base == null ? null : interned.on(base, List.of(fa.field()));
             }
             default -> leaf == Leaf.AN_EVALUATION ? interned.evaluated(evaluationIdOf(e)) : null;
