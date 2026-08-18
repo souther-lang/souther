@@ -4,10 +4,12 @@ import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorContract.ContractParam;
 import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.check.BehaviorContract.Rule;
+import souther.compiler.check.TypeOps;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
@@ -17,10 +19,13 @@ import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static souther.compiler.codegen.Descriptors.CD_ConstraintViolation;
 import static souther.compiler.codegen.Descriptors.CD_EnsuresFailure;
+import static souther.compiler.codegen.Descriptors.CD_String;
 import static souther.compiler.codegen.Descriptors.MTD_ensuresFailure;
+import static souther.compiler.codegen.Descriptors.MTD_equalsObject;
 import static souther.compiler.codegen.Descriptors.MTD_notHeld;
 import static souther.compiler.codegen.Descriptors.build;
 import static souther.compiler.codegen.JvmTypes.unbox;
@@ -32,6 +37,13 @@ import static souther.compiler.codegen.JvmTypes.unbox;
  * aborts at the first that does not hold. Three callers reach it — the behavior's own {@code apply},
  * the crossing an injected answer enters generated code by, and a row validating a fixture — so it
  * is a class of its own with one address they all name the same way.
+ *
+ * <p>{@code checkCase(Object p0, …, Object pn, String case)} is the same declaration asked of
+ * weaker evidence: the case the answer is, where no value was written. An {@code example} row
+ * writing a bare case name has stated that much — an arm is a reference to the answer — so the
+ * rules that case decides on its own are run and the rest stay undecided. Two entry points and one
+ * owner: what a clause means is worked out here for both, and a caller chooses between them by
+ * what it has rather than by knowing which rules follow from it.
  *
  * <p>Every argument is a reference. What a behavior may declare is bounded by parameter count and
  * not by width ({@link JvmLimits}), so a behavior taking the largest admissible number of parameters
@@ -64,10 +76,16 @@ final class EnsuresGen {
         }
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_void,
                 params.toArray(new ClassDesc[0]));
+        List<ClassDesc> byCase = new ArrayList<>(params);
+        byCase.set(contract.params().size(), CD_String);
+        MethodTypeDesc checkCase = MethodTypeDesc.of(ConstantDescs.CD_void,
+                byCase.toArray(new ClassDesc[0]));
         return build(cd, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withMethodBody("check", check, ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC,
                     code -> emitCheck(code, cd, contract));
+            cb.withMethodBody("checkCase", checkCase, ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC,
+                    code -> emitCheckByCase(code, cd, contract));
         });
     }
 
@@ -83,6 +101,20 @@ final class EnsuresGen {
         // so nothing below has to work out where it went.
         int answer = contract.params().size();
 
+        BodyGen gen = bindParams(code, cd, contract);
+        for (Rule rule : contract.rules()) {
+            emitRule(code, gen, contract, rule, answer);
+        }
+        code.return_();
+    }
+
+    /**
+     * The parameters into the slots a rule names them by, whichever entry point this is.
+     *
+     * <p>A rule names a parameter by its binding, and both checks are handed the same parameters in
+     * the same argument positions. What follows them differs and this does not.
+     */
+    private BodyGen bindParams(CodeBuilder code, ClassDesc cd, BehaviorContract contract) {
         BodyGen gen = new BodyGen(ctx, code, null, cd, contract.params().size() + 1);
         for (ContractParam param : contract.params()) {
             code.aload(param.index());
@@ -90,10 +122,68 @@ final class EnsuresGen {
             unbox(code, param.type(), slot, ctx);
             gen.bind(param.binding(), param.name(), slot, param.type());
         }
+        return gen;
+    }
+
+    /**
+     * The parameters, then the rules the named case decides on its own.
+     *
+     * <p>A rule is here where its guard is an arm the case satisfies and its statement does not read
+     * the answer. Both are settled here, where the declaration is: which cases an arm answers for is
+     * a question about the output's declarations, and whether a statement reads {@code value} is a
+     * question about the rule ({@link Rule#readsAnswer()}). A caller hands over the case it has and
+     * is told what does not hold; it is not asked which rules follow from it.
+     *
+     * <p>The case arrives as the name it is declared under and is compared as one. An arm may name a
+     * sum and a written answer is one of its leaves, so what a rule is guarded by here is the set of
+     * leaves its arm answers for — worked out from the declarations rather than tested against a
+     * class, since there is no value to test.
+     */
+    private void emitCheckByCase(CodeBuilder code, ClassDesc cd, BehaviorContract contract) {
+        int named = contract.params().size();
+
+        BodyGen gen = bindParams(code, cd, contract);
         for (Rule rule : contract.rules()) {
-            emitRule(code, gen, contract, rule, answer);
+            if (!(rule.guard() instanceof Guard.Case(CaseSelector selector)) || rule.readsAnswer()) {
+                continue;
+            }
+            Set<TypeSymbol> answersFor = answersFor(selector);
+            if (answersFor.isEmpty()) {
+                continue;
+            }
+            Label next = code.newLabel();
+            Label matched = code.newLabel();
+            for (TypeSymbol leaf : answersFor) {
+                // The constant is the receiver, so a case nothing was handed for is a comparison
+                // that answers no rather than one that throws.
+                code.ldc(leaf.qualified());
+                code.aload(named);
+                code.invokevirtual(CD_String, "equals", MTD_equalsObject);
+                code.ifne(matched);
+            }
+            code.goto_(next);
+            code.labelBinding(matched);
+            emitStatement(code, gen, contract, rule, next, selector);
         }
         code.return_();
+    }
+
+    /**
+     * The cases an arm answers for, as the names they are declared under.
+     *
+     * <p>Its leaves, because that is what a written answer is one of: a union member may be a sum,
+     * and an arm naming that sum is about each of the cases it has. Read off the selector, which is
+     * what a selector is for — what a case means was settled where the arm was specialized, and
+     * working it back out of the name here would be a second answer to it.
+     *
+     * <p>Empty for a carrier that is not a case a written answer wears: an optional's, which is
+     * made by its own factory and named by neither of the two, and a carrier standing under no
+     * readable type. A rule guarded by one of those is decided nowhere but at the answer.
+     */
+    private Set<TypeSymbol> answersFor(CaseSelector selector) {
+        return selector.refinement() instanceof Refinement.Direct(Type bound) && bound != null
+                ? TypeOps.leafCases(bound, ctx.symbols)
+                : Set.of();
     }
 
     /**

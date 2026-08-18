@@ -277,7 +277,7 @@ public final class BehaviorChecker {
                                          Rule rule) {
         Set<BindingId> read = new LinkedHashSet<>();
         collectBindings(rule.statement(), contract.behavior(), read);
-        if (rule.guard() instanceof Guard.Always && !read.contains(rule.value())) {
+        if (rule.guard() instanceof Guard.Always && !rule.readsAnswer()) {
             throw CompileException.of(Diagnostic.at(rule.pos())
                     .say(new BehaviorMessage.AnEnsuresClauseDoesNotNameTheAnswer(
                             behavior.name())).build());
