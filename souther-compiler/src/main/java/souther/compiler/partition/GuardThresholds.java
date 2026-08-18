@@ -78,7 +78,7 @@ public final class GuardThresholds {
          * value, and reading it as a place to cut would put a distinction between the two sides into
          * a partition the model never drew.
          */
-        public record Singled(NumericTerm term, Place value, OriginRef.GuardOrigin origin) {}
+        public record Singled(NumericTerm term, Place value, OriginRef origin) {}
 
         public Guards {
             thresholds = List.copyOf(thresholds);
@@ -209,8 +209,8 @@ public final class GuardThresholds {
      * expression the terms do not name, or a threshold written as something other than a constant —
      * and each of the three is a different piece of work.
      */
-    private static BlockReason why(Core.Binary comparison, InputReads reads,
-                                   Symbols symbols) {
+    static BlockReason why(Core.Binary comparison, InputReads reads,
+                           Symbols symbols) {
         boolean leftNames = !mentionedIn(comparison.left(), reads, symbols).isEmpty();
         boolean rightNames = !mentionedIn(comparison.right(), reads, symbols).isEmpty();
         // Which limit stopped this is asked of what the sides name, not of how far the derivation
@@ -234,14 +234,14 @@ public final class GuardThresholds {
                 : new BlockReason.UnreadComparisonDomain();
     }
 
-    private static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
+    static List<TermPath> mentionedIn(Core e, InputReads reads, Symbols symbols) {
         List<TermPath> out = new ArrayList<>();
         mentioned(e, reads, symbols, out);
         return out;
     }
 
     /** Whether an operator is one that compares two values rather than combining two conditions. */
-    private static boolean orders(Hir.BinOp op) {
+    static boolean orders(Hir.BinOp op) {
         return switch (op) {
             case EQ, NE, LT, LE, GT, GE -> true;
             case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
@@ -312,17 +312,8 @@ public final class GuardThresholds {
     private static void between(String behavior, Core.If iff, Placed placed, CoverageSites.Plan plan,
                                 CoverageSites.GuardRef guard, int site, InputReads reads,
                                 Symbols symbols, List<BoundaryObligation> out) {
-        Core.Binary comparison = placed.comparison();
-        if (!ordersStrictly(comparison.op())) {
-            return;
-        }
-        NumericTerm on = termOf(comparison.left(), reads, symbols);
-        NumericTerm against = termOf(comparison.right(), reads, symbols);
-        if (on == null || against == null) {
-            return;   // a position inside an expression is not a place a row can be written at
-        }
-        Carrier carrier = Carrier.ofValue(comparison.left().type(), symbols);
-        if (carrier == null || !carrier.equals(Carrier.ofValue(comparison.right().type(), symbols))) {
+        ComparedTerms drawn = ComparedTerms.of(placed.comparison(), reads, symbols);
+        if (drawn == null) {
             return;
         }
         // Below and inclusive are what a threshold's arms are read off, and neither is a question this
@@ -332,27 +323,14 @@ public final class GuardThresholds {
         OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(guard, site,
                 plan.site(site).obligation(),
                 Citation.of(iff.pos()),
-                true, placed.witness(), holdsAtTheLine(comparison.op()), false);
+                true, placed.witness(), drawn.holdsAtTheLine(), false);
         BoundaryObligation made = new BoundaryObligation(
-                new BoundaryTarget.EqualTerms(behavior, on, against, carrier), origin,
-                BoundaryObligation.BoundarySide.AT);
+                new BoundaryTarget.EqualTerms(behavior, drawn.on(), drawn.against(),
+                        drawn.carrier()),
+                origin, BoundaryObligation.BoundarySide.AT);
         if (out.stream().noneMatch(had -> had.equals(made))) {
             out.add(made);
         }
-    }
-
-    /** Whether an operator orders its two sides, which {@code ==} and {@code /=} do not. */
-    private static boolean ordersStrictly(Hir.BinOp op) {
-        return switch (op) {
-            case LT, LE, GT, GE -> true;
-            case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
-        };
-    }
-
-    /** Whether the line's own values satisfy the comparison, which is what tells {@code <} from
-     * {@code <=} and is the whole of what the row on the line shows. */
-    private static boolean holdsAtTheLine(Hir.BinOp op) {
-        return op == Hir.BinOp.LE || op == Hir.BinOp.GE;
     }
 
     /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
@@ -451,71 +429,22 @@ public final class GuardThresholds {
                                     Symbols symbols, List<Threshold> out,
                                     List<Guards.Singled> singled) {
         Core.Binary comparison = placed.comparison();
-        Hir.BinOp op = comparison.op();
-        // The carrier comes from the side that named the position, so the literal on the other side
-        // is read on the carrier the line is being drawn on. A size call is an `Int` there, which is
-        // the whole-number carrier, and a position holding dates is a day count — the same answer
-        // `Carrier` gives everywhere else.
-        NumericTerm term = termOf(comparison.left(), reads, symbols);
-        Place value = constantOf(comparison.right(),
-                Carrier.ofValue(comparison.left().type(), symbols), symbols);
-        if (term == null || value == null) {
-            // `100000 >= cost` says what `cost <= 100000` says; read the position-bearing side first.
-            term = termOf(comparison.right(), reads, symbols);
-            value = constantOf(comparison.left(),
-                    Carrier.ofValue(comparison.right().type(), symbols), symbols);
-            op = mirrored(op);
-        }
-        if (term == null || value == null) {
+        // What the comparison draws is read the same way wherever a comparison is written, so it is
+        // asked of the one reader that says. What is added here is what meeting the line takes,
+        // which is a guard's own answer and no other rule's.
+        ComparedLine drawn = ComparedLine.of(comparison, reads, symbols);
+        if (drawn == null) {
             return null;
         }
-        Boolean below = switch (op) {
-            case LE, GT -> Boolean.TRUE;    // the value itself is on the low side
-            case LT, GE -> Boolean.FALSE;   // and here it is on the high side
-            default -> null;                // EQ / NE do not order the values, so they cut nothing
-        };
-        if (below == null) {
-            // An equality singles the value out instead. Recorded as that rather than as a place to
-            // cut, because the values either side of it are not a distinction the model has drawn.
-            if (op != Hir.BinOp.EQ && op != Hir.BinOp.NE) {
-                return null;
-            }
-            singled.add(new Guards.Singled(term, value,
-                    new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
-                            Citation.of(iff.pos()),
-                            true, placed.witness(), op == Hir.BinOp.EQ, true)));
-            return term.path();
+        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(guard, site,
+                plan.site(site).obligation(), Citation.of(iff.pos()), drawn.valueBelongsBelow(),
+                placed.witness(), drawn.holdsAtTheValue(), drawn.singles());
+        if (drawn.singles()) {
+            singled.add(new Guards.Singled(drawn.term(), drawn.value(), origin));
+            return drawn.term().path();
         }
-        // True at the line's own value for the operators that include it, which is not the same
-        // question as which class the value falls in: `x <= c` and `x > c` agree about the second.
-        boolean holds = op == Hir.BinOp.LE || op == Hir.BinOp.GE;
-        out.add(new Threshold(term, value, below,
-                new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
-                        Citation.of(iff.pos()),
-                        below, placed.witness(), holds)));
-        // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
-        // and `x > c` agree about the first and take opposite halves, so the arms are read off the
-        // operator here, where it is still known, and not recovered from the threshold later.
-        // An arm that does not witness this comparison is not one of its edges either: what reaches
-        // it is decided by the rest of the condition as much as by this line.
-        int then = placed.witness() == OriginRef.GuardOrigin.Witness.ELSE
-                || placed.witness() == OriginRef.GuardOrigin.Witness.NEITHER
-                        ? CoverageSites.NO_SITE : guard.siteIndexThen();
-        int otherwise = placed.witness() == OriginRef.GuardOrigin.Witness.THEN
-                || placed.witness() == OriginRef.GuardOrigin.Witness.NEITHER
-                        ? CoverageSites.NO_SITE : guard.siteIndexElse();
-        switch (op) {
-            case LE -> {
-            }
-            case GT -> {
-            }
-            case LT -> {
-            }
-            case GE -> {
-            }
-            default -> { }
-        }
-        return term.path();
+        out.add(new Threshold(drawn.term(), drawn.value(), drawn.valueBelongsBelow(), origin));
+        return drawn.term().path();
     }
 
     private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {
@@ -540,11 +469,10 @@ public final class GuardThresholds {
      * names, and a boundary on it could not be looked for in a row.
      */
     static NumericTerm termOf(Core e, InputReads reads, Symbols symbols) {
-        if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
-                && reached.name() instanceof ReachName.OfLibrary library
-                && NumericMeasures.isMeasure(library.target()) && call.args().size() == 1) {
-            TermPath of = reads.pathOf(call.args().get(0), symbols);
-            return of == null ? null : new NumericTerm.SizeOf(library.target(), of);
+        NumericMeasures.Measured measured = NumericMeasures.measureIn(e);
+        if (measured != null) {
+            TermPath of = reads.pathOf(measured.of(), symbols);
+            return of == null ? null : new NumericTerm.SizeOf(measured.operation(), of);
         }
         TermPath path = reads.pathOf(e, symbols);
         return path == null ? null : new NumericTerm.ValueOf(path);
@@ -595,16 +523,6 @@ public final class GuardThresholds {
             case Core.Str str -> carrier instanceof Carrier.Text
                     ? souther.compiler.numeric.Text.of(str.value()) : null;
             case null, default -> null;
-        };
-    }
-
-    private static Hir.BinOp mirrored(Hir.BinOp op) {
-        return switch (op) {
-            case LT -> Hir.BinOp.GT;
-            case LE -> Hir.BinOp.GE;
-            case GT -> Hir.BinOp.LT;
-            case GE -> Hir.BinOp.LE;
-            default -> op;
         };
     }
 
