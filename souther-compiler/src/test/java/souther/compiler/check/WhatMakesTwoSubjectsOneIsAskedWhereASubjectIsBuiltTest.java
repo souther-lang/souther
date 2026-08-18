@@ -171,6 +171,31 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
                 "`distinct` may answer fewer, so its size is a value of its own");
     }
 
+    /**
+     * A part of an evaluation is a part of that evaluation, not an evaluation of its own.
+     *
+     * <p>A clause is written about the parts — an {@code ensures} states {@code value.rank}, not
+     * {@code value} — so an answer that could be pointed at while nothing inside it could would be a
+     * subject nothing is ever about. The same rule {@link Location} carries for a place, asked here of
+     * an evaluation.
+     */
+    @Test
+    void aFieldReadOffAnEvaluationIsAPartOfIt() {
+        Terms terms = new Terms(Symbols.none());
+        Denotations at = Denotations.none();
+        Core answer = unnameable();
+
+        FactSubject whole = terms.subjectOf(answer, at);
+        FactSubject part = terms.subjectOf(
+                new Core.FieldAccess(answer, "rank", Type.INT, POS), at);
+
+        assertInstanceOf(FactSubject.OfAnEvaluation.class, part, "a part of an evaluation");
+        assertEquals(((FactSubject.OfAnEvaluation) whole).where(),
+                ((FactSubject.OfAnEvaluation) part).where(),
+                "and of that evaluation, not of one of its own");
+        assertNotEquals(whole, part, "the answer and the field read off it are two values");
+    }
+
     private static Core length(Core of) {
         return new Core.PreservedCall(new souther.compiler.types.ValueName.Stdlib("List", "length"),
                 java.util.List.of(of), Type.INT, POS);

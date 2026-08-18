@@ -1054,15 +1054,20 @@ public final class InvariantChecker {
 
     // --- the walk ------------------------------------------------------------------------------
 
-    private void walk(Core e, Known k, Denotations at, int depth) {
+    private void walk(Core e, Known given, Denotations at, int depth) {
         // Nothing reaches here, so there is nothing here to be about. Asked once, at the one door
         // every reading goes through: a branch, an arm, a departure, an attempt's success and a
         // closure's body are each walked with something further settled, and each of them is a place
         // the conditions can come to contradict. Asked at the reports instead, a reading added to
         // this walk would be one more that has to remember.
-        if (k.reachesNothing()) {
+        if (given.reachesNothing()) {
             return;
         }
+        // What the answers read here guarantee, before anything is judged against them. One door,
+        // because a construction is judged at its own step and the answers it is built from stand
+        // underneath it: taken in at each call's own step instead, the construction would be judged
+        // before the value it was handed said anything.
+        Known k = engine.answering(e, given, at);
         Core.LetIn standing = bindingInValueIn(e);
         if (standing != null) {
             // A call this analysis expanded is a binding holding what it was given, and where that

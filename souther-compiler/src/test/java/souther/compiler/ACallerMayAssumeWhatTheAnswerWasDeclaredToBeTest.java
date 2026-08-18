@@ -153,6 +153,11 @@ class ACallerMayAssumeWhatTheAnswerWasDeclaredToBeTest {
 
         assertEquals(List.of(), unproven(source),
                 "`value.rank > id.value` was read, whatever became of the half beside it");
+        assertEquals(1, unproven(source.replace(
+                        "    ensures String.startsWith(value.tag, \"x\") && value.rank > id.value\n",
+                        "")).size(),
+                "and with the rule taken away the construction is unproven — without this, the "
+                        + "silence above is also what a rule reaching nobody looks like (#819)");
     }
 
 

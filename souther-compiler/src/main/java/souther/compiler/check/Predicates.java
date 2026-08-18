@@ -640,8 +640,32 @@ final class Predicates {
      * reaches. What a clause owes at a construction is what it guarantees where it is already
      * established, so the two read the same clauses through the same rule and differ only in
      * direction. */
+    /** Every subject the clauses in {@code owed} say something about. */
+    private static Set<FactSubject> subjectsIn(Owed owed) {
+        Set<FactSubject> named = new LinkedHashSet<>();
+        for (Clause c : owed.clauses()) {
+            for (Constraint known : c.known()) {
+                named.addAll(known.form().coefs().keySet());
+            }
+            if (c.numeric() != null) {
+                named.addAll(c.numeric().form().coefs().keySet());
+            }
+            if (c.fact() != null) {
+                named.addAll(c.fact().keys());
+            }
+        }
+        return named;
+    }
+
     Known assume(Owed owed, Known k, Known.Held held) {
         Known out = k;
+        // Every subject this takes something in about is one something has been said about. Recorded
+        // for the same reason a guard's subjects are: what makes a clause readable against a value is
+        // that something speaks of it, and the seeding speaks. A place did not need it — the seeding
+        // writes about places, which is a rule of its own — but an evaluation has no such rule, and
+        // saying nothing here would leave a value its own type guarantees something about looking
+        // like one nothing is known of.
+        out = out.speaking(subjectsIn(owed));
         // What could not be read says nothing here: a clause left to the run-time check is not one
         // the seeding may assume, and the flag saying so is the construction site's to act on.
         for (Clause c : owed.clauses()) {

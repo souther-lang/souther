@@ -55,15 +55,30 @@ sealed interface FactSubject {
      * subject at all, and a construction built from one of those was never checked and never
      * reported (#819).
      */
-    record OfAnEvaluation(EvaluationId where) implements FactSubject {
+    record OfAnEvaluation(EvaluationId where, java.util.List<String> path) implements FactSubject {
 
         public OfAnEvaluation {
             java.util.Objects.requireNonNull(where, "an evaluation is somewhere it happened");
+            path = java.util.List.copyOf(path);
+        }
+
+        /**
+         * This, with {@code field} read from it — the same rule {@link Location} carries for a place,
+         * asked of an evaluation instead.
+         *
+         * <p>What an evaluation answers has parts, and a clause is written about the parts: an
+         * {@code ensures} states {@code value.rank}, not {@code value}. Without this the answer could
+         * be pointed at and nothing in it could, which is a subject nothing would ever be about.
+         */
+        OfAnEvaluation then(String field) {
+            java.util.List<String> longer = new java.util.ArrayList<>(path);
+            longer.add(field);
+            return new OfAnEvaluation(where, longer);
         }
 
         @Override
         public String rendered() {
-            return where.rendered();
+            return where.rendered() + String.join("", path.stream().map(f -> "." + f).toList());
         }
     }
 

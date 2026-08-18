@@ -347,11 +347,32 @@ final class Terms {
         if (affineScalarBase(e.type()) == null) {
             return null;
         }
-        FactSubject atom = named(bodyKey(e, at), granularityOf(e.type()));
+        Term key = bodyKey(e, at);
+        // A number the term grammar cannot name is still a number, and it is still one value. Where
+        // it is a part of an evaluation — `findIt(id).rank` — the evaluation is what it is a part of,
+        // and that is what a clause about the answer is read against.
+        FactSubject atom = named(key != null ? FactSubject.of(key) : partOfAnEvaluation(e, at),
+                granularityOf(e.type()));
         if (atom != null) {
             recording(atom, e, at);
         }
         return atom;
+    }
+
+    /**
+     * The part of an evaluation {@code e} is, or null where it is not read off one.
+     *
+     * <p>A field read off something the term grammar cannot name is a part of that evaluation rather
+     * than an evaluation of its own — the rule {@link Location} carries for a place, asked here of an
+     * evaluation. Nothing else is: an evaluation reached no other way is left to {@link #evaluationOf},
+     * which is where an occurrence is given its identity.
+     */
+    private FactSubject partOfAnEvaluation(Core e, Denotations at) {
+        if (!(e instanceof Core.FieldAccess fa)
+                || !(subjectOf(fa.target(), at) instanceof FactSubject.OfAnEvaluation base)) {
+            return null;
+        }
+        return Location.isStep(fa.target().type(), fa.field(), symbols) ? base.then(fa.field()) : base;
     }
 
     /**
@@ -641,7 +662,21 @@ final class Terms {
             return FactSubject.of(key);
         }
         // Nothing the term grammar can name. That is a value this cannot share, not a value it
-        // cannot point at, so the evaluation itself is the subject.
+        // cannot point at, so the evaluation itself is the subject — and a field read off one is a
+        // part of that evaluation rather than an evaluation of its own.
+        FactSubject part = partOfAnEvaluation(e, at);
+        if (part != null) {
+            return part;
+        }
+        // A name is the expression it was given. Answering it with an evaluation of its own would
+        // make naming an answer change which value a fact is about — the seeding speaks at the call,
+        // and every reading of the name would look elsewhere.
+        if (e instanceof Core.Read r) {
+            Core given = at.valueOf(r.binding());
+            if (given != null && given != e) {
+                return subjectOf(given, at);
+            }
+        }
         return evaluationOf(e);
     }
 
@@ -659,7 +694,7 @@ final class Terms {
             return null;
         }
         return new FactSubject.OfAnEvaluation(evaluations.computeIfAbsent(asWritten(e),
-                node -> new EvaluationId(shapeOf(node), node.pos())));
+                node -> new EvaluationId(shapeOf(node), node.pos())), java.util.List.of());
     }
 
     /**
