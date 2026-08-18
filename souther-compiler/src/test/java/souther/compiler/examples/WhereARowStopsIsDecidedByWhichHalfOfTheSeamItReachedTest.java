@@ -142,7 +142,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
         assertEquals(Stage.FIXTURES_VALIDATED, row.stage(), "it was never handed over");
         assertEquals(Disposition.INCOMPLETE, row.disposition(),
                 "so nothing about it was established");
-        assertEquals(FailurePhase.INFRASTRUCTURE, row.failurePhase());
+        assertEquals(FailurePhase.VALUE_CROSSING, row.failurePhase());
         assertInstanceOf(Applied.Nothing.class, row.run().applied());
         assertEquals(List.of(), observed.failures(),
                 "and nothing is said about the model, which may be right");

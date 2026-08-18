@@ -207,7 +207,7 @@ public final class ExampleVerifier {
         return switch (phase) {
             case ANSWERER_ESTABLISHMENT -> Incompleteness.Code.ANSWERER_NOT_ESTABLISHED;
             case NONE, INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION,
-                 COMPARISON, STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, INFRASTRUCTURE ->
+                 COMPARISON, STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, VALUE_CROSSING ->
                     Incompleteness.Code.ROW_UNDECIDED;
         };
     }
@@ -1125,7 +1125,7 @@ public final class ExampleVerifier {
             // no answerer a compile has crosses, so what more to say about such a row is settled by
             // whatever first supplies one that does.
             state.neverEntered();
-            state.incomplete(FailurePhase.INFRASTRUCTURE);
+            state.incomplete(FailurePhase.VALUE_CROSSING);
             return;
         }
         result = projected(result, sig.outputType());

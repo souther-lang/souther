@@ -11,7 +11,7 @@ package souther.compiler.observe;
  *
  * <p>This says what the run applied and nothing else. How a behavior is written is answered where it
  * is written ({@code Prepared.injected}), and a second answer to that question is what this
- * must not become. What the row cost is {@link Counted}, which covers the fixtures as well and so is
+ * must not become. What the row cost is {@link Counting}, which covers the fixtures as well and so is
  * not a fact about the application alone.
  *
  * <p>There is no arm for an implementation supplied from outside the compile. Nothing outside a

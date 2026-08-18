@@ -73,12 +73,16 @@ public enum FailurePhase {
     STACK_EXHAUSTED,
 
     /**
-     * Something the host was supposed to provide was not there.
+     * A value this compile built could not be put in the form the answer reads it by.
      *
-     * <p>What produces it is a row that could not be handed to what was to apply it: the value the
-     * row built could not be put in the form an answerer of other classes reads. Nothing about the
-     * row was established, so it is recorded as undecided and not as a failure — the model may be
-     * right, and nothing here saw enough to say.
+     * <p>A row is handed to what applies it in two faces — the value as this compile built it, and
+     * the same value as a derived decoder reads it — and this is the second one not coming to be.
+     * Nothing about the row was established, so it is recorded as undecided and not as a failure —
+     * the model may be right, and nothing here saw enough to say.
+     *
+     * <p>About one value of one row, which is what tells it from
+     * {@link #ANSWERER_ESTABLISHMENT}: that is decided once for a behavior, before any row of it is
+     * handed over, and this can happen after it agreed.
      */
-    INFRASTRUCTURE
+    VALUE_CROSSING
 }
