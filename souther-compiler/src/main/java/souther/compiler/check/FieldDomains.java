@@ -48,7 +48,7 @@ public final class FieldDomains {
     /** No position anywhere, for the reading that reached none. Unmodifiable, as every other part
      * of {@link #NONE} is: a shared constant handing out a map anybody could add to is a value one
      * caller can change under the rest. */
-    private static final SequencedMap<Term, String> NO_POSITIONS =
+    private static final SequencedMap<FactSubject, String> NO_POSITIONS =
             java.util.Collections.unmodifiableSequencedMap(new LinkedHashMap<>());
 
     /**
@@ -90,7 +90,7 @@ public final class FieldDomains {
     private final Set<String> notGathered;
     /** Where each position of this value sits, in the order the value declares them. What a domain
      * holds is what a reading called a position; which place in the value that is, is known here. */
-    private final SequencedMap<Term, String> positions;
+    private final SequencedMap<FactSubject, String> positions;
     /** Everything the clauses were read as, kept whole. Whether any value of this exists is a
      * question about all of it and is asked of it; the numbers are read out of it where a bound is
      * what a caller is after. */
@@ -110,7 +110,7 @@ public final class FieldDomains {
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeSymbol>> narrowers,
                          boolean seeded, Set<String> notGathered,
-                         SequencedMap<Term, String> positions,
+                         SequencedMap<FactSubject, String> positions,
                          ConstraintState constraints, TypeSymbol named,
                          Hir.Data data, Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
@@ -231,13 +231,13 @@ public final class FieldDomains {
         Set<String> positions = new LinkedHashSet<>(seeded.keys().keySet());
         positions.addAll(seeded.atoms().keySet());
         positions.forEach(field -> {
-            AdmissibleValues<Term> values = seeded.constraints().values();
+            AdmissibleValues<FactSubject> values = seeded.constraints().values();
             // Both names of the position, since a number has one of each and a clause reaching it
             // is filed under whichever the reading recognised. Both are about the same values, so
             // what holds of it is what both leave.
             ValueSet here = ValueSet.ANY;
             UnreadReason why = null;
-            for (Term name : named(seeded, field)) {
+            for (FactSubject name : named(seeded, field)) {
                 here = here.meet(values.at(name));
                 // The first that stopped it. Two names of one position are two ways the same rules
                 // were filed, so a second reason is another account of a position already known to
@@ -274,7 +274,7 @@ public final class FieldDomains {
         // followed by the atoms, and that is the keys: an atom is named from a body key, so a
         // position with an atom has a key and the second pass adds nothing. A size has no key and
         // is not one of these — it is a number taken of a position rather than a position.
-        SequencedMap<Term, String> placeOf = new LinkedHashMap<>();
+        SequencedMap<FactSubject, String> placeOf = new LinkedHashMap<>();
         positions.forEach(field ->
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
@@ -511,13 +511,13 @@ public final class FieldDomains {
 
     /** Both names the position at {@code path} answers to. A number has one of each and everything
      * else has the second, and a clause is filed under whichever the reading recognised. */
-    private static List<Term> named(InvariantChecker.Seeded seeded, String path) {
-        List<Term> names = new ArrayList<>();
-        Term atom = seeded.atoms().get(path);
+    private static List<FactSubject> named(InvariantChecker.Seeded seeded, String path) {
+        List<FactSubject> names = new ArrayList<>();
+        FactSubject atom = seeded.atoms().get(path);
         if (atom != null) {
             names.add(atom);
         }
-        Term key = seeded.keys().get(path);
+        FactSubject key = seeded.keys().get(path);
         if (key != null) {
             names.add(key);
         }

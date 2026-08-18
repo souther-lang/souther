@@ -49,22 +49,22 @@ import java.util.Map;
  * end, and the values a denial leaves are a set rather than a range. Under a denial the two swap
  * places, which is the same rule read once.
  */
-final class OrderedReading implements ClauseReading<OrderedIntervals<Term>> {
+final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject>> {
 
     private final Terms terms;
     private final Denotations at;
     /** What each position's values are ordered on, for the positions that are ordered at all. */
-    private final Map<Term, OrderScale> scales;
+    private final Map<FactSubject, OrderScale> scales;
 
-    private OrderedReading(Terms terms, Denotations at, Map<Term, OrderScale> scales) {
+    private OrderedReading(Terms terms, Denotations at, Map<FactSubject, OrderScale> scales) {
         this.terms = terms;
         this.at = at;
         this.scales = scales;
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
-    static OrderedReading of(Terms terms, Denotations at, Map<Term, Type> byName, Symbols symbols) {
-        Map<Term, OrderScale> scales = new LinkedHashMap<>();
+    static OrderedReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName, Symbols symbols) {
+        Map<FactSubject, OrderScale> scales = new LinkedHashMap<>();
         byName.forEach((name, type) -> {
             OrderScale scale = OrderScale.ofValue(type, symbols);
             if (scale != null) {
@@ -75,17 +75,17 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<Term>> {
     }
 
     @Override
-    public OrderedIntervals<Term> nothingSaid() {
+    public OrderedIntervals<FactSubject> nothingSaid() {
         return OrderedIntervals.top();
     }
 
     @Override
-    public OrderedIntervals<Term> both(OrderedIntervals<Term> one, OrderedIntervals<Term> other) {
+    public OrderedIntervals<FactSubject> both(OrderedIntervals<FactSubject> one, OrderedIntervals<FactSubject> other) {
         return one.meet(other);
     }
 
     @Override
-    public OrderedIntervals<Term> either(OrderedIntervals<Term> one, OrderedIntervals<Term> other) {
+    public OrderedIntervals<FactSubject> either(OrderedIntervals<FactSubject> one, OrderedIntervals<FactSubject> other) {
         return one.join(other);
     }
 
@@ -98,15 +98,15 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<Term>> {
      * step.
      */
     @Override
-    public OrderedIntervals<Term> leaf(Core e, boolean positive) {
+    public OrderedIntervals<FactSubject> leaf(Core e, boolean positive) {
         return e instanceof Core.Binary bin ? comparison(bin, positive) : OrderedIntervals.top();
     }
 
     /** Where one comparison leaves the position it names, or nothing where it names none. */
-    private OrderedIntervals<Term> comparison(Core.Binary bin, boolean positive) {
+    private OrderedIntervals<FactSubject> comparison(Core.Binary bin, boolean positive) {
         // The position-bearing side read as the left one, as `0 <= value` says what `value >= 0`
         // says.
-        Term position = positionIn(bin.left());
+        FactSubject position = positionIn(bin.left());
         Core bound = bin.right();
         Hir.BinOp op = bin.op();
         if (position == null) {
@@ -152,7 +152,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<Term>> {
      * every answer rather than something applied once at the end. A reader adding a second such
      * place has to remember the extent; this one cannot forget it.
      */
-    private static OrderedIntervals<Term> leaves(Term position, OrderScale scale,
+    private static OrderedIntervals<FactSubject> leaves(FactSubject position, OrderScale scale,
                                                  OrderedInterval range) {
         return OrderedIntervals.at(position, scale.extent().meet(range));
     }
@@ -173,11 +173,8 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<Term>> {
     }
 
     /** The position {@code e} is, or null where it is not one this is reading for. */
-    private Term positionIn(Core e) {
-        Term named = terms.atomOf(e, at);
-        if (named == null) {
-            named = terms.bodyKey(e, at);
-        }
+    private FactSubject positionIn(Core e) {
+        FactSubject named = terms.subjectOf(e, at);
         return named != null && scales.containsKey(named) ? named : null;
     }
 }

@@ -54,8 +54,8 @@ import java.util.Set;
  * readers of two domains, and each of them answered that there was something wherever the domain it
  * happened to ask had nothing to say.
  */
-record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
-                       AdmissibleValues<Term> values, OrderedIntervals<Term> ordered,
+record ConstraintState(NumericDomain<FactSubject> numbers, PredicateFacts facts,
+                       AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
                        boolean shown) {
 
     /** Nothing taken in, so nothing ruled out. */
@@ -111,7 +111,7 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
      *                  off the state's own map, the place named would be the one whose clause was
      *                  read first, and moving a clause would move the refusal
      */
-    Optional<Emptiness> holdsNothing(SequencedMap<Term, String> positions) {
+    Optional<Emptiness> holdsNothing(SequencedMap<FactSubject, String> positions) {
         Emptiness why = isBottom() ? new Emptiness.ConflictingRules() : null;
         // A position whose ends cross, which is nearer than the general form: it says not only that
         // the rules contradict but where they leave nothing.
@@ -121,8 +121,8 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
         // the alternatives may fail at different positions — and the particular proof is particular
         // by naming a place. Written without one, the sentence read off it would name whatever place
         // the reader happened to be at, which is the declaration's own value.
-        Set<Term> empty = ordered.holdingNothing();
-        for (Map.Entry<Term, String> each : positions.entrySet()) {
+        Set<FactSubject> empty = ordered.holdingNothing();
+        for (Map.Entry<FactSubject, String> each : positions.entrySet()) {
             if (empty.contains(each.getKey())) {
                 why = Emptiness.preferred(why, new Emptiness.AtAField(each.getValue(),
                         new Emptiness.EmptyOrderedInterval()));
@@ -133,22 +133,22 @@ record ConstraintState(NumericDomain<Term> numbers, PredicateFacts facts,
     }
 
     /** This, with {@code f rel 0} taken as holding. */
-    ConstraintState taking(LinearForm<Term> f, Rel rel, Map<Term, Granularity> kinds) {
+    ConstraintState taking(LinearForm<FactSubject> f, Rel rel, Map<FactSubject, Granularity> kinds) {
         return new ConstraintState(numbers.assume(f, rel, kinds), facts, values, ordered, shown);
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
-    ConstraintState taking(Term key, boolean positive) {
+    ConstraintState taking(FactSubject key, boolean positive) {
         return new ConstraintState(numbers, facts.assume(key, positive), values, ordered, shown);
     }
 
     /** This, with {@code admitted} taken as holding of the positions it speaks about. */
-    ConstraintState taking(AdmissibleValues<Term> admitted) {
+    ConstraintState taking(AdmissibleValues<FactSubject> admitted) {
         return new ConstraintState(numbers, facts, values.meet(admitted), ordered, shown);
     }
 
     /** This, with {@code bounded} taken as holding of the positions it bounds. */
-    ConstraintState taking(OrderedIntervals<Term> bounded) {
+    ConstraintState taking(OrderedIntervals<FactSubject> bounded) {
         return new ConstraintState(numbers, facts, values, ordered.meet(bounded), shown);
     }
 }

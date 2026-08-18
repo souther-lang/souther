@@ -392,8 +392,8 @@ public final class InvariantChecker {
      *                 borrowing that answer would settle each reading's completeness by a fragment
      *                 that is not its own
      */
-    record Seeded(ConstraintState constraints, Map<String, Term> atoms, Map<String, Term> keys,
-                  Map<String, Term> held, Reading reading, boolean everyClauseRead,
+    record Seeded(ConstraintState constraints, Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
+                  Map<String, FactSubject> held, Reading reading, boolean everyClauseRead,
                   Set<String> notGathered) {
 
         public Seeded {
@@ -409,7 +409,7 @@ public final class InvariantChecker {
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
          * asked of {@link #constraints} and is never read off this. */
-        NumericDomain<Term> numbers() {
+        NumericDomain<FactSubject> numbers() {
             return constraints.numbers();
         }
     }
@@ -542,10 +542,10 @@ public final class InvariantChecker {
             gaveUp("seedFields " + named.name(), why);
             return Seeded.nothingRead();
         }
-        Map<String, Term> atoms = new LinkedHashMap<>();
+        Map<String, FactSubject> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
-        Map<String, Term> held = new LinkedHashMap<>();
-        Map<String, Term> keys = new LinkedHashMap<>();
+        Map<String, FactSubject> held = new LinkedHashMap<>();
+        Map<String, FactSubject> keys = new LinkedHashMap<>();
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
             if (type != null) {
@@ -564,7 +564,7 @@ public final class InvariantChecker {
         // reached this value is the walk's answer and is given to both readings; what each of them
         // makes of a clause is its own, so neither can widen the other's idea of what it was handed.
         List<Core> reaching = written.stream().map(Written::clause).toList();
-        Map<Term, Type> positions = positions(atoms, keys, typeAt);
+        Map<FactSubject, Type> positions = positions(atoms, keys, typeAt);
         // And what the same clauses say about which values each position may hold and where each
         // position stops, off the same list at the same moment. One reading in two languages and
         // not two readings: the connectives belong to the clause, so an alternative nothing can
@@ -574,7 +574,7 @@ public final class InvariantChecker {
                 .taking(stated.values())
                 .taking(stated.ordered());
         for (Map.Entry<String, Count> each : settled.entrySet()) {
-            Term atom = atoms.get(each.getKey());
+            FactSubject atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());
             if (atom == null || type == null) {
                 continue;
@@ -605,16 +605,16 @@ public final class InvariantChecker {
      * ask for what they left.
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
-                      int depth, Map<String, Term> atoms, Map<String, Type> typeAt,
-                      Map<String, Term> held, Map<String, Term> keys) {
-        Term atom = terms.atomOf(value, at);
+                      int depth, Map<String, FactSubject> atoms, Map<String, Type> typeAt,
+                      Map<String, FactSubject> held, Map<String, FactSubject> keys) {
+        FactSubject atom = terms.atomOf(value, at);
         if (atom != null) {
             atoms.put(path, atom);
         }
         // What the position is called, which every position has and only some are numbers. An
         // enumeration is ordered and carries no atom, so a clause bounding one is recognised by this
         // and by nothing above it.
-        Term key = terms.bodyKey(value, at);
+        FactSubject key = FactSubject.of(terms.bodyKey(value, at));
         if (key != null) {
             keys.put(path, key);
         }
@@ -624,7 +624,7 @@ public final class InvariantChecker {
         // And what a rule counting this position spoke about, which is not what the position is. A
         // list is no number and has no atom above; the count of it has one, and a reader asking how
         // much the position holds is asking about that one.
-        Term counted = terms.takenAtomOf(value, type, at);
+        FactSubject counted = terms.takenAtomOf(value, type, at);
         if (counted != null) {
             held.put(path, counted);
         }
@@ -662,15 +662,15 @@ public final class InvariantChecker {
      * both names — a number is called one thing by the interval algebra and another by everything
      * else — both are filed, since a clause reaching it may be recognised by either.
      */
-    private static Map<Term, Type> positions(Map<String, Term> atoms, Map<String, Term> keys,
+    private static Map<FactSubject, Type> positions(Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
                                              Map<String, Type> typeAt) {
-        Map<Term, Type> out = new LinkedHashMap<>();
+        Map<FactSubject, Type> out = new LinkedHashMap<>();
         typeAt.forEach((path, type) -> {
-            Term key = keys.get(path);
+            FactSubject key = keys.get(path);
             if (key != null) {
                 out.put(key, type);
             }
-            Term atom = atoms.get(path);
+            FactSubject atom = atoms.get(path);
             if (atom != null) {
                 out.put(atom, type);
             }
@@ -746,14 +746,14 @@ public final class InvariantChecker {
     record Reading(List<Direct> directs, Map<String, List<TypeSymbol>> narrowers) {}
 
     private Reading directsIn(List<Written> stated, Denotations at,
-                                   Map<String, Term> atoms, Map<String, Term> keys,
-                                   Map<String, Term> held, Map<String, Type> typeAt) {
-        Map<Term, Coordinate> byName = new LinkedHashMap<>();
+                                   Map<String, FactSubject> atoms, Map<String, FactSubject> keys,
+                                   Map<String, FactSubject> held, Map<String, Type> typeAt) {
+        Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
             if (carrier != null) {
                 byName.put(key, new Coordinate(path, false, carrier));
-                Term atom = atoms.get(path);
+                FactSubject atom = atoms.get(path);
                 if (atom != null) {
                     byName.put(atom, new Coordinate(path, false, carrier));
                 }
@@ -778,7 +778,7 @@ public final class InvariantChecker {
      * comparisons it had already accounted for.
      */
     private void direct(Core clause, TypeSymbol from, Denotations at,
-                        Map<Term, Coordinate> byName, List<Direct> out,
+                        Map<FactSubject, Coordinate> byName, List<Direct> out,
                         Map<String, List<TypeSymbol>> narrowers) {
         if (!(clause instanceof Core.Binary bin)) {
             return;
@@ -829,9 +829,9 @@ public final class InvariantChecker {
      * moved even where the number came from somewhere further off.
      */
     private void relating(Core clause, TypeSymbol from, Denotations at,
-                          Map<Term, Coordinate> byName,
+                          Map<FactSubject, Coordinate> byName,
                           Map<String, List<TypeSymbol>> narrowers) {
-        Term named = nameOf(clause, at);
+        FactSubject named = nameOf(clause, at);
         Coordinate found = named == null ? null : byName.get(named);
         if (found != null) {
             List<TypeSymbol> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
@@ -853,9 +853,8 @@ public final class InvariantChecker {
      * <p>Then what the position is called, for the positions that are ordered and are not numbers. An
      * enumeration has no atom and a clause can still say where its values stop.
      */
-    private Term nameOf(Core e, Denotations at) {
-        Term atom = terms.atomOf(e, at);
-        return atom != null ? atom : terms.bodyKey(e, at);
+    private FactSubject nameOf(Core e, Denotations at) {
+        return terms.subjectOf(e, at);
     }
 
     /**
@@ -1260,11 +1259,11 @@ public final class InvariantChecker {
     }
 
     /** Which of the values a construction hands over is not one a clause may be read against
-     * ({@link Terms#siteKey}) — by identity, since it is these very values that stand in the clause. */
+     * ({@link Terms#reportableSite}) — by identity, since it is these very values that stand in the clause. */
     private Set<Core> unnamed(Collection<Core> given, Known k, Denotations at) {
         Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Core value : given) {
-            if (terms.siteKey(value, at, k) == null) {
+            if (terms.reportableSite(value, at, k) == null) {
                 out.add(value);
             }
         }
@@ -1374,11 +1373,11 @@ public final class InvariantChecker {
         if (owed.isEmpty()) {
             return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, found);
         }
-        NumericDomain<Term> dom = readingOf(k.numbers(), owed);
+        NumericDomain<FactSubject> dom = readingOf(k.numbers(), owed);
         // The same clauses read against the same site, under what would be known here had no
         // condition on the path settled anything. What each clause states of the sizes it names holds
         // either way, so both readings take it.
-        NumericDomain<Term> alone = readingOf(k.unguarded().numbers(), owed);
+        NumericDomain<FactSubject> alone = readingOf(k.unguarded().numbers(), owed);
         // An invariant is the conjunction of its clauses, so every one of them is read before what
         // the invariant came out as is decided. A clause the values alone refute is the whole
         // invariant refuted on the values alone, whatever another clause needed to be refuted —
@@ -1426,12 +1425,12 @@ public final class InvariantChecker {
      * assumed, so it belongs to the reading and not to the value — which is why the construction's
      * two readings are built by two calls rather than sharing one domain.
      */
-    private NumericDomain<Term> readingOf(NumericDomain<Term> base, List<Owing> owed) {
-        NumericDomain<Term> out = base;
+    private NumericDomain<FactSubject> readingOf(NumericDomain<FactSubject> base, List<Owing> owed) {
+        NumericDomain<FactSubject> out = base;
         // What the clauses are decided by, which is one half of what the derivation can reach. The
         // other half is what the domain speaks of, and that is the domain's own to answer — asked
         // after this loop, since assuming a clause's statements is what puts its atoms there.
-        Set<Term> asked = new LinkedHashSet<>();
+        Set<FactSubject> asked = new LinkedHashSet<>();
         for (Owing owing : owed) {
             Predicates.Clause c = owing.owed();
             for (Predicates.Constraint known : c.known()) {
@@ -1451,7 +1450,7 @@ public final class InvariantChecker {
      * two questions were answered against a reading that proves everything, and a check that filed
      * it under either answer would report a clause the value does not fail, or leave one it does.
      */
-    private static ClauseStatus statusOf(Predicates.Clause owed, NumericDomain<Term> dom, Known k,
+    private static ClauseStatus statusOf(Predicates.Clause owed, NumericDomain<FactSubject> dom, Known k,
                                          Clause clause) {
         boolean established = owed.dischargedBy(dom, k.facts());
         boolean refused = owed.refutedBy(dom, k.facts());
@@ -1740,17 +1739,11 @@ public final class InvariantChecker {
         }
     }
 
-    /** What each node a rewrite built stands for, so a construction keeps its identity through one. */
-    private final Map<Core, Core> rebuilt = new IdentityHashMap<>();
-
-    /** The node {@code e} was built from, however many rewrites ago. */
+    /** The node {@code e} was built from, however many rewrites ago. Asked of {@link Terms}, which
+     * is where which-occurrence-is-this is answered: a construction and an evaluation are told apart
+     * by the same rewrites, and two records of that would be two things to keep agreeing. */
     private Core asWritten(Core e) {
-        Core from = e;
-        Core next;
-        while ((next = rebuilt.get(from)) != null) {
-            from = next;
-        }
-        return from;
+        return terms.asWritten(e);
     }
 
     /**
@@ -1972,14 +1965,14 @@ public final class InvariantChecker {
         }
         Core made = Core.mapAll(e, child -> without(child, was, becomes), name -> name);
         if (made != e) {
-            rebuilt.put(made, e);
+            terms.rebuilt(made, e);
             // What an attempt tries to build is rebuilt through the construction slot, which does not
             // come back through here, so its rebuild is recorded here instead. Unrecorded, the two
             // readings key one construction under two occurrences, and the branch that refutes it is
             // said on its own rather than answered by the branch that proves it.
             if (made instanceof Core.IfConstructed x && e instanceof Core.IfConstructed from
                     && x.construct() != from.construct()) {
-                rebuilt.put(x.construct(), from.construct());
+                terms.rebuilt(x.construct(), from.construct());
             }
         }
         return made;

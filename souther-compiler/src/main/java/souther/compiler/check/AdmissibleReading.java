@@ -34,17 +34,17 @@ import java.util.Set;
  * the values can be written out ({@link ValueUniverse}) and is kept as a denial where they cannot,
  * so nothing reaches emptiness except through values this had in hand.
  */
-final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
+final class AdmissibleReading implements ClauseReading<AdmissibleValues<FactSubject>> {
 
     private final Terms terms;
     private final Denotations at;
     /** What each position of the value is called, and what type stands there. A position is here
      * whether or not it is a number: which values a boolean has is as much an answer as which
      * values an integer has, and the reading that asked the carrier had no word for the first. */
-    private final Map<Term, Type> byName;
+    private final Map<FactSubject, Type> byName;
     private final Symbols symbols;
 
-    private AdmissibleReading(Terms terms, Denotations at, Map<Term, Type> byName,
+    private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                               Symbols symbols) {
         this.terms = terms;
         this.at = at;
@@ -53,29 +53,29 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
     }
 
     /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
-    static AdmissibleReading of(Terms terms, Denotations at, Map<Term, Type> byName,
+    static AdmissibleReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                                 Symbols symbols) {
         return new AdmissibleReading(terms, at, byName, symbols);
     }
 
     @Override
-    public AdmissibleValues<Term> nothingSaid() {
+    public AdmissibleValues<FactSubject> nothingSaid() {
         return AdmissibleValues.top();
     }
 
     @Override
-    public AdmissibleValues<Term> both(AdmissibleValues<Term> one, AdmissibleValues<Term> other) {
+    public AdmissibleValues<FactSubject> both(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
         return one.meet(other);
     }
 
     @Override
-    public AdmissibleValues<Term> either(AdmissibleValues<Term> one, AdmissibleValues<Term> other) {
+    public AdmissibleValues<FactSubject> either(AdmissibleValues<FactSubject> one, AdmissibleValues<FactSubject> other) {
         return one.join(other);
     }
 
     /** An equality names a value and a denial leaves the rest; nothing else here is read. */
     @Override
-    public AdmissibleValues<Term> leaf(Core e, boolean positive) {
+    public AdmissibleValues<FactSubject> leaf(Core e, boolean positive) {
         if (e instanceof Core.Binary b && (b.op() == Hir.BinOp.EQ || b.op() == Hir.BinOp.NE)) {
             // Which of the two it states, once the denials above have been counted: `/=` denied
             // states the equality, and `==` denied denies it.
@@ -85,8 +85,8 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */
-    private AdmissibleValues<Term> comparison(Core.Binary b, boolean states) {
-        AdmissibleValues<Term> read = sided(b.left(), b.right(), states);
+    private AdmissibleValues<FactSubject> comparison(Core.Binary b, boolean states) {
+        AdmissibleValues<FactSubject> read = sided(b.left(), b.right(), states);
         if (read == null) {
             // `"A" == value` says what `value == "A"` says.
             read = sided(b.right(), b.left(), states);
@@ -110,7 +110,7 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
      * ordering comparison and an equality answer alike — written per shape, {@code <} fell through
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
-    private AdmissibleValues<Term> unreadable(Core e) {
+    private AdmissibleValues<FactSubject> unreadable(Core e) {
         return AdmissibleValues.unreadable(names(e), relatesTwoPositions(e)
                 ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
     }
@@ -127,8 +127,8 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
         if (!(e instanceof Core.Binary b) || !COMPARES.contains(b.op())) {
             return false;
         }
-        Term left = positionIn(b.left());
-        Term right = positionIn(b.right());
+        FactSubject left = positionIn(b.left());
+        FactSubject right = positionIn(b.right());
         return left != null && right != null && !left.equals(right);
     }
 
@@ -140,19 +140,16 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */
-    private AdmissibleValues<Term> sided(Core where, Core what, boolean states) {
-        Term position = positionIn(where);
+    private AdmissibleValues<FactSubject> sided(Core where, Core what, boolean states) {
+        FactSubject position = positionIn(where);
         Type type = position == null ? null : byName.get(position);
         Value value = type == null ? null : valueOf(what);
         return value == null ? null : AdmissibleValues.at(position, admits(value, states, type));
     }
 
     /** The position {@code e} is, or null where it is not one of the positions being read for. */
-    private Term positionIn(Core e) {
-        Term named = terms.atomOf(e, at);
-        if (named == null) {
-            named = terms.bodyKey(e, at);
-        }
+    private FactSubject positionIn(Core e) {
+        FactSubject named = terms.subjectOf(e, at);
         return named != null && byName.containsKey(named) ? named : null;
     }
 
@@ -208,17 +205,14 @@ final class AdmissibleReading implements ClauseReading<AdmissibleValues<Term>> {
      * nothing here relates one position to another, so a rule narrowing a position names it — and a
      * rule relating two of them names both and is itself one of these.
      */
-    private Set<Term> names(Core e) {
-        Set<Term> found = new LinkedHashSet<>();
+    private Set<FactSubject> names(Core e) {
+        Set<FactSubject> found = new LinkedHashSet<>();
         gather(e, found);
         return found;
     }
 
-    private void gather(Core e, Set<Term> found) {
-        Term here = terms.atomOf(e, at);
-        if (here == null) {
-            here = terms.bodyKey(e, at);
-        }
+    private void gather(Core e, Set<FactSubject> found) {
+        FactSubject here = terms.subjectOf(e, at);
         if (here != null && byName.containsKey(here)) {
             found.add(here);
             return;   // a position names itself, and nothing under it is a position of its own

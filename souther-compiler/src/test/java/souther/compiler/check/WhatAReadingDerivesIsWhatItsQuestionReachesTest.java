@@ -47,7 +47,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
 
     /** The recipes each reading of the module evaluated, by the name each atom renders as. */
     private static List<Set<String>> derivedWhileCompiling(String module) {
-        List<List<Term>> watching = new ArrayList<>();
+        List<List<FactSubject>> watching = new ArrayList<>();
         DerivedBounds.WATCHING = watching;
         try {
             Compiler.compileWithWarnings(module);
@@ -55,7 +55,7 @@ class WhatAReadingDerivesIsWhatItsQuestionReachesTest {
             DerivedBounds.WATCHING = null;
         }
         return watching.stream()
-                .map(one -> one.stream().map(Term::rendered)
+                .map(one -> one.stream().map(FactSubject::rendered)
                         .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)))
                 .map(one -> (Set<String>) one)
                 .toList();

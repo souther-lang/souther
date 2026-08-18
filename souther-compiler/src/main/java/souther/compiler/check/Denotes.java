@@ -19,12 +19,15 @@ sealed interface Denotes {
     record At(Location where) implements Denotes {}
 
     /**
-     * A value named by the expression that computes it. {@code readable} is true where there is
-     * something to say of it however it is reached — a form the numeric domain built, or a rule
-     * about how it was made; false where only a guard naming it makes a clause readable against
-     * it.
+     * A value named by the expression that computes it.
+     *
+     * <p>Whether a clause may be read against it is not held here. It was, as a flag decided when the
+     * binding was entered, and a flag is a second record of something the expression already answers:
+     * {@link Terms#intrinsicallyReadable} asks it of the expression, and what a path has said about
+     * the value is {@link Known}'s. A denotation says what a value <em>is</em>; what can be done with
+     * it is worked out from that and from what is known, and not stored beside it.
      */
-    record Computed(Term term, boolean readable) implements Denotes {}
+    record Computed(Term term) implements Denotes {}
 
     /**
      * A value written out, kept as what was written. There is no guard an author could add about

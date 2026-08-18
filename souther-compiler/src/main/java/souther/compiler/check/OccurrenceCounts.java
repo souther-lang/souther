@@ -93,7 +93,7 @@ public final class OccurrenceCounts {
         if (seeded == null) {
             return 0;
         }
-        Term counted = seeded.held().get(path);
+        FactSubject counted = seeded.held().get(path);
         return counted == null ? 0
                 : CountDomain.leastFrom(seeded.numbers().boundsOf(counted).min());
     }
@@ -102,11 +102,11 @@ public final class OccurrenceCounts {
         if (seeded == null) {
             return true;
         }
-        Term counted = seeded.held().get(path);
+        FactSubject counted = seeded.held().get(path);
         if (counted == null) {
             return true;   // nothing counts what is there, so no rule here is about how much it holds
         }
-        NumericDomain.LinearForm<Term> from = NumericDomain.LinearForm.atom(counted)
+        NumericDomain.LinearForm<FactSubject> from = NumericDomain.LinearForm.atom(counted)
                 .minus(NumericDomain.LinearForm.constant(BigDecimal.valueOf(count)));
         return !seeded.numbers()
                 .assume(from, against, Map.of(counted, Granularity.DISCRETE))

@@ -159,7 +159,7 @@ final class PathEngine {
         if (at.valueOf(li.binder().id()) == li.value()) {
             return new Entered(k, at);
         }
-        Denotes what = terms.denotationOf(li.value(), at, k);
+        Denotes what = terms.denotationOf(li.value(), at);
         return new Entered(k, at.binding(li.binder().id(), li.value(), what));
     }
 

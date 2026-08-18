@@ -32,7 +32,7 @@ import java.util.Map;
  * A branch impossible only by an arithmetic relation between two positions is one nothing here can
  * drop, and giving those two a reading of alternatives is its own change with its own reason.
  */
-record StatedByClauses(AdmissibleValues<Term> values, OrderedIntervals<Term> ordered) {
+record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered) {
 
     /** Nothing read, so nothing ruled out. */
     static StatedByClauses top() {
@@ -45,7 +45,7 @@ record StatedByClauses(AdmissibleValues<Term> values, OrderedIntervals<Term> ord
      * @param byName the type at each position, keyed by what that position is called
      */
     static StatedByClauses of(List<Core> clauses, Terms terms, Denotations at,
-                              Map<Term, Type> byName, Symbols symbols) {
+                              Map<FactSubject, Type> byName, Symbols symbols) {
         Reading reading = new Reading(AdmissibleReading.of(terms, at, byName, symbols),
                 OrderedReading.of(terms, at, byName, symbols));
         StatedByClauses out = top();
