@@ -22,10 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A contract is read into terms, and a term carries where it was written and the ordinal its
  * module numbered it with. Neither is anything a caller reads — it substitutes its own arguments in
  * and reads what the terms say — so two readings of one declaration that differ only in where the
- * file put it are the same dependency. {@link Bodies.Assumed} is where that is decided, and
+ * file put it are the same dependency. {@link souther.compiler.check.StatedContract} is where that is decided, and
  * {@link souther.compiler.core.Core#withoutItsPlace} is what it decides with.
  *
- * <p>This asks it of {@link Bodies.Assumed}, over what the corpus states. It does not ask it of
+ * <p>This asks it of {@link Bodies.Stated}, over what the corpus states. It does not ask it of
  * every kind of term: the corpus states one {@code ensures}, which reaches a handful of the cases
  * {@link souther.compiler.core.Core#withoutItsPlace} is written out of, and a case that kept a
  * place in a shape this never meets would pass here. That is
@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
 
     /** Every behavior that states something, in every module of every corpus. */
-    private static Map<ValueName.Behavior, Bodies.Assumed> assumed(Compilation c) {
-        Map<ValueName.Behavior, Bodies.Assumed> out = new LinkedHashMap<>();
+    private static Map<ValueName.Behavior, souther.compiler.check.StatedContract> assumed(Compilation c) {
+        Map<ValueName.Behavior, souther.compiler.check.StatedContract> out = new LinkedHashMap<>();
         for (String module : c.modules()) {
             Map<String, souther.compiler.check.StatedContract> stated =
                     c.db().ask(new Bodies.StatedContracts(module)).value();
@@ -50,7 +50,7 @@ class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
             }
             for (String behavior : stated.keySet()) {
                 ValueName.Behavior named = new ValueName.Behavior(module, behavior);
-                Answer<Bodies.Assumed> answer = c.db().ask(new Bodies.Stated(named));
+                Answer<souther.compiler.check.StatedContract> answer = c.db().ask(new Bodies.Stated(named));
                 if (answer.present()) {
                     out.put(named, answer.value());
                 }
@@ -73,9 +73,9 @@ class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
     void movingEveryLineOfEveryCorpusChangesNoContractACallerDependsOn() {
         List<String> checked = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Map<ValueName.Behavior, Bodies.Assumed> where =
+            Map<ValueName.Behavior, souther.compiler.check.StatedContract> where =
                     assumed(compiled(corpus.files(), corpus.sources(), ""));
-            Map<ValueName.Behavior, Bodies.Assumed> moved =
+            Map<ValueName.Behavior, souther.compiler.check.StatedContract> moved =
                     assumed(compiled(corpus.files(), corpus.sources(), "\n\n\n"));
 
             assertEquals(where.keySet(), moved.keySet(),

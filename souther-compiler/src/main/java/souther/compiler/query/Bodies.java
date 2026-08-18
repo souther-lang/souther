@@ -409,52 +409,6 @@ public final class Bodies {
     }
 
     /**
-     * A contract as a caller depends on it.
-     *
-     * <p>Two of these are the same when what they state is the same. A contract carries where its
-     * terms were written and the coverage ordinals its module numbered them with, and a caller reads
-     * neither — it substitutes its own arguments into the terms and reads what they say. Comparing
-     * the whole of one would make a blank line above a declaration, or a clause above it gaining a
-     * term, an edit to every body that calls it, because a module numbers its constructs from one
-     * end and every position below the change moves.
-     *
-     * <p>What is handed on is the contract that was read, places and all: a reader of it wants the
-     * places, and only the comparing is done without them. The reading with them taken out is held
-     * beside it rather than worked out at each comparison, which would walk both trees every time
-     * an edit is absorbed.
-     */
-    public static final class Assumed {
-
-        private final StatedContract contract;
-        private final StatedContract stating;
-
-        Assumed(StatedContract contract) {
-            this.contract = contract;
-            this.stating = contract.withoutItsPlace();
-        }
-
-        /** The contract as it was read, where it was written. */
-        public StatedContract contract() {
-            return contract;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Assumed that && stating.equals(that.stating);
-        }
-
-        @Override
-        public int hashCode() {
-            return stating.hashCode();
-        }
-
-        @Override
-        public String toString() {
-            return contract.toString();
-        }
-    }
-
-    /**
      * What one behavior states about its answer, asked of the module that declares it.
      *
      * <p>The unit a reader depends on. A body is checked against the contracts of the behaviors it
@@ -468,28 +422,35 @@ public final class Bodies {
      * reaching a reader wherever it comes out equal. What is left is the cost of rebuilding the
      * table, which is a question about this producer and not about who depends on it.
      *
-     * <p>Coming out equal is {@link Assumed}'s question and not the contract's. A contract carries
-     * where its terms were written and the ordinals its module numbered them with, so on the whole
-     * value nothing below an edit ever comes out equal: a blank line moves every position under it,
-     * and a clause gaining a term moves every ordinal under it. Neither is what a caller assumes, so
-     * neither is what this is compared by.
+     * <p>Answered without its places, which is the whole of what a caller assumes. A contract as the
+     * declaration holds it carries where its terms were written and the ordinals the module numbered
+     * them with, and on that value nothing below an edit ever comes out equal: a blank line moves
+     * every position under it, and a clause gaining a term moves every ordinal under it. A caller
+     * reads neither — it substitutes its own arguments into the terms and reads what they say.
+     *
+     * <p>Taken out here rather than ignored when comparing. An answer whose equality says one thing
+     * and whose value says another is one a reader can tell apart after the store has decided they
+     * are the same, and the store decides that on behalf of everything downstream. So the two are
+     * one value: what this hands over is what it is compared by. The declaration's own reading, with
+     * its places, is {@link StatedContracts}, which is what an editor and a diagnostic want.
      *
      * <p>Absent where the behavior states nothing, and where the module that declares it could not be
      * read. Absence is what a caller wanting to know "is there anything to assume" is asking, and an
      * empty contract would be a second way to say it.
      */
-    public record Stated(ValueName.Behavior behavior) implements Key<Assumed> {
+    public record Stated(ValueName.Behavior behavior) implements Key<StatedContract> {
         @Override
         public String module() {
             return behavior.module();
         }
 
         @Override
-        public Answer<Assumed> compute(Db db) {
+        public Answer<StatedContract> compute(Db db) {
             Map<String, StatedContract> declared =
                     db.ask(new StatedContracts(behavior.module())).value();
             StatedContract stated = declared == null ? null : declared.get(behavior.name());
-            return stated == null ? Answer.absent() : Answer.of(new Assumed(stated));
+            return stated == null ? Answer.absent()
+                    : Answer.of(stated.withoutItsPlace());
         }
     }
 
@@ -512,12 +473,18 @@ public final class Bodies {
      * for which behavior is {@link SpecChecker#dependencyBindings}, asked rather than worked out
      * again: the clause and the parameter list are read together in order and not paired by name,
      * because two modules may declare a behavior of one name, and the answer is a binding because a
-     * binding in force wins over the declaration it shadows (spec §fn-rules).
+     * binding in force wins over the declaration it shadows (spec §fn-rules). Neither is a
+     * difference a program can show here — a {@code depends on} its body never calls is refused
+     * (E1603), so a shadow of that spelling has the parameter beside it — which is why it is asked
+     * of the one place that decides it rather than settled again by whatever agrees today.
      *
-     * <p>Applied or not. A behavior named where a value goes becomes the function it names, and
-     * whether some later step applies it is not something a walk of the body can see; a name nothing
-     * applies brings a contract nobody consults, which is a dependency this body has not got rather
-     * than one it has lost.
+     * <p>Every name, and not every application. A behavior named where a value goes becomes the
+     * function it names, and what applies it may be a binding away, so a walk that only read
+     * applications would miss one the body really does call. Measured: reached through a binding
+     * that is then applied, and not reached at all where nothing reads the binding — a binding
+     * nothing reads is not in the tree this walks. So the frontier is drawn wider than the
+     * applications and comes out the same size, and a name that could be left in it costs a
+     * dependency this body has not got rather than losing one it has.
      *
      * <p>Absent where the body or the declaration is not there to read, which is not the same
      * answer as reaching nothing: the check that reads contracts is skipped where the body is,
@@ -578,17 +545,17 @@ public final class Bodies {
      * shape of a {@code compute}.
      */
     public record ContractsForBody(String module, String behavior)
-            implements Key<Map<ValueName.Behavior, Assumed>> {
+            implements Key<Map<ValueName.Behavior, StatedContract>> {
 
         @Override
-        public Answer<Map<ValueName.Behavior, Assumed>> compute(Db db) {
+        public Answer<Map<ValueName.Behavior, StatedContract>> compute(Db db) {
             Answer<Set<ValueName.Behavior>> targets = db.ask(new BehaviorsReached(module, behavior));
             if (!targets.present()) {
                 return Answer.absent();
             }
-            Map<ValueName.Behavior, Assumed> out = new LinkedHashMap<>();
+            Map<ValueName.Behavior, StatedContract> out = new LinkedHashMap<>();
             for (ValueName.Behavior each : targets.value()) {
-                Answer<Assumed> stated = db.ask(new Stated(each));
+                Answer<StatedContract> stated = db.ask(new Stated(each));
                 if (stated.present()) {
                     out.put(each, stated.value());
                 }
@@ -1525,17 +1492,6 @@ public final class Bodies {
         }
     }
 
-    /** What each contract states, out of the values a caller's dependency on it is compared by. */
-    private static Map<ValueName.Behavior, StatedContract> stated(
-            Answer<Map<ValueName.Behavior, Assumed>> contracts) {
-        if (!contracts.present()) {
-            return Map.of();
-        }
-        Map<ValueName.Behavior, StatedContract> out = new LinkedHashMap<>();
-        contracts.value().forEach((behavior, assumed) -> out.put(behavior, assumed.contract()));
-        return out;
-    }
-
     /**
      * One behavior's body checked against the behavior it implements, as the Core the backend emits.
      *
@@ -1563,7 +1519,7 @@ public final class Bodies {
             // What the behaviors this body reaches state about their answers, and only those: a
             // relation declared by a behavior it does not call is no part of what it is checked
             // against, and depending on one would re-check this body whenever that one was edited.
-            Answer<Map<ValueName.Behavior, Assumed>> contracts =
+            Answer<Map<ValueName.Behavior, StatedContract>> contracts =
                     db.ask(new ContractsForBody(module, behavior));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !inliner.present()
@@ -1576,7 +1532,7 @@ public final class Bodies {
             InvariantChecker.Source dischargeSource = discharge.present()
                     ? new InvariantChecker.Source(discharge.value().writtenBody(),
                             dischargeInvariants.present() ? dischargeInvariants.value() : Map.of(),
-                            stated(contracts))
+                            contracts.present() ? contracts.value() : Map.of())
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {

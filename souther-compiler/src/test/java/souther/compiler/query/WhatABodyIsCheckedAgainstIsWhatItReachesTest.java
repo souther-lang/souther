@@ -98,18 +98,31 @@ class WhatABodyIsCheckedAgainstIsWhatItReachesTest {
     }
 
     /**
-     * A behavior named where a value goes is reached whether or not anything applies it. Known and
-     * conservative: what a name becomes is the function it names, and which later step applies it is
-     * not something a walk of the body can see, so the frontier is what a contract lookup may ask
-     * about rather than what it will.
+     * A behavior applied through a binding is reached. What a name becomes is the function it names,
+     * so the application can be a binding away from the name, and a walk reading applications alone
+     * would miss a behavior this body really does call.
      */
     @Test
-    void aBehaviorNamedAsAValueIsReachedWhetherOrNotItIsApplied() {
+    void aBehaviorAppliedThroughABindingIsReached() {
         Compilation c = compiled(CALLING.replace("let caller (n) = called(n)",
                 "let caller (n) = {\n    let f = called\n    f(n)\n}"));
 
         assertEquals(Set.of(of("called")), reachedBy(c, "caller"),
-                "`called` is named here, and naming it is what brings its contract along");
+                "`called` is what `f` is, and `f` is what is applied");
+    }
+
+    /**
+     * And a binding nothing reads is not in the tree this walks, so naming a behavior and doing
+     * nothing with it reaches nothing. Which is why the frontier being drawn over names rather than
+     * applications costs nothing: it is wider than the applications and comes out the same size.
+     */
+    @Test
+    void aBehaviorNamedInABindingNothingReadsIsNotReached() {
+        Compilation c = compiled(CALLING.replace("let caller (n) = called(n)",
+                "let caller (n) = {\n    let f = called\n    n\n}"));
+
+        assertEquals(Set.of(), reachedBy(c, "caller"),
+                "nothing reads `f`, so nothing here calls `called`");
     }
 
     /**
