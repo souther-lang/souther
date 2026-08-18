@@ -25,10 +25,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * file put it are the same dependency. {@link Bodies.Assumed} is where that is decided, and
  * {@link souther.compiler.core.Core#withoutItsPlace} is what it decides with.
  *
- * <p>Asked of the corpus rather than of a term written here. The rewrite is a case per kind of
- * node, and a case that kept a place would go on passing a test written against the shapes whoever
- * wrote the rewrite had in mind. The corpus is written to reach every construct the language
- * declares, so what it compiles is the wide reading.
+ * <p>This asks it of {@link Bodies.Assumed}, over what the corpus states. It does not ask it of
+ * every kind of term: the corpus states one {@code ensures}, which reaches a handful of the cases
+ * {@link souther.compiler.core.Core#withoutItsPlace} is written out of, and a case that kept a
+ * place in a shape this never meets would pass here. That is
+ * {@code EveryTermCanBeReadWithoutItsPlaceTest}, which asks the same question of {@code Core} and
+ * reports the kinds it did not reach. Both are wanted: one holds the rewrite, and this holds what
+ * the query graph does with it.
  *
  * <p>Moving the whole file is the edit: every position in it changes, and every construct is
  * numbered after the ones the blank lines did not add, so a place surviving anywhere in a contract
