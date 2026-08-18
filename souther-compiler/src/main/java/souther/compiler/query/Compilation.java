@@ -4,7 +4,6 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
@@ -225,11 +224,6 @@ public final class Compilation {
      * recursive prelude helpers it reaches. Null where it did not get that far. */
     public Prepared module(String name) {
         return db.ask(new Shapes.Prepared(name)).value();
-    }
-
-    /** What the names in {@code module} denote — the table a question about a type is asked against. */
-    public Symbols symbols(String module) {
-        return db.ask(new Shapes.Scope(module)).value();
     }
 
     /**

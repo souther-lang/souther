@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -38,7 +39,7 @@ class HowManyValuesAPositionHasIsNotHowMuchItHoldsTest {
                         .flatMap(java.util.List::stream)
                         .map(each -> each.diagnostic().code().toString()).toList(),
                 "the model this reads has to be one somebody could write");
-        Symbols symbols = compilation.symbols("demo");
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return OccurrenceValues.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)), data(compilation, name), symbols)
                 .wholeValuesAt(path);
     }

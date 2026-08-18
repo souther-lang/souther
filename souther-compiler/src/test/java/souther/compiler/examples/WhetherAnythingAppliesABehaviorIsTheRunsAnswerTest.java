@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
@@ -212,7 +213,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> ExampleVerifier.check(
                         mine.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                        mine.db().ask(new Shapes.Scope(name)).value(),
+                        Scopes.derived(mine.db(), name).value(),
                         mine.db().ask(new Bodies.Signatures(name)).value(),
                         artifactOf(other, "example.elsewhere"),
                         () -> {
@@ -304,7 +305,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         String name = c.modules().get(0);
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                c.db().ask(new Shapes.Scope(name)).value(),
+                Scopes.derived(c.db(), name).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifactOf(c, name),
                 // Every answer here applies this compile's own classes, so nothing is held against

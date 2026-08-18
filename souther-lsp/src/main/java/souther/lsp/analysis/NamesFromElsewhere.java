@@ -2,7 +2,6 @@ package souther.lsp.analysis;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Scoping;
-import souther.compiler.check.Symbols;
 import souther.compiler.query.Answer;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
@@ -12,13 +11,14 @@ import souther.lsp.protocol.CompletionItem;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * What a document may write that it does not declare itself, as the compiler last answered it.
  *
  * <p>Which bare spelling reaches what is the compiler's, and both namespaces are asked of it every
- * time it can answer: {@link Names.NameScope} for the declarations a name reaches, which carry what
+ * time it can answer: {@link Names.Reachable} for the declarations a name reaches, which carry what
  * kind of declaration each is, and {@link Names.ModuleScope} for the value namespace. Nothing here
  * reads an import line. What one brings in is {@code Scoping}'s to say, and a second reader of those
  * lines would be that rule written twice, to go out of agreement the first time either moved.
@@ -83,7 +83,7 @@ final class NamesFromElsewhere {
         if (module == null) {
             return null;
         }
-        Answer<Symbols> types = compilation.db().ask(new Names.NameScope(module));
+        Answer<Map<String, Hir.Def>> types = compilation.db().ask(new Names.Reachable(module));
         Answer<Scoping.Scoped> scope = compilation.db().ask(new Names.ModuleScope(module));
         if (!types.present() || !scope.present()) {
             return null;
@@ -91,7 +91,7 @@ final class NamesFromElsewhere {
         List<CompletionItem> found = new ArrayList<>();
         // The type namespace first, as a bare name in a value position is answered: a data written
         // as a value is its construction, and the value table is read after that.
-        types.value().reachable().forEach((spelling, def) -> {
+        types.value().forEach((spelling, def) -> {
             if (!declaredHere.contains(spelling)) {
                 found.add(new CompletionItem(spelling, kindOf(def), def.declaredIn()));
             }

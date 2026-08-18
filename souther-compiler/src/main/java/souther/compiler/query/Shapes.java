@@ -71,7 +71,7 @@ public final class Shapes {
             if (!expandable.present()) {
                 return Answer.absent();
             }
-            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
+            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
             if (!scope.present()) {
                 return Answer.absent();
             }
@@ -189,7 +189,7 @@ public final class Shapes {
         @Override
         public Answer<Map<String, souther.compiler.check.Derived.Def>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
+            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -281,7 +281,7 @@ public final class Shapes {
         @Override
         public Answer<Map<String, souther.compiler.check.Desugared.Fn>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = db.ask(new Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -346,7 +346,7 @@ public final class Shapes {
         @Override
         public Answer<souther.compiler.check.Prepared> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
-            Answer<Symbols> scope = db.ask(new Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             // What each behavior takes and answers with, from the one place that settles it: a
             // composition's shape is worked out there and nowhere else, and a dependency another
@@ -370,19 +370,6 @@ public final class Shapes {
         }
     }
 
-    /** What names mean in a module once everything is derived — the scope a check runs in. */
-    public record Scope(String name) implements Key<Symbols> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Symbols> compute(Db db) {
-            return Names.derivedSymbols(db, name);
-        }
-    }
-
     /**
      * How each clause of each invariant this module declares can be discharged at compile time (spec
      * §invariant-discharge-capability), in the order the clauses are written.
@@ -400,7 +387,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
+            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -461,7 +448,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = db.ask(new Names.NameScope(name));
+            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }

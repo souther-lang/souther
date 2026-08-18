@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -35,7 +36,7 @@ class WhichTypesHaveValuesThatCanBeWrittenOutTest {
                 .flatMap(List::stream)
                 .map(each -> each.diagnostic().code())
                 .toList(), "the model this reads has to be one somebody could write");
-        return compilation.symbols("demo");
+        return Scopes.derived(compilation.db(), "demo").value();
     }
 
     private static List<Value> of(String source, String named) {

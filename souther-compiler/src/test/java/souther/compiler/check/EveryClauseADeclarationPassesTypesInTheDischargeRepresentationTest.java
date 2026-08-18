@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
@@ -105,7 +106,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
             compilation.answerEverything();
 
             String module = compilation.modules().get(0);
-            Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+            Symbols symbols = Scopes.derived(compilation.db(), module).value();
             Map<TypeSymbol, List<Hir.InvariantClause>> declared =
                     compilation.db().ask(new Shapes.InvariantsForDischarge(module)).value();
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();

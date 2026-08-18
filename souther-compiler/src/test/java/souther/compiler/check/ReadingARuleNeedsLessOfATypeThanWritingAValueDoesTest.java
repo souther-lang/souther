@@ -2,13 +2,13 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Text;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -52,7 +52,7 @@ class ReadingARuleNeedsLessOfATypeThanWritingAValueDoesTest {
     private static Symbols symbols() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
-        return compilation.db().ask(new Shapes.Scope(compilation.modules().get(0))).value();
+        return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
     }
 
     private static Type colour() {

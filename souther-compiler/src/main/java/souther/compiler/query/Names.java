@@ -71,10 +71,10 @@ public final class Names {
      * A registry over this compilation, reading each module's declarations as resolution left them.
      *
      * <p>One of the two declaration worlds a module can be read against, and which one a reader gets
-     * is which question it asked: this one answers {@link NameScope}, and the derived one answers
-     * {@link Shapes.Scope}. Neither is chosen by a value handed in — a reader that could pass which
-     * world it wanted is a reader that could pass the wrong one, and nothing in what it was holding
-     * would say so.
+     * is which question it asked: this one answers {@link #resolvedSymbols}, and the derived one
+     * answers {@link #derivedSymbols}. Neither is chosen by a value handed in — a reader that could
+     * pass which world it wanted is a reader that could pass the wrong one, and nothing in what it
+     * was holding would say so.
      */
     static Registry<Hir.Def> resolvedRegistry(Db db) {
         return new Registry<Hir.Def>() {
@@ -150,8 +150,9 @@ public final class Names {
      * answers an identity from this registry and from the language's own vocabulary, and the
      * prelude's declarations are loaded resolved and kept out of derivation — so there is no derived
      * declaration for the second source to hand over, and the representation both can be in is the
-     * node. What says a reader is at the derived world is which query it asked: {@code Shapes.Scope}
-     * is built over this one and {@code Names.NameScope} over the resolved one.
+     * node. What says a reader is at the derived world is which of the two it asked for:
+     * {@link #derivedSymbols} is built over this one and {@link #resolvedSymbols} over the
+     * resolved one.
      */
     static Registry<Hir.Def> derivedRegistry(Db db) {
         return new Registry<Hir.Def>() {
@@ -400,22 +401,54 @@ public final class Names {
         };
     }
 
-    /** What names mean in a module, over the declaration world {@code registry} reads. */
+    /**
+     * What the names written in a module mean — the part of its scope that is a value.
+     *
+     * <p>The cutoff every reader of a scope stops at. A module is assembled once and the assembly
+     * holds more than this: the value namespace, a way of asking the modules around it a further
+     * question, and what its import lines could not do. A body is checked against none of those and
+     * against this, so declaring a behavior — which adds a value name and no type name — comes out
+     * here as the answer that was already there, and nothing that reads it runs again.
+     */
+    public record Meanings(String name) implements Key<Scoping.Meanings> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Scoping.Meanings> compute(Db db) {
+            Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
+            return scoped.present() ? Answer.of(scoped.value().meanings()) : Answer.absent();
+        }
+    }
+
+    /**
+     * What names mean in a module, over the declaration world {@code registry} reads.
+     *
+     * <p>Built where it is used and never kept. What comes back reads declarations by asking this
+     * store, so it is a way of asking rather than an answer: two of them are the same when the
+     * store is, which says where they came from and not what they say. Kept as an answer, it would
+     * be an answer that never equals the one it replaces, and everything that read it would run
+     * again for as long as the compilation lived. Built here, the reads it makes are recorded
+     * against whichever question was being answered when it made them — which is one declaration at
+     * a time, and is the finer dependency this hands out.
+     */
     private static Answer<Symbols> symbols(Db db, String name, Registry<Hir.Def> registry) {
-        Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
-        if (!scoped.present()) {
+        Answer<Scoping.Meanings> meanings = db.ask(new Meanings(name));
+        if (!meanings.present()) {
             return Answer.absent();
         }
-        return Answer.of(scoped.value().symbolsOver(registry));
+        return Answer.of(meanings.value().symbolsOver(registry));
     }
 
     /** What names mean in a module over the declarations as resolution left them — what
-     * {@link NameScope} answers with, and what a reader asks for by asking that. */
+     * {@link Resolved} is resolved against. */
     static Answer<Symbols> resolvedSymbols(Db db, String name) {
         return symbols(db, name, resolvedRegistry(db));
     }
 
-    /** The same over the derived declarations — {@link Shapes.Scope}'s answer. */
+    /** The same over the derived declarations — what everything below the check reads. */
     static Answer<Symbols> derivedSymbols(Db db, String name) {
         return symbols(db, name, derivedRegistry(db));
     }
@@ -423,24 +456,33 @@ public final class Names {
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
      * against. */
     static Answer<SyntaxSymbols> writtenSymbols(Db db, String name) {
-        Answer<Scoping.Scoped> scoped = db.ask(new ModuleScope(name));
-        if (!scoped.present()) {
+        Answer<Scoping.Meanings> meanings = db.ask(new Meanings(name));
+        if (!meanings.present()) {
             return Answer.absent();
         }
-        return Answer.of(scoped.value().writtenSymbols(writtenRegistry(db)));
+        return Answer.of(meanings.value().writtenSymbols(writtenRegistry(db)));
     }
 
-    /** What names mean in a module before anything is derived from it — what {@link Resolved}
-     * resolves against. */
-    public record NameScope(String name) implements Key<Symbols> {
+    /**
+     * Every bare spelling that reaches a definition in a module, and the definition it reaches —
+     * this module's own plus the ones it imported.
+     *
+     * <p>The one question a scope answers that needs both of its halves, asked here so that what a
+     * reader outside the compile gets is the answer and not the way of reading it. What a scope
+     * hands out reads declarations by asking this store, and a reader holding one past the question
+     * it was built for makes reads nothing records; the answer is a map of declarations, which is a
+     * value, so there is nothing left to hold.
+     */
+    public record Reachable(String name) implements Key<Map<String, Hir.Def>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Symbols> compute(Db db) {
-            return resolvedSymbols(db, name);
+        public Answer<Map<String, Hir.Def>> compute(Db db) {
+            Answer<Symbols> symbols = resolvedSymbols(db, name);
+            return symbols.present() ? Answer.of(symbols.value().reachable()) : Answer.absent();
         }
     }
 
@@ -470,7 +512,7 @@ public final class Names {
             Resolve.Resolution resolution;
             try {
                 resolution = Resolve.resolving(available.value(),
-                        scoped.value().writtenSymbols(writtenRegistry(db)),
+                        scoped.value().meanings().writtenSymbols(writtenRegistry(db)),
                         scoped.value().values());
             } catch (CompileException e) {
                 return Answer.absent(e);

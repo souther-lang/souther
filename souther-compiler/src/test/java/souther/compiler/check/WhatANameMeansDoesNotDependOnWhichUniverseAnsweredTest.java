@@ -119,7 +119,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         assertEquals(java.util.List.of(), scoped.refused(),
                 "nothing about this model is refused");
         Resolve.Resolution answered = Resolve.resolving(subject.module(),
-                scoped.writtenSymbols(declaredBy(db, readings)), scoped.values());
+                scoped.meanings().writtenSymbols(declaredBy(db, readings)), scoped.values());
         assertEquals(java.util.List.of(), answered.unresolved(),
                 () -> "every name was answered: " + answered.unresolved());
         return answered.module();
@@ -190,7 +190,7 @@ class WhatANameMeansDoesNotDependOnWhichUniverseAnsweredTest {
         Scoping.Scoped scoped =
                 Scoping.of(new ModuleUniverse.OfWhatIsRead(readings), withoutTheTable);
         Resolve.Resolution answered = Resolve.resolving(withoutTheTable.module(),
-                scoped.writtenSymbols(declaredBy(db, readings)), scoped.values());
+                scoped.meanings().writtenSymbols(declaredBy(db, readings)), scoped.values());
 
         assertTrue(answered.unresolved().stream()
                         .anyMatch(e -> e.getMessage().contains("length")),

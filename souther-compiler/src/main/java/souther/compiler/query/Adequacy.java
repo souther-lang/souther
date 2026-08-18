@@ -191,7 +191,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, InputDomain>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
             if (!prepared.present() || !scope.present() || !sigs.present() || !settled.present()) {
@@ -277,7 +277,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, souther.compiler.check.PathReachability.Answers>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -535,7 +535,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, SignatureEvidence>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
@@ -588,7 +588,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, PartitionEvidence>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
@@ -662,7 +662,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, List<BoundaryAssessment>>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
@@ -1257,7 +1257,7 @@ public final class Adequacy {
         @Override
         public Answer<Map<String, Filling>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();

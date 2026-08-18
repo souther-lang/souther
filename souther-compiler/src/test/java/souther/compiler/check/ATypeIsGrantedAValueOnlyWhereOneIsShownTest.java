@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeSymbol;
 
@@ -36,7 +37,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
         Map<TypeSymbol, Cardinality> solution =
-                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), compilation.symbols("demo")).all();
+                TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), Scopes.derived(compilation.db(), "demo").value()).all();
         Map<String, Cardinality> byName = new LinkedHashMap<>();
         solution.forEach((name, each) -> byName.put(name.name(), each));
         return byName;

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeSymbol;
 
@@ -34,7 +35,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(Derived.Def::read).toList();
         return UninhabitableTypes.withNoValueOfTheirOwn(defs,
-                TypeCardinality.solve(defs, compilation.symbols("demo")));
+                TypeCardinality.solve(defs, Scopes.derived(compilation.db(), "demo").value()));
     }
 
     private static Emptiness only(String source) {
@@ -49,7 +50,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
         compilation.answerEverything();
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(Derived.Def::read).toList();
-        Symbols symbols = compilation.symbols("demo");
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return shape(TypeCardinality.solve(defs, symbols).of(
                 souther.compiler.types.TypeSymbols.declared(
                         new souther.compiler.types.TypeKey(symbols.module(), name))).why());

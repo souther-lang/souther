@@ -128,7 +128,7 @@ public final class Output {
         static Inputs inputs(Db db, String name) {
             Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             // The same answer the check read. The backend replays the composition walk and emits
             // the codecs a signature says are needed, so building its own would be the boundary's
             // question answered a third time.
@@ -592,7 +592,7 @@ public final class Output {
         @Override
         public Answer<Boolean> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -646,7 +646,7 @@ public final class Output {
          */
         private String failingClause(Db db, DataChecker.ConstCheck check, Class<?> ctfe) {
             Answer<souther.compiler.check.Prepared> declaring = db.ask(new Shapes.Prepared(check.type().module()));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(check.type().module()));
+            Answer<Symbols> scope = Names.derivedSymbols(db, check.type().module());
             if (!declaring.present() || !scope.present()) {
                 return null;
             }
@@ -709,7 +709,7 @@ public final class Output {
         @Override
         public Answer<souther.compiler.examples.ExampleStatements.Readings> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
@@ -941,7 +941,7 @@ public final class Output {
          */
         private static List<Diagnostic> fakeTables(Db db, String name, SourceId sourceId) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return List.of();
@@ -982,7 +982,7 @@ public final class Output {
         static Answer<Of> evaluate(Db db, String name, SourceId sourceId, EvaluationArtifact artifact,
                                    CoverageMode coverage) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
