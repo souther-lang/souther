@@ -107,7 +107,15 @@ public sealed interface Ordering {
         // without ranging over it, and either side may be the one that names the sum — so the
         // enumeration is read off the pair rather than off one operand.
         TypeSymbol enumeration = TypeOps.comparisonEnumeration(lb, rb, symbols);
-        return enumeration != null ? new Places(enumeration) : ofTerminal(lb, symbols);
+        if (enumeration != null) {
+            return new Places(enumeration);
+        }
+        // Otherwise both operands open to one type, which the admissibility rule established and
+        // this states rather than assumes: every route that admits a pair short of the enumeration
+        // one leaves them with equal bases. Answering off the left alone would give an order for a
+        // pair that has none — and the backend's "a comparison the checker admitted has no order"
+        // is only an assertion about the checker while nothing here can fail.
+        return lb.equals(rb) ? ofTerminal(lb, symbols) : null;
     }
 
     /** How a value still held as the type it was asked of is ordered: a newtype by the {@code

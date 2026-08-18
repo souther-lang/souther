@@ -80,10 +80,13 @@ the wrapped value has an order and the name over it does not take that away.
 
 Two things follow that the primitive cases did not raise. The order of an enumeration lives on the
 sum rather than on the case value, because one unit data may be a case of two sums (ADR-0069), so a
-newtype over a bare *case* has no order to carry either and is refused; a newtype over the *sum*
-names one enumeration and is ordered by it. And the generated `Comparable` cannot delegate to the
-wrapped value's own `compareTo`, there being none — it reads the sum's declaration order, which is
-the wrapper being the place a Java reader gets an ordering the case values do not have.
+case that two enumerations list has no order of its own — and a name wrapped round such a case has
+none to carry and is refused. That is the rule holding rather than an exception to it: a case one
+enumeration lists does have an order, and a newtype over it is ordered by that enumeration, exactly
+as a newtype over the sum is. What decides it is whether the wrapped value has an order, which is
+all the rule ever asks. And the generated `Comparable` cannot delegate to the wrapped value's own
+`compareTo`, there being none — it reads the sum's declaration order, which is the wrapper being the
+place a Java reader gets an ordering the case values do not have.
 
 ## Sorting
 

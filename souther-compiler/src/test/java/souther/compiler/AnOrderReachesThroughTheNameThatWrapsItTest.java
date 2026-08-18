@@ -272,9 +272,11 @@ class AnOrderReachesThroughTheNameThatWrapsItTest {
 
     /**
      * The order belongs to the sum, so a case two sums place differently has none of its own, and
-     * neither does a name wrapped round it: refused rather than guessed (ADR-0069). The wrapper's
-     * having a declaration to read the order off is what tells this apart from {@code StageN}, whose
-     * field is declared as the sum and is not ambiguous.
+     * neither does a name wrapped round it: refused rather than guessed (ADR-0069).
+     *
+     * <p>The control is the same model with one sum instead of two, and it compiles — so a newtype
+     * over a case value is not the shape being refused. What the name carries is whether the value
+     * under it has an order, and the second placement is what takes that away.
      */
     @Test
     void aNewtypeOverACaseTwoEnumerationsListHasNoOrder() {
