@@ -1,8 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.core.Core;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -45,6 +48,40 @@ public final class NumericMeasures {
     /** Whether {@code operation} is one of them. */
     public static boolean isMeasure(ValueName operation) {
         return CALLS.contains(operation);
+    }
+
+    /** One of these applied to something: which measure, and what it is taken of. */
+    public record Measured(ValueName.Stdlib operation, Core of) {}
+
+    /**
+     * The measure {@code e} takes and what it takes it of, or null where it takes none.
+     *
+     * <p>Asked here rather than matched on a call's shape, because the same call arrives in two
+     * shapes and which of them is not a detail of the walk. The tree that runs holds a
+     * language-defined operation as a call of what it resolved to; the tree a declaration's own
+     * rules are read in keeps it standing ({@link Core.PreservedCall}). A reader that knew one shape
+     * drew the line a {@code guard} puts on a length and not the one a clause puts on the same
+     * length — the same drift the list above exists to stop, one representation down.
+     *
+     * <p>The argument has to be one thing. A measure of several is not one of these, and what it
+     * would be counted at is not a place either.
+     */
+    public static Measured measureIn(Core e) {
+        ValueName operation = switch (e) {
+            case Core.Call call when call.fn() instanceof Core.Reached reached
+                    && reached.name() instanceof ReachName.OfLibrary library ->
+                    library.target();
+            case Core.PreservedCall preserved -> preserved.operation();
+            case null, default -> null;
+        };
+        List<Core> args = switch (e) {
+            case Core.Call call -> call.args();
+            case Core.PreservedCall preserved -> preserved.args();
+            case null, default -> List.of();
+        };
+        return operation instanceof ValueName.Stdlib measure && isMeasure(measure)
+                && args.size() == 1
+                ? new Measured(measure, args.get(0)) : null;
     }
 
     /**
