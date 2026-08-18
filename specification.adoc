@@ -3077,6 +3077,8 @@ A row and a `+fake+` row each write an input and the answer that goes with it, w
 
 [[a-row-keeps-what-the-behavior-states]]The values an `+example+` row states MUST keep what the behavior declares of what it answers (<<e1928>>), and [[a-fake-row-keeps-what-the-dependency-states]]the values a `+fake+` row stands in with MUST keep what the faked behavior declares of what it answers (<<e1929>>). A declaration is what says what a behavior answers, and a row stating otherwise records something the model rules out.
 
+[[an-implementation-keeps-what-the-behavior-states]]Where an implementation supplied to a run answers an `+example+` row of an injected behavior, what it answered MUST keep what that behavior declares of what it answers (<<e1930>>). A behavior with a body checks its own answer where it answers; an injected one has none, so what it answers is checked where it enters the domain, and applying it for a row is such an entry.
+
 This is not the policy ADR-0093 declined. Two written statements disagreeing is a disagreement with no right side (<<stand-in-and-recorded-row-agree>>), which is why it is a warning naming both; a written value against a declaration is not two descriptions but a description held to what the model states, and the declaration decides.
 
 It is the declaration's check that decides it, run over the values the row wrote. A row's operands are compiled and applied as the module's own code, so what a row states exists as a value while the module is compiled, and the same check that runs where the behavior answers is applied to it. Nothing reads the clause a second time and decides what it means. This is *compile-time fixture validation* and not a proof: what is established is that these values keep the clause, not that the behavior does — which is <<invariant-discharge>>'s distinction, on the other side of it.
@@ -6021,6 +6023,24 @@ A `+_+` row states no input, so there is nothing here to relate its answer to; w
 A table with such a row is not one to stand in with, as a table that will not build is not (<<example-fakes>>). A row reaching it stops without a fake and says nothing of its own: running it would put the rest of the behavior in a state the model rules out, and what the row then reported would be about a run that cannot happen.
 
 Neither is it compared with the rows recorded for the behavior (<<e1919>>). That comparison is written for two descriptions with nothing to choose between them, and this is a description held to a declaration — reported together they would say of one pair both that the fake is the side that is wrong and that neither side is.
+
+[#e1930]
+=== An implementation answers a row with a value the behavior's clause rules out
+
+[,text]
+----
+The implementation supplied for `findTodo` answered this row's input with a value that
+does not keep what `findTodo` declares of what it answers:
+ensures not held on todo.findTodo: asked, answering Todo
+----
+
+Emitted at an `+example+` row of an injected behavior, where an implementation supplied to the run answered the row's input with a value that does not keep an `+ensures+` of that behavior (<<an-implementation-keeps-what-the-behavior-states>>). The check that decides it is the emitted one, the same one a crossing into generated code invokes.
+
+Told apart from <<e1928>> by which text is wrong. That one is a row recording something the model rules out; this is code outside the model doing something the model says it will not, and what an author does about the two is not the same.
+
+Only an injected behavior reaches it. A behavior with a body checks its own answer where it answers, so by the time a row sees that answer it has already been held to the declaration, and asking again would be a clause checked twice.
+
+Said before the row's own comparison. What the answer disagrees with here is the model, and a row told only that it expected one value and saw another would send its author to look at the row.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

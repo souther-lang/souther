@@ -106,6 +106,10 @@ final class Crossing {
      * build declared — which is exactly what a row is being run against, and is why the two builds'
      * declarations are held together before any row gets here.
      */
+    Object crossed(souther.compiler.types.TypeSymbol type, Object neutral) {
+        return decoded(type, neutral);
+    }
+
     private Object decoded(souther.compiler.types.TypeSymbol type, Object neutral) {
         Class<?> value;
         Method factory;

@@ -605,8 +605,16 @@ public final class ExampleVerifier {
      *                  where there was nothing to hold — the answer is this compile's own, or
      *                  nothing answers the behavior at all
      */
+    /**
+     * @param injected whether the behavior is written without a body. What that decides here is who
+     *                 checks its {@code ensures}: a behavior with a body checks its own answer where
+     *                 it answers, and an injected one has no body to check in, so every crossing into
+     *                 generated code checks it ({@code EnsuresEnforcement.AtEachCrossing}). A row
+     *                 applying one is such a crossing, and where a behavior is only ever entered
+     *                 through a row it is the only one there is.
+     */
     private record ExampleTarget(String name, List<BehaviorRequirement> requirements,
-                                 Answerer.Answer answer, Agreement agreement) {}
+                                 Answerer.Answer answer, Agreement agreement, boolean injected) {}
 
     /**
      * The behavior a row is about, and what this run has to apply it with.
@@ -638,7 +646,8 @@ public final class ExampleVerifier {
             }
             Answerer.Answer answer = answerer.of(name);
             return new ExampleTarget(name, requirements.getOrDefault(name, List.of()), answer,
-                    heldTo(name, answer));
+                    heldTo(name, answer),
+                    b instanceof Hir.SpecBehavior spec && module.injected(spec));
         }
         return null;
     }
@@ -1365,6 +1374,9 @@ public final class ExampleVerifier {
         // declares it, and what this module means by that class's spelling is a different question.
         state.resultArm = fixtures.typeOf(result);
         state.got(Stage.COMPARED);
+        if (!keepsWhatIsDeclaredOfWhatItAnswered(fixtures, row, target, args, result, out, state)) {
+            return;
+        }
         TypeSymbol arm = fixtures.caseOnly(row.expected());
         if (arm != null) {
             // A bare case name asserts the arm and nothing under it, so there is no value to compare.
@@ -1478,6 +1490,75 @@ public final class ExampleVerifier {
                 .build());
         state.failed(FailurePhase.ENSURES);
         return false;
+    }
+
+    /**
+     * Whether what the behavior <em>answered</em> keeps what it declares of what it answers.
+     *
+     * <p>Asked of an injected behavior only, and that is not a rule of its own. A behavior with a
+     * body checks its own answer where it answers, so asking again here would be a clause checked
+     * twice — which is silent and costs a run on every row. An injected one has no body to check in
+     * and its answer is checked where it enters generated code, and applying it for a row is such an
+     * entry. Where the application's only Java calls it, this is the only one there will ever be.
+     *
+     * <p>The check that runs is the emitted one, the same {@code $Ensures.check} a crossing invokes,
+     * so what a clause means is worked out where it was emitted and not read a second time here.
+     *
+     * <p>Before the row's own comparison. What the answer disagrees with here is the model, and a row
+     * told only that it expected one value and saw another would send its author to look at the row.
+     *
+     * <p>The answer is brought into this compile's classes first, and that is not a convenience. The
+     * emitted check guards each rule with an {@code instanceof} against the class this compile
+     * emitted for the case, so an answer of another loader's classes matches no guard and every rule
+     * is skipped — the check would run and say nothing, for every implementation, wrong or right.
+     * Bringing it over is the line the Decoder draws for a value arriving from outside, which is
+     * exactly what {@code AtEachCrossing} says this check is for.
+     */
+    private boolean keepsWhatIsDeclaredOfWhatItAnswered(FixtureReader fixtures, Hir.ExampleRow row,
+                                                        ExampleTarget target, Object[] args,
+                                                        Object answered, List<Diagnostic> out,
+                                                        RowState state) {
+        if (!target.injected() || state.resultArm == null) {
+            return true;
+        }
+        Object here;
+        try {
+            here = inTheseClasses(fixtures, state.resultArm, answered);
+        } catch (FixtureException | ImplementationNotReached e) {
+            // The answer could not be brought into the classes the check reads, so nothing was
+            // checked. Undecided rather than failed: the model may be right, and this saw nothing.
+            state.incomplete(FailurePhase.VALUE_CROSSING);
+            return false;
+        }
+        ValueName.Behavior behavior = new ValueName.Behavior(module.name(), target.name());
+        String why = ensures.notHeld(behavior, args, here);
+        if (why == null) {
+            return true;
+        }
+        out.add(Diagnostic.at(row.pos())
+                .say(new ExampleMessage.AnImplementationDoesNotKeepWhatTheBehaviorStates(
+                        target.name(), why))
+                .hint(new ExampleMessage.TheDeclarationIsWhatSaysWhatItAnswers(target.name()))
+                .build());
+        state.failed(FailurePhase.ENSURES);
+        return false;
+    }
+
+    /**
+     * {@code value} as this compile's classes, read at the case it is.
+     *
+     * <p>Out through the neutral form and back in through this module's own decoder, which is the
+     * one crossing there is. The case is where it is read: an answer is the case it turned out to
+     * be, and reading it at the union it came out of would ask for the envelope a position adds
+     * rather than for the value.
+     *
+     * <p>A value already of these classes goes through it too. Telling the two apart would mean
+     * comparing a class identity, which is the question this whole seam exists to not ask.
+     */
+    private Object inTheseClasses(FixtureReader fixtures, TypeSymbol is, Object value) {
+        NeutralValue neutral = fixtures.neutralAt(value, new Type.Ref(is),
+                "what `" + is.name() + "` was answered as");
+        return new Crossing(loader).crossed(is, neutral.read());
     }
 
     // --- fakes for what a behavior depends on ---------------------------------------------------

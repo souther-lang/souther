@@ -151,7 +151,23 @@ public sealed interface ExampleMessage extends Message {
     record AFakeRowDoesNotKeepWhatTheDependencyStates(String dependency, String why)
             implements ExampleMessage, Reported {}
 
-    /** What to do about either: the declaration is what says what the behavior answers, so a row
+    /**
+     * An implementation supplied for an injected behavior answered a row's input with something the
+     * behavior's {@code ensures} says it cannot answer with.
+     *
+     * <p>Told apart from {@link ARowDoesNotKeepWhatTheBehaviorStates} because the two are about
+     * different texts: that one is a row recording something the model rules out, and this is code
+     * outside the model doing something the model says it will not. What an author does about them
+     * is not the same — one is a row to correct, the other an implementation to correct.
+     *
+     * <p>A behavior with a body cannot reach this. Its own {@code apply} checks its answer where it
+     * answers, so what it answers has already been held to the declaration by the time a row sees it.
+     */
+    @Code(DiagnosticCode.E1930)
+    record AnImplementationDoesNotKeepWhatTheBehaviorStates(String target, String why)
+            implements ExampleMessage, Reported {}
+
+    /** What to do about any of them: the declaration is what says what the behavior answers, so a row
      *  stating otherwise records something the behavior will not do. */
     record TheDeclarationIsWhatSaysWhatItAnswers(String target)
             implements ExampleMessage, Supporting {}

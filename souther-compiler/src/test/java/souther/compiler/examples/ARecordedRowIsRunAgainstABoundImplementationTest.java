@@ -93,6 +93,66 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
             }
             """;
 
+    /**
+     * The same model, with the behavior stating a relation between what it is given and what it
+     * answers.
+     *
+     * <p>Nothing in the generated surface carries it: an injected behavior's base class is the same
+     * class whether or not a clause is written, so the agent writing the SQL cannot see the contract
+     * in what it extends.
+     */
+    private static final String DECLARING = MODEL.replace(
+            "behavior findTodo : (id: TodoId) -> Todo | NotFound\n",
+            """
+            behavior findTodo : (id: TodoId) -> Todo | NotFound
+                ensures Todo -> value.id.value == id.value
+            """);
+
+    /** Answers the stored row with a todo carrying an id nobody asked for. */
+    private static final String ANSWERS_ABOUT_ANOTHER = """
+            package example.todo;
+            public final class FindTodoImpl extends FindTodo {
+                public FindTodoResult apply(TodoId id) {
+                    return id.equals(new TodoId(1L))
+                            ? new Todo(new TodoId(7L), new Title("write the SQL"), false)
+                            : new NotFound(id);
+                }
+            }
+            """;
+
+    /**
+     * What the implementation answered, held to what the behavior declares.
+     *
+     * <p>This is the only place such an answer is ever checked when the application's own Java is
+     * what calls the behavior: there is no body to check in, and a behavior nothing in the module
+     * calls has no crossing into generated code either.
+     *
+     * <p>The row is stopped at {@code ENSURES} and before its own comparison — what the answer
+     * disagrees with is the model, and a row told only that it expected one value and saw another
+     * would send its author to look at the row.
+     */
+    @Test
+    void whatAnInjectedImplementationAnsweredIsHeldToWhatTheBehaviorDeclares() throws Exception {
+        ExampleVerifier.Observations observed = evaluated(DECLARING, ANSWERS_ABOUT_ANOTHER);
+
+        RowOutcome stored = named(observed, "a todo that is stored");
+        assertEquals(Disposition.FAILED, stored.disposition());
+        assertEquals(FailurePhase.ENSURES, stored.failurePhase(),
+                "and not COMPARISON, which is the row disagreeing rather than the model");
+        assertTrue(reasons(observed).contains("E1930"), reasons(observed).toString());
+    }
+
+    /** The control: the same declaration, kept. */
+    @Test
+    void anImplementationThatKeepsTheDeclarationIsNotStoppedByIt() throws Exception {
+        ExampleVerifier.Observations observed = evaluated(DECLARING, ANSWERS);
+
+        assertEquals(List.of(), reasons(observed));
+        for (RowOutcome row : observed.rows()) {
+            assertEquals(Disposition.HELD, row.disposition(), row.identity().shown());
+        }
+    }
+
     /** The row it owes, held against what the implementation answered. */
     @Test
     void aPendingRowIsDecidedByTheImplementationTheEvaluationWasGiven() throws Exception {
@@ -163,8 +223,16 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
 
     /** The module's rows, run against {@code implementation} as a build that is not this one's. */
     private static ExampleVerifier.Observations evaluated(String implementation) throws Exception {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
+        return evaluated(MODEL, implementation);
+    }
+
+    private static ExampleVerifier.Observations evaluated(String model, String implementation)
+            throws Exception {
+        Compilation c = Compilation.ofSource(model, "Main");
         c.db().ask(new Output.All());
+        assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)
+                        .map(d -> String.valueOf(d.diagnostic().code())).toList(),
+                "the model whose rows are run compiles");
         String name = c.modules().get(0);
         EvaluationArtifact artifact = c.db()
                 .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
