@@ -18,4 +18,8 @@ final class AsPlaces {
     static FactSubject of(BindingId binding) {
         return new Terms(Symbols.none()).placeSubject(binding);
     }
+
+    static Term term(BindingId binding) {
+        return new Terms(Symbols.none()).placeTerm(binding);
+    }
 }

@@ -46,7 +46,7 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
     @Test
     void aNameGivenAPlaceIsAboutThatPlace() {
         BindingId x = binders.binder("x", POS).id();
-        Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x));
+        Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x), engine.terms().placeTerm(x));
 
         heldOf(new Core.Read("x", x, Type.INT, POS), outer);
     }
@@ -54,7 +54,7 @@ class WhatANameIsAboutIsWhatItWasGivenIsAboutTest {
     @Test
     void aNameGivenSomethingComputedIsAboutWhatComputesIt() {
         BindingId x = binders.binder("x", POS).id();
-        Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x));
+        Denotations outer = Denotations.none().location(x, engine.terms().placeSubject(x), engine.terms().placeTerm(x));
 
         heldOf(new Core.Binary(Hir.BinOp.ADD, new Core.Read("x", x, Type.INT, POS),
                 new Core.Int(1, Type.INT, POS), CoverageOrigin.unwritten(), Type.INT, POS), outer);

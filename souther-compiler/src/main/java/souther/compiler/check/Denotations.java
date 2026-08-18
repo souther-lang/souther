@@ -104,8 +104,8 @@ record Denotations(Map<BindingId, Means> bound) {
      * something is is a second answer to keep agreeing with the first. Usually it is the place the
      * binding is ({@link Terms#placeSubject}); an arm opening an optional hands what that optional
      * holds. */
-    Denotations location(BindingId binding, FactSubject subject) {
-        return with(binding, new Means(null, subject, Location.of(binding), null));
+    Denotations location(BindingId binding, FactSubject subject, Term term) {
+        return with(binding, new Means(null, subject, Location.of(binding), term));
     }
 
     /**
@@ -123,16 +123,17 @@ record Denotations(Map<BindingId, Means> bound) {
      * introduced a value of its own: the name was about the answer while standing for nothing, so a
      * {@code match} over what an outer arm bound could not find the call underneath it.
      */
-    Denotations opened(BindingId binding, Core value, FactSubject subject) {
-        return with(binding, new Means(value, subject, Location.of(binding), null));
+    Denotations opened(BindingId binding, Core value, FactSubject subject, Term term) {
+        return with(binding, new Means(value, subject, Location.of(binding), term));
     }
 
     /** The same, for bindings that stand for themselves rather than for a value the walk reached —
      * a declaration's own fields, where its invariant is read on its own. */
-    Denotations locations(Collection<BindingId> bindings, Function<BindingId, FactSubject> places) {
+    Denotations locations(Collection<BindingId> bindings, Function<BindingId, FactSubject> subjects,
+                          Function<BindingId, Term> terms) {
         Denotations out = this;
         for (BindingId binding : bindings) {
-            out = out.location(binding, places.apply(binding));
+            out = out.location(binding, subjects.apply(binding), terms.apply(binding));
         }
         return out;
     }

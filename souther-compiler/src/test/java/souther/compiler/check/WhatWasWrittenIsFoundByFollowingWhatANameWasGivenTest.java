@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -136,8 +135,9 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         assertEquals(engine.terms().bodyKey(three, Denotations.none()),
                 engine.terms().bodyKey(read(a), at),
                 "the text and the name it was given are named alike");
-        assertFalse(engine.terms().intrinsicallyReadable(read(a), at),
-                "and neither is something to read a clause against");
+        assertNull(engine.terms().reportableSite(read(a), at, Known.top()),
+                "and neither is somewhere to ask an author for a guard");
+        assertNull(engine.terms().reportableSite(three, Denotations.none(), Known.top()));
     }
 
     private Denotations given(Hir.Binder binder, Core value, Denotations at) {

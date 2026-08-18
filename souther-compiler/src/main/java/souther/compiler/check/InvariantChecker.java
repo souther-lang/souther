@@ -206,7 +206,7 @@ public final class InvariantChecker {
         // assuming it.
         return c.capabilitiesOf(clause, read -> c.clauses.typed(read, named, data),
                 Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
-                        c.terms::placeSubject),
+                        c.terms::placeSubject, c.terms::placeTerm),
                 data.name());
     }
 
@@ -485,7 +485,8 @@ public final class InvariantChecker {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
-        Denotations at = Denotations.none().locations(bindings.values(), c.terms::placeSubject);
+        Denotations at = Denotations.none()
+                .locations(bindings.values(), c.terms::placeSubject, c.terms::placeTerm);
         Known k = Known.top();
         boolean read = true;
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
@@ -898,7 +899,7 @@ public final class InvariantChecker {
         Core stated = c.typed(read -> c.clauses.typed(read, named, data), clause, data.name());
         for (ClauseDischarge.Kind read : c.kindsRead(stated,
                 Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
-                        c.terms::placeSubject),
+                        c.terms::placeSubject, c.terms::placeTerm),
                 data.name())) {
             if (read != ClauseDischarge.Kind.DERIVABLE) {
                 return false;

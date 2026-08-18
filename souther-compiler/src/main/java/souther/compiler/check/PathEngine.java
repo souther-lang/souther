@@ -141,7 +141,8 @@ final class PathEngine {
      * asked here.
      */
     Entered enter(Core.Read root, Known known, Denotations at) {
-        Denotations next = at.location(root.binding(), terms.placeSubject(root.binding()));
+        Denotations next = at.location(root.binding(), terms.placeSubject(root.binding()),
+                terms.placeTerm(root.binding()));
         return new Entered(seedAt(root, known, next, 0), next);
     }
 
@@ -237,8 +238,10 @@ final class PathEngine {
         Core.Read root = Terms.read(arm.binding(), arm.bindType(), arm.pos());
         Opens opens = opens(arm, scrutinee, at);
         Denotations next = opens == null
-                ? at.location(root.binding(), terms.placeSubject(root.binding()))
-                : at.opened(root.binding(), opens.value(), opens.subject());
+                ? at.location(root.binding(), terms.placeSubject(root.binding()),
+                        terms.placeTerm(root.binding()))
+                : at.opened(root.binding(), opens.value(), opens.subject(),
+                        terms.placeTerm(root.binding()));
         return new Entered(seedAt(root, k, next, 0), next);
     }
 

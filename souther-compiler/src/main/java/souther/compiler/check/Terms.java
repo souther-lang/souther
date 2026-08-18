@@ -689,7 +689,13 @@ final class Terms {
      * the moment a binding names a value that is not a place.
      */
     FactSubject placeSubject(BindingId binding) {
-        return FactSubject.of(interned.at(Location.of(binding)));
+        return FactSubject.of(placeTerm(binding));
+    }
+
+    /** What the term grammar names the place {@code binding} is by: the place it is. Said here for
+     * the same reason every other term is. */
+    Term placeTerm(BindingId binding) {
+        return interned.at(Location.of(binding));
     }
 
     /**
@@ -810,14 +816,8 @@ final class Terms {
      * expression not change what is known of it.
      */
     boolean intrinsicallyReadable(Core e, Denotations at) {
-        if (isAPlace(e, at)) {
-            return true;
-        }
-        // Text says all there is to say of itself, so nothing is read against it here.
-        if (writtenValue(e, at) != null) {
-            return false;
-        }
-        return bodyKey(e, at) != null && (affineOf(e, at) != null || namedByRule(e, at));
+        return isAPlace(e, at)
+                || (bodyKey(e, at) != null && (affineOf(e, at) != null || namedByRule(e, at)));
     }
 
     /**
