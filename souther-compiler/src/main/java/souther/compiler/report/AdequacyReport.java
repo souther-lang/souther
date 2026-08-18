@@ -936,14 +936,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * word stops the compile rather than arriving in a document as one that already existed.
      */
     public static String readingWord(PartitionEvidence.AxisCoverage.Reading read) {
-        return switch (read) {
-            case PartitionEvidence.AxisCoverage.Reading.Answered _ -> "complete";
-            case PartitionEvidence.AxisCoverage.Reading.Standing _ -> "partial";
-            // Partial too, and told apart by what is written beside it. A reader keying on the word
-            // is told the numbers rest on something unfinished either way, which is what the word
-            // is for; which of the two it is is a different key.
-            case PartitionEvidence.AxisCoverage.Reading.NotReached _ -> "partial";
-        };
+        // Partial covers both, and what is written beside it says which. A reader keying on the
+        // word is told the numbers rest on something unfinished, which is what the word is for; the
+        // two facts under it are not exclusive and each has a key of its own.
+        return read.answered() ? "complete" : "partial";
     }
 
     /**
@@ -1127,12 +1123,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // Under one pair of keys a consumer would read one as the other.
             ObjectNode read = a.putObject("read");
             read.put("extent", readingWord(axis.read()));
-            if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.NotReached) {
+            if (axis.read().reach() == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
                 read.put("rulesNotReached", true);
             }
-            if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.Standing open) {
+            if (!axis.read().unanswered().isEmpty()) {
                 ArrayNode standing = read.putArray("unanswered");
-                for (PartitionEvidence.AxisCoverage.Unanswered each : open.questions()) {
+                for (PartitionEvidence.AxisCoverage.Unanswered each : axis.read().unanswered()) {
                     ObjectNode one = standing.addObject();
                     one.put("rule", each.rule());
                     one.put("question", word(each.question()));

@@ -277,31 +277,30 @@ final class Coverages {
         // words: the vocabulary beside it says why a division could not be derived, which is a
         // different question, and borrowing it left a reader with a sentence that named neither
         // (issue #842).
-        PartitionEvidence.AxisCoverage.Reading read = axis.rulesNotReached()
-                ? new PartitionEvidence.AxisCoverage.Reading.NotReached()
-                : axis.unanswered().isEmpty()
-                ? PartitionEvidence.AxisCoverage.ANSWERED
-                : new PartitionEvidence.AxisCoverage.Reading.Standing(
-                        axis.unanswered().stream()
-                                // Named through the origin, which is the one thing that turns a
-                                // rule into the words a report writes. A rule that is not an
-                                // invariant joins by having an origin of its own, and nothing here
-                                // reads what a clause is made of.
-                                .map(each -> {
-                                    // The subject the question carries, resolved against the axis
-                                    // it is at. A question about the position is spelled as the
-                                    // position and one about a number taken of it as the term, and
-                                    // which of the two it is was settled where the question was
-                                    // raised — not here, and not by whatever a renderer has to
-                                    // hand.
-                                    String subject = each.owed().subject().measured()
-                                            ? axis.term().toString() : axis.path().toString();
-                                    return new PartitionEvidence.AxisCoverage.Unanswered(
-                                            new souther.compiler.partition.OriginRef
-                                                    .InvariantOrigin(each.rule()).named(),
-                                            each.owed().obligation(), subject);
-                                })
-                                .toList());
+        PartitionEvidence.AxisCoverage.Reading read = new PartitionEvidence.AxisCoverage.Reading(
+                axis.rulesNotReached()
+                        ? PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT
+                        : PartitionEvidence.AxisCoverage.Reach.EVERY_RULE,
+                // What the axis already says about which of this position's rules nothing accounted
+                // for, each named. Read off the axis rather than worked out here, and in the
+                // questions' own words: the vocabulary beside it says why a division could not be
+                // derived, which is a different question, and borrowing it left a reader with a
+                // sentence that named neither (issue #842).
+                axis.unanswered().stream()
+                        .map(each -> {
+                            // The subject the question carries, resolved against the axis it is at.
+                            // A question about the position is spelled as the position and one
+                            // about a number taken of it as the term, and which of the two it is
+                            // was settled where the question was raised — not here, and not by
+                            // whatever a renderer has to hand.
+                            String subject = each.owed().subject().measured()
+                                    ? axis.term().toString() : axis.path().toString();
+                            return new PartitionEvidence.AxisCoverage.Unanswered(
+                                    new souther.compiler.partition.OriginRef
+                                            .InvariantOrigin(each.rule()).named(),
+                                    each.owed().obligation(), subject);
+                        })
+                        .toList());
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being

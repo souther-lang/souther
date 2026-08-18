@@ -4,7 +4,6 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.ValueSet;
 
 import java.util.List;
 import java.util.Map;
@@ -40,6 +39,7 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
         return new StatedByClauses(AdmissibleValues.top(), OrderedIntervals.top());
     }
 
+
     /**
      * What {@code clauses} leave, all of them holding at once.
      *
@@ -59,8 +59,9 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                              Symbols symbols) {
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols),
-                OrderedReading.of(terms, at, byName, symbols));
+        java.util.Set<FactSubject> adopted = new java.util.LinkedHashSet<>();
+        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, adopted),
+                OrderedReading.of(terms, at, byName, symbols, adopted), adopted);
     }
 
     /**
@@ -78,20 +79,19 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
     }
 
     /**
-     * Whether this reading of one clause took it into either of its languages at {@code position}.
+     * Where the readings took {@code clause} in, said by them.
      *
-     * <p>Said of the reading and not of the shape. A caller working out from the clause's spelling
-     * which reading ought to have managed it is guessing at another reader's semantics, which is the
-     * mistake the whole accounting is written against.
+     * <p>A reading of its own, so the set holds what this clause was adopted at and not what
+     * everything before it was.
      */
-    boolean tookIn(FactSubject position) {
-        // What this reading produced about the position, and not the absence of a recorded failure.
-        // `speaksFor` is `!unread.containsKey`, which is true of every position a clause never
-        // mentioned — so a clause that said nothing here would have read every position of the
-        // value.
-        return (values.whyUnread(position) == null && !values.at(position).equals(ValueSet.ANY))
-                || ordered.ranges().containsKey(position);
+    static java.util.Set<FactSubject> adoptedIn(Core clause, Terms terms, Denotations at,
+                                                Map<FactSubject, Type> byName, Symbols symbols) {
+        Reading reading = readingOf(terms, at, byName, symbols);
+        reading.read(clause, true);
+        return reading.adopted();
     }
+
+
 
     /**
      * Whether nothing satisfies what has been read.
@@ -108,8 +108,18 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
         return new StatedByClauses(values.meet(other.values), ordered.meet(other.ordered));
     }
 
-    /** The two readings of one clause tree, run together so that the connectives are the clause's. */
-    record Reading(AdmissibleReading values, OrderedReading ordered)
+    /**
+     * The two readings of one clause tree, run together so that the connectives are the clause's,
+     * and where they took a leaf in.
+     *
+     * <p>{@code adopted} is filled by the readings as they read, and is theirs to say. Read off
+     * what a reading leaves a position instead, a clause it took in whole and narrowed nothing by
+     * comes back unread: {@code value == 5 || value /= 5} is read at both leaves and joins to every
+     * value there is. That is the same reconstruction {@code Predicates.Assumed} keeps a field of
+     * its own to avoid, and the one this accounting was written against.
+     */
+    record Reading(AdmissibleReading values, OrderedReading ordered,
+                   java.util.Set<FactSubject> adopted)
             implements ClauseReading<StatedByClauses> {
 
         @Override

@@ -1907,22 +1907,23 @@ public final class Adequacy {
                 // A position the axes measure whose rules nothing looked at. Said apart from the
                 // rules below: there is no rule to name, and there is no rule to name because
                 // nothing was seen rather than because everything was accounted for.
-                if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.NotReached) {
+                if (axis.read().reach()
+                        == PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT) {
                     out.add(new Finding(Kind.PARTITION_RULES_NOT_REACHED, behavior.name(),
                             MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
                             List.of(axis.path())));
                 }
-                if (axis.read() instanceof PartitionEvidence.AxisCoverage.Reading.Standing open) {
-                    // One per rule. A position was all a reader used to be given, and the rules a
-                    // position carries are not one thing to act on.
-                    for (PartitionEvidence.AxisCoverage.Unanswered each : open.questions()) {
-                        // The subject the question carries, and not the axis's own number. A
-                        // length bound says which strings may stand at the position and draws its
-                        // line on the count, and the axis is named after the second.
-                        out.add(new Finding(Kind.PARTITION_RULE_UNACCOUNTED, behavior.name(),
-                                MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
-                                List.of(each.subject(), each.rule(), asked(each.question()))));
-                    }
+                // One per rule, and said whether or not something is out of sight beside them: a
+                // rule that arrived and went unaccounted for is a fact about the rule, and a
+                // subtree nothing entered is a fact about the walk. A position was all a reader
+                // used to be given, and the rules a position carries are not one thing to act on.
+                for (PartitionEvidence.AxisCoverage.Unanswered each : axis.read().unanswered()) {
+                    // The subject the question carries, and not the axis's own number. A length
+                    // bound says which strings may stand at the position and draws its line on the
+                    // count, and the axis is named after the second.
+                    out.add(new Finding(Kind.PARTITION_RULE_UNACCOUNTED, behavior.name(),
+                            MeasurementStatus.NOT_MEASURED, Citation.of(behavior.pos()),
+                            List.of(each.subject(), each.rule(), asked(each.question()))));
                 }
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {

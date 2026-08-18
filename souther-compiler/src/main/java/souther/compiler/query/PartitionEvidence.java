@@ -304,34 +304,34 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
          * <p>Each entry names the rule. A position was all a reader used to be given, which left
          * them looking for a rule the sentence never named.
          */
-        public sealed interface Reading {
+        public record Reading(Reach reach, List<Unanswered> unanswered) {
 
-            /** Nothing the rules raise about this position is left standing. */
-            record Answered() implements Reading {}
-
-            /**
-             * The walk never reached the rules written about this position, so what is written
-             * there is not known.
-             *
-             * <p>Its own answer beside the one below, and not a list that came back empty. Nothing
-             * was found here because nothing looked: a position whose rules were never enumerated
-             * has no rule to name and is not a position whose rules were all accounted for, and
-             * telling an author the second sends them away from the one thing worth knowing
-             * (issue #791).
-             */
-            record NotReached() implements Reading {}
-
-            /** Some of it is, and which rules raised it. */
-            record Standing(List<Unanswered> questions) implements Reading {
-
-                public Standing {
-                    if (questions.isEmpty()) {
-                        throw new IllegalArgumentException(
-                                "nothing standing is a different answer");
-                    }
-                    questions = List.copyOf(questions);
-                }
+            public Reading {
+                unanswered = List.copyOf(unanswered);
             }
+
+            /** Whether anything the rules raise about this position is left standing. */
+            public boolean answered() {
+                return reach == Reach.EVERY_RULE && unanswered.isEmpty();
+            }
+        }
+
+        /**
+         * Whether the walk reached the rules written about this position.
+         *
+         * <p>Its own axis beside the questions, and not another arm among them. Nothing was found
+         * where nothing looked, and an empty list of questions says every rule was accounted for —
+         * which is the opposite of the one thing worth knowing (issue #791). The two are not
+         * exclusive either: a rule can have arrived and gone unaccounted for while a subtree beside
+         * it was never entered, and a type that made them arms could not say so.
+         */
+        public enum Reach {
+
+            /** Every rule written about the position reached a reading. */
+            EVERY_RULE,
+
+            /** Some of them did not, so what is written there is not known. */
+            SOME_OUT_OF_SIGHT
         }
 
         /**
@@ -356,7 +356,7 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                  String subject) {}
 
         /** Nothing standing, which is what a caller holding no account of its own says. */
-        public static final Reading ANSWERED = new Reading.Answered();
+        public static final Reading ANSWERED = new Reading(Reach.EVERY_RULE, List.of());
 
         /** Why a position has no coverage numbers. */
         public enum Reason implements souther.compiler.observe.MeasureReason {

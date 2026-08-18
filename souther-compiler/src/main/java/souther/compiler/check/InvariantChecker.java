@@ -580,20 +580,15 @@ public final class InvariantChecker {
         // not two readings: the connectives belong to the clause, so an alternative nothing can
         // satisfy is dropped by asking the whole of what is known about it.
         StatedByClauses stated = StatedByClauses.top();
-        StatedByClauses.Reading reading2 =
-                StatedByClauses.readingOf(c.terms, at, positions, symbols);
         for (Written each : written) {
-            StatedByClauses one = reading2.read(each.clause(), true);
-            stated = stated.meet(one);
-            // Which positions this clause reached, asked of the reading itself. Recorded per clause
-            // because that is the granularity a question has: a clause the reading of values took
-            // in whole sat beside one it could not, and the position-wide account said both had
-            // gone unread.
-            for (FactSubject position : positions.keySet()) {
-                if (one.tookIn(position)) {
-                    took.record(each.from(), position);
-                }
-            }
+            // A reading of its own per clause, so what it says it adopted is this clause's and not
+            // everything before it. Recorded per clause because that is the granularity a question
+            // has: a clause the readings took in whole sat beside one they could not, and the
+            // position-wide account said both had gone unread.
+            StatedByClauses.Reading one =
+                    StatedByClauses.readingOf(c.terms, at, positions, symbols);
+            stated = stated.meet(one.read(each.clause(), true));
+            one.adopted().forEach(position -> took.record(each.from(), position));
         }
         ConstraintState constraints = k.constraints()
                 .taking(stated.values())
@@ -860,12 +855,12 @@ public final class InvariantChecker {
                 positions.put(name, type);
             }
         });
-        StatedByClauses here = StatedByClauses.ofOne(part, terms, at, positions, symbols);
+        Set<FactSubject> here = StatedByClauses.adoptedIn(part, terms, at, positions, symbols);
         Set<FactSubject> constrained =
                 Predicates.subjectsIn(predicates.obligations(part, Known.top(), at, false));
         Set<FactSubject> standing = new LinkedHashSet<>();
         for (FactSubject name : about) {
-            if (!here.tookIn(name) && !constrained.contains(name)) {
+            if (!here.contains(name) && !constrained.contains(name)) {
                 standing.add(name);
             }
         }

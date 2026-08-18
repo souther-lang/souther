@@ -201,15 +201,20 @@
               "path": { "type": "string", "description": "The input position, as a parameter and the fields read off it. A newtype's `value` is never a step." },
               "read": {
                 "type": "object",
-                "description": "Which of this position's rules nothing accounted for. It qualifies `classes` and nothing else says it: a rule nothing took in may yet refuse a value one of the classes holds, so `classes` is the denominator the model states and not one every member of which is known to stand. The questions the model raises and not how far one reading got — several readings take a clause in and they are short of different things, so an ordering bound is unreadable to the one that turns clauses into sets of values and is held whole by two others. Under the earlier version this field said the second, which reported a model whose every rule had been read as one this compiler could not read.",
+                "description": "Which of this position's rules nothing accounted for. It qualifies `classes` and nothing else says it: a rule nothing took in may yet refuse a value one of the classes holds, so `classes` is the denominator the model states and not one every member of which is known to stand. The questions the model raises and not how far one reading got — several readings take a clause in and they are short of different things, so an ordering bound is unreadable to the one that turns clauses into sets of values and is held whole by two others. Under the earlier version this field said the second, which reported a model whose every rule had been read as one this compiler could not read. The two keys below are separate axes and either, both or neither may be written.",
                 "required": ["extent"],
                 "additionalProperties": false,
+                "oneOf": [
+                  { "properties": { "extent": { "const": "complete" } }, "not": { "anyOf": [ { "required": ["rulesNotReached"] }, { "required": ["unanswered"] } ] } },
+                  { "properties": { "extent": { "const": "partial" } }, "anyOf": [ { "required": ["rulesNotReached"] }, { "required": ["unanswered"] } ] }
+                ],
                 "properties": {
-                  "extent": { "enum": ["complete", "partial"], "description": "Whether anything the rules raise about this position is left standing." },
-                  "rulesNotReached": { "type": "boolean", "description": "The walk never reached the rules written about this position, so what is written there is not known. Present exactly where that is so, and never beside `unanswered`: there is no rule to name, and a document listing none would say every rule was accounted for. `extent` is `partial` here too — a reader keying on the word is told the numbers rest on something unfinished either way, and which of the two it is is this key." },
+                  "extent": { "enum": ["complete", "partial"], "description": "Whether anything the rules raise about this position is left standing. `complete` exactly where neither key below is written, which the `oneOf` above says rather than leaving to a reader of this sentence." },
+                  "rulesNotReached": { "const": true, "description": "The walk never reached some of the rules written about this position, so what is written there is not known. Written only where that is so. Its own axis beside `unanswered` and not exclusive with it: a rule can have arrived and gone unaccounted for while a subtree beside it was never entered, and both are said." },
                   "unanswered": {
                     "type": "array",
-                    "description": "The rules nothing took in, each naming the rule because a position is not what an author edits. Present where `extent` is `partial` and `rulesNotReached` is absent: a position whose rules were never reached has no rule to name, and the two are never written together.",
+                    "description": "The rules nothing took in, each naming the rule because a position is not what an author edits. Written only where there is one.",
+                    "minItems": 1,
                     "items": {
                       "type": "object",
                       "required": ["rule", "question", "subject"],

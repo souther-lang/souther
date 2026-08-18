@@ -283,18 +283,33 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
-     * And the other field with no enum behind it: how far a position's rules were read, which is
-     * two arms of a sealed type rather than an enumeration.
+     * And the other field with no enum behind it: whether anything the rules raise about a position
+     * is left standing, which is derived from two things rather than enumerated.
+     *
+     * <p>Both of the things, since either alone leaves the other's word unwritten: a position can
+     * have a rule nothing accounted for, or a subtree the walk never entered, or both, and all
+     * three are the same word here.
      */
     @Test
-    void theOtherFieldWithNoEnumBehindItIsWrittenFromTheArmsOfAReading() {
-        assertEquals(Set.of(AdequacyReport.readingWord(
-                        new PartitionEvidence.AxisCoverage.Reading.Answered()),
+    void theOtherFieldWithNoEnumBehindItIsWrittenFromWhatAReadingLeavesStanding() {
+        PartitionEvidence.AxisCoverage.Unanswered one =
+                new PartitionEvidence.AxisCoverage.Unanswered("r",
+                        souther.compiler.check.CoverageObligation.ADMITTED_VALUES, "s");
+
+        assertEquals(Set.copyOf(List.of(
+                        AdequacyReport.readingWord(PartitionEvidence.AxisCoverage.ANSWERED),
                         AdequacyReport.readingWord(
-                                new PartitionEvidence.AxisCoverage.Reading.Standing(List.of(
-                                        new PartitionEvidence.AxisCoverage.Unanswered("r",
-                                                souther.compiler.check.CoverageObligation
-                                                        .ADMITTED_VALUES, "s"))))),
+                                new PartitionEvidence.AxisCoverage.Reading(
+                                        PartitionEvidence.AxisCoverage.Reach.EVERY_RULE,
+                                        List.of(one))),
+                        AdequacyReport.readingWord(
+                                new PartitionEvidence.AxisCoverage.Reading(
+                                        PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
+                                        List.of())),
+                        AdequacyReport.readingWord(
+                                new PartitionEvidence.AxisCoverage.Reading(
+                                        PartitionEvidence.AxisCoverage.Reach.SOME_OUT_OF_SIGHT,
+                                        List.of(one))))),
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "axes", "items",
                         "properties", "read", "properties", "extent")));
     }

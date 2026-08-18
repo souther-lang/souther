@@ -182,6 +182,24 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     }
 
     /**
+     * A clause read whole that narrows nothing is read.
+     *
+     * <p>What a reading adopted and what it ends up leaving a position are different facts.
+     * {@code value == 5 || value /= 5} is read at both leaves and joins to every value there is;
+     * {@code value >= 1 || value <= 0} is read at both and leaves the whole order. Adoption taken
+     * from what the reading left, both come back as rules nothing read — which is #842's mistake
+     * again, with the lattice value standing in for the reading's own account. The readings say
+     * where they took a leaf in, at the point they take it.
+     */
+    @Test
+    void aClauseThatNarrowsNothingIsStillRead() {
+        assertTrue(answered("value == 5 || value /= 5"),
+                "read at both leaves, and every value is left");
+        assertTrue(answered("value >= 1 || value <= 0"),
+                "and the same of an order neither half narrows");
+    }
+
+    /**
      * A clause half of which nothing read is a clause nothing read.
      *
      * <p>A conjunction is one rule the author wrote and is read a conjunct at a time, so the
