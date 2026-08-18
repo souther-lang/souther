@@ -35,27 +35,34 @@ import java.util.function.Function;
 record Denotations(Map<BindingId, Means> bound) {
 
     /**
-     * What a binding means to this check, which is three answers and not one.
+     * What a binding means to this check: the questions asked of it, each with an answer of its own.
      *
-     * @param value what it was given, where it was given anything — a fresh location is introduced
-     *              rather than given a value, and has none
-     * @param subject what a fact about it is about. Handed in rather than worked out from
-     *                {@code denotes}: which value this is is {@link Terms}' to say and one thing has
-     *                to say it, and a denotation is what a reading may <em>do</em> with the binding.
-     *                Read from the denotation, a binding that names an answer would be named by
-     *                nothing, and a binding entered as a place would be named by the place — so
-     *                refining a value and introducing one could not be told apart
-     * @param denotes what a reading may make of it: whether a clause can be read against it, and
-     *                what it was written as where that has to travel with the name
+     * <p>Held apart because they are apart. One classification stood here and said which of four
+     * kinds a binding was, and the four were not one question with four answers: measured over every
+     * read of a binding, each kind was one combination of these, and a reader testing one kind was
+     * reading what the other kinds had left over. Taking a kind away then widened what that reader
+     * read, without the reader changing (#824).
+     *
+     * <p>Nothing here says which combinations may occur. Four of them do, and those four are the
+     * kinds this replaces, but that is what the corpus holds rather than a rule about bindings: a
+     * {@code match} arm opening text written into the source is a place whose value was written, and
+     * refusing one here would refuse a program for the shape of a record.
+     *
+     * @param value what it was given, where it was given anything — a place introduced with nothing
+     *              behind it has none, and following this is how what was written is found
+     * @param subject what a fact about it is about. Handed in rather than worked out from anything
+     *                here: which value this is is {@link Terms}' to say and one thing has to say it
+     * @param location where it is, or null where it is not a place. What the seeding writes about
+     *                 and what a clause may be read against
+     * @param term what the term grammar names it by, or null where it names it by nothing
      */
-    record Means(Core value, FactSubject subject, Denotes denotes) {
+    record Means(Core value, FactSubject subject, Location location, Term term) {
 
         Means {
             // Every binding this holds is one something is known about. A binding entered without a
             // subject would be read back as one nothing entered, which takes an atom per occurrence
             // — so one value read twice would be two subjects, which is what a subject is for.
             java.util.Objects.requireNonNull(subject, "a binding entered is a binding to be about");
-            java.util.Objects.requireNonNull(denotes, "what may be done with it is an answer too");
         }
     }
 
@@ -69,11 +76,18 @@ record Denotations(Map<BindingId, Means> bound) {
         return given == null ? null : given.subject();
     }
 
-    /** What {@code binding} denotes, which is nothing where nothing entered it. */
-    Denotes of(BindingId binding) {
+    /** Where {@code binding} is, or null where it is not a place. */
+    Location locationOf(BindingId binding) {
         Means given = bound.get(binding);
-        return given != null ? given.denotes() : new Denotes.Nothing();
+        return given == null ? null : given.location();
     }
+
+    /** What the term grammar names {@code binding} by, or null where it names it by nothing. */
+    Term termOf(BindingId binding) {
+        Means given = bound.get(binding);
+        return given == null ? null : given.term();
+    }
+
 
     /** The value {@code binding} was given, or null where nothing recorded one. */
     Core valueOf(BindingId binding) {
@@ -91,7 +105,7 @@ record Denotations(Map<BindingId, Means> bound) {
      * binding is ({@link Terms#placeSubject}); an arm opening an optional hands what that optional
      * holds. */
     Denotations location(BindingId binding, FactSubject subject) {
-        return with(binding, new Means(null, subject, new Denotes.At(Location.of(binding))));
+        return with(binding, new Means(null, subject, Location.of(binding), null));
     }
 
     /**
@@ -110,7 +124,7 @@ record Denotations(Map<BindingId, Means> bound) {
      * {@code match} over what an outer arm bound could not find the call underneath it.
      */
     Denotations opened(BindingId binding, Core value, FactSubject subject) {
-        return with(binding, new Means(value, subject, new Denotes.At(Location.of(binding))));
+        return with(binding, new Means(value, subject, Location.of(binding), null));
     }
 
     /** The same, for bindings that stand for themselves rather than for a value the walk reached —
@@ -123,8 +137,9 @@ record Denotations(Map<BindingId, Means> bound) {
         return out;
     }
 
-    Denotations binding(BindingId binding, Core value, FactSubject subject, Denotes denotes) {
-        return with(binding, new Means(value, subject, denotes));
+    Denotations binding(BindingId binding, Core value, FactSubject subject, Location location,
+                        Term term) {
+        return with(binding, new Means(value, subject, location, term));
     }
 
     private Denotations with(BindingId binding, Means means) {

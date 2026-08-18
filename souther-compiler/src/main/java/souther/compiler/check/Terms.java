@@ -794,8 +794,7 @@ final class Terms {
         if (subject == null) {
             return null;
         }
-        return intrinsicallyReadable(denotationOf(e, at), e, at) || k.speaksOf(subject)
-                ? subject : null;
+        return intrinsicallyReadable(e, at) || k.speaksOf(subject) ? subject : null;
     }
 
     /**
@@ -810,12 +809,15 @@ final class Terms {
      * <p>Asked of the expression, so a name for it answers the same. That is what makes naming an
      * expression not change what is known of it.
      */
-    boolean intrinsicallyReadable(Denotes d, Core e, Denotations at) {
-        return switch (d) {
-            case Denotes.At _ -> true;
-            case Denotes.Computed _ -> affineOf(e, at) != null || namedByRule(e, at);
-            case Denotes.Written _, Denotes.Nothing _ -> false;
-        };
+    boolean intrinsicallyReadable(Core e, Denotations at) {
+        if (isAPlace(e, at)) {
+            return true;
+        }
+        // Text says all there is to say of itself, so nothing is read against it here.
+        if (writtenValue(e, at) != null) {
+            return false;
+        }
+        return bodyKey(e, at) != null && (affineOf(e, at) != null || namedByRule(e, at));
     }
 
     /**
@@ -1164,14 +1166,9 @@ final class Terms {
      */
     private Term keyOfNowhere(Core e, Denotations at) {
         return switch (e) {
-            case Core.Read r -> switch (at.of(r.binding())) {
-                case Denotes.Computed computed -> computed.term();
-                case Denotes.Written written -> written.term();
-                // A chain is asked of this only once it has been found not to be a place, so the
-                // binding at its head does not denote one and nothing here names it.
-                case Denotes.At ignored -> null;
-                case Denotes.Nothing ignored -> null;
-            };
+            // What the walk recorded the term grammar names it by, and null where it names it by
+            // nothing. A chain is asked of this only once it has been found not to be a place.
+            case Core.Read r -> at.termOf(r.binding());
             case Core.FieldAccess fa -> {
                 if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
                     yield keyOfNowhere(fa.target(), at);
@@ -1188,10 +1185,10 @@ final class Terms {
      * that expression is arithmetic over, what rule names it, read of the name as well.
      *
      * <p>Asked here rather than left as which arm a denotation is. Two readers tested one arm of
-     * {@link Denotes} for it, and an arm is a poor way to ask: {@code Computed} says what a binding
-     * is not — not a place, not text, not nameless — so what those readers meant held by falling
-     * through the others, and removing an arm silently widened what they read. Named, the question is
-     * one thing to answer and one thing to get wrong.
+     * one classification for it, and an arm of a sum is a poor way to ask: the arm they tested said
+     * what a binding is not — not a place, not text, not nameless — so what those readers meant held
+     * by falling through the others, and removing an arm silently widened what they read. Named, the
+     * question is one thing to answer and one thing to get wrong.
      *
      * <p>Not the same as following what a name was given. {@link #writtenValue} does that too, and
      * does it whatever the name denotes, because what was written is a fact about the value however
@@ -1199,12 +1196,15 @@ final class Terms {
      * given a place does not do: the text folds and the place is the atom, and neither is arithmetic
      * to read through to.
      *
-     * <p>Answered from the denotation as it stands. Whether it can be worked out from what is asked
-     * elsewhere — a place, written text, a name at all — is worth measuring, and measuring it needs
-     * the question to have a name first.
+     * <p>Worked out from what is asked elsewhere: where the binding is, what names it, and what it
+     * was written as. Each of those is a question of its own with an answer of its own, and this one
+     * is the three of them together — where a classification holding all three at once made the
+     * answer to one of them depend on which other answers were left.
      */
     boolean computesAsWhatItWasGiven(BindingId binding, Denotations at) {
-        return at.of(binding) instanceof Denotes.Computed;
+        Core given = at.valueOf(binding);
+        return at.locationOf(binding) == null && at.termOf(binding) != null
+                && (given == null || writtenValue(given, at) == null);
     }
 
     /**
@@ -1228,31 +1228,7 @@ final class Terms {
      * term grammar names a chain by. A reader that only wants to know whether there is one asks
      * {@link #isAPlace}. */
     Location locationOf(Core e, Denotations at) {
-        return Location.of(e, symbols,
-                binding -> at.of(binding) instanceof Denotes.At located ? located.where() : null);
-    }
-
-    /**
-     * What a binding's initializer denotes: the location it is where it is one, else the term it
-     * computes, else nothing. A name is an alias and never a value of its own — this is the one place
-     * that decides it, so an expression answers the same whether it was written where it is used or
-     * given a name first.
-     */
-    Denotes denotationOf(Core e, Denotations at) {
-        Core written = writtenValue(e, at);
-        if (written != null) {
-            return new Denotes.Written(bodyKey(written, at));
-        }
-        Location located = locationOf(e, at);
-        if (located != null) {
-            return new Denotes.At(located);
-        }
-        Naming named = naming(e, at, Map.of(), 0, Leaf.SYMBOLIC);
-        if (named instanceof Naming.Unnamed) {
-            return new Denotes.Nothing();
-        }
-        Term term = named.term();
-        return new Denotes.Computed(term);
+        return Location.of(e, symbols, at::locationOf);
     }
 
     /**

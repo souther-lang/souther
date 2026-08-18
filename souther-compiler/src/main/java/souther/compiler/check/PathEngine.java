@@ -172,13 +172,13 @@ final class PathEngine {
         if (at.valueOf(li.binder().id()) == li.value()) {
             return new Entered(k, at);
         }
-        Denotes what = terms.denotationOf(li.value(), at);
         // What the name is about is what it was given is about. Where even the identity reading has
         // nothing to name — an expression answering nothing at all — the name is what there is, and
         // it is one value however many times it is read.
         FactSubject about = terms.subjectOf(li.value(), at);
         return new Entered(k, at.binding(li.binder().id(), li.value(),
-                about != null ? about : terms.placeSubject(li.binder().id()), what));
+                about != null ? about : terms.placeSubject(li.binder().id()),
+                terms.locationOf(li.value(), at), terms.bodyKey(li.value(), at)));
     }
 
     /**

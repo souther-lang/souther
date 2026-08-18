@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -117,10 +118,8 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Hir.Binder a = binders.binder("a", POS);
         Hir.Binder b = binders.binder("b", POS);
         Denotations at = Denotations.none()
-                .binding(a.id(), read(b), engine.terms().placeSubject(a.id()),
-                        new Denotes.Nothing())
-                .binding(b.id(), read(a), engine.terms().placeSubject(b.id()),
-                        new Denotes.Nothing());
+                .binding(a.id(), read(b), engine.terms().placeSubject(a.id()), null, null)
+                .binding(b.id(), read(a), engine.terms().placeSubject(b.id()), null, null);
 
         assertNull(Terms.writtenValue(read(a), at));
     }
@@ -133,9 +132,11 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
         Hir.Binder a = binders.binder("a", POS);
         Denotations at = given(a, three, Denotations.none());
 
-        assertEquals(engine.terms().denotationOf(three, Denotations.none()).getClass(),
-                engine.terms().denotationOf(read(a), at).getClass(),
-                "the text and the name it was given mean the same thing here");
+        assertEquals(engine.terms().bodyKey(three, Denotations.none()),
+                engine.terms().bodyKey(read(a), at),
+                "the text and the name it was given are named alike");
+        assertFalse(engine.terms().intrinsicallyReadable(read(a), at),
+                "and neither is something to read a clause against");
     }
 
     private Denotations given(Hir.Binder binder, Core value, Denotations at) {
