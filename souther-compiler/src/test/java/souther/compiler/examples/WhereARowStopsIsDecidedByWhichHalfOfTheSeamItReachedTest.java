@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.observe.Applied;
 import souther.compiler.observe.Disposition;
@@ -299,7 +300,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 .ask(new Output.EvaluationLinked(name, Output.CoverageMode.NONE)).value();
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                c.db().ask(new Shapes.Scope(name)).value(),
+                Scopes.derived(c.db(), name).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifact,
                 // The answerers here apply this compile's own classes, so there is no second set of

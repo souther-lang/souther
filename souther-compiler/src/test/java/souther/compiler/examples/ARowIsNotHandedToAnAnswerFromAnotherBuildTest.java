@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ClassFileDeclarations;
 import souther.compiler.meta.PublishedClasses;
@@ -305,7 +306,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
                 "the model whose rows are run compiles");
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                c.db().ask(new Shapes.Scope(name)).value(),
+                Scopes.derived(c.db(), name).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifact,
                 declared,

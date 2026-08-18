@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -49,7 +50,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
-        Symbols symbols = compilation.symbols("demo");
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
                 TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols);
         assertTrue(solved.of(TypeSymbols.declared(new TypeKey(symbols.module(), reader))).none(),
@@ -133,7 +134,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        Symbols symbols = compilation.symbols("demo");
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         assertTrue(TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols)
                         .granting(Set.of(TypeSymbols.declared(new TypeKey(symbols.module(), "Granted")))).get(TypeSymbols.declared(new TypeKey(symbols.module(), "Bad"))).none(),
                 "and what it wraps was not granted anything");
@@ -165,7 +166,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 data B = { a: A }
                 """, "Main");
         compilation.answerEverything();
-        Symbols symbols = compilation.symbols("demo");
+        Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
                 TypeCardinality.solve(compilation.module("demo").defs().stream().map(Derived.Def::read).toList(), symbols);
 

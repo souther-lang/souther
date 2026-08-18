@@ -297,7 +297,7 @@ public final class Bodies {
         public Answer<Map<ValueName.Behavior, Sig>> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared =
                     db.ask(new Shapes.Desugared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             if (!desugared.present() || !scope.present() || !imported.present()) {
                 return Answer.absent();
@@ -340,7 +340,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, BehaviorContract>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
             if (!lowering.present() || !scope.present() || !signatures.present()
@@ -397,7 +397,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, ContractDischarge>> compute(Db db) {
             Answer<Map<String, StatedContract>> stated = db.ask(new StatedContracts(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             if (!stated.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -565,6 +565,47 @@ public final class Bodies {
     }
 
     /**
+     * What the behaviors one body names take, by the name each is called under.
+     *
+     * <p>{@link CalleeSigs} is the module's index of everything callable in it, and a body wants the
+     * entries for what it calls. Read whole, it hands this body the module's identity: declaring a
+     * behavior no body calls changes the index, and every body of the module is checked again
+     * against signatures none of them names differently. Read here and projected, the index is still
+     * built once and what comes out of this is the same answer until one of these signatures moves.
+     *
+     * <p>Over what the body reaches rather than what it applies, which is the frontier
+     * {@link BehaviorsReached} draws and the same one a body's contracts are read at. That frontier
+     * is taken over the representation the discharge analysis reads, and this is handed to a check
+     * that reads the fully expanded one — which is the same set of names, because a helper cannot
+     * reach a behavior at all (E1818), so expanding one into a body brings no name the other tree
+     * has not got.
+     *
+     * <p>One lookup by name is all the check does with it, so a body that named something not in
+     * here would be told there is no such behavior — which is what a body naming something outside
+     * its own frontier would have to be. Nothing iterates it, so nothing sees a smaller module.
+     */
+    public record CalleeSigsForBody(String module, String behavior)
+            implements Key<Map<ValueName.Behavior, ReqSig>> {
+
+        @Override
+        public Answer<Map<ValueName.Behavior, ReqSig>> compute(Db db) {
+            Answer<Set<ValueName.Behavior>> targets = db.ask(new BehaviorsReached(module, behavior));
+            Answer<Map<ValueName.Behavior, ReqSig>> callable = db.ask(new CalleeSigs(module));
+            if (!targets.present() || !callable.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Behavior, ReqSig> out = new LinkedHashMap<>();
+            for (ValueName.Behavior each : targets.value()) {
+                ReqSig sig = callable.value().get(each);
+                if (sig != null) {
+                    out.put(each, sig);
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * What each behavior of a module states about its answer, read into the representation the
      * analysis has rules about and typed there, by the name the behavior is declared under.
      *
@@ -587,7 +628,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, StatedContract>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Shapes.Expandable(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Map<String, Type>> helpers = db.ask(new RecursiveHelperSigs(name));
             if (!expandable.present() || !scope.present() || !signatures.present()
@@ -759,7 +800,7 @@ public final class Bodies {
         @Override
         public Answer<Map<ValueName.Behavior, ReqSig>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Dependencies(name));
             Answer<Set<ValueName.Behavior>> borrowed = db.ask(new ImportedDependencies(name));
@@ -793,7 +834,7 @@ public final class Bodies {
         @Override
         public Answer<Map<ValueName.Behavior, ReqSig>> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Callable(name));
             Answer<Set<ValueName.Behavior>> borrowed = db.ask(new ImportedCallable(name));
@@ -849,7 +890,7 @@ public final class Bodies {
         @Override
         public Answer<Hir.Module> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             if (!prepared.present() || !scope.present() || !reqSigs.present()) {
                 return Answer.absent();
@@ -1392,7 +1433,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, Type>> compute(Db db) {
             Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             if (!inliner.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -1419,7 +1460,7 @@ public final class Bodies {
         public Answer<Map<String, DataChecker.Constructs>> compute(Db db) {
             Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             if (!inliner.present() || !sigs.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -1506,8 +1547,12 @@ public final class Bodies {
             Answer<Hir.SpecBehavior> spec = db.ask(new Spec(module, behavior));
             Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
             Answer<Hir.FnDef> body = db.ask(new LoweredBody(module, behavior));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
-            Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs = db.ask(new CalleeSigs(module));
+            Answer<Symbols> scope = Names.derivedSymbols(db, module);
+            // What this body names, and not what its module happens to have callable in it: a
+            // signature it never names is no part of what it is checked against, and depending on
+            // the module's index would re-check this body whenever a behavior beside it was declared.
+            Answer<Map<ValueName.Behavior, ReqSig>> calleeSigs =
+                    db.ask(new CalleeSigsForBody(module, behavior));
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
@@ -1571,7 +1616,7 @@ public final class Bodies {
      */
     private static Map<String, souther.compiler.claims.Claims> judged(
             Db db, String module, Hir.Module settled, Map<String, Core> bodies) {
-        Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
+        Answer<Symbols> scope = Names.derivedSymbols(db, module);
         Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
                 db.ask(new souther.compiler.query.Adequacy.Inputs(module));
         if (!scope.present() || !inputs.present()) {
@@ -1649,7 +1694,7 @@ public final class Bodies {
         @Override
         public Answer<Of> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
-            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Symbols> scope = Names.derivedSymbols(db, name);
             // The signatures the check reads are the ones every other reader reads. Asked for here
             // rather than built here: a second construction would answer the boundary's question a
             // second time, and what a phase below the check is handed would be a different answer

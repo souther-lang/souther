@@ -248,7 +248,7 @@ public final class PublishedUniverse {
                     ScopeRefusals.of(scoped.refused()));
         }
         Resolve.Resolution resolution = Resolve.resolving(readable.module(),
-                scoped.writtenSymbols(registry), scoped.values());
+                scoped.meanings().writtenSymbols(registry), scoped.values());
         if (!resolution.unresolved().isEmpty()) {
             // What resolution has for each of them is a report, written for an author holding the
             // file and quoting the line — a line of the text this reading assembled. So what

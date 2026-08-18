@@ -53,8 +53,8 @@ class WhichDeclarationWorldAReaderGetsIsWhichQuestionItAskedTest {
     void theResolvedWorldAndTheDerivedWorldAnswerDifferently() {
         Db db = db();
 
-        Hir.Expr resolved = clauseOf(db.ask(new Names.NameScope("m")).value());
-        Hir.Expr derived = clauseOf(db.ask(new Shapes.Scope("m")).value());
+        Hir.Expr resolved = clauseOf(Names.resolvedSymbols(db, "m").value());
+        Hir.Expr derived = clauseOf(Names.derivedSymbols(db, "m").value());
 
         assertEquals(1, applications(resolved),
                 "the resolved world holds the clause as written: a call to the helper");
@@ -69,8 +69,8 @@ class WhichDeclarationWorldAReaderGetsIsWhichQuestionItAskedTest {
     void neitherScopeCarriesWhichWorldItCameFrom() {
         Db db = db();
 
-        assertInstanceOf(Symbols.class, db.ask(new Names.NameScope("m")).value());
-        assertInstanceOf(Symbols.class, db.ask(new Shapes.Scope("m")).value());
+        assertInstanceOf(Symbols.class, Names.resolvedSymbols(db, "m").value());
+        assertInstanceOf(Symbols.class, Names.derivedSymbols(db, "m").value());
     }
 
     private static int applications(Hir.Expr e) {
