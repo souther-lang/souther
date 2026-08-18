@@ -136,7 +136,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
                             invariant always = 1 >= 0
                         """, "Length"), "always"));
 
-        assertEquals(Required.Because.IT_NAMES_NO_POSITION, said.because());
+        assertEquals(Set.of(Required.Because.IT_NAMES_NO_POSITION), said.because());
         assertEquals(Set.of(), said.obligations());
     }
 
@@ -159,7 +159,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
 
         Required.Irrelevant ordered = assertInstanceOf(Required.Irrelevant.class,
                 only(raised, "ordered"), "a rule about a pair raises no question about one position");
-        assertEquals(Required.Because.IT_RELATES_TWO_POSITIONS, ordered.because());
+        assertEquals(Set.of(Required.Because.IT_RELATES_TWO_POSITIONS), ordered.because());
         assertEquals(Set.of(), ordered.obligations());
 
         assertEquals(Set.of("ADMITTED_VALUES at endsAt", "BOUNDARY at endsAt"),

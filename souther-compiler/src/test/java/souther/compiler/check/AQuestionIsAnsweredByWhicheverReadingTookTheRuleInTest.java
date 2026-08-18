@@ -222,6 +222,53 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
                 "while a conjunct nothing read leaves the one beside it saying what it said");
     }
 
+    /**
+     * A branch shown to admit nothing settles the positions it named.
+     *
+     * <p>The other side of the rule above, and not a special case of it. {@code s < ""} admits
+     * nothing — no string is below the empty one, which the reading of order has whole — so the
+     * choice is the branch beside it, and what this clause does to {@code s} is nothing at all.
+     * That is an answer, and one only a reading that got to the end of the branch could give;
+     * dropping the dead branch's evidence with its state turned it into a rule nothing had read.
+     *
+     * <p>What the surviving branch missed still outranks it. A dead branch beside one nothing could
+     * read leaves that branch's positions open, however dead the first was.
+     */
+    @Test
+    void aBranchThatAdmitsNothingSettlesWhatItNamed() {
+        assertEquals(Set.of(), unansweredOf("""
+                module example.pair
+
+                data R = { s: String, b: Bool }
+                    invariant said = s < "" || b == true
+                """, "R"));
+
+        assertEquals(Set.of(), unansweredOf("""
+                module example.pair
+
+                data R = { s: String, b: Bool }
+                    invariant said = s < "" || (b == true && b == false)
+                """, "R"),
+                "and where every branch admits nothing, so does the choice — at every position"
+                        + " either of them named");
+
+        assertEquals(Set.of("x"), unansweredOf("""
+                module example.pair
+
+                data R = { s: String, x: Int }
+                    invariant said = s < "" || Int.abs(x) >= 2
+                """, "R"),
+                "while the branch nothing could read leaves its own positions open");
+    }
+
+    /** The positions of {@code type} that the clauses written over it were not read at. */
+    private static Set<String> unansweredOf(String source, String type) {
+        return accountingOf(source, type).values().stream()
+                .flatMap(each -> each.unaccounted().stream())
+                .map(owed -> owed.subject().path())
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     /** The positions of a two-field record that the clause written over them was not read at. */
     private static Set<String> unansweredAbout(String clause) {
         return accountingOf("""

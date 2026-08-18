@@ -18,6 +18,12 @@ import java.util.Set;
  * why {@link #dropped} is here and why {@link #either} spoils across positions the unread branch
  * never named — the same reason {@code AdmissibleValues.join} does.
  *
+ * <p>What is recorded is that the reading settled what the clause does to a position, which is not
+ * the same as its having narrowed anything there. A branch shown to admit nothing settles every
+ * position it named: the choice is the other branch, so what this clause does to a position only
+ * that branch spoke of is nothing at all — an answer, and one only a reading that got to the end of
+ * the branch could give.
+ *
  * <p>Composed rather than collected. A set filled as the leaves go by is a fact about the walk and
  * not about the clause, and it cannot be undone by what a later branch failed to read.
  *
@@ -89,9 +95,39 @@ record Adoption(Set<FactSubject> read, Set<FactSubject> missed, boolean dropped)
         return new Adoption(union(read, other.read), lost, dropped || other.dropped);
     }
 
-    /** Whether this reading took the whole of what the clause says about {@code position} in. */
+    /** Whether this reading settled what the whole of the clause does to {@code position}. */
     boolean took(FactSubject position) {
         return read.contains(position) && !missed.contains(position);
+    }
+
+    /** The positions any part of the clause was about. */
+    Set<FactSubject> mentions() {
+        return union(read, missed);
+    }
+
+    /**
+     * This branch of a choice, beside one shown to admit nothing.
+     *
+     * <p>The dead branch settles the positions it named: nothing satisfies it, so what the choice
+     * does to a position only it spoke of is nothing, which is an answer. Its own misses do not
+     * come with it — a rule it could not read is a rule about a branch nobody can take — and
+     * neither does its {@link #dropped}, for the same reason.
+     *
+     * <p>What this branch missed still wins. {@code (s < "") || f(x)} leaves {@code x} open however
+     * dead the first branch is, so the surviving branch's account is the one that outranks.
+     */
+    Adoption beside(Adoption dead) {
+        return new Adoption(union(read, dead.mentions()), missed, dropped);
+    }
+
+    /**
+     * Two branches of a choice, both shown to admit nothing.
+     *
+     * <p>Then the choice admits nothing, which settles every position either of them named: the
+     * values there are exactly none. No branch is left to have missed anything.
+     */
+    Adoption bothDead(Adoption other) {
+        return new Adoption(union(mentions(), other.mentions()), Set.of(), false);
     }
 
     private static Set<FactSubject> union(Set<FactSubject> these, Set<FactSubject> those) {

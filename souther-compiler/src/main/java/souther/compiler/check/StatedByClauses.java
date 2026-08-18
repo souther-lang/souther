@@ -219,16 +219,21 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
                         values.either(one.values.leavingNothing(), other.values.leavingNothing()),
                         ordered.either(one.ordered.leavingNothing(),
                                 other.ordered.leavingNothing()),
-                        one.byValues.either(other.byValues),
-                        one.byOrder.either(other.byOrder));
+                        one.byValues.bothDead(other.byValues),
+                        one.byOrder.bothDead(other.byOrder));
             }
             // An alternative nobody can take says nothing about the positions, its unread rules
-            // included — so what it missed leaves with it, the way its evidence does.
+            // included — so what it missed leaves with it, the way its evidence does. What it does
+            // leave is that the positions it named are settled: nothing satisfies it, so the choice
+            // does nothing to them, and that is an answer only a reading that got to the end of the
+            // branch could give.
             if (one.holdsNothing()) {
-                return other;
+                return new StatedByClauses(other.values, other.ordered,
+                        other.byValues.beside(one.byValues), other.byOrder.beside(one.byOrder));
             }
             if (other.holdsNothing()) {
-                return one;
+                return new StatedByClauses(one.values, one.ordered,
+                        one.byValues.beside(other.byValues), one.byOrder.beside(other.byOrder));
             }
             return new StatedByClauses(values.either(one.values, other.values),
                     ordered.either(one.ordered, other.ordered),

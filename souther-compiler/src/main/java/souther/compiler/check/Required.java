@@ -79,14 +79,21 @@ public sealed interface Required {
      */
     final class Irrelevant implements Required {
 
-        private final Because because;
+        private final Set<Because> because;
 
-        private Irrelevant(Because because) {
-            this.because = because;
+        private Irrelevant(Set<Because> because) {
+            this.because = Collections.unmodifiableSet(new LinkedHashSet<>(because));
         }
 
-        /** What settled it. */
-        public Because because() {
+        /**
+         * What settled it, which is every part's reason and not one of them.
+         *
+         * <p>{@code a < b && 1 >= 0} raises nothing because one part is about a pair and the other
+         * about nothing here, and both are true of the rule. Kept as one, the answer was whichever
+         * part was written first — a fact about the source order under a name that says why the
+         * rule raises nothing.
+         */
+        public Set<Because> because() {
             return because;
         }
 
@@ -97,7 +104,7 @@ public sealed interface Required {
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Irrelevant it && because == it.because;
+            return other instanceof Irrelevant it && because.equals(it.because);
         }
 
         @Override
@@ -135,6 +142,12 @@ public sealed interface Required {
     }
 
     /** What every invariant clause raises about a position it is written about. */
+    private static Set<Because> union(Set<Because> these, Set<Because> those) {
+        Set<Because> out = new LinkedHashSet<>(these);
+        out.addAll(those);
+        return out;
+    }
+
     private static Owed admittedValues(Owed.Subject where) {
         return new Owed(CoverageObligation.ADMITTED_VALUES, where);
     }
@@ -165,11 +178,11 @@ public sealed interface Required {
             // A clause about no position of this value raises no question about one. Not a rule
             // that went unread: what it says was read, and what it says is about nothing here.
             case ClauseStates.SomethingElse other -> other.positions().isEmpty()
-                    ? new Irrelevant(Because.IT_NAMES_NO_POSITION)
+                    ? new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION))
                     : new Some(other.positions().stream()
                             .map(Required::admittedValues).collect(java.util.stream.Collectors
                                     .toCollection(LinkedHashSet::new)));
-            case ClauseStates.ARelation _ -> new Irrelevant(Because.IT_RELATES_TWO_POSITIONS);
+            case ClauseStates.ARelation _ -> new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
         };
     }
 
@@ -184,8 +197,11 @@ public sealed interface Required {
         if (had == null) {
             return one;
         }
-        if (had instanceof Irrelevant) {
-            return one instanceof Irrelevant ? had : one;
+        if (had instanceof Irrelevant it) {
+            // Both, where both parts raise nothing: each is a reason the rule raises nothing, and
+            // keeping one makes the answer turn on which part was written first.
+            return one instanceof Irrelevant too
+                    ? new Irrelevant(union(it.because(), too.because())) : one;
         }
         if (one instanceof Irrelevant) {
             return had;
