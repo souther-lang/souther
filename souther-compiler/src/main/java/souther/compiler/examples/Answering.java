@@ -1,7 +1,10 @@
 package souther.compiler.examples;
 
+import souther.compiler.check.Sig;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
+
+import java.util.Map;
 
 /**
  * Where a run's answerer comes from, and what makes the answerer and the values it is handed one
@@ -48,5 +51,23 @@ public interface Answering {
      *  applied, all in the loader the run built. */
     static Answering generatedHere() {
         return GeneratedImplementation::new;
+    }
+
+    /**
+     * {@code implementation} for whichever behavior it implements, and {@link #generatedHere} for
+     * every other.
+     *
+     * <p>The instance and nothing else. Which behavior it is for and which declarations it reads
+     * values by are both worked out from it — by the ABI and by its own loader's class files — so
+     * neither can be stated wrongly by a caller that got one of them wrong.
+     *
+     * <p>{@code sigs} is the module's, and is what a value crossing to the instance's classes is
+     * read as. It is the run's answer and not the instance's: what a row states is of the module the
+     * rows are written for, and holding that module's declarations against the instance's is
+     * {@code DeclarationAgreement}'s, done before any row is handed over.
+     */
+    static Answering bound(Object implementation, Map<String, Sig> sigs) {
+        return (generated, compiled) -> new BoundImplementation(implementation, sigs,
+                new GeneratedImplementation(generated, compiled), generated.module());
     }
 }
