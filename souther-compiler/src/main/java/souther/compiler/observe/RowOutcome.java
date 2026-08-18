@@ -31,6 +31,7 @@ import java.util.Set;
  * an input fixture failed    NONE                FAILED        INPUT_FIXTURE
  * the expectation failed     NONE                FAILED        EXPECTED_FIXTURE
  * the expected arm is wrong  NONE                FAILED        EXPECTED_FIXTURE
+ * the values broke a clause  FIXTURES_VALIDATED  FAILED        ENSURES
  * a dependency had no fake   FIXTURES_VALIDATED  FAILED        FAKE_RESOLUTION
  * a fake had no answer       INVOKED             FAILED        FAKE_RESOLUTION
  * an `unreachable` reached   INVOKED             FAILED        INVOCATION

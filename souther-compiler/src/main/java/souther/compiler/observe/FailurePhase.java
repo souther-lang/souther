@@ -23,6 +23,16 @@ public enum FailurePhase {
     FAKE_RESOLUTION,
 
     /**
+     * The values the row states do not keep what the behavior declares of what it answers.
+     *
+     * <p>Not {@link #EXPECTED_FIXTURE}, which is an expectation that could not be built. Here it was
+     * built, and what it states and what the row was given are related in a way the model declares
+     * cannot arise. Nor {@link #COMPARISON}, which is the answer disagreeing with the row: nothing
+     * needs to have answered for this, and a row waiting for a body is held to it like any other.
+     */
+    ENSURES,
+
+    /**
      * What was to apply the behavior could not be established as being of the module the row is
      * written for.
      *

@@ -223,7 +223,8 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                         mine.db().ask(new Bodies.ModuleDefinitions(name)).value(),
                         Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                         EvaluationPolicy.DEFAULT,
-                        Answering.generatedHere()));
+                        Answering.generatedHere(),
+                        mine.db().ask(new Bodies.Contracts(name)).value()));
 
         assertTrue(refused.getMessage().contains("example.applying")
                         && refused.getMessage().contains("example.elsewhere"),
@@ -316,7 +317,8 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                answering);
+                answering,
+                c.db().ask(new Bodies.Contracts(name)).value());
     }
 
     private static Compilation compiled() {

@@ -2,6 +2,7 @@ package souther.compiler.examples;
 
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Hir;
@@ -129,6 +130,11 @@ public final class ExampleVerifier {
      * and a name it has one of would be applied, so a row would be answered by an implementation of
      * something else rather than failing to find anything.
      *
+     * <p>{@code contracts} is what the module's behaviors declare of what they answer, which is what
+     * says there is a check to run over a row's values. Read from the answer that owns it rather
+     * than from the classes: a check that will not load is a compile that did not emit what it said
+     * it would, and reading the loader for this would take that for a behavior with nothing to say.
+     *
      * @throws IllegalArgumentException where the artifact is of another module
      */
     public static Observations check(souther.compiler.check.Prepared.ExampleExecution module,
@@ -138,7 +144,8 @@ public final class ExampleVerifier {
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Hir.FnDef> values,
                                      Deadline deadline, EvaluationPolicy policy,
-                                     Answering answering) {
+                                     Answering answering,
+                                     Map<String, BehaviorContract> contracts) {
         if (!artifact.implementations().module().equals(module.name())) {
             throw new IllegalArgumentException("the rows are `" + module.name()
                     + "`'s and the artifact is `" + artifact.implementations().module()
@@ -149,7 +156,8 @@ public final class ExampleVerifier {
         }
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
-                deadline, policy, answering.over(artifact.implementations(), loader), declared);
+                deadline, policy, answering.over(artifact.implementations(), loader), declared,
+                contracts);
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
@@ -197,8 +205,8 @@ public final class ExampleVerifier {
     private static Incompleteness.Code leftUndecidedBy(FailurePhase phase) {
         return switch (phase) {
             case ANSWERER_ESTABLISHMENT -> Incompleteness.Code.ANSWERER_NOT_ESTABLISHED;
-            case NONE, INPUT_FIXTURE, EXPECTED_FIXTURE, FAKE_RESOLUTION, INVOCATION, COMPARISON,
-                 STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, INFRASTRUCTURE ->
+            case NONE, INPUT_FIXTURE, EXPECTED_FIXTURE, ENSURES, FAKE_RESOLUTION, INVOCATION,
+                 COMPARISON, STEP_LIMIT, DEPTH_LIMIT, TIMEOUT, STACK_EXHAUSTED, INFRASTRUCTURE ->
                     Incompleteness.Code.ROW_UNDECIDED;
         };
     }
@@ -291,13 +299,17 @@ public final class ExampleVerifier {
      * where it can be quoted, and a reader of the other source would otherwise be shown rows that
      * stopped with nothing saying why. */
     private final Set<String> said = new LinkedHashSet<>();
+    /** What holds a row's values to what the behavior declares of what it answers. */
+    private final EnsuresChecks ensures;
 
     private ExampleVerifier(souther.compiler.check.Prepared.ExampleExecution module,
                             Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
-                            Supplier<PublishedClasses> declared) {
+                            Supplier<PublishedClasses> declared,
+                            Map<String, BehaviorContract> contracts) {
+        this.ensures = new EnsuresChecks(module.name(), loader, contracts);
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -1009,9 +1021,9 @@ public final class ExampleVerifier {
         // Build the expected value before running: a row whose expectation cannot be built states no
         // expectation, and comparing a result against a value nothing built reported a mismatch
         // against an empty expected value — a wrong answer for a row that was right.
-        Asserted asserted;
+        FixtureReader.ExpectedValue expected;
         try {
-            asserted = fixtures.caseOnly(row.expected()) != null ? null
+            expected = fixtures.caseOnly(row.expected()) != null ? null
                     : fixtures.assertedExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
             out.add(Diagnostic.at(row.pos())
@@ -1021,7 +1033,20 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.EXPECTED_FIXTURE);
             return;
         }
+        Asserted asserted = expected == null ? null : expected.asserted();
         state.got(Stage.FIXTURES_VALIDATED);
+        // What the row states, held to what the behavior declares of what it answers. Before
+        // anything is applied, and so before the row is let go for having nothing to apply it: the
+        // values are here either way, and a recorded row stating an answer the model rules out is a
+        // wrong record however long it waits for a body.
+        //
+        // A row writing a bare case name is not held: it asserts the arm and nothing under it, so
+        // there is no answer to hand over. What such a row states is held where the behavior
+        // answers, like anything else the compiler is not given a value for.
+        if (expected != null && !keepsWhatIsDeclared(row, target, args, expected.live(), sig, out,
+                state)) {
+            return;
+        }
         // Stated as a switch and not as a test for one of the two: what a run can have for a behavior
         // may come to say more than it does here, and a reader written as a test would go on taking one
         // of its ways with an answer it was never shown.
@@ -1167,6 +1192,29 @@ public final class ExampleVerifier {
         return result;
     }
 
+    /**
+     * Whether the row's values keep what the behavior declares of what it answers; false with the
+     * refusal reported, and the row recorded as having stopped here.
+     *
+     * <p>The answer is projected first. A value that crossed out of another module arrives wearing
+     * the case this module bridges it in, and the check reads the carrier — which is the order the
+     * emitted code puts the two in as well: project, check, and only then narrow to what runs.
+     */
+    private boolean keepsWhatIsDeclared(Hir.ExampleRow row, ExampleTarget target, Object[] args,
+                                        Object answer, Sig sig, List<Diagnostic> out,
+                                        RowState state) {
+        String why = ensures.notHeld(target.name(), args, projected(answer, sig.outputType()));
+        if (why == null) {
+            return true;
+        }
+        out.add(Diagnostic.at(row.pos())
+                .say(new ExampleMessage.ARowDoesNotKeepWhatTheBehaviorStates(target.name(), why))
+                .hint(new ExampleMessage.TheDeclarationIsWhatSaysWhatItAnswers(target.name()))
+                .build());
+        state.failed(FailurePhase.ENSURES);
+        return false;
+    }
+
     // --- fakes for what a behavior depends on ---------------------------------------------------
 
     /**
@@ -1279,7 +1327,8 @@ public final class ExampleVerifier {
         // is wrong with the table is said where the fake is written, and said once: this row and every
         // other row reaching the same fake would each repeat the one thing wrong with the one table.
         ExampleStatements.BuiltTable built =
-                ExampleStatements.standins(fixtures, fk, paramTypes, depSig.out(), new ArrayList<>());
+                ExampleStatements.standins(fixtures, fk, paramTypes, depSig.out(), ensures,
+                        new ArrayList<>());
         if (built == null) {
             return null;
         }

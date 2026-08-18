@@ -34,6 +34,15 @@ it crosses into generated code. Example and fake values invoke that same generat
 violation is a `ConstraintViolation` carrying an `EnsuresFailure`, not an output case and not an
 `InvariantFailure` relabelled with a behavior name.
 
+An `example` row and a `fake` row write both sides of the relation down, so each is run through
+that check while the module is compiled and refused where it does not hold (E1928, E1929). This is
+the policy ADR-0093 said the language did not have. That decision is about two descriptions of one
+behavior — a stand-in and a recorded row — where nothing names either as the right one, and it
+stands: E1919 remains a warning naming both. A written value against a declaration is a different
+pair, and the declaration decides it. A row whose expectation is a bare case name, a `_` row of
+a fake, and a `with` each write only one side of the relation, and are held only where the behavior
+answers.
+
 Callers seed a clause only after the output arm is known and only where parameter-to-argument
 substitution leaves terms the existing analysis can name. Classification uses the invariant
 capability procedure with the parameter and answer locations supplied to it. Structural equality

@@ -4,6 +4,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -72,10 +73,14 @@ public final class ExampleStatements {
      * it is held to the same counted budget a row is: what is read is decided by what the statements
      * say, not by how fast the host reading them is. */
     private final EvaluationPolicy policy;
+    /** What holds a fake's row to what the dependency declares of what it answers. */
+    private final EnsuresChecks ensures;
 
     private ExampleStatements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
-                              Deadline deadline, EvaluationPolicy policy) {
+                              Deadline deadline, EvaluationPolicy policy,
+                              Map<String, BehaviorContract> contracts) {
+        this.ensures = new EnsuresChecks(module.name(), loader, contracts);
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -119,7 +124,8 @@ public final class ExampleStatements {
     public static Readings disagreements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
-                                         Deadline deadline, EvaluationPolicy policy) {
+                                         Deadline deadline, EvaluationPolicy policy,
+                                         Map<String, BehaviorContract> contracts) {
         if (module.examples().isEmpty()) {
             return Readings.NONE;
         }
@@ -133,7 +139,7 @@ public final class ExampleStatements {
             return Readings.NONE;
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy);
+                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
         try {
             return v.collectDisagreements(contested);
         } catch (LinkageError e) {
@@ -178,12 +184,13 @@ public final class ExampleStatements {
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               SourceId sourceId,
-                                              Deadline deadline, EvaluationPolicy policy) {
+                                              Deadline deadline, EvaluationPolicy policy,
+                                              Map<String, BehaviorContract> contracts) {
         if (module.fakes().isEmpty()) {
             return List.of();
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy);
+                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
         for (int i = 0; i < module.fakes().size(); i++) {
@@ -203,7 +210,7 @@ public final class ExampleStatements {
             // built the table of a fake nothing reads, so this is the first thing that would run it.
             Read<List<Diagnostic>> read = v.within(reader -> {
                 List<Diagnostic> wrong = new ArrayList<>();
-                BuiltTable built = standins(reader, fk, sig.ins(), sig.out(), wrong);
+                BuiltTable built = standins(reader, fk, sig.ins(), sig.out(), v.ensures, wrong);
                 if (built != null) {
                     for (Shadowed dead : built.shadowed()) {
                         wrong.add(cannotAnswer(fk, dead));
@@ -488,7 +495,7 @@ public final class ExampleStatements {
         }
         // The whole table, built the one way the proxy builds it.
         Read<BuiltTable> read = within(
-                reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
+                reader -> standins(reader, fk, sig.ins(), sig.out(), ensures, new ArrayList<>()),
                 new Deadline.Work.Table(fk.target(), fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
@@ -905,9 +912,15 @@ public final class ExampleStatements {
      * builds, and building the output first would run whatever helpers it applies before saying so —
      * so a table with an arity slip and a slow or non-terminating output reported the second problem
      * instead of the first, or ran out of time before reporting either.
+     *
+     * <p>A row that builds is then held to what the dependency declares of what it answers, which is
+     * a row stating an input and the answer it stands in with — the two sides of the relation, in
+     * hand at once. A {@code _} row states no input, so there is nothing here to relate its answer
+     * to; what it answers is held where it answers, at the crossing into generated code.
      */
     static BuiltTable standins(FixtureReader fixtures, Hir.Fake fk, List<BoundaryInput> ins,
-                                     BoundaryOutput outType, List<Diagnostic> out) {
+                                     BoundaryOutput outType, EnsuresChecks ensures,
+                                     List<Diagnostic> out) {
         for (Hir.FakeRow r : fk.rows()) {
             if (!r.isDefault() && r.inputs().size() != ins.size()) {
                 out.add(unbuildableFake(r.pos(), fk.target(), "a row has " + r.inputs().size()
@@ -967,7 +980,17 @@ public final class ExampleStatements {
                 reachable.add(written);
                 // A dependency that returns a sum has no single decoder; each row names one case, so
                 // decode the row's output against that case's type (as an expected value is).
-                explicit.add(new Standin(arguments, r, fixtures.buildFixture(r.output(), outType)));
+                FixtureReader.BuiltFixture answer = fixtures.buildFixture(r.output(), outType);
+                String why = ensures.notHeld(fk.target(), arguments, answer.value());
+                if (why != null) {
+                    out.add(Diagnostic.at(r.pos())
+                            .say(new ExampleMessage.AFakeRowDoesNotKeepWhatTheDependencyStates(
+                                    fk.target(), why))
+                            .hint(new ExampleMessage.TheDeclarationIsWhatSaysWhatItAnswers(
+                                    fk.target()))
+                            .build());
+                }
+                explicit.add(new Standin(arguments, r, answer));
             }
         } catch (FixtureException fe) {
             out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
