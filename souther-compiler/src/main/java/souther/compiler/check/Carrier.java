@@ -305,6 +305,14 @@ public sealed interface Carrier {
      * the reader that wants one, so it is answered here. It was being answered separately by each
      * reader instead, and an invariant and a {@code guard} at one position admitted different rules
      * with only one of them saying so.
+     *
+     * <p><b>No names to take off.</b> The {@link #literalOf(Core, Symbols)} beside this one peels a
+     * newtype's construction, and this one does not, which is a difference in what the two are handed
+     * rather than one of them forgetting: a rule may not construct a data, so a bound is never one
+     * (E1105 for an invariant, E1017 for an {@code ensures}). Peeling here would be a rule about
+     * expressions this compiler refuses to have, and nothing would keep it right. Those refusals are
+     * therefore load-bearing for a reader that does not name them, and
+     * {@code AConstructionIsWrittenInABodyAndNotInARuleTest} is where they are held.
      */
     default Place literalOf(Hir.Expr e) {
         return switch (this) {
