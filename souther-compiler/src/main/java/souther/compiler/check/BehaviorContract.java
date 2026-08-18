@@ -73,6 +73,33 @@ public record BehaviorContract(ValueName.Behavior behavior, List<ContractParam> 
         public Type valueType(Type output) {
             return guard instanceof Guard.Case c ? c.selector().bound() : output;
         }
+
+        /**
+         * Whether the statement reads the answer.
+         *
+         * <p>What a rule can be decided from. Where the answer is known only as the case it is —
+         * an {@code example} row writing a bare case name has written that and no value — a rule
+         * reading only the inputs is decided, and one reading {@code value} is not: there is
+         * nothing to read it as, and deciding it against a value nobody wrote would be answering
+         * about something the row did not say.
+         *
+         * <p>A question about the rule and not a search. {@code value} is a binding and the rule
+         * carries which one, so what is walked is this statement for that binding.
+         */
+        public boolean readsAnswer() {
+            return reads(statement, value);
+        }
+
+        private static boolean reads(Hir.Expr expr, BindingId binding) {
+            if (expr instanceof Hir.Var.Denoting var
+                    && var.denotes() instanceof ValueName.Local local
+                    && local.id().equals(binding)) {
+                return true;
+            }
+            boolean[] found = {false};
+            Hir.forEachChild(expr, child -> found[0] |= reads(child, binding));
+            return found[0];
+        }
     }
 
     /**

@@ -61,6 +61,19 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
                 | "the answer is the one asked for" : (Id(1)) -> Todo { id = Id(1), title = "write it" }
             """;
 
+    /** An answer whose case carries fields, and a clause an arm decides on its own. */
+    private static final String CARRIES_FIELDS = """
+            module example.todo
+
+            data Id = Int
+            data Todo = { id: Id, title: String }
+            data NotFound = { asked: Id }
+
+            behavior findTodo : (id: Id) -> Todo | NotFound
+                ensures positive = NotFound -> id.value > 0
+
+            """;
+
     private static final String BREAKS_IT = """
 
             example findTodo
@@ -160,14 +173,65 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     }
 
     /**
-     * A bare case name that carries fields is not held, and this records where that limit is rather
-     * than claiming it is right. The arm does name the answer, so a rule reading only the inputs is
-     * decidable here — but the check is handed the answer as a value, and this row wrote none. What
-     * would close it is a check that can be asked about an arm rather than about a value (#821).
+     * A bare case name that carries fields writes no value, and it does name the answer. What the
+     * row gives is the case the answer is, and every rule that case decides on its own is run over
+     * it — here a rule reading only the input, which the row's input does not keep.
      */
     @Test
-    void aRowStatingOnlyACaseThatCarriesFieldsIsNotHeldYet() {
-        assertDoesNotThrow(() -> Compiler.compile("""
+    void aRowStatingOnlyACaseThatCarriesFieldsIsHeldToWhatItsArmDecides() {
+        CompileException refused = err(CARRIES_FIELDS + """
+                example findTodo
+                    | "nothing is found for zero" : (Id(0)) -> NotFound
+                """);
+
+        assertTrue(codesOf(refused).contains("E1928"),
+                "the arm names the answer, and the input is written: " + codesOf(refused));
+        String said = rendered(only("E1928", refused));
+        assertTrue(said.contains("positive"), "and the clause that was not kept: " + said);
+    }
+
+    /** The same row with an input the clause keeps. */
+    @Test
+    void aRowStatingOnlyACaseThatCarriesFieldsAndKeepsTheClauseIsKept() {
+        assertDoesNotThrow(() -> Compiler.compile(CARRIES_FIELDS + """
+                example findTodo
+                    | "nothing is found for one" : (Id(1)) -> NotFound
+                """));
+    }
+
+    /** The control: the same row, with nothing declared for it to fail. */
+    @Test
+    void theSameCaseOnlyRowIsKeptWhereNothingIsDeclared() {
+        assertDoesNotThrow(() -> Compiler.compile(
+                CARRIES_FIELDS.replace("    ensures positive = NotFound -> id.value > 0\n", "") + """
+                example findTodo
+                    | "nothing is found for zero" : (Id(0)) -> NotFound
+                """));
+    }
+
+    /** Where such a row stops is where any row held to the declaration stops. */
+    @Test
+    void whereACaseOnlyRowStopsIsSaidOfTheRow() {
+        List<RowOutcome> rows = rows(CARRIES_FIELDS + """
+                example findTodo
+                    | "nothing is found for zero" : (Id(0)) -> NotFound
+                """);
+
+        assertEquals(1, rows.size());
+        assertEquals(Disposition.FAILED, rows.get(0).disposition());
+        assertEquals(FailurePhase.ENSURES, rows.get(0).failurePhase());
+        assertEquals(Stage.FIXTURES_VALIDATED, rows.get(0).stage());
+    }
+
+    /**
+     * A rule that reads the answer is not decided from the case alone, which is the honest answer
+     * for a row that wrote no value. Read against the row below it, which writes one and is refused
+     * by the same clause — so what is silent here is the missing value and not a clause nothing
+     * runs.
+     */
+    @Test
+    void aRuleReadingTheAnswerIsNotDecidedFromTheCaseAlone() {
+        String model = """
                 module example.todo
 
                 data Id = Int
@@ -175,10 +239,62 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
                 data NotFound = { asked: Id }
 
                 behavior findTodo : (id: Id) -> Todo | NotFound
-                    ensures positive = NotFound -> id.value > 0
+                    ensures asked = NotFound -> value.asked.value == id.value
+
+                example findTodo
+                """;
+
+        assertDoesNotThrow(() -> Compiler.compile(model
+                + "    | \"the case alone\" : (Id(1)) -> NotFound\n"));
+
+        CompileException refused = err(model
+                + "    | \"a value that does not keep it\" : (Id(1)) -> NotFound { asked = Id(2) }\n");
+        assertTrue(codesOf(refused).contains("E1928"), codesOf(refused).toString());
+    }
+
+    /**
+     * An arm may name a sum, and a row names one of its leaves. Which rules a leaf is held to is
+     * worked out where the check is emitted, so the arm `Errors` decides for the `NotFound` a row
+     * writes.
+     */
+    @Test
+    void anArmNamingASumDecidesForEachLeafItHas() {
+        CompileException refused = err("""
+                module example.todo
+
+                data Id = Int
+                data Todo = { id: Id, title: String }
+                data NotFound = { asked: Id }
+                data Denied = { asked: Id }
+                data Errors = NotFound | Denied
+
+                behavior findTodo : (id: Id) -> Todo | Errors
+                    ensures positive = Errors -> id.value > 0
 
                 example findTodo
                     | "nothing is found for zero" : (Id(0)) -> NotFound
+                """);
+
+        assertTrue(codesOf(refused).contains("E1928"),
+                "`NotFound` is a leaf of the arm `Errors`: " + codesOf(refused));
+    }
+
+    /** And a leaf the arm does not name is held to nothing the arm states. */
+    @Test
+    void aRuleIsNotAppliedToACaseItsArmDoesNotName() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module example.todo
+
+                data Id = Int
+                data Todo = { id: Id, title: String }
+                data NotFound = { asked: Id }
+                data Denied = { asked: Id }
+
+                behavior findTodo : (id: Id) -> Todo | NotFound | Denied
+                    ensures positive = NotFound -> id.value > 0
+
+                example findTodo
+                    | "denied for zero" : (Id(0)) -> Denied
                 """));
     }
 
@@ -280,6 +396,78 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
                 fake lookup
                     | (Id(1)) -> Found { id = Id(1) }
                 """));
+    }
+
+    /**
+     * A fake stands in with a value, and a bare case name carrying fields is not one. Such a name
+     * denotes a value only where the type has one — a unit case — so in a fake's answer it is
+     * <em>E1023</em> before anything holds it, and the case-alone reading an {@code example} row's
+     * expectation gets is not one this position has.
+     *
+     * <p>Written down because it is what keeps the two apart. A row's expectation may name the case
+     * the answer is, because reporting a disagreement about the case is what a row is for; a fake
+     * answers a dependency, and a value is what the behavior it stands in for is given.
+     */
+    @Test
+    void aFakeAnsweringWithACaseThatCarriesFieldsNamesNoValue() {
+        List<String> codes = codesOf(Compilation.ofSource("""
+                module example.order
+
+                data Id = Int
+                data Found = { id: Id }
+                data Missing = { asked: Id }
+
+                behavior lookup : (id: Id) -> Found | Missing
+                    ensures positive = Missing -> id.value > 0
+
+                data Placed = { by: Id }
+
+                behavior place : (id: Id) -> Placed
+                    depends on lookup
+                    constructs Placed
+
+                let place (id, lookup) = match lookup(id) with
+                    | Found   -> Placed { by = id }
+                    | Missing -> Placed { by = id }
+
+                fake lookup
+                    | (Id(0)) -> Missing
+                """, "Main"));
+
+        assertTrue(codes.contains("E1023"),
+                "`Missing` carries fields, so it names no value here: " + codes);
+        assertFalse(codes.contains("E1929"),
+                "nothing was built for the declaration to be asked about: " + codes);
+    }
+
+    /** The same table with the value written, which the declaration then rules out. */
+    @Test
+    void aFakeAnsweringWithSuchACaseWrittenOutIsHeld() {
+        List<String> codes = codesOf(Compilation.ofSource("""
+                module example.order
+
+                data Id = Int
+                data Found = { id: Id }
+                data Missing = { asked: Id }
+
+                behavior lookup : (id: Id) -> Found | Missing
+                    ensures positive = Missing -> id.value > 0
+
+                data Placed = { by: Id }
+
+                behavior place : (id: Id) -> Placed
+                    depends on lookup
+                    constructs Placed
+
+                let place (id, lookup) = match lookup(id) with
+                    | Found   -> Placed { by = id }
+                    | Missing -> Placed { by = id }
+
+                fake lookup
+                    | (Id(0)) -> Missing { asked = Id(0) }
+                """, "Main"));
+
+        assertTrue(codes.contains("E1929"), codes.toString());
     }
 
     /** A `_` row states no input, so there is nothing to hold its output against here. */

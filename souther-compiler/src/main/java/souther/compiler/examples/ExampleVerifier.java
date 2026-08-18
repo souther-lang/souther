@@ -1023,18 +1023,19 @@ public final class ExampleVerifier {
         // expectation, and comparing a result against a value nothing built reported a mismatch
         // against an empty expected value — a wrong answer for a row that was right.
         FixtureReader.ExpectedValue expected;
-        // What the row states as a value, which is not always what it states. A bare case name
+        // What the row states of the answer, which is not always the answer. A bare case name
         // asserts the arm; where that arm is a unit case the arm and the value are the same thing —
         // there is one value of that type, so a row naming it has written the whole answer and not
-        // a name standing for values it did not write.
-        Object stated;
+        // a name standing for values it did not write. Where the case carries fields the row has
+        // stated the case and nothing under it, which is weaker evidence and still evidence.
+        Evidence evidence;
         try {
             TypeSymbol only = fixtures.caseOnly(row.expected());
             expected = only != null ? null : fixtures.assertedExpected(row.expected(), sig.out());
-            stated = only == null ? expected.live()
+            evidence = only == null ? new Evidence.Answer(expected.live())
                     : symbols.declarations().declaration(only.key()) instanceof Hir.UnitData
-                            ? fixtures.buildFixture(row.expected(), sig.out()).value()
-                            : null;
+                            ? new Evidence.Answer(fixtures.buildFixture(row.expected(), sig.out()).value())
+                            : new Evidence.Case(only);
         } catch (FixtureException fe) {
             out.add(Diagnostic.at(row.pos())
                     .say(new ExampleMessage.TheExpectedValueCouldNotBeBuilt(target.name(),
@@ -1050,10 +1051,10 @@ public final class ExampleVerifier {
         // values are here either way, and a recorded row stating an answer the model rules out is a
         // wrong record however long it waits for a body.
         //
-        // A row writing a bare case name that carries fields is not held: it asserts the arm and
-        // nothing under it, and a rule may read what it did not write. What such a row states is
-        // held where the behavior answers.
-        if (stated != null && !keepsWhatIsDeclared(row, target, args, stated, sig, out, state)) {
+        // What the row has is handed over as it stands. Which rules a declaration decides from an
+        // answer and which it decides from a case alone is the declaration's own, worked out where
+        // its check is emitted; nothing here reads a clause to choose.
+        if (!keepsWhatIsDeclared(row, target, args, evidence, sig, out, state)) {
             return;
         }
         // Stated as a switch and not as a test for one of the two: what a run can have for a behavior
@@ -1202,18 +1203,39 @@ public final class ExampleVerifier {
     }
 
     /**
-     * Whether the row's values keep what the behavior declares of what it answers; false with the
-     * refusal reported, and the row recorded as having stopped here.
+     * What a row states of the answer, which is one of two things.
      *
-     * <p>The answer is projected first. A value that crossed out of another module arrives wearing
+     * <p>The row wrote a value, or it wrote the case the answer is and nothing under it. Which of
+     * the two it has is all this side knows: what a declaration can be decided from either is the
+     * declaration's, and is answered by the check it is emitted as.
+     */
+    private sealed interface Evidence {
+
+        /** The answer itself, as the row's own code produced it. */
+        record Answer(Object value) implements Evidence {}
+
+        /** The case the answer is, as this module declares it. */
+        record Case(TypeSymbol name) implements Evidence {}
+    }
+
+    /**
+     * Whether what the row states keeps what the behavior declares of what it answers; false with
+     * the refusal reported, and the row recorded as having stopped here.
+     *
+     * <p>An answer is projected first. A value that crossed out of another module arrives wearing
      * the case this module bridges it in, and the check reads the carrier — which is the order the
-     * emitted code puts the two in as well: project, check, and only then narrow to what runs.
+     * emitted code puts the two in as well: project, check, and only then narrow to what runs. A
+     * case needs none of that: it is the name this module declares it under, and it crossed nothing.
      */
     private boolean keepsWhatIsDeclared(Hir.ExampleRow row, ExampleTarget target, Object[] args,
-                                        Object answer, Sig sig, List<Diagnostic> out,
+                                        Evidence evidence, Sig sig, List<Diagnostic> out,
                                         RowState state) {
-        String why = ensures.notHeld(new ValueName.Behavior(module.name(), target.name()), args,
-                projected(answer, sig.outputType()));
+        ValueName.Behavior behavior = new ValueName.Behavior(module.name(), target.name());
+        String why = switch (evidence) {
+            case Evidence.Answer(Object value) ->
+                    ensures.notHeld(behavior, args, projected(value, sig.outputType()));
+            case Evidence.Case(TypeSymbol name) -> ensures.notHeldForCase(behavior, args, name);
+        };
         if (why == null) {
             return true;
         }

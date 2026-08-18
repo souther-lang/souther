@@ -1,7 +1,10 @@
 # ADR-0104: A behavior states a relation between what it is given and what it answers
 
 Status: Accepted. Completes the postcondition side counted by ADR-0003 without changing its
-decision about preconditions or violation destinations.
+decision about preconditions or violation destinations. Amended (2026-08-18) — what is fixed is
+that one generated component owns what a clause means, not that it has one Java method. It exposes
+an entry point per kind of evidence a caller can have, and an answer known only as the case it is
+has one of its own.
 
 ## Context
 
@@ -28,9 +31,16 @@ unspoken for and there is no wildcard. Clauses may be named under the invariant 
 A `>->` composition carries no clause because it writes no parameter list and stage clauses are not
 inferred transitively.
 
-One generated `<Module>.<Behavior>$Ensures.check(parameters..., value)` implements the clauses.
-A Souther implementation calls it at the exit of `$Impl.apply`; an injected answer calls it where
-it crosses into generated code. Example and fake values invoke that same generated method. A
+One generated `<Module>.<Behavior>$Ensures` implements the clauses, and what they mean is worked
+out there and nowhere else. It exposes an entry point per kind of evidence a caller can have, and a
+caller chooses by what it holds rather than by knowing which rules follow from it.
+`check(parameters..., value)` is asked about an answer: a Souther implementation calls it at the
+exit of `$Impl.apply`, an injected answer calls it where it crosses into generated code, and
+example and fake values invoke that same method. `checkCase(parameters..., case)` is asked about
+the case an answer is, which is all an `example` row writing a bare case name states. It runs the
+rules that case decides on its own — those guarded by an arm the case satisfies whose statement
+does not read `value` — and leaves the rest undecided. Which rules those are, and which cases an
+arm answers for, are settled where the check is emitted. Every argument of both is a reference. A
 violation is a `ConstraintViolation` carrying an `EnsuresFailure`, not an output case and not an
 `InvariantFailure` relabelled with a behavior name.
 
@@ -39,11 +49,11 @@ that check while the module is compiled and refused where it does not hold (E192
 the policy ADR-0093 said the language did not have. That decision is about two descriptions of one
 behavior — a stand-in and a recorded row — where nothing names either as the right one, and it
 stands: E1919 remains a warning naming both. A written value against a declaration is a different
-pair, and the declaration decides it. An arm is part of what a row wrote, so a bare case name naming a unit case
-is a whole answer and is held; a `_` row of a fake and a `with` write only one side of the relation
-and are held only where the behavior answers. A bare case name carrying fields is not held yet: the
-arm names the answer, but the check is asked about an answer rather than about an arm, so a rule
-reading only the inputs is decidable from such a row and is not decided. A table with a row that is
+pair, and the declaration decides it. An arm is part of what a row wrote: a bare case name naming a
+unit case is a whole answer and is held as one, and a bare case name carrying fields states the
+case and no value and is held to what that case decides on its own. A `_` row of a fake and a
+`with` write only one side of the relation and are held only where the behavior answers. A table
+with a row that is
 refused is not one to stand in with, as a table that will not build is not, and is not compared with
 the rows recorded for the behavior either: ADR-0093's comparison names neither side as right, and
 this has named one, so the two cannot be said about one pair.
