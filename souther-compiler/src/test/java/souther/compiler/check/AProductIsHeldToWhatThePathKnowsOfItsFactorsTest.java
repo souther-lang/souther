@@ -78,7 +78,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
         BindingId b = binding(1);
-        Denotations at = Denotations.none().location(a, AsPlaces.of(a)).location(b, AsPlaces.of(b));
+        Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
         LinearForm<FactSubject> product = terms.affineOf(
                 arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
@@ -110,7 +110,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
         BindingId b = binding(1);
-        Denotations at = Denotations.none().location(a, AsPlaces.of(a)).location(b, AsPlaces.of(b));
+        Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
         LinearForm<FactSubject> product = terms.affineOf(
                 arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);
@@ -133,7 +133,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
     void aQuotientByAWrittenConstantFollowsTheBoundOnItsNumerator() {
         Terms terms = new Terms(Symbols.none());
         BindingId x = binding(0);
-        Denotations at = Denotations.none().location(x, AsPlaces.of(x));
+        Denotations at = Denotations.none().location(x, AsPlaces.of(x), AsPlaces.term(x));
         Core scaled = arithmetic(Hir.BinOp.MUL, read("x", x), new Core.Int(30, Type.INT, POS));
         Core quotient = arithmetic(Hir.BinOp.DIV, scaled, new Core.Int(100, Type.INT, POS));
 
@@ -157,7 +157,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
         BindingId b = binding(1);
-        Denotations at = Denotations.none().location(a, AsPlaces.of(a)).location(b, AsPlaces.of(b));
+        Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
         Core product = arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b));
         Core quotient = arithmetic(Hir.BinOp.DIV, product, new Core.Int(100, Type.INT, POS));
 
@@ -189,7 +189,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
         BindingId b = binding(1);
-        Denotations at = Denotations.none().location(a, AsPlaces.of(a)).location(b, AsPlaces.of(b));
+        Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
         FactSubject first = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
         FactSubject second = terms.affineOf(arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at).coefs().keySet().iterator().next();
@@ -204,7 +204,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
         Terms terms = new Terms(Symbols.none());
         BindingId a = binding(0);
         BindingId b = binding(1);
-        Denotations at = Denotations.none().location(a, AsPlaces.of(a)).location(b, AsPlaces.of(b));
+        Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
 
         LinearForm<FactSubject> product = terms.affineOf(
                 arithmetic(Hir.BinOp.MUL, read("a", a), read("b", b)), at);

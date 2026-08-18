@@ -40,7 +40,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
     void twoWritingsOfAPlaceAreOneSubject() {
         Terms terms = new Terms(Symbols.none());
         BindingId n = binding(0);
-        Denotations at = Denotations.none().location(n, AsPlaces.of(n));
+        Denotations at = Denotations.none().location(n, AsPlaces.of(n), AsPlaces.term(n));
 
         FactSubject first = terms.subjectOf(new Core.Read("n", n, Type.INT, POS), at);
         FactSubject second = terms.subjectOf(new Core.Read("n", n, Type.INT, POS), at);
@@ -255,7 +255,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
     void aSizeAndTheSizeOfWhatItWasBuiltFromAreOneSubject() {
         Terms terms = new Terms(Symbols.none());
         BindingId ns = binding(2);
-        Denotations at = Denotations.none().location(ns, AsPlaces.of(ns));
+        Denotations at = Denotations.none().location(ns, AsPlaces.of(ns), AsPlaces.term(ns));
         Core list = new Core.Read("ns", ns, Type.list(Type.INT), POS);
 
         FactSubject ofTheSource = terms.subjectOf(length(list), at);
@@ -269,7 +269,7 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
     void aSizeOfABuildThatMayAnswerFewerIsItsOwnSubject() {
         Terms terms = new Terms(Symbols.none());
         BindingId ns = binding(3);
-        Denotations at = Denotations.none().location(ns, AsPlaces.of(ns));
+        Denotations at = Denotations.none().location(ns, AsPlaces.of(ns), AsPlaces.term(ns));
         Core list = new Core.Read("ns", ns, Type.list(Type.INT), POS);
 
         assertNotEquals(terms.subjectOf(length(list), at),

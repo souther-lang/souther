@@ -277,7 +277,7 @@ final class Terms {
      * answers that with the location, which is what the seeding wrote about.
      */
     private LinearForm<FactSubject> givenForm(Core e, Denotations at) {
-        if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Computed)
+        if (!(e instanceof Core.Read r) || !computesAsWhatItWasGiven(r.binding(), at)
                 || affineScalarBase(e.type()) == null) {
             return null;
         }
@@ -689,7 +689,13 @@ final class Terms {
      * the moment a binding names a value that is not a place.
      */
     FactSubject placeSubject(BindingId binding) {
-        return FactSubject.of(interned.at(Location.of(binding)));
+        return FactSubject.of(placeTerm(binding));
+    }
+
+    /** What the term grammar names the place {@code binding} is by: the place it is. Said here for
+     * the same reason every other term is. */
+    Term placeTerm(BindingId binding) {
+        return interned.at(Location.of(binding));
     }
 
     /**
@@ -780,21 +786,21 @@ final class Terms {
      * such an invariant. Widening it is a matter of naming more values here.
      */
     FactSubject reportableSite(Core e, Denotations at, Known k) {
-        Denotes d = denotationOf(e, at);
         // A value written out is not a site at all. There is nothing to state of `"xyz"` that the
         // text does not already say, so there is no guard an author could add — and this is a rule
-        // about what is worth reporting, not about what is known. Kept out of the judgment below
-        // rather than answered as "not readable": a written value's key is one a guard naming a
-        // literal puts in `spoken` (`x == "xyz"` speaks of both sides), so folded into the judgment
-        // it would come back readable through the second half of it.
-        if (d instanceof Denotes.Written) {
+        // about what is worth reporting, not about what is known. Asked of the text rather than of
+        // which arm a denotation is, since what was written is a fact about the value however it is
+        // reached. Kept out of the judgment below rather than answered as "not readable": a written
+        // value's key is one a guard naming a literal puts in `spoken` (`x == "xyz"` speaks of both
+        // sides), so folded into the judgment it would come back readable through the second half.
+        if (writtenValue(e, at) != null) {
             return null;
         }
         FactSubject subject = subjectOf(e, at);
         if (subject == null) {
             return null;
         }
-        return intrinsicallyReadable(d, e, at) || k.speaksOf(subject) ? subject : null;
+        return intrinsicallyReadable(e, at) || k.speaksOf(subject) ? subject : null;
     }
 
     /**
@@ -809,12 +815,9 @@ final class Terms {
      * <p>Asked of the expression, so a name for it answers the same. That is what makes naming an
      * expression not change what is known of it.
      */
-    boolean intrinsicallyReadable(Denotes d, Core e, Denotations at) {
-        return switch (d) {
-            case Denotes.At _ -> true;
-            case Denotes.Computed _ -> affineOf(e, at) != null || namedByRule(e, at);
-            case Denotes.Written _, Denotes.Nothing _ -> false;
-        };
+    boolean intrinsicallyReadable(Core e, Denotations at) {
+        return isAPlace(e, at)
+                || (bodyKey(e, at) != null && (affineOf(e, at) != null || namedByRule(e, at)));
     }
 
     /**
@@ -1163,14 +1166,9 @@ final class Terms {
      */
     private Term keyOfNowhere(Core e, Denotations at) {
         return switch (e) {
-            case Core.Read r -> switch (at.of(r.binding())) {
-                case Denotes.Computed computed -> computed.term();
-                case Denotes.Written written -> written.term();
-                // A chain is asked of this only once it has been found not to be a place, so the
-                // binding at its head does not denote one and nothing here names it.
-                case Denotes.At ignored -> null;
-                case Denotes.Nothing ignored -> null;
-            };
+            // What the walk recorded the term grammar names it by, and null where it names it by
+            // nothing. A chain is asked of this only once it has been found not to be a place.
+            case Core.Read r -> at.termOf(r.binding());
             case Core.FieldAccess fa -> {
                 if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
                     yield keyOfNowhere(fa.target(), at);
@@ -1180,6 +1178,33 @@ final class Terms {
             }
             default -> null;
         };
+    }
+
+    /**
+     * Whether {@code binding}'s name may be read as the workings of the expression it was given: what
+     * that expression is arithmetic over, what rule names it, read of the name as well.
+     *
+     * <p>Asked here rather than left as which arm a denotation is. Two readers tested one arm of
+     * one classification for it, and an arm of a sum is a poor way to ask: the arm they tested said
+     * what a binding is not — not a place, not text, not nameless — so what those readers meant held
+     * by falling through the others, and removing an arm silently widened what they read. Named, the
+     * question is one thing to answer and one thing to get wrong.
+     *
+     * <p>Not the same as following what a name was given. {@link #writtenValue} does that too, and
+     * does it whatever the name denotes, because what was written is a fact about the value however
+     * it is reached. This is about carrying a computation across a name, which a name given text or
+     * given a place does not do: the text folds and the place is the atom, and neither is arithmetic
+     * to read through to.
+     *
+     * <p>Worked out from what is asked elsewhere: where the binding is, what names it, and what it
+     * was written as. Each of those is a question of its own with an answer of its own, and this one
+     * is the three of them together — where a classification holding all three at once made the
+     * answer to one of them depend on which other answers were left.
+     */
+    boolean computesAsWhatItWasGiven(BindingId binding, Denotations at) {
+        Core given = at.valueOf(binding);
+        return at.locationOf(binding) == null && at.termOf(binding) != null
+                && (given == null || writtenValue(given, at) == null);
     }
 
     /**
@@ -1203,38 +1228,71 @@ final class Terms {
      * term grammar names a chain by. A reader that only wants to know whether there is one asks
      * {@link #isAPlace}. */
     Location locationOf(Core e, Denotations at) {
-        return Location.of(e, symbols,
-                binding -> at.of(binding) instanceof Denotes.At located ? located.where() : null);
+        return Location.of(e, symbols, at::locationOf);
     }
 
     /**
-     * What a binding's initializer denotes: the location it is where it is one, else the term it
-     * computes, else nothing. A name is an alias and never a value of its own — this is the one place
-     * that decides it, so an expression answers the same whether it was written where it is used or
-     * given a name first.
+     * What {@code e} is written as, where it is a written value or a name given one — and
+     * {@code null} where it is computed from anything.
+     *
+     * <p>Found by following what a name was given, however many names deep, and asked of what the
+     * following ends at. A name is what it was given whatever kind of thing that is, so this is one
+     * rule and not one per kind of binding: a {@code match} arm opening a value written into the
+     * source opens that written value, for the same reason a {@code let} given it does.
+     *
+     * <p>{@code seen} ends a chain that has no end. Nothing the walk records is one — a binding is
+     * entered under what stood before it — but a reading that follows what it is handed says what it
+     * does with a chain it was handed, rather than leaving it to whoever built it.
      */
-    Denotes denotationOf(Core e, Denotations at) {
-        Core written = writtenValue(e, at);
-        if (written != null) {
-            return new Denotes.Written(bodyKey(written, at), written);
-        }
-        Location located = locationOf(e, at);
-        if (located != null) {
-            return new Denotes.At(located);
-        }
-        Naming named = naming(e, at, Map.of(), 0, Leaf.SYMBOLIC);
-        if (named instanceof Naming.Unnamed absent) {
-            return new Denotes.Nothing(absent);
-        }
-        Term term = named.term();
-        return new Denotes.Computed(term);
+    Core writtenValue(Core e, Denotations at) {
+        return writtenValue(e, at, new HashSet<>());
     }
 
-    /** What {@code e} is written as, where it is a written value or a name given one — and
-     * {@code null} where it is computed from anything. */
-    static Core writtenValue(Core e, Denotations at) {
+    /** Where a test counts the steps this takes following what a name was given, and null everywhere
+     * else. What a chain of names costs is not something an answer says. */
+    static long[] FOLLOWED;
+
+    /**
+     * What the end of the chain from {@code binding} was written as, and the value it was given when
+     * that was worked out.
+     *
+     * <p>Kept because the answer is about the binding and not about the ask. A reading of arithmetic
+     * follows a name, then follows what that name was given, and so on down, so a chain of names was
+     * walked once per link and cost the square of its length. What is remembered is the following and
+     * not the fact — a binding still stands for what it was given, and this says only that the
+     * following of it has been done.
+     *
+     * <p>Held against the environment it was worked out in, and thrown away when that is not the one
+     * being asked about. What a name was given is the walk's answer, and the walk answers differently
+     * as it goes: a name whose chain reaches a binding the walk had not entered yet reaches nothing,
+     * and the same name reaches text once it has. Remembered across the two, the earlier answer would
+     * stand where the later one is owed — and it did, over three constructions, until the environment
+     * became part of what is remembered.
+     */
+    private record Followed(Denotations at, Core given, Core written) {}
+
+    private final Map<BindingId, Followed> followed = new HashMap<>();
+
+    private Core writtenValue(Core e, Denotations at, Set<BindingId> seen) {
+        long[] counting = FOLLOWED;
+        if (counting != null) {
+            counting[0]++;
+        }
         if (e instanceof Core.Read r) {
-            return at.of(r.binding()) instanceof Denotes.Written w ? w.value() : null;
+            Core given = at.valueOf(r.binding());
+            if (given == null || given == e) {
+                return null;
+            }
+            Followed had = followed.get(r.binding());
+            if (had != null && had.at() == at && had.given() == given) {
+                return had.written();
+            }
+            if (!seen.add(r.binding())) {
+                return null;
+            }
+            Core written = writtenValue(given, at, seen);
+            followed.put(r.binding(), new Followed(at, given, written));
+            return written;
         }
         return isWritten(e) ? e : null;
     }
@@ -1300,7 +1358,7 @@ final class Terms {
             // It was a flag recorded when the binding was entered, which is a second record of what
             // the initializer already answers.
             Core given = at.valueOf(r.binding());
-            return at.of(r.binding()) instanceof Denotes.Computed && given != null && given != e
+            return computesAsWhatItWasGiven(r.binding(), at) && given != null && given != e
                     && (affineOf(given, at) != null || namedByRule(given, at));
         }
         Core read = asOperator(e);
