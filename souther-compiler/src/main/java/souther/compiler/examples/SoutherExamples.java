@@ -2,8 +2,10 @@ package souther.compiler.examples;
 
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
+import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ExampleRuns;
@@ -15,6 +17,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +29,12 @@ import java.util.Map;
  * and holding it to the {@code .sou} as it stands now is how a model that moved is found out. Rows
  * travelling with the classes would verify an edited model against its own old record and go quietly
  * green.
+ *
+ * <p>What is read is a source set and a dependency path, because that is what a model is. A module
+ * may write its rows beside itself and in an {@code examples for} file, and may import another
+ * user module whose classes a dependency published — so a face taking one file and no path would be
+ * narrower than the language, and a project using either would find its rows unreachable rather than
+ * failing. Nothing here decides which module the rows are of: {@link #bind} asks the implementation.
  *
  * <p>What holds the two builds together is {@code DeclarationAgreement}, and it is reached on the
  * way to every bound row: an answer states which declarations it reads values by, the two sets are
@@ -39,38 +48,58 @@ import java.util.Map;
 public final class SoutherExamples {
 
     private final Compilation compilation;
-    private final String module;
-    private final Prepared.ExampleExecution rows;
-    private final Map<String, Sig> sigs;
 
-    private SoutherExamples(Compilation compilation, String module) {
+    /** Each module this compile declares, with its signatures. Which of them a binding is of is the
+     *  binding's to say, so all of them are kept. */
+    private final Map<String, Map<String, Sig>> sigs = new LinkedHashMap<>();
+
+    private SoutherExamples(Compilation compilation) {
         this.compilation = compilation;
-        this.module = module;
-        this.rows = compilation.db().ask(new Shapes.Prepared(module)).value().forExamples();
-        this.sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-    }
-
-    /** The rows written in {@code source}. */
-    public static SoutherExamples of(Path source) {
-        String written;
-        try {
-            written = Files.readString(source);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+        for (String module : compilation.modules()) {
+            sigs.put(module, compilation.db().ask(new Bodies.Signatures(module)).value());
         }
-        return of(written, nameOf(source), source.toString());
     }
 
-    /** The rows written in {@code source}, which is the text of a module rather than a file. */
-    public static SoutherExamples ofSource(String source) {
-        return of(source, "Main", "the source given");
-    }
-
-    private static SoutherExamples of(String written, String fallbackName, String shown) {
-        Compilation compiled = Compilation.ofSource(written, fallbackName);
+    /**
+     * The rows written in {@code sources}, resolving imports of other user modules against
+     * {@code dependencies}.
+     *
+     * <p>The whole entrance. A module and its {@code examples for} files are as many sources as they
+     * are; what a dependency published is on the path, the way every other reader of a published
+     * module reads one.
+     */
+    public static SoutherExamples of(List<Path> sources, ModulePath dependencies) {
+        List<String> written = new ArrayList<>(sources.size());
+        for (Path source : sources) {
+            written.add(read(source));
+        }
+        Compilation compiled = Compilation.ofSources(written, dependencies);
         compiled.db().ask(new Output.All());
-        refuseIfItDoesNotCompile(compiled, shown);
-        return new SoutherExamples(compiled, compiled.modules().get(0));
+        refuseIfItDoesNotCompile(compiled);
+        return new SoutherExamples(compiled);
+    }
+
+    /** The same, of sources that import no other user module. */
+    public static SoutherExamples of(List<Path> sources) {
+        return of(sources, ModulePath.EMPTY);
+    }
+
+    /** The same, of a module written in one file. */
+    public static SoutherExamples of(Path source) {
+        return of(List.of(source));
+    }
+
+    /** The rows written in {@code sources} as text, for a caller holding them rather than files. */
+    public static SoutherExamples ofSources(List<String> sources, ModulePath dependencies) {
+        Compilation compiled = Compilation.ofSources(sources, dependencies);
+        compiled.db().ask(new Output.All());
+        refuseIfItDoesNotCompile(compiled);
+        return new SoutherExamples(compiled);
+    }
+
+    /** The same, of one module's text. */
+    public static SoutherExamples ofSource(String source) {
+        return ofSources(List.of(source), ModulePath.EMPTY);
     }
 
     /**
@@ -80,38 +109,71 @@ public final class SoutherExamples {
      * ABI gives that behavior's base, looked for in the instance's supertypes; which declarations it
      * reads values by is read from its own loader's class files. Naming either of them here would be
      * a second speller of a rule that has one, and a way to state it wrongly.
+     *
+     * <p>Which module the rows are of comes from the same answer. A source set may declare more than
+     * one, and taking the first would bind a model by the order its files were handed over.
      */
     public BoundExamples bind(Object implementation) {
         if (implementation == null) {
             throw new IllegalArgumentException("a binding is of an implementation");
         }
+        String module = null;
         List<String> bound = new ArrayList<>();
-        for (String behavior : sigs.keySet()) {
-            if (BoundImplementation.isFor(implementation, module, behavior)) {
-                bound.add(behavior);
+        for (Map.Entry<String, Map<String, Sig>> declared : sigs.entrySet()) {
+            List<String> here = new ArrayList<>();
+            for (String behavior : declared.getValue().keySet()) {
+                if (BoundImplementation.isFor(implementation, declared.getKey(), behavior)) {
+                    here.add(behavior);
+                }
             }
+            if (here.isEmpty()) {
+                continue;
+            }
+            if (module != null) {
+                throw new IllegalArgumentException(implementation.getClass().getName()
+                        + " implements behaviors of both `" + module + "` and `" + declared.getKey()
+                        + "`, and a binding is of one module's rows");
+            }
+            module = declared.getKey();
+            bound = here;
         }
-        if (bound.isEmpty()) {
+        if (module == null) {
             throw new IllegalArgumentException(implementation.getClass().getName()
-                    + " implements no behavior of `" + module + "`");
+                    + " implements no behavior of " + sigs.keySet());
         }
-        return new BoundExamples(this, ExampleRuns.evaluating(compilation.db(), module,
-                Answering.bound(implementation, sigs)), bound);
+        Prepared.ExampleExecution rows = compilation.db()
+                .ask(new Shapes.Prepared(module)).value().forExamples();
+        return new BoundExamples(rows, ExampleRuns.evaluating(compilation.db(), module,
+                Answering.bound(implementation, sigs.get(module))), bound);
     }
 
-    Prepared.ExampleExecution module() {
-        return rows;
+    /** The modules these sources declare. */
+    public List<String> modules() {
+        return List.copyOf(sigs.keySet());
     }
 
-    /** The module the rows are of. */
-    public String moduleName() {
-        return module;
+    /**
+     * What one row or one observation is given to finish within, from here on.
+     *
+     * <p>A caller has a reason to say where a compile does not: what a bound implementation waits
+     * for is a database, a socket or a filesystem, and how long that may take is theirs to know. The
+     * default is set so that no row a model states reaches it, which is a statement about evaluating
+     * a `let` body and not about an implementation that went to look something up.
+     *
+     * <p>Said about these sources and no others, so one caller's budget does not hold every compile
+     * in the JVM to it.
+     */
+    public SoutherExamples withBudget(java.time.Duration budget) {
+        compilation.withExampleBudget(budget);
+        return this;
     }
 
-    private static String nameOf(Path source) {
-        String file = source.getFileName().toString();
-        int dot = file.lastIndexOf('.');
-        return dot <= 0 ? file : file.substring(0, dot);
+    private static String read(Path source) {
+        try {
+            return Files.readString(source);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
@@ -120,18 +182,25 @@ public final class SoutherExamples {
      * <p>Refused here rather than left to show up as every row failing: what a row would be held to
      * was never emitted, and a caller told "the row did not hold" would be told the wrong thing
      * about a source that is wrong somewhere else.
+     *
+     * <p>{@link CompileException} and not a message of this file's own. A caller reaching this is
+     * looking at a source of theirs, and what they need is the position, the code and the sentence
+     * the compiler already writes — several of them, since a model is wrong where it is wrong.
+     * Rebuilding a one-line summary out of codes would take a reader who has all of that and hand
+     * them less than the compiler's own entrance does.
      */
-    private static void refuseIfItDoesNotCompile(Compilation compiled, String shown) {
-        List<String> said = new ArrayList<>();
+    private static void refuseIfItDoesNotCompile(Compilation compiled) {
+        List<Located> refusals = new ArrayList<>();
         for (List<Located> perSource : compiled.diagnostics().values()) {
             for (Located filed : perSource) {
                 if (filed.diagnostic().severity() == Severity.ERROR) {
-                    said.add(String.valueOf(filed.diagnostic().code()));
+                    refusals.add(filed);
                 }
             }
         }
-        if (!said.isEmpty()) {
-            throw new IllegalStateException(shown + " does not compile: " + said);
+        if (!refusals.isEmpty()) {
+            throw CompileException.ofAllReported(refusals,
+                    "the rows cannot be run: the model they are written in does not compile");
         }
     }
 }

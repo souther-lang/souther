@@ -1,7 +1,7 @@
 package souther.compiler.examples;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.Prepared;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
@@ -31,7 +31,7 @@ public final class StandinEntry {
 
     private final BoundExamples of;
     private final String behavior;
-    private final Prepared.FakeTable table;
+    private final SourcePos table;
     private final Hir.FakeRow written;
     private final List<ObservedValue> inputs;
     private final ObservedValue stated;
@@ -39,7 +39,7 @@ public final class StandinEntry {
     private final String shownStated;
     private final List<RecordedRow> alsoBy;
 
-    StandinEntry(BoundExamples of, String behavior, Prepared.FakeTable table, Hir.FakeRow written,
+    StandinEntry(BoundExamples of, String behavior, SourcePos table, Hir.FakeRow written,
                  List<ObservedValue> inputs, ObservedValue stated, List<String> shownInputs,
                  String shownStated, List<RecordedRow> alsoBy) {
         this.of = of;
@@ -58,10 +58,21 @@ public final class StandinEntry {
         return behavior;
     }
 
-    /** Which table this entry is of. Where it is written is the table's own to say, by the position
-     *  the node already holds. */
-    public Prepared.FakeTable table() {
+    /**
+     * Where the table this entry is of is written.
+     *
+     * <p>A place and not the table. What a caller has a question about is which table an entry came
+     * from and where to look, and a compile-stage representation handed out for that would be an
+     * entrance into the pipeline this face exists to stand in front of — {@code Prepared.FakeTable}
+     * reaches {@link Hir} from a reader that has no business there.
+     */
+    public SourcePos table() {
         return table;
+    }
+
+    /** Where this entry itself is written. */
+    public SourcePos at() {
+        return written.pos();
     }
 
     /** The inputs the entry states. */

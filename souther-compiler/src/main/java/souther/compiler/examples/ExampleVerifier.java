@@ -268,11 +268,9 @@ public final class ExampleVerifier {
             return List.of();
         }
         Hir.Fake first = null;
-        souther.compiler.check.Prepared.FakeTable table = null;
         for (souther.compiler.check.Prepared.FakeTable written : module.fakes()) {
             if (written.target().equals(behavior)) {
                 first = written.read();
-                table = written;
                 break;
             }
         }
@@ -301,7 +299,7 @@ public final class ExampleVerifier {
                     alsoBy.add(stated.handle());
                 }
             }
-            entries.add(new StandinEntry(of, behavior, table, entry.row(), inputs,
+            entries.add(new StandinEntry(of, behavior, first.pos(), entry.row(), inputs,
                     fixtures.observed(entry.answer().value()), shownInputs,
                     fixtures.shown(fixtures.structured(entry.answer().value()), sig.outputType()),
                     alsoBy));
@@ -373,6 +371,29 @@ public final class ExampleVerifier {
      * that already has one.
      */
     StandinObservation observe(String behavior, StandinEntry entry) {
+        // Under the deadline, as a row is. An implementation that does not come back is what a
+        // budget is for, and an observation that ran outside one would hang the caller's loop where
+        // a row's evaluation would have been given up on.
+        switch (deadline.given(new Deadline.Work.Table(behavior, entry.at()),
+                () -> observing(behavior, entry))) {
+            case Deadline.Outcome.Finished(StandinObservation observed) -> {
+                return observed;
+            }
+            case Deadline.Outcome.Overran(Runnable abandon) -> {
+                abandon.run();
+                return new StandinObservation.Unobserved(
+                        new StandinObservation.Reason.TheObservationRanOut(
+                                "the implementation did not answer within "
+                                        + deadline.budgetMs() + "ms"));
+            }
+            case Deadline.Outcome.Threw(Throwable cause) -> {
+                return new StandinObservation.Unobserved(
+                        new StandinObservation.Reason.TheObservationRanOut(String.valueOf(cause)));
+            }
+        }
+    }
+
+    private StandinObservation observing(String behavior, StandinEntry entry) {
         Sig sig = sigs.get(behavior);
         ExampleTarget target = targetOf(behavior);
         if (sig == null || target == null) {
@@ -380,10 +401,23 @@ public final class ExampleVerifier {
                     new StandinObservation.Reason.TheEntryWasNotRead(
                             "`" + behavior + "` has nothing to apply its inputs to"));
         }
-        if (!(target.answer() instanceof Answerer.Answer.Something applies)) {
-            return new StandinObservation.Unobserved(
-                    new StandinObservation.Reason.TheImplementationWasNotReached(
-                            "nothing this run was given applies `" + behavior + "`"));
+        // The same gate a row passes, asked the same way. An implementation that a row may not be
+        // handed to may not be handed an entry's values either: it reads them by the declarations
+        // some other build wrote, and what came back would be the two builds disagreeing rather than
+        // the stand-in and the implementation.
+        Answerer.Answer.Something applies;
+        switch (target.handing()) {
+            case Handing.NothingApplies _ -> {
+                return new StandinObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationWasNotReached(
+                                "nothing this run was given applies `" + behavior + "`"));
+            }
+            case Handing.NotEstablished(Agreement why) -> {
+                return new StandinObservation.Unobserved(
+                        new StandinObservation.Reason.TheImplementationIsOfAnotherBuild(
+                                String.valueOf(why)));
+            }
+            case Handing.MayApply(Answerer.Answer.Something something) -> applies = something;
         }
         FixtureReader fixtures = newFixtureReader();
         Object[] args;
@@ -614,7 +648,43 @@ public final class ExampleVerifier {
      *                 through a row it is the only one there is.
      */
     private record ExampleTarget(String name, List<BehaviorRequirement> requirements,
-                                 Answerer.Answer answer, Agreement agreement, boolean injected) {}
+                                 Answerer.Answer answer, Agreement agreement, boolean injected) {
+
+        /**
+         * Whether values may be handed to what answers this behavior, and if so to what.
+         *
+         * <p>One answer rather than two conditions each caller keeps. Whether anything applies the
+         * behavior and whether what applies it was built against this module are asked together
+         * because a caller that has values to hand over needs both answered before it hands them,
+         * and asked separately one of them goes unasked — {@code observe} asked neither and applied
+         * an implementation a row would have been kept away from.
+         *
+         * <p>A sealed type, so a caller that does not consider an arm is a compile error rather than
+         * a path that quietly hands the values over anyway.
+         */
+        Handing handing() {
+            if (!(answer instanceof Answerer.Answer.Something applies)) {
+                return new Handing.NothingApplies();
+            }
+            return agreement != null && !(agreement instanceof Agreement.Agree)
+                    ? new Handing.NotEstablished(agreement)
+                    : new Handing.MayApply(applies);
+        }
+    }
+
+    /** What may be handed a behavior's values, or why nothing may be. */
+    private sealed interface Handing {
+
+        /** It may be applied, and this is what applies it. */
+        record MayApply(Answerer.Answer.Something applies) implements Handing {}
+
+        /** Nothing this run was given applies the behavior. */
+        record NothingApplies() implements Handing {}
+
+        /** What would apply it could not be established as being of the module being evaluated, so
+         *  no value of this module's may be handed to it. */
+        record NotEstablished(Agreement why) implements Handing {}
+    }
 
     /**
      * The behavior a row is about, and what this run has to apply it with.
@@ -1303,8 +1373,8 @@ public final class ExampleVerifier {
         // may come to say more than it does here, and a reader written as a test would go on taking one
         // of its ways with an answer it was never shown.
         Answerer.Answer.Something applies;
-        switch (target.answer()) {
-            case Answerer.Answer.Nothing _ -> {
+        switch (target.handing()) {
+            case Handing.NothingApplies _ -> {
                 // Everything a row can be held to without something to run it has been: its arity, its
                 // inputs against their types and invariants, and its expectation against the output's
                 // cases. What is left needs something to apply the behavior, and this run has nothing.
@@ -1314,16 +1384,16 @@ public final class ExampleVerifier {
                 state.failurePhase = FailurePhase.NONE;
                 return;
             }
-            case Answerer.Answer.Something something -> applies = something;
-        }
-        if (target.agreement() != null && !(target.agreement() instanceof Agreement.Agree)) {
-            // Everything this row can be held to without being run has been, and it is not handed
-            // over: what would read its values could not be established as reading them by the
-            // declarations they were built from. Nothing was decided about the model, and what
-            // stopped it was the answer — which is what the row says of itself, rather than being
-            // worked out again by whoever reads it. The behavior's own diagnostic says why.
-            state.incomplete(FailurePhase.ANSWERER_ESTABLISHMENT);
-            return;
+            case Handing.NotEstablished _ -> {
+                // Everything this row can be held to without being run has been, and it is not handed
+                // over: what would read its values could not be established as reading them by the
+                // declarations they were built from. Nothing was decided about the model, and what
+                // stopped it was the answer — which is what the row says of itself, rather than being
+                // worked out again by whoever reads it. The behavior's own diagnostic says why.
+                state.incomplete(FailurePhase.ANSWERER_ESTABLISHMENT);
+                return;
+            }
+            case Handing.MayApply(Answerer.Answer.Something something) -> applies = something;
         }
         List<DependencyStandin> standins = resolveFakes(fixtures, target, row, out);
         if (standins == null) {

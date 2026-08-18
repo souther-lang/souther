@@ -140,9 +140,15 @@ final class BoundImplementation implements Answerer {
         for (int i = 0; i < args.length; i++) {
             args[i] = crossing.crossed(sig.ins().get(i), arguments.get(i).neutral().read());
         }
-        Method apply = applyOf(args.length);
+        Method apply = applyOf(behavior);
         try {
             return apply.invoke(implementation, args);
+        } catch (IllegalArgumentException e) {
+            // A crossed value the declared `apply` will not take. That is the crossing having built
+            // something the other build's own parameter type does not admit, which is a fact about
+            // the two builds and not about the applied code coming back with a failure.
+            throw new ImplementationNotReached("`" + behavior + "`'s `apply` would not take what the"
+                    + " row's values crossed as: " + e, new NoSuchMethodException("apply"));
         } catch (InvocationTargetException ite) {
             // What the supplied code came back with, carried out as it stands. Whose failure it is
             // and what it means for the row are read where the row is — which is the same reading a
@@ -154,26 +160,53 @@ final class BoundImplementation implements Answerer {
     }
 
     /**
-     * The {@code apply} the instance supplies, of the arity the behavior declares.
+     * The {@code apply} the behavior's base declares, resolved on the instance.
      *
-     * <p>A bridge is passed over. A single-input behavior's base is a {@code Behavior<In,Out>}, so a
-     * Java implementation of it carries both its own typed {@code apply} and the erased bridge that
-     * dispatches to it; invoking the bridge would work, and taking whichever came first would make
-     * which one runs depend on a reflection order nothing states.
+     * <p>The base is asked, not the instance. What an implementation calls its methods is its own,
+     * and a walk over the instance's own {@code apply}s would take whichever it found — an
+     * implementation that also carries {@code apply(String debug)} has two of the same arity, and
+     * which one ran would depend on a reflection order nothing states. The base declares exactly one
+     * {@code apply}: a single-input behavior's is {@code Behavior}'s and any other count's is the
+     * abstract one emitted beside it, and either way its parameter types are the crossing's own
+     * target.
+     *
+     * <p>Resolved on the instance's class so the override runs rather than the abstract declaration,
+     * which is what {@code getMethod} answers for the same name and parameter types.
      */
-    private Method applyOf(int arity) {
-        Method found = null;
-        for (Method m : implementation.getClass().getMethods()) {
-            if (m.getName().equals("apply") && m.getParameterCount() == arity && !m.isBridge()) {
-                found = m;
+    private Method applyOf(String behavior) {
+        Class<?> base;
+        try {
+            base = implementation.getClass().getClassLoader()
+                    .loadClass(baseOf(behavior));
+        } catch (ClassNotFoundException e) {
+            throw new ImplementationNotReached("the base of `" + behavior + "` is not in the classes"
+                    + " the implementation was built against", e);
+        }
+        Method declared = null;
+        for (Method m : base.getDeclaredMethods()) {
+            if (!m.getName().equals("apply") || m.isBridge() || m.isSynthetic()) {
+                continue;
             }
+            if (declared != null) {
+                throw new ImplementationNotReached("the base of `" + behavior + "` declares more"
+                        + " than one `apply`", new NoSuchMethodException("apply"));
+            }
+            declared = m;
         }
-        if (found == null) {
-            throw new ImplementationNotReached("the bound implementation declares no `apply` taking "
-                    + arity + " argument(s)", new NoSuchMethodException("apply"));
+        try {
+            // A single-input behavior's base declares no `apply` of its own — it implements
+            // `Behavior<In,Out>`, whose erased one it inherits — so where the base declared none the
+            // interface's is what a row enters through. Its parameter is `Object`, which is what a
+            // crossed value already is.
+            Method apply = declared == null
+                    ? implementation.getClass().getMethod("apply", Object.class)
+                    : implementation.getClass().getMethod("apply", declared.getParameterTypes());
+            apply.setAccessible(true);
+            return apply;
+        } catch (ReflectiveOperationException e) {
+            throw new ImplementationNotReached("the bound implementation supplies no `apply` the"
+                    + " base of `" + behavior + "` declares", e);
         }
-        found.setAccessible(true);
-        return found;
     }
 
     private String baseOf(String behavior) {

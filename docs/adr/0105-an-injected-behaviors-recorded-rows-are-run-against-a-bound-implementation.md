@@ -42,11 +42,26 @@ owns the loop. A bulk `evaluate()` would own it, and the hooks it would then gro
 around, transaction, retry, parallelism) are a test framework, which exists. The compile-time run
 keeps evaluating in bulk: there the environment is the fakes and the run owns them.
 
-**`RowKey` holds a `RowIdentity.Named`, is an address, and is not what `evaluate` takes.**
-`RowKey(String, String)` with a checking factory would leave the unnameable case representable; #718
-put the namespace on the behavior and this finishes that decision. It is resolved through
-`row(behavior, name)` so a name nothing answers to fails at resolution rather than as setup that
-silently never runs. `evaluate` takes the enumerated row, so an unnamed row — addressable by nothing
+**What is read is a source set and a dependency path.** A module may write its rows beside itself and
+in an `examples for` file, and may import another user module whose classes a dependency published.
+A face taking one file and no path would be narrower than the language it stands in front of, and a
+project using either would find its rows unreachable rather than failing. Which module the rows are
+of is not decided here either: `bind` asks the implementation, so a source set declaring more than
+one module is not bound by the order its files were handed over.
+
+A model that does not compile is refused with `CompileException`, which carries the positions, the
+codes and the sentences the compiler already writes. This is the first thing a caller sees when a
+test suite starts, and rebuilding a summary out of codes would hand a reader less than the
+compiler's own entrance does.
+
+**`RowKey` holds a `RowIdentity.Named`, is an address, and is not what `evaluate` takes.** Two
+things it must be and the type closes both: it holds a `RowIdentity.Named`, so no key exists for a
+row that has no name, and it is made only by `row(behavior, name)`, so no key exists for a row
+nothing answers to. Left as a record its canonical constructor would be public, a name nothing
+answers to would be written straight past the resolution, `is` would answer `false` for every row,
+and the setup guarded by it would silently never run — which is the failure the type exists to
+prevent. A key is refused by another enumeration's rows rather than answering `false` about them,
+for the same reason. `evaluate` takes the enumerated row, so an unnamed row — addressable by nothing
 — still runs.
 
 **`Applied`'s third arm is `Bound`.** Not `External`: where an implementation came from is a fact
@@ -72,6 +87,26 @@ compared.
 
 `observe` and not a second `evaluate`, because one adjudicates an obligation and the other relates two
 answers, and spelling them apart keeps a consumer from sliding a fake entry into the row default.
+
+**What stands between values and a bound implementation is one thing, asked as one.** Whether
+anything applies the behavior and whether what applies it was built against this module are answered
+together, as a sealed `Handing`, so a caller that has values to hand over cannot consider one and
+forget the other. Asked as two conditions each caller kept, `observe` asked neither: it applied an
+implementation `evaluate` was keeping rows away from, and the same binding meant two things
+depending on which call was made. An observation runs under the same deadline a row does, for the
+same reason — an implementation that does not come back would otherwise hang the caller's loop where
+a row's evaluation would have been given up on. The budget is the caller's to set (`withBudget`),
+because what a bound implementation waits for is a database or a socket and how long that may take
+is not something a compile knows.
+
+**The `apply` that runs is the one the behavior's base declares.** Read off the instance by name and
+arity, an unrelated `apply(String debug)` is as good a candidate, and which one ran would depend on
+the order reflection happens to answer in. The base is asked instead, which is the same principle as
+naming the behavior through the ABI.
+
+**What a `StandinEntry` says about its table is a place.** `Prepared.FakeTable` is a compile-stage
+representation reaching `Hir`, and handing it out is an entrance into the pipeline this face exists
+to stand in front of. What a caller has a question about is where to look.
 
 **What is not run.** The `_` row states no input. A `with dep = value` states none either. A row
 shadowed inside its table is refused by #716 (E1926). And a second `fake` table written for a target

@@ -29,14 +29,14 @@ import java.util.List;
  */
 public final class BoundExamples {
 
-    private final SoutherExamples of;
+    private final Prepared.ExampleExecution rows;
     private final ExampleVerifier verifier;
 
     /** The behaviors the bound instance implements, worked out once from the instance. */
     private final List<String> bound;
 
-    BoundExamples(SoutherExamples of, ExampleVerifier verifier, List<String> bound) {
-        this.of = of;
+    BoundExamples(Prepared.ExampleExecution rows, ExampleVerifier verifier, List<String> bound) {
+        this.rows = rows;
         this.verifier = verifier;
         this.bound = List.copyOf(bound);
     }
@@ -50,7 +50,7 @@ public final class BoundExamples {
      */
     public List<RecordedRow> rows() {
         List<RecordedRow> found = new ArrayList<>();
-        for (Prepared.Rows block : of.module().examples()) {
+        for (Prepared.Rows block : rows.examples()) {
             Hir.Example written = block.read();
             if (!bound.contains(written.target())) {
                 continue;
@@ -91,7 +91,7 @@ public final class BoundExamples {
             if (candidate.behavior().equals(behavior)
                     && candidate.identity() instanceof RowIdentity.Named named
                     && named.name().equals(name)) {
-                return new RowKey(behavior, named);
+                return new RowKey(this, behavior, named);
             }
         }
         throw new IllegalArgumentException("no row of `" + behavior + "` is named `" + name + "`");

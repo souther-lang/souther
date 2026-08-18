@@ -64,8 +64,21 @@ public sealed interface StandinObservation {
         /** A value this compile built could not be put in the form the implementation reads. */
         record AValueCouldNotCross(String said) implements Reason {}
 
-        /** The entry's own values could not be built, or the observation ran out of what it was
-         *  allowed. Nothing was asked of the implementation. */
+        /** The entry's own values could not be built. Nothing was asked of the implementation. */
         record TheEntryWasNotRead(String said) implements Reason {}
+
+        /**
+         * What answers the behavior was built against another revision of the module, so nothing of
+         * this module's may be handed to it.
+         *
+         * <p>The same gate a row passes ({@code ANSWERER_ESTABLISHMENT}), said in this vocabulary.
+         * An entry observed against such an implementation would report the two builds disagreeing
+         * as the stand-in and the implementation disagreeing.
+         */
+        record TheImplementationIsOfAnotherBuild(String said) implements Reason {}
+
+        /** The observation was given up on: it did not come back within what it was allowed, or it
+         *  went through more than the policy admits. Nothing here says the two would have agreed. */
+        record TheObservationRanOut(String said) implements Reason {}
     }
 }
