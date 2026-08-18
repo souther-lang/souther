@@ -155,10 +155,8 @@ public final class ExampleVerifier {
         if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
-        MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
-                deadline, policy, answering.over(artifact.implementations(), loader), declared,
-                contracts);
+        ExampleVerifier v = evaluating(module, symbols, sigs, artifact, declared, requirements,
+                parent, values, deadline, policy, answering, contracts);
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
@@ -189,6 +187,60 @@ public final class ExampleVerifier {
             }
         }
         return new Observations(failures, rows, incompleteness);
+    }
+
+    /**
+     * The same state {@link #check} runs the rows in, kept so one row can be run at a time.
+     *
+     * <p>Everything a row is built from is here and none of it is optional: a fixture is decoded
+     * through a derived decoder against this module's symbols, its signatures and this compile's
+     * classes, so a value cannot be constructed without the whole of it. Making it once and running
+     * rows against it is what lets the loop belong to a caller — which is what it has to be when
+     * what an implementation answers out of changes between one row and the next.
+     */
+    public static ExampleVerifier evaluating(souther.compiler.check.Prepared.ExampleExecution module,
+                                      Symbols symbols, Map<String, Sig> sigs,
+                                      EvaluationArtifact artifact,
+                                      Supplier<PublishedClasses> declared,
+                                      Map<String, List<BehaviorRequirement>> requirements,
+                                      ClassLoader parent, Map<String, Hir.FnDef> values,
+                                      Deadline deadline, EvaluationPolicy policy,
+                                      Answering answering,
+                                      Map<String, BehaviorContract> contracts) {
+        MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
+        return new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
+                deadline, policy, answering.over(artifact.implementations(), loader), declared,
+                contracts);
+    }
+
+    /**
+     * One row of {@code behavior}, run now.
+     *
+     * <p>What it answers is the row's outcome and nothing beside it. A row's diagnostics are what a
+     * compile says about a model, and a row run here is being run against something a compile never
+     * saw: the outcome says what happened, and what that means for whoever asked is theirs.
+     *
+     * <p>Read the same way as in a bulk run, by the same call — so a row does not mean one thing when
+     * a compile runs it and another when a caller does.
+     */
+    public RowOutcome one(String behavior, Hir.ExampleRow row) {
+        ExampleTarget target = targetOf(behavior);
+        if (target == null) {
+            throw new IllegalStateException("`" + behavior + "` has no target to run its rows"
+                    + " against, and a row of it should not have been enumerated");
+        }
+        Sig sig = sigs.get(behavior);
+        if (sig == null) {
+            throw new IllegalStateException("`" + behavior + "` is evaluable and has no signature");
+        }
+        List<Diagnostic> said = new ArrayList<>();
+        List<RowOutcome> outcomes = new ArrayList<>();
+        checkRow(target, sig, outCases(sig.outputType()), row, said, outcomes);
+        if (outcomes.size() != 1) {
+            throw new IllegalStateException("a row was run and " + outcomes.size()
+                    + " outcomes were recorded");
+        }
+        return outcomes.get(0);
     }
 
     /**

@@ -177,6 +177,22 @@ final class BoundImplementation implements Answerer {
     }
 
     private String baseOf(String behavior) {
+        return baseOf(module, behavior);
+    }
+
+    /**
+     * Whether {@code implementation} is an implementation of {@code module}'s {@code behavior}.
+     *
+     * <p>The same question this answerer asks of itself, for a reader that has to know which of a
+     * module's rows a binding makes runnable before anything is run. Both go through
+     * {@link #baseOf(String, String)}, so there is one place that decides how a behavior is spelled
+     * as a class and it is the one the emitter uses.
+     */
+    static boolean isFor(Object implementation, String module, String behavior) {
+        return everythingItIs(implementation.getClass()).contains(baseOf(module, behavior));
+    }
+
+    private static String baseOf(String module, String behavior) {
         return SoutherJvmAbi.nameOf(new GeneratedClass.BehaviorInterface(module, behavior))
                 .binaryName();
     }
