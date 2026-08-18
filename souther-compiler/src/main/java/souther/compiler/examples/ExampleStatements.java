@@ -4,6 +4,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -19,6 +20,7 @@ import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -72,10 +74,14 @@ public final class ExampleStatements {
      * it is held to the same counted budget a row is: what is read is decided by what the statements
      * say, not by how fast the host reading them is. */
     private final EvaluationPolicy policy;
+    /** What holds a fake's row to what the dependency declares of what it answers. */
+    private final EnsuresChecks ensures;
 
     private ExampleStatements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Hir.FnDef> values,
-                              Deadline deadline, EvaluationPolicy policy) {
+                              Deadline deadline, EvaluationPolicy policy,
+                              Map<String, BehaviorContract> contracts) {
+        this.ensures = new EnsuresChecks(module.name(), loader, contracts);
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -84,6 +90,38 @@ public final class ExampleStatements {
         this.deadline = deadline;
         this.policy = policy;
         this.rendering = new FixtureReader(module, symbols, values, loader);
+    }
+
+    /**
+     * Where a row of {@code built} states values the faked behavior declares cannot go together.
+     *
+     * <p>Asked after the table is built rather than while it is being built, so that the two readers
+     * of a table ask it in the two ways each needs: where the fake is written it is reported on, and
+     * where a row would stand in with it, it is what says the table is not one to stand in with. The
+     * second is why this is not left to the check the stand-in's answer would meet at the crossing:
+     * a row run against a dependency state the model rules out reaches the rest of its behavior in a
+     * state nothing can arise in, and what that row then reports is about a run that cannot happen.
+     *
+     * <p>The rows the table can answer with, which is what {@link Standins#explicit} is. A row the
+     * dispatch never reaches states nothing the fake stands in with, and what is wrong with it is
+     * that it answers nothing ({@link #cannotAnswer}). The {@code _} row is not here either: it
+     * states no input, so there is no relation to hold its answer to.
+     */
+    static List<Diagnostic> notKept(EnsuresChecks ensures, String module, Hir.Fake fk,
+                                    BuiltTable built) {
+        List<Diagnostic> said = new ArrayList<>();
+        for (Standin standin : built.standins().explicit()) {
+            String why = ensures.notHeld(new ValueName.Behavior(module, fk.target()),
+                    standin.arguments(), standin.answer().value());
+            if (why != null) {
+                said.add(Diagnostic.at(standin.row().pos())
+                        .say(new ExampleMessage.AFakeRowDoesNotKeepWhatTheDependencyStates(
+                                fk.target(), why))
+                        .hint(new ExampleMessage.TheDeclarationIsWhatSaysWhatItAnswers(fk.target()))
+                        .build());
+            }
+        }
+        return said;
     }
 
     /**
@@ -119,7 +157,8 @@ public final class ExampleStatements {
     public static Readings disagreements(souther.compiler.check.Prepared.ExampleExecution module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Hir.FnDef> values,
-                                         Deadline deadline, EvaluationPolicy policy) {
+                                         Deadline deadline, EvaluationPolicy policy,
+                                         Map<String, BehaviorContract> contracts) {
         if (module.examples().isEmpty()) {
             return Readings.NONE;
         }
@@ -133,7 +172,7 @@ public final class ExampleStatements {
             return Readings.NONE;
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy);
+                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
         try {
             return v.collectDisagreements(contested);
         } catch (LinkageError e) {
@@ -178,12 +217,13 @@ public final class ExampleStatements {
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Hir.FnDef> values,
                                               SourceId sourceId,
-                                              Deadline deadline, EvaluationPolicy policy) {
+                                              Deadline deadline, EvaluationPolicy policy,
+                                              Map<String, BehaviorContract> contracts) {
         if (module.fakes().isEmpty()) {
             return List.of();
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline, policy);
+                new MemoryClassLoader(classes, parent), values, deadline, policy, contracts);
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
         for (int i = 0; i < module.fakes().size(); i++) {
@@ -208,6 +248,7 @@ public final class ExampleStatements {
                     for (Shadowed dead : built.shadowed()) {
                         wrong.add(cannotAnswer(fk, dead));
                     }
+                    wrong.addAll(notKept(v.ensures, module.name(), fk, built));
                 }
                 return wrong;
             }, new Deadline.Work.Table(fk.target(), fk.pos()));
@@ -486,9 +527,15 @@ public final class ExampleStatements {
         if (rows == null || sig == null) {
             return;
         }
-        // The whole table, built the one way the proxy builds it.
+        // The whole table, built the one way the proxy builds it, and held to the dependency's
+        // declaration the one way a table is held to it. Inside the reading because holding it runs
+        // the module's code, which is what a reading is what it costs of.
         Read<BuiltTable> read = within(
-                reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
+                reader -> {
+                    BuiltTable made = standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>());
+                    return made == null || !notKept(ensures, module.name(), fk, made).isEmpty()
+                            ? null : made;
+                },
                 new Deadline.Work.Table(fk.target(), fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
@@ -523,8 +570,16 @@ public final class ExampleStatements {
             }
             case Read.Got(BuiltTable _) -> { }
         }
-        // The whole table or nothing: a table with a row that will not build answers nothing here,
-        // and what is wrong with it is reported where the fake is written ({@link #fakeTables}).
+        // The whole table or nothing, and two ways to have nothing: a table with a row that will not
+        // build, and one with a row stating what the dependency declares cannot happen. Both answer
+        // nothing here, and what is wrong with either is reported where the fake is written
+        // ({@link #fakeTables}).
+        //
+        // The second is not only a duplicate spared. A disagreement says two descriptions of one
+        // behavior differ and neither is the right one (ADR-0093); a refused row says the
+        // declaration decides and the fake is the side that is wrong. Said about one pair, the two
+        // contradict each other — so once the declaration has ruled a table out, there is no
+        // description left here for a recorded row to disagree with.
         BuiltTable built = read.orNull();
         if (built == null) {
             return;
@@ -905,6 +960,11 @@ public final class ExampleStatements {
      * builds, and building the output first would run whatever helpers it applies before saying so —
      * so a table with an arity slip and a slow or non-terminating output reported the second problem
      * instead of the first, or ran out of time before reporting either.
+     *
+     * <p>Building only. What a table states is held to what the dependency declares where the table
+     * is reported on ({@link #notKept}), which is where a diagnostic about it can be said — this is
+     * called from three places and two of them discard what they are told, so holding it here would
+     * be work done for an answer nobody reads.
      */
     static BuiltTable standins(FixtureReader fixtures, Hir.Fake fk, List<BoundaryInput> ins,
                                      BoundaryOutput outType, List<Diagnostic> out) {

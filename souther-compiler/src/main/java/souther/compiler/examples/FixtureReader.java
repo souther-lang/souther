@@ -368,6 +368,19 @@ public final class FixtureReader {
     // --- what a row asserts ---------------------------------------------------------------------
 
     /**
+     * The value a row's expectation computed, and that value read as what the row asserts.
+     *
+     * <p>The two from one evaluation. What computes the expectation is the module's own code and it
+     * is applied by running it, so asking for the value a second time would apply the helpers a
+     * second time — counted twice against the row's budget, and a second time for whatever they do.
+     * A reader that wants only the assertion reads {@link #asserted()} and pays for one run.
+     *
+     * @param live     the value as the run produced it, which is what a check is handed
+     * @param asserted that value as the structure a row is compared by
+     */
+    record ExpectedValue(Object live, Asserted asserted) {}
+
+    /**
      * What a row asserts, as the value it wrote rather than as a value of the position it wrote it at.
      *
      * <p>An input is a value the model is given, so it is read at its position and refused where it
@@ -406,7 +419,7 @@ public final class FixtureReader {
      * is what keeps {@code Amount("x")} a fixture that cannot be built while leaving
      * {@code Receipt { total = 1 }} a value of its own to disagree with what came out.
      */
-    Asserted assertedExpected(Hir.Expr expected, BoundaryOutput out) {
+    ExpectedValue assertedExpected(Hir.Expr expected, BoundaryOutput out) {
         // The value the row wrote, computed by the module's own code: the emitted method runs and
         // what it answers is read as what the row stated, exactly as a helper's answer for the
         // whole expectation is. Which collection a sequence is comes from the value — the position
@@ -414,7 +427,8 @@ public final class FixtureReader {
         // nothing of it.
         String method = emittedFor(expected);
         if (method != null) {
-            return assertedLive(ran(method));
+            Object live = ran(method);
+            return new ExpectedValue(live, assertedLive(live));
         }
         // Every expectation that computes a value has a method — the correspondence is constructed
         // where the methods are emitted — and one written as a bare case name is read by caseOnly

@@ -729,13 +729,17 @@ public final class Output {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
+            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
+            if (contracts == null) {
+                return Answer.absent();
+            }
             // `requirements` is asked for above as a readiness condition — a module whose
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
             return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(
                     prepared.value().forExamples(),
                     scope.value(), sigs.value(), classes, evaluationLoader(db),
-                    values == null ? Map.of() : values, deadlineOf(db), policyOf(db)));
+                    values == null ? Map.of() : values, deadlineOf(db), policyOf(db), contracts));
         }
     }
 
@@ -955,12 +959,16 @@ public final class Output {
                 return List.of();
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
+            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
+            if (contracts == null) {
+                return List.of();
+            }
             // As above: `requirements` says this module is ready to be read, not what to read.
             return souther.compiler.examples.ExampleStatements.fakeTables(
                     prepared.value().forExamples(), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, sourceId,
-                    deadlineOf(db), policyOf(db));
+                    deadlineOf(db), policyOf(db), contracts);
         }
 
         /**
@@ -1008,6 +1016,12 @@ public final class Output {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
             Map<String, Hir.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
+            // What the module's behaviors declare of what they answer, which is what says a row's
+            // values have something to be held to.
+            Map<String, BehaviorContract> contracts = db.ask(new Bodies.Contracts(name)).value();
+            if (contracts == null) {
+                return Answer.absent();
+            }
             souther.compiler.examples.ExampleVerifier.Observations observed =
                     souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(),
                             artifact,
@@ -1022,7 +1036,7 @@ public final class Output {
                             // What applies a behavior here is what this compile emitted. A compile has
                             // nothing else to run a row against; something supplied from outside one
                             // arrives through the same seam and brings its own classes.
-                            souther.compiler.examples.Answering.generatedHere());
+                            souther.compiler.examples.Answering.generatedHere(), contracts);
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }

@@ -459,7 +459,8 @@ class CompileFakeExampleDisagreementTest {
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
-                EvaluationPolicy.DEFAULT);
+                EvaluationPolicy.DEFAULT,
+                c.db().ask(new souther.compiler.query.Bodies.Contracts(name)).value());
     }
 
     /** The warnings of a single-source compile that holds. */

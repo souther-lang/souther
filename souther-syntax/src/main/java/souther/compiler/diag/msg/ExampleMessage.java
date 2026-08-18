@@ -133,6 +133,30 @@ public sealed interface ExampleMessage extends Message {
     record AFakeHadNoOutputForAnInput(String input) implements ExampleMessage, Reported {}
 
     /**
+     * The row states an input and an answer the behavior's {@code ensures} says cannot go together.
+     *
+     * <p>{@code why} is what the check said when it was run over the row's own values, so the clause
+     * that was not kept, and the case the row's answer turned out to be, are named by the thing that
+     * found it rather than worked out again here.
+     */
+    @Code(DiagnosticCode.E1928)
+    record ARowDoesNotKeepWhatTheBehaviorStates(String target, String why)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * A row of a fake's table stands in with an answer the dependency's {@code ensures} says it
+     * cannot give for the input that row states.
+     */
+    @Code(DiagnosticCode.E1929)
+    record AFakeRowDoesNotKeepWhatTheDependencyStates(String dependency, String why)
+            implements ExampleMessage, Reported {}
+
+    /** What to do about either: the declaration is what says what the behavior answers, so a row
+     *  stating otherwise records something the behavior will not do. */
+    record TheDeclarationIsWhatSaysWhatItAnswers(String target)
+            implements ExampleMessage, Supporting {}
+
+    /**
      * What answers the behavior was built against another revision of the module, and the two say
      * different things about something a value crossing between them depends on.
      */

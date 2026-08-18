@@ -218,7 +218,8 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                answering);
+                answering,
+                c.db().ask(new Bodies.Contracts(name)).value());
     }
 
     /** The classes one build of these sources emits, read for what they were stamped with. */

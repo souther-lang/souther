@@ -34,6 +34,20 @@ it crosses into generated code. Example and fake values invoke that same generat
 violation is a `ConstraintViolation` carrying an `EnsuresFailure`, not an output case and not an
 `InvariantFailure` relabelled with a behavior name.
 
+An `example` row and a `fake` row write both sides of the relation down, so each is run through
+that check while the module is compiled and refused where it does not hold (E1928, E1929). This is
+the policy ADR-0093 said the language did not have. That decision is about two descriptions of one
+behavior — a stand-in and a recorded row — where nothing names either as the right one, and it
+stands: E1919 remains a warning naming both. A written value against a declaration is a different
+pair, and the declaration decides it. An arm is part of what a row wrote, so a bare case name naming a unit case
+is a whole answer and is held; a `_` row of a fake and a `with` write only one side of the relation
+and are held only where the behavior answers. A bare case name carrying fields is not held yet: the
+arm names the answer, but the check is asked about an answer rather than about an arm, so a rule
+reading only the inputs is decidable from such a row and is not decided. A table with a row that is
+refused is not one to stand in with, as a table that will not build is not, and is not compared with
+the rows recorded for the behavior either: ADR-0093's comparison names neither side as right, and
+this has named one, so the two cannot be said about one pair.
+
 Callers seed a clause only after the output arm is known and only where parameter-to-argument
 substitution leaves terms the existing analysis can name. Classification uses the invariant
 capability procedure with the parameter and answer locations supplied to it. Structural equality

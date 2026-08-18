@@ -2355,6 +2355,8 @@ A clause MAY be named. [[ensures-clause-names-are-distinct]]Named clauses are di
 
 A clause travels with the published declaration, as a data's does and for the same reason: a reader that cannot read it cannot assume it.
 
+Where a value the model writes down states both sides of the relation — an `+example+` row, a row of a `+fake+` table — that value is held to the clause while the module is compiled (<<example-ensures>>).
+
 ==== What a caller may assume
 
 Where a caller has reached the case a rule is about, that rule holds of the answer, and the checker takes it as holding — the same seeding an input's type gives (<<invariant-discharge>>). This is what declaring a relation buys: the answer does not carry the input, so before it a caller could only re-establish the relation with a `+guard+` it had no way to derive.
@@ -3067,6 +3069,27 @@ example findMember
 ----
 
 How many rows are waiting is what `+souther examples+` reports; it is not a compile warning, because waiting is the normal state of a model being written and a warning on every one of them says nothing.
+
+[#example-ensures]
+=== A written value is held to what the behavior states
+
+A row and a `+fake+` row each write an input and the answer that goes with it, which is what an `+ensures+` relates (<<ensures>>). Where a clause is declared, the values written are held to it.
+
+[[a-row-keeps-what-the-behavior-states]]The values an `+example+` row states MUST keep what the behavior declares of what it answers (<<e1928>>), and [[a-fake-row-keeps-what-the-dependency-states]]the values a `+fake+` row stands in with MUST keep what the faked behavior declares of what it answers (<<e1929>>). A declaration is what says what a behavior answers, and a row stating otherwise records something the model rules out.
+
+This is not the policy ADR-0093 declined. Two written statements disagreeing is a disagreement with no right side (<<stand-in-and-recorded-row-agree>>), which is why it is a warning naming both; a written value against a declaration is not two descriptions but a description held to what the model states, and the declaration decides.
+
+It is the declaration's check that decides it, run over the values the row wrote. A row's operands are compiled and applied as the module's own code, so what a row states exists as a value while the module is compiled, and the same check that runs where the behavior answers is applied to it. Nothing reads the clause a second time and decides what it means. This is *compile-time fixture validation* and not a proof: what is established is that these values keep the clause, not that the behavior does — which is <<invariant-discharge>>'s distinction, on the other side of it.
+
+A row waiting for an implementation is held all the same. The values are written whether or not anything applies the behavior, and a record of an answer the model rules out is a wrong record however long it waits (<<example-pending>>).
+
+What is held is decided by what the row wrote, and an arm is part of what it wrote. A bare case name naming a unit case states the whole answer — a unit case has one value, so naming it is writing it — and such a row is held like any other. This is the same reading of an arm as <<ensures>>'s: an arm is a reference to the answer, so `+ensures NotFound -> id > 0+` is decided by a row stating an input and that arm, with no construction written.
+
+Where only one side is written there is no relation to hold. A `+_+` row of a `+fake+` states no input, and a `+with+` supplies an answer for whatever it is asked; what either states is held where the behavior answers.
+
+A table with a refused row answers nothing wherever else it is read. Nothing stands in with it (<<example-fakes>>), and it is not compared with the rows recorded for the behavior (<<stand-in-and-recorded-row-agree>>): that comparison names neither side as the right one, and this has already named one. The two cannot both be said about one pair.
+
+A bare case name that carries fields is not held today. The arm names the answer, so a rule reading only the inputs is decidable from such a row — what stands in the way is that the check is asked about an answer rather than about an arm, and closing it is a check that can be asked the second way.
 
 [#example-placement]
 === Inline or an attached file
@@ -5960,6 +5983,38 @@ Emitted at an `+example+` whose behavior is answered by an implementation suppli
 Said once for the behavior in each source its rows are written in, however many rows those are: one answer and one model disagreeing is one fact, and the rows did not stop for reasons of their own. Not once for the behavior outright, because a diagnostic is said where it can be quoted — a behavior whose rows are written in the module and in an attached `+examples for+` file has rows in two files, and a reader of the second one would otherwise be shown rows that stopped and nothing saying why. Each row is recorded as undecided, with its inputs and its expectation already built and held to their invariants.
 
 Two things are reported under this code, and they are not the same finding. Where both sides were read and one declares something else, the declaration is named and the fix is to build again. Where the declarations could not be read at all — classes carrying none, or declarations this compiler cannot read back (<<a-published-module-can-be-read-back>>) — nothing has been established about either build, and saying a build was stale would be saying it on evidence nobody has.
+
+[#e1928]
+=== An example row states values the behavior's clause rules out
+
+[,text]
+----
+The values this row states do not keep what `findTodo` declares of what it answers:
+ensures not held on todo.findTodo: asked, answering Todo
+----
+
+Emitted at an `+example+` row whose input and stated answer do not keep an `+ensures+` of the behavior it is written for (<<a-row-keeps-what-the-behavior-states>>). The stated answer is the value the row wrote, or the unit case its arm names. What decides it is the declaration's own check, applied to the values the row wrote (<<example-ensures>>), so what the message carries is what that check said — the clause that was not kept, and the case the answer turned out to be.
+
+A refusal and not a warning. A stand-in and a row disagreeing is two descriptions with no right side (<<e1919>>); this is a description held to what the model states, and a row that records an answer the model rules out is a record of something that will not happen.
+
+Said before anything applies the behavior, so a row waiting for an implementation is told the same day it is written. A row whose expectation is a bare case name carrying fields is not held (<<example-ensures>>).
+
+[#e1929]
+=== A fake row stands in with values the dependency's clause rules out
+
+[,text]
+----
+The values this row stands in with do not keep what `lookup` declares of what it
+answers: ensures not held on order.lookup: asked, answering Found
+----
+
+Emitted at a row of a `+fake+` table whose input and output do not keep an `+ensures+` of the behavior the table stands in for (<<a-fake-row-keeps-what-the-dependency-states>>). The same rule as <<e1928>> at the other place a model writes both sides of a relation down, and told apart from it because what an author does about the two is not the same: one is what a behavior owes, the other what stands in for it while some other behavior's row runs.
+
+A `+_+` row states no input, so there is nothing here to relate its answer to; what it answers is held at the crossing into generated code, like any other answer arriving from outside.
+
+A table with such a row is not one to stand in with, as a table that will not build is not (<<example-fakes>>). A row reaching it stops without a fake and says nothing of its own: running it would put the rest of the behavior in a state the model rules out, and what the row then reported would be about a run that cannot happen.
+
+Neither is it compared with the rows recorded for the behavior (<<e1919>>). That comparison is written for two descriptions with nothing to choose between them, and this is a description held to a declaration — reported together they would say of one pair both that the fake is the side that is wrong and that neither side is.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims

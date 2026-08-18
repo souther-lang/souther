@@ -236,7 +236,8 @@ class AnAnswererInAnotherLoaderRunsARowTest {
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                answerer.asAnswering(classes, parent));
+                answerer.asAnswering(classes, parent),
+                c.db().ask(new Bodies.Contracts(name)).value());
     }
 
     private static Class<?> loaded(ClassLoader loader, String name) {

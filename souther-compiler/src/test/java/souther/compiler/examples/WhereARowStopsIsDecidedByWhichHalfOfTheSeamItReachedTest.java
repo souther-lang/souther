@@ -312,6 +312,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
                 c.db().ask(new Bodies.ModuleDefinitions(name)).value(),
                 Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
                 EvaluationPolicy.DEFAULT,
-                (generated, compiled) -> answerer);
+                (generated, compiled) -> answerer,
+                c.db().ask(new Bodies.Contracts(name)).value());
     }
 }
