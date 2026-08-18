@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -703,6 +704,35 @@ class IncrementalCompilationTest {
                 "`writing` names `Discount`, which meant nothing here and now denotes a declaration");
         assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller")),
                 "and `caller` beside it still does not write it");
+    }
+
+    /**
+     * A scope answers from what the module means now, however long the thing holding it has been
+     * held.
+     *
+     * <p>A scope is built inside the question that reads it and goes no further, which is the rule
+     * and not something a scope can check. What it can do is not depend on it: what a name means is
+     * asked of the store each time and the reading built over that answer is kept only while it is
+     * the answer, so a scope kept past its question is slower and not wrong. Held instead from the
+     * first read, it would answer from that read for as long as it lived, and whether that could be
+     * seen would be a fact about who kept a scope rather than one this module can be sure of.
+     *
+     * <p>So this test keeps one on purpose, which nothing in the compiler does.
+     */
+    @Test
+    void aScopeHeldPastTheQuestionItWasBuiltForStillAnswersFromWhatTheModuleMeansNow() {
+        Compilation c = stating();
+        Symbols held = Scopes.derived(c.db(), "shop.orders").value();
+        assertFalse(held.scope().inScope("Discount"), "nothing here is written that way yet");
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                data Discount = Int
+                """), Set.of());
+        c.answerEverything();
+
+        assertTrue(held.scope().inScope("Discount"),
+                "the same scope, asked again after the declaration arrived");
     }
 
     /** A body whose report offers the sum an arm's name does belong to (E1203). What that report

@@ -484,9 +484,14 @@ public final class Names {
      * <p>Built where it is used and never kept, for the reason {@link Key} gives: it reads this
      * store, so two of them are the same when the store is, which says where they came from and not
      * what they say. The reads it makes land on whichever question was being answered when it made
-     * them. What it fetched is kept for as long as it lives, because one scope is read many times
-     * while one question is being answered and the store would otherwise be asked the same thing
-     * each time.
+     * them.
+     *
+     * <p>The store is asked every time and not once. What is kept is the reading built over the
+     * answer, and it is kept only while the answer is the one it was built over — so a scope read
+     * after an edit answers from what the module means now, and one read many times while a single
+     * question is being answered builds the reading once. Fetched once instead, this would hold a
+     * snapshot for as long as it lived, and whether that could be read after an edit would be a
+     * fact about who kept a scope rather than one this can be sure of on its own.
      *
      * <p>Where this compilation has no such module, every spelling means nothing — the answer
      * {@link Denoting#NONE} gives. Nothing reading a scope learns that a compilation can be missing
@@ -495,14 +500,20 @@ public final class Names {
      */
     private static Denoting asked(Db db, String module) {
         return new Denoting() {
-            private Denoting fetched;
+            private Scoping.Meanings over;
+            private Denoting reading;
 
             private Denoting read() {
-                if (fetched == null) {
-                    Answer<Scoping.Meanings> meanings = db.ask(new Meanings(module));
-                    fetched = meanings.present() ? meanings.value().denoting() : Denoting.NONE;
+                Answer<Scoping.Meanings> meanings = db.ask(new Meanings(module));
+                Scoping.Meanings now = meanings.present() ? meanings.value() : null;
+                // The answer itself and not what it means: this is asking whether the reading in
+                // hand was built over what the store just handed over, which is a question about
+                // the two being the one object.
+                if (reading == null || now != over) {
+                    over = now;
+                    reading = now == null ? Denoting.NONE : now.denoting();
                 }
-                return fetched;
+                return reading;
             }
 
             @Override
