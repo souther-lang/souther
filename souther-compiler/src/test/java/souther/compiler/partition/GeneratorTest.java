@@ -11,6 +11,7 @@ import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
+import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -101,7 +102,7 @@ class GeneratorTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
         assertNotNull(prepared);
         assertNotNull(sigs);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()

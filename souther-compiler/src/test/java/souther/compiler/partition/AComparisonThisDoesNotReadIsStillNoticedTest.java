@@ -11,6 +11,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.UnreadRule;
+import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -64,7 +65,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()

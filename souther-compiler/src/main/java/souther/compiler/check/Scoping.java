@@ -90,7 +90,7 @@ public final class Scoping {
         Resolve.Values values = new Resolve.Values(
                 reachable(universe, subject, imports), new OfTheUniverse(universe));
         refused.addAll(oneSpellingTwice(subject, ownData));
-        return new Scoped(m.name(), denotations, aliases, values, imports, refused);
+        return new Scoped(new Meanings(m.name(), denotations, aliases), values, imports, refused);
     }
 
     /**
@@ -371,32 +371,39 @@ public final class Scoping {
      * universe, leaving what an import brought in decided by one and what a qualifier names by the
      * other. The declaration registry is handed over at the point of use for the opposite reason:
      * one compilation genuinely reads one scope against three stages of its declarations.
+     *
+     * <p>{@link Meanings} is the part of it that is a value on its own, and a reader wanting only
+     * to know what a name means here is handed that rather than this.
      */
-    public record Scoped(String module, Map<String, Denotation> denotations,
-                         Map<String, String> aliases, Resolve.Values values,
+    public record Scoped(Meanings meanings, Resolve.Values values,
                          ResolvedImports imports, List<Refusal> refused) {
 
-        /** Copied, for the reason {@link Exposing.Checked} is: this is an answer a compilation
-         *  remembers, and an answer it remembers is a value. */
+        /**
+         * Copied, for the reason {@link Exposing.Checked} is: this is an answer a compilation
+         * remembers, and an answer it remembers is a value.
+         *
+         * <p>This one is not one yet. Two of these assembled from one input are unequal, because
+         * the way of asking the universe a further question holds the store it asks — which is a
+         * capability in an answer, and is on the register
+         * {@code EquivalentDatabasesAnswerTheSameTest} keeps.
+         */
         public Scoped {
-            denotations = Collections.unmodifiableMap(new LinkedHashMap<>(denotations));
-            aliases = Collections.unmodifiableMap(new LinkedHashMap<>(aliases));
             refused = List.copyOf(refused);
         }
 
-        /**
-         * What {@code Resolve} reads this module against, over the declarations as they were
-         * written.
-         *
-         * <p>Made here and not by a caller holding the parts. The scope, the aliases and the module
-         * name come out of one assembly and mean nothing apart from each other; passed separately
-         * they could be paired with parts of another, and nothing in what a caller was holding
-         * would have said so. The registry is the one thing left to hand over, because it really is
-         * a free axis: one compilation reads the same scope against its written, its resolved and
-         * its derived declarations.
-         */
-        public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry) {
-            return SyntaxSymbols.of(module, registry, denotations, aliases);
+        /** The module being scoped. */
+        public String module() {
+            return meanings.module();
+        }
+
+        /** What each type spelling written here denotes. */
+        public Map<String, Denotation> denotations() {
+            return meanings.denotations();
+        }
+
+        /** What each {@code import ... as} alias reaches. */
+        public Map<String, String> aliases() {
+            return meanings.aliases();
         }
 
         /** What this module can name in the value namespace, on its own. What a reader wanting to
@@ -404,7 +411,42 @@ public final class Scoping {
         public Resolve.Reachable reachable() {
             return values.reachable();
         }
+    }
 
+    /**
+     * What the names written in a module mean: what each type spelling denotes, and what each alias
+     * reaches.
+     *
+     * <p>Apart from {@link Scoped} because it is the part of a scope that is a value and nothing
+     * else. What a module is resolved against is this together with the value namespace and a way
+     * of asking the universe a further question, and those two are not values of this kind — one
+     * carries a way of reading the modules around this one, which is a thing to do rather than a
+     * thing to compare. A reader that only wants to know what a name means here is handed this, and
+     * two of them coming out the same is what lets everything below stop.
+     *
+     * <p>Which is what a behavior being declared shows: the value namespace gains a name and this
+     * does not, because a behavior is not a type. Read as part of the whole assembly, that edit
+     * arrived at every reader of what the names mean; read as this, it arrives at none of them.
+     *
+     * <p>The three parts are here together and not handed over one at a time, for the reason
+     * {@link Scoped} gives: the module name, the scope and the aliases come out of one assembly and
+     * mean nothing apart from each other, so a caller putting them together could pair parts of two.
+     * The declaration registry is the one axis that stays free, because one compilation genuinely
+     * reads one set of meanings against its written, its resolved and its derived declarations.
+     */
+    public record Meanings(String module, Map<String, Denotation> denotations,
+                           Map<String, String> aliases) {
+
+        public Meanings {
+            denotations = Collections.unmodifiableMap(new LinkedHashMap<>(denotations));
+            aliases = Collections.unmodifiableMap(new LinkedHashMap<>(aliases));
+        }
+
+        /** What {@code Resolve} reads this module against, over the declarations as they were
+         *  written. */
+        public SyntaxSymbols writtenSymbols(Registry<Ast.Def> registry) {
+            return SyntaxSymbols.of(module, registry, denotations, aliases);
+        }
 
         /** The same over a stage of the declarations something has resolved. */
         public Symbols symbolsOver(Registry<Hir.Def> registry) {

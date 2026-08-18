@@ -7,6 +7,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -117,7 +118,7 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();

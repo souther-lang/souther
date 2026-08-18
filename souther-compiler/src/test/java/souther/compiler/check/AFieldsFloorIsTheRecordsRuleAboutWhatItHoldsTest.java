@@ -2,8 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
+import souther.compiler.query.Names;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
@@ -36,7 +36,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());

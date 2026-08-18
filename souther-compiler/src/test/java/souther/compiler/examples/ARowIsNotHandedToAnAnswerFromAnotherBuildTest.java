@@ -11,6 +11,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
+import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -305,7 +306,7 @@ class ARowIsNotHandedToAnAnswerFromAnotherBuildTest {
                 "the model whose rows are run compiles");
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                c.db().ask(new Shapes.Scope(name)).value(),
+                Names.derivedSymbols(c.db(), name).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifact,
                 declared,

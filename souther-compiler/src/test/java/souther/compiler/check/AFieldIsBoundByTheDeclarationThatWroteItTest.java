@@ -94,7 +94,7 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
 
     /** The clauses as the module named {@code reading} reads them. */
     private static Clauses readBy(Compilation c, String reading) {
-        return new Clauses(c.db().ask(new Names.NameScope(reading)).value(), Map.of());
+        return new Clauses(Names.resolvedSymbols(c.db(), reading).value(), Map.of());
     }
 
     /**

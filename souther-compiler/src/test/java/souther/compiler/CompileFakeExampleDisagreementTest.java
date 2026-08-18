@@ -452,7 +452,7 @@ class CompileFakeExampleDisagreementTest {
                 c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value();
         return ExampleStatements.disagreements(
                 prepared.forExamples(),
-                c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
+                souther.compiler.query.Names.derivedSymbols(c.db(), name).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
                         name, souther.compiler.query.Output.CoverageMode.NONE)).value().classes(),

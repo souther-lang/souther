@@ -13,6 +13,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -592,13 +593,42 @@ class IncrementalCompilationTest {
     }
 
     /**
-     * Known and not narrowed: declaring a behavior re-checks every body of the module. A body reads
-     * its module's scope and the signatures of everything callable there as whole tables, so adding
-     * one changes both and reaches all of them — issue #829.
+     * What the names written in a module mean is what a body is checked in, and declaring a behavior
+     * does not change it: a behavior is a value and not a type, so no spelling here means anything
+     * it did not mean before.
      *
-     * <p>Written down so that narrowing either of them is a change that shows, and so that the
-     * contract dependency above is not read as having made an edit to a declaration local. It did
-     * not: it made an edit to an `ensures` local, which is a different edit.
+     * <p>The whole assembly does change — the value namespace gains a name — and reading a scope off
+     * the assembly is what made that edit arrive at every reader of what the names mean. What is
+     * asked for here is the part of it that answers this question.
+     */
+    @Test
+    void declaringABehaviorDoesNotChangeWhatTheNamesOfTheModuleMean() {
+        Compilation c = stating();
+        Answer<?> meant = c.db().ask(new Names.Meanings("shop.orders"));
+        Answer<?> assembled = c.db().ask(new Names.ModuleScope("shop.orders"));
+
+        c.update(Map.of("orders.sou", STATING + """
+
+                behavior added : (n: Amount) -> Amount
+                    constructs Amount
+                let added (n) = Amount(n.value * 4)
+                """), Set.of());
+        c.answerEverything();
+
+        assertEquals(meant, c.db().ask(new Names.Meanings("shop.orders")),
+                "`added` is a name in the value namespace and no type is spelled differently");
+        assertNotEquals(assembled, c.db().ask(new Names.ModuleScope("shop.orders")),
+                "and the assembly it is read off did change, which is why it is not read off it");
+    }
+
+    /**
+     * Known and not narrowed: declaring a behavior re-checks every body of the module. A body reads
+     * the signatures of everything callable in its module as a whole table, so adding one changes it
+     * and reaches all of them — issue #829.
+     *
+     * <p>Written down so that narrowing it is a change that shows, and so that the contract
+     * dependency above is not read as having made an edit to a declaration local. It did not: it
+     * made an edit to an `ensures` local, which is a different edit.
      */
     @Test
     void declaringABehaviorRechecksTheBodiesBesideIt() {

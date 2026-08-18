@@ -10,6 +10,7 @@ import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
+import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -212,7 +213,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> ExampleVerifier.check(
                         mine.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                        mine.db().ask(new Shapes.Scope(name)).value(),
+                        Names.derivedSymbols(mine.db(), name).value(),
                         mine.db().ask(new Bodies.Signatures(name)).value(),
                         artifactOf(other, "example.elsewhere"),
                         () -> {
@@ -304,7 +305,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
         String name = c.modules().get(0);
         return ExampleVerifier.check(
                 c.db().ask(new Shapes.Prepared(name)).value().forExamples(),
-                c.db().ask(new Shapes.Scope(name)).value(),
+                Names.derivedSymbols(c.db(), name).value(),
                 c.db().ask(new Bodies.Signatures(name)).value(),
                 artifactOf(c, name),
                 // Every answer here applies this compile's own classes, so nothing is held against

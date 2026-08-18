@@ -14,6 +14,7 @@ import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -66,7 +67,7 @@ class RowClassesTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

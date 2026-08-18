@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Membership;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.query.Names;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -43,7 +44,7 @@ class PartitionsTest {
         assertNotNull(sigs);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
+        Symbols symbols = Names.derivedSymbols(compilation.db(), module).value();
         return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get(behavior), symbols),
                 symbols);
     }
