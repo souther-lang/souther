@@ -6,6 +6,7 @@ import souther.compiler.check.BehaviorChecker;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.ClausesForDischarge;
+import souther.compiler.check.StatedContract;
 import souther.compiler.check.ContractDischarge;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
@@ -393,6 +394,85 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, ContractDischarge>> compute(Db db) {
+            Answer<Map<String, StatedContract>> stated = db.ask(new StatedContracts(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            if (!stated.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            Map<String, ContractDischarge> out = new LinkedHashMap<>();
+            stated.value().forEach((behavior, rules) ->
+                    out.put(behavior, ContractDischarge.of(rules, scope.value())));
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * What every behavior a body of this module may call states about its answer, by the name it is
+     * called under — this module's own and the ones it borrows.
+     *
+     * <p>What a caller may assume of an answer is what the module that declared the behavior said,
+     * so a borrowed one is read from the module that declares it and not from anything this one
+     * holds. A module reached through its published classes answers the same question: the
+     * declaration it published is read back by this front end, and what its author wrote is what
+     * comes back (spec §published-modules).
+     *
+     * <p>A behavior that states nothing is not here, and neither is one whose module could not be
+     * read. Absence is what a caller wanting to know "is there anything to assume" is asking, and an
+     * empty contract would be a second way to say it.
+     */
+    public record ContractsInSight(String name)
+            implements Key<Map<ValueName.Behavior, StatedContract>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<ValueName.Behavior, StatedContract>> compute(Db db) {
+            Answer<Map<String, StatedContract>> own = db.ask(new StatedContracts(name));
+            if (!own.present()) {
+                return Answer.absent();
+            }
+            Map<ValueName.Behavior, StatedContract> out = new LinkedHashMap<>();
+            own.value().forEach((behavior, stated) ->
+                    out.put(new ValueName.Behavior(name, behavior), stated));
+            for (ValueName.Behavior each : borrowed(db, name)) {
+                if (each.module().equals(name)) {
+                    continue;
+                }
+                Map<String, StatedContract> theirs =
+                        db.ask(new StatedContracts(each.module())).value();
+                StatedContract stated = theirs == null ? null : theirs.get(each.name());
+                if (stated != null) {
+                    out.put(each, stated);
+                }
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * What each behavior of a module states about its answer, read into the representation the
+     * analysis has rules about and typed there, by the name the behavior is declared under.
+     *
+     * <p>The one reading of a rule as a term. Two readers want it — the editor, which shows how much
+     * of each rule the check can read, and the check at a call, which takes what it may assume — and
+     * both want the same thing of it: the rule as the analysis holds it, placed where its author
+     * wrote it. Read twice, what an author is shown and what a caller is given would be two answers
+     * to keep agreeing.
+     *
+     * <p>Nothing is reported from here. Whether a clause is well formed was decided by
+     * {@link Contracts}, which owns both the contracts and what reading them found; a behavior whose
+     * declaration cannot be read is left out of this rather than refused a second time.
+     */
+    public record StatedContracts(String name) implements Key<Map<String, StatedContract>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, StatedContract>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Shapes.Expandable(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
@@ -403,7 +483,7 @@ public final class Bodies {
             }
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
-            Map<String, ContractDischarge> out = new LinkedHashMap<>();
+            Map<String, StatedContract> out = new LinkedHashMap<>();
             try {
                 ClausesForDischarge declaring =
                         ClausesForDischarge.of(expandable.value(), scope.value(), published);
@@ -412,12 +492,12 @@ public final class Bodies {
                     try {
                         BehaviorContract contract = BehaviorChecker.contractAsRead(each.getValue(),
                                 name, signatures.value().get(each.getKey()), scope.value());
-                        out.put(each.getKey(), ContractDischarge.of(contract, declaring,
-                                scope.value(), helpers.value()));
+                        out.put(each.getKey(), StatedContract.of(contract, declaring, scope.value(),
+                                helpers.value()));
                     } catch (Unanswerable | CompileException _) {
                         // The declaration could not be read, which is said where it is held to its
-                        // rules. There is nothing to classify, and a behavior that cannot be read
-                        // leaves the rest of the module's readable.
+                        // rules. There is nothing to read into a term, and a behavior that cannot be
+                        // read leaves the rest of the module's readable.
                     }
                 }
             } catch (CompileException e) {
@@ -1323,6 +1403,11 @@ public final class Bodies {
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
             Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> dischargeInvariants =
                     db.ask(new Shapes.InvariantsForDischarge(module));
+            // What the behaviors this body may call state about their answers. A caller that has
+            // matched a case may take the rules about that case as holding, which is what a declared
+            // relation is for (spec §ensures).
+            Answer<Map<ValueName.Behavior, StatedContract>> contracts =
+                    db.ask(new ContractsInSight(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !inliner.present()
                     || !sigs.present() || !constructs.present()) {
@@ -1333,7 +1418,8 @@ public final class Bodies {
             // rather than run against the emitted tree, whose operations are no longer operations.
             InvariantChecker.Source dischargeSource = discharge.present()
                     ? new InvariantChecker.Source(discharge.value().writtenBody(),
-                            dischargeInvariants.present() ? dischargeInvariants.value() : Map.of())
+                            dischargeInvariants.present() ? dischargeInvariants.value() : Map.of(),
+                            contracts.present() ? contracts.value() : Map.of())
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {

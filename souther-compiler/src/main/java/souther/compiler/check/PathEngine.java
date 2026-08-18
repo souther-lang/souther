@@ -1,10 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.BehaviorContract.Guard;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What holds where a walk stands, and the three acts that move it.
@@ -46,9 +50,16 @@ final class PathEngine {
     private final Terms terms;
     /** What a clause owes and what a guard settles. */
     private final Predicates predicates;
+    /** What each behavior a body may call states about its answer, by the name it is called under. */
+    private final Map<ValueName.Behavior, StatedContract> contracts;
 
     PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants) {
-        this(symbols, dischargeInvariants, Terms.Of.THE_DISCHARGE_TREE);
+        this(symbols, dischargeInvariants, Map.of(), Terms.Of.THE_DISCHARGE_TREE);
+    }
+
+    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+               Map<ValueName.Behavior, StatedContract> contracts) {
+        this(symbols, dischargeInvariants, contracts, Terms.Of.THE_DISCHARGE_TREE);
     }
 
     /**
@@ -61,10 +72,16 @@ final class PathEngine {
      */
     PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
                Terms.Of reading) {
+        this(symbols, dischargeInvariants, Map.of(), reading);
+    }
+
+    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+               Map<ValueName.Behavior, StatedContract> contracts, Terms.Of reading) {
         this.symbols = symbols;
         this.clauses = new Clauses(symbols, dischargeInvariants);
         this.terms = new Terms(symbols, reading);
         this.predicates = new Predicates(terms);
+        this.contracts = Map.copyOf(contracts);
     }
 
     Symbols symbols() {
@@ -171,10 +188,150 @@ final class PathEngine {
      * here rather than at each walk: two readings deciding it apart is two chances to forget, and
      * the one that forgot fell over on every ordinary unit case.
      */
-    Entered enteringArm(Core.Case arm, Known k, Denotations at) {
-        return arm.binding() == null || arm.bindType() == null
+    Entered enteringArm(Core.Case arm, Core scrutinee, Known k, Denotations at) {
+        Entered in = arm.binding() == null || arm.bindType() == null
                 ? new Entered(k, at)
                 : enter(Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+        return assuming(answeredBy(scrutinee, in.at()), answered(arm, scrutinee),
+                guard -> impliedBy(guard, arm.pattern()), in);
+    }
+
+    /**
+     * The same arm, where the answer it is opening came from nowhere this can name.
+     *
+     * <p>Kept as the shorter question a caller with no scrutinee to hand asks — a conditional lifted
+     * out of a body is read where it stood, and what it stood in front of is not being re-decided
+     * here.
+     */
+    Entered enteringArm(Core.Case arm, Known k, Denotations at) {
+        return enteringArm(arm, null, k, at);
+    }
+
+    // --- what a call's answer was declared to be ------------------------------------------------
+
+    /**
+     * What the behavior that produced {@code value} states about its answer, or null where nothing
+     * did.
+     *
+     * <p>The call is followed through the names it was given. {@code let r = findTodo(id)} and
+     * {@code match findTodo(id)} are the same program to an author, and asking whether the scrutinee
+     * <em>is</em> a call answers only the second — the binding it went through is not a step away
+     * from the call, it is a name for it. Derived from what the walk already recorded rather than
+     * remembered beside it: {@link Denotations} holds what each binding was given, and holding an
+     * origin as well would be two records of one fact to keep agreeing.
+     */
+    private Answered answeredBy(Core value, Denotations at) {
+        Core.Call call = value == null ? null : originatingCall(value, at, new HashSet<>());
+        if (call == null || !(call.fn() instanceof Core.Reached reached)
+                || !(reached.denotes() instanceof ValueName.Behavior behavior)) {
+            return null;
+        }
+        StatedContract stated = contracts.get(behavior);
+        return stated == null ? null : new Answered(stated, call);
+    }
+
+    /** An answer and what was declared about it: the rules, and the call they are read at — a rule
+     * names the behavior's own parameters, and what those are here is what this call handed over. */
+    private record Answered(StatedContract stated, Core.Call call) {}
+
+    /** The call {@code value} came from, through however many names it was given, or null where it
+     * came from something else. {@code seen} stops a binding given itself. */
+    private Core.Call originatingCall(Core value, Denotations at, Set<BindingId> seen) {
+        if (value instanceof Core.Call call) {
+            return call;
+        }
+        if (value instanceof Core.Read read && seen.add(read.binding())) {
+            Core given = at.valueOf(read.binding());
+            return given == null ? null : originatingCall(given, at, seen);
+        }
+        return null;
+    }
+
+    /**
+     * Whether an arm's pattern says the answer is what {@code guard} is about.
+     *
+     * <p>Read off the pattern, which is the proof the checker already has: an arm is taken because
+     * the value is one of the cases it names, so an arm naming one case says the answer is that case
+     * and an arm naming several says only that it is one of them. A rule about one of several is a
+     * rule about a value this arm may not have.
+     *
+     * <p>A rule under no case applies to every answer, so any arm reaching it is an arm it holds of.
+     */
+    private static boolean impliedBy(Guard guard, Core.ResolvedPattern pattern) {
+        if (guard instanceof Guard.Always) {
+            return true;
+        }
+        if (!(guard instanceof Guard.Case(CaseSelector selector))
+                || !(pattern instanceof Core.ResolvedPattern.Single single)) {
+            return false;
+        }
+        return single.selector().name().equals(selector.name());
+    }
+
+    /** What the arm holds of the answer: what it binds where it binds one, and the answer itself
+     * where it does not — an arm may state a relation about a case that carries nothing. */
+    private static Core answered(Core.Case arm, Core scrutinee) {
+        return arm.binding() == null || arm.bindType() == null ? scrutinee
+                : Terms.read(arm.binding(), arm.bindType(), arm.pos());
+    }
+
+    /**
+     * {@code in} with every rule the arm's pattern implies taken as holding of the answer.
+     *
+     * <p>Conjunct by conjunct, as everything else about a clause is. A rule one half of which names
+     * something this cannot read still says the other half: dropping the rule for the half that got
+     * away would leave a caller with less than the declaration gives them, and taking the half that
+     * was read is what the seeding does everywhere else.
+     */
+    private Entered assuming(Answered answered, Core answer, Predicate<Guard> reached, Entered in) {
+        if (answered == null || answer == null) {
+            return in;
+        }
+        Known out = in.known();
+        for (StatedContract.StatedRule rule : answered.stated().rules()) {
+            if (!reached.test(rule.guard())) {
+                continue;
+            }
+            Map<BindingId, Core> given = handedOver(answered, rule, answer);
+            if (given == null) {
+                continue;
+            }
+            for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
+                if (conjunct.stated() == null) {
+                    continue;
+                }
+                Core here = Clauses.substituted(conjunct.stated(), given);
+                out = predicates.assume(predicates.obligations(here, out, in.at(), false), out,
+                        Known.Held.OF_THE_VALUE);
+            }
+        }
+        return new Entered(out, in.at());
+    }
+
+    /**
+     * What each name a rule reads stands for here: the parameters as this call handed them over, and
+     * {@code value} as what the arm holds.
+     *
+     * <p>A rule is written in the declaration's names and read at the caller's values, so the two are
+     * put together before anything is read of it — which is the same substitution a declaration's
+     * clause gets where a value is built ({@link Clauses#statedAt}).
+     *
+     * <p>Null where the call and the declaration disagree about how many values were handed over.
+     * That is a program this compiler is refusing elsewhere, and a rule read against the wrong
+     * argument would be a relation nobody declared.
+     */
+    private static Map<BindingId, Core> handedOver(Answered answered,
+                                                   StatedContract.StatedRule rule, Core answer) {
+        List<Core> args = answered.call().args();
+        if (args.size() != answered.stated().params().size()) {
+            return null;
+        }
+        Map<BindingId, Core> given = new HashMap<>();
+        for (BehaviorContract.ContractParam param : answered.stated().params()) {
+            given.put(param.binding(), args.get(param.index()));
+        }
+        given.put(rule.value(), answer);
+        return given;
     }
 
     /**
