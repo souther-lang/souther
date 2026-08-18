@@ -45,6 +45,16 @@ import java.util.Set;
  * What would is for an example to depend on the classes it reaches rather than on all of them,
  * which is per-definition work and not here.
  *
+ * <p>Which is one case of the rule the rest of them are cases of. A collection gathered per module
+ * is an index, and a question asked per definition depends on the entries it reaches rather than on
+ * the index. Read whole, an index hands the finer question the coarser one's identity: an edit
+ * anywhere in the module — or in a module it imports — arrives as an edit to every definition in it,
+ * and no test of what the compiler answers can see the difference. Keeping the index is fine; what
+ * a per-definition question may not do is read one as a value. {@link Bodies.ContractsForBody} is a
+ * body's contracts asked that way, behavior by behavior. Checking a body still reads its module's
+ * {@link Shapes.Scope} and {@link Bodies.CalleeSigs} whole, so declaring a behavior re-checks every
+ * body of the module; that is issue #829, and {@code IncrementalCompilationTest} pins both sides.
+ *
  * <p>One store is one workspace over time, not one compile. It is not thread-safe and does not need
  * to be: the work inside a compile is a graph walk, not a set of independent jobs.
  */
