@@ -122,7 +122,16 @@ public sealed interface Required {
 
         /** The rule is about how one position stands against another, which no partition of one and
          * no line on one number is. */
-        IT_RELATES_TWO_POSITIONS
+        IT_RELATES_TWO_POSITIONS,
+
+        /**
+         * The rule names no position of this value.
+         *
+         * <p>{@code invariant t = 1 >= 0} says nothing about anywhere, so there is nothing about a
+         * position for anything to have read. A rule cannot cost a position it does not name, which
+         * is what the reading of values says of its own failures for the same reason.
+         */
+        IT_NAMES_NO_POSITION
     }
 
     /** What every invariant clause raises about a position it is written about. */
@@ -153,9 +162,13 @@ public sealed interface Required {
             // stand there, and what it says is that none may.
             case ClauseStates.NoValueAtAll none -> new Some(new LinkedHashSet<>(
                     java.util.List.of(admittedValues(none.position()))));
-            case ClauseStates.SomethingElse other -> new Some(other.positions().stream()
-                    .map(Required::admittedValues).collect(java.util.stream.Collectors
-                            .toCollection(LinkedHashSet::new)));
+            // A clause about no position of this value raises no question about one. Not a rule
+            // that went unread: what it says was read, and what it says is about nothing here.
+            case ClauseStates.SomethingElse other -> other.positions().isEmpty()
+                    ? new Irrelevant(Because.IT_NAMES_NO_POSITION)
+                    : new Some(other.positions().stream()
+                            .map(Required::admittedValues).collect(java.util.stream.Collectors
+                                    .toCollection(LinkedHashSet::new)));
             case ClauseStates.ARelation _ -> new Irrelevant(Because.IT_RELATES_TWO_POSITIONS);
         };
     }

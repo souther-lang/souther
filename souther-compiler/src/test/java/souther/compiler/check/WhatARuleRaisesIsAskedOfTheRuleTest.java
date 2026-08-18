@@ -118,6 +118,29 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
     }
 
     /**
+     * A rule about no position of this value raises nothing, and says what settled that.
+     *
+     * <p>{@code 1 >= 0} says nothing about anywhere, so there is nothing about a position for
+     * anything to have read. Filed at the value for want of somewhere else, it was a rule nothing
+     * had accounted for — a false one, since what it says was read and what it says is about
+     * nothing here.
+     */
+    @Test
+    void aRuleAboutNoPositionRaisesNothing() {
+        Required.Irrelevant said = assertInstanceOf(Required.Irrelevant.class,
+                only(raisedBy("""
+                        module example.rooms
+
+                        data Length = Int
+                            invariant floor = value >= 1
+                            invariant always = 1 >= 0
+                        """, "Length"), "always"));
+
+        assertEquals(Required.Because.IT_NAMES_NO_POSITION, said.because());
+        assertEquals(Set.of(), said.obligations());
+    }
+
+    /**
      * A rule relating two positions raises nothing, and says what settled that.
      *
      * <p>The conclusion, not an empty result. Both sides were recognised, and a partition is of one

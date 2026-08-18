@@ -59,22 +59,19 @@ sealed interface ClauseStates {
      * to stop: the question is raised by the model, and whether anything answered it is asked
      * afterwards.
      *
-     * @param positions the ones the clause names. A rule cannot cost a position it does not name, so
-     *                  these and not every position of the value. Where it names none this reading
-     *                  recognised, the value itself stands: what the clause is about is then not
-     *                  known, and filing it nowhere would let a rule this could not place take
-     *                  nothing with it
+     * @param positions the ones the clause names, which may be none. A rule cannot cost a position
+     *                  it does not name, so these and not every position of the value — and a
+     *                  clause naming none of them raises no question about one, which is what
+     *                  {@link Required#ofInvariant} makes of an empty set. Filed at the value
+     *                  instead, {@code invariant t = 1 >= 0} was a rule nothing had accounted for
      */
     record SomethingElse(Set<Owed.Subject> positions) implements ClauseStates {
 
         public SomethingElse {
             // Insertion order: `Set.of` and `Set.copyOf` iterate in an order salted once per JVM
             // run, and what is built from these reaches a checked-in document.
-            positions = positions.isEmpty()
-                    ? java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(
-                            java.util.List.of(Owed.Subject.at(FieldDomains.THE_VALUE))))
-                    : java.util.Collections.unmodifiableSet(
-                            new java.util.LinkedHashSet<>(positions));
+            positions = java.util.Collections.unmodifiableSet(
+                    new java.util.LinkedHashSet<>(positions));
         }
 
         static SomethingElse naming(List<Owed.Subject> found) {

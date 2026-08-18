@@ -88,24 +88,12 @@ record StatedByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fa
     }
 
     /**
-     * What one clause says on its own.
-     *
-     * <p>The same reading as {@link #of}, run over one clause, so that a caller can tell which
-     * clauses a reading took in rather than which positions it ended up short of. The two are
-     * different questions and reading the second for the first is what let one clause's failure
-     * spoil the account of every clause beside it: {@code value >= 1} leaves the reading of values
-     * short at a position, and {@code value == 7} written beside it was taken in whole.
-     */
-    static StatedByClauses ofOne(Core clause, Terms terms, Denotations at,
-                                 Map<FactSubject, Type> byName, Symbols symbols) {
-        return readingOf(terms, at, byName, symbols).read(clause, true);
-    }
-
-    /**
      * Where the readings took {@code clause} in, said by them.
      *
-     * <p>A reading of its own, so the set holds what this clause was adopted at and not what
-     * everything before it was.
+     * <p>A reading of its own, so what comes back is what this clause was adopted at and not what
+     * everything before it was. The two languages are two accounts and either will do: a comparison
+     * one of them has no word for is read whole by the other, and asking for one to hold all of a
+     * clause would call a clause that was read unread.
      */
     static Set<FactSubject> adoptedIn(Core clause, Terms terms, Denotations at,
                                       Map<FactSubject, Type> byName, Symbols symbols) {

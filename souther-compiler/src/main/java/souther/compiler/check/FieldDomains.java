@@ -579,7 +579,7 @@ public final class FieldDomains {
         // clauses it was handed, and a clause it could not turn into an obligation is one this
         // reading may have taken in whole; borrowing it would settle this reading's completeness by
         // a fragment that is not this reading's.
-        return reachedTheRulesAt(path) ? AdmissibleSet.complete(values)
+        return everyRuleReachedAt(path) ? AdmissibleSet.complete(values)
                 : AdmissibleSet.partial(values, UnreadReason.NOT_REACHED);
     }
 
@@ -594,20 +594,14 @@ public final class FieldDomains {
      * <p>A stop at {@link #THE_VALUE} is different in kind and is why the paths are compared rather
      * than counted: the declaration's own clause can name any position of it, so a clause of it
      * that never arrived leaves every position short of its rules.
-     */
-    /**
-     * Whether the gathering reached the rules written about the position at {@code path}.
      *
-     * <p>Asked of the gathering and not read off what a reading came back short of. A position can
-     * be both — a rule that arrived and could not be read, beside a subtree the walk never entered —
-     * and {@link #admits} answers with the first of the two because it has one slot to answer in.
-     * A caller that wants to know whether anything is out of sight wants this.
+     * <p>Asked here rather than read off what a reading came back short of. A position can be both
+     * — a rule that arrived and could not be read, beside a subtree the walk never entered — and
+     * {@link #admits} answers with the first of the two because it has one slot to answer in, so
+     * reach taken from there is lost wherever another reason won it. A caller that wants to know
+     * whether anything is out of sight wants this.
      */
     public boolean everyRuleReachedAt(String path) {
-        return reachedTheRulesAt(path);
-    }
-
-    private boolean reachedTheRulesAt(String path) {
         for (String stopped : notGathered) {
             if (stopped.equals(THE_VALUE) || path.equals(stopped)
                     || path.startsWith(stopped + ".")) {
