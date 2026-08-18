@@ -1097,12 +1097,15 @@ public final class InvariantChecker {
      * what was put in lands on the same subjects. A binder an expansion introduced was written
      * around its own body, and the binders a conditional stands inside scope over the conditional
      * and no further, so nothing standing beside either was written where it could name them.
+     *
+     * <p>{@code unread} is null where none of it is: what was put in stands somewhere the reading
+     * had already stopped, and the region that owns it reads it when this walk arrives there.
      */
     private void entering(Core e, Core unread, Known given, Denotations at, int depth) {
         if (given.reachesNothing()) {
             return;
         }
-        walk(e, engine.answering(unread, given, at), at, depth);
+        walk(e, unread == null ? given : engine.answering(unread, given, at), at, depth);
     }
 
     /**
@@ -1149,17 +1152,25 @@ public final class InvariantChecker {
             Entered inside = scopeOf(site, k, at);
             Known within = inside.known();
             Denotations there = inside.at();
-            entering(value.cond(), within, there, depth);
+            // The condition is read here only where the reading stopped short of it. Reached
+            // from where the region was entered, it stands in `within` already.
+            if (site.read()) {
+                walk(value.cond(), within, there, depth);
+            } else {
+                entering(value.cond(), within, there, depth);
+            }
             Set<Core> alike = sameConditional(e, value, there);
             // The readings start from where the conditional stood, not from outside it. The tree each
             // is given still holds those binders and walks into them again, which is why entering one
             // already entered is nothing: a second transition would forget what the branch settled.
             // Only the branch is unread. Everything beside the conditional was read where this
             // region was entered and stands in `within`, and the two readings differ in what the
-            // condition settles rather than in what stands outside it.
-            say(reading(without(e, alike, value.then()), value.then(),
+            // condition settles rather than in what stands outside it. Where the reading stopped
+            // short of the conditional, nothing here is: the branch stands where the region that
+            // owns it reads it, and this walk reaches that region on its way down.
+            say(reading(without(e, alike, value.then()), site.read() ? value.then() : null,
                             predicates.assumeCond(value.cond(), within, there, true).known(), there, depth),
-                    reading(without(e, alike, value.els()), value.els(),
+                    reading(without(e, alike, value.els()), site.read() ? value.els() : null,
                             predicates.assumeCond(value.cond(), within, there, false).known(), there, depth));
             return;
         }
@@ -1853,7 +1864,24 @@ public final class InvariantChecker {
      * a construction written inside a condition is a construction like any other, and reading it
      * where its binders are not entered is reading it as something nothing can be said of.
      */
-    private record ConditionalSite(Core.If conditional, List<Binder> scope) {
+    private record ConditionalSite(Core.If conditional, List<Binder> scope, boolean read) {
+
+        static ConditionalSite at(Core.If conditional) {
+            return new ConditionalSite(conditional, List.of(), true);
+        }
+
+        /**
+         * The same site, found past somewhere the reading stops.
+         *
+         * <p>What the reading covers is what {@link PathEngine#answering} walks from where the region
+         * was entered, and the search below goes further: into a binding's body, into an arm, into an
+         * attempt's success and into a departure. A site found there stands where nothing has been
+         * read, so the branch put in its place is read here; a site the reading reached stands where
+         * everything has, and reading it again would seed what is already held.
+         */
+        ConditionalSite pastTheReading() {
+            return new ConditionalSite(conditional, scope, false);
+        }
 
         /** One binder the conditional stands inside, as the environment its body is read in. */
         private interface Binder {
@@ -1866,7 +1894,7 @@ public final class InvariantChecker {
             List<Binder> outer = new ArrayList<>();
             outer.add(binder);
             outer.addAll(scope);
-            return new ConditionalSite(conditional, List.copyOf(outer));
+            return new ConditionalSite(conditional, List.copyOf(outer), read);
         }
 
         /** A {@code let}'s body, read with the name standing for what it was given. */
@@ -1957,7 +1985,7 @@ public final class InvariantChecker {
      * scope for the value it is itself given, so a conditional found there is inside nothing. */
     private static ConditionalSite conditionalIn(Core e) {
         if (e instanceof Core.If iff) {
-            return new ConditionalSite(iff, List.of());
+            return ConditionalSite.at(iff);
         }
         if (e instanceof Core.Block) {
             return null;   // read where the closure is applied
@@ -1968,7 +1996,8 @@ public final class InvariantChecker {
                 return given;
             }
             ConditionalSite inside = conditionalIn(li.body());
-            return inside == null ? null : inside.under(ConditionalSite.of(li));
+            return inside == null ? null
+                    : inside.pastTheReading().under(ConditionalSite.of(li));
         }
         if (e instanceof Core.Match m) {
             ConditionalSite asked = conditionalIn(m.scrutinee());
@@ -1981,8 +2010,9 @@ public final class InvariantChecker {
                     continue;
                 }
                 // A case that binds nothing introduces nothing: its body is read as the arm's own.
+                ConditionalSite there = inside.pastTheReading();
                 return arm.binding() == null || arm.bindType() == null
-                        ? inside : inside.under(ConditionalSite.of(arm));
+                        ? there : there.under(ConditionalSite.of(arm));
             }
             return null;
         }
@@ -1993,14 +2023,14 @@ public final class InvariantChecker {
             }
             ConditionalSite held = conditionalIn(ic.then());
             if (held != null) {
-                return held.under(ConditionalSite.of(ic));
+                return held.pastTheReading().under(ConditionalSite.of(ic));
             }
             // A departure stands where the invariant did not hold and nothing was built, so it is
             // inside nothing the attempt would have guaranteed.
             for (Core.ElseArm arm : ic.els()) {
                 ConditionalSite departed = conditionalIn(arm.body());
                 if (departed != null) {
-                    return departed;
+                    return departed.pastTheReading();
                 }
             }
             return null;

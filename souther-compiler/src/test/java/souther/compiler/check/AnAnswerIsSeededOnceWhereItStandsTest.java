@@ -168,6 +168,69 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
         }
     }
 
+    /**
+     * Where a conditional is, and where the answer stands relative to it. The walk opens a
+     * conditional a value is handed by reading the expression once with each branch put where it
+     * stood, so every one of these is a place the same answer could be read twice.
+     */
+    private static final String SUM = """
+            module demo exposing ( Amount, Pair, Tag, step, run )
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Pair = { l: Amount, r: Amount }
+
+            data Tag = Lo | Hi
+
+            behavior step : (a: Amount) -> Amount
+                constructs Amount
+
+            let step (a) = Amount(a.value + 1)
+
+            behavior run : (a: Amount, t: Tag) -> Pair
+                constructs Pair, Amount
+
+            """;
+
+    @Test
+    void anAnswerAConditionalIsDecidedByIsNotReadAgain() {
+        seededOnce(1, SUM + """
+                let run (a, t) = Pair
+                    { l = if step(a).value > 3 then Amount(1) else Amount(2)
+                    , r = a
+                    }
+                """, "an answer in the condition of a conditional in a value");
+    }
+
+    @Test
+    void anAnswerPastWhereTheReadingStoppedIsReadByTheRegionThatOwnsIt() {
+        seededOnce(1, SUM + """
+                let run (a, t) = Pair
+                    { l = match t with
+                            | Lo -> if step(a).value > 3 then Amount(1) else Amount(2)
+                            | Hi -> Amount(9)
+                    , r = a
+                    }
+                """, "an answer in a condition an arm stands over");
+        seededOnce(1, SUM + """
+                let run (a, t) = Pair
+                    { l = match t with
+                            | Lo -> if a.value > 3 then Amount(1) else Amount(step(a).value)
+                            | Hi -> Amount(9)
+                    , r = a
+                    }
+                """, "an answer in a branch an arm stands over");
+        seededOnce(1, SUM + """
+                let run (a, t) = Pair
+                    { l = match t with
+                            | Lo -> if a.value > 3 then Amount(1) else Amount(2)
+                            | Hi -> Amount(9)
+                    , r = step(a)
+                    }
+                """, "an answer beside a conditional an arm stands over");
+    }
+
     @Test
     void aCallNestedInsideAnotherIsSeededOnce() {
         for (int depth : List.of(1, 2, 4, 8, 16)) {
