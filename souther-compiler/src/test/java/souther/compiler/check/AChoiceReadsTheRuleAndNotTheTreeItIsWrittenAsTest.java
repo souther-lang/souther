@@ -70,10 +70,11 @@ class AChoiceReadsTheRuleAndNotTheTreeItIsWrittenAsTest {
         Branch left = UNREADABLE.or(UNREADABLE).or(IMPOSSIBLE);
         Branch right = UNREADABLE.or(UNREADABLE.or(IMPOSSIBLE));
 
-        assertEquals(left.adoption().took("y"), right.adoption().took("y"),
-                "the position the branch that admits nothing named");
-        assertEquals(left.adoption().took("x"), right.adoption().took("x"),
-                "and the one the unread branches were about");
+        // The whole account and not what it comes to at a position: what a choice hands on is what
+        // the choice beside it composes with, so two groupings agreeing about the answer while
+        // holding different evidence would come apart at the next alternative.
+        assertEquals(left.adoption(), right.adoption(),
+                "one rule, one account of it");
         assertTrue(left.adoption().took("y"),
                 "which is settled: nothing satisfies the branch that named it, so the choice"
                         + " imposes nothing there");
@@ -85,8 +86,8 @@ class AChoiceReadsTheRuleAndNotTheTreeItIsWrittenAsTest {
      *  vary. */
     @Test
     void andTheSameWhicheverOrderTheBranchesAreMetIn() {
-        assertEquals(UNREADABLE.or(UNREADABLE).or(IMPOSSIBLE).adoption().took("y"),
-                IMPOSSIBLE.or(UNREADABLE).or(UNREADABLE).adoption().took("y"));
+        assertEquals(UNREADABLE.or(UNREADABLE).or(IMPOSSIBLE).adoption(),
+                IMPOSSIBLE.or(UNREADABLE).or(UNREADABLE).adoption());
     }
 
     /**
