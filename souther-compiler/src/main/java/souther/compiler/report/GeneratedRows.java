@@ -402,8 +402,8 @@ public final class GeneratedRows {
             // `subject` joins on. The finding carries the arm rather than words about it, so that
             // the sentence a diagnostic says in the reader's language and the words written here
             // are two readings of one arm rather than one of them being handed the other's.
-            case ARM_UNREACHED -> ((souther.compiler.coverage.CoverageSites.Site)
-                    gap.args().get(0)).label();
+            case ARM_UNREACHED -> ArmVocabulary.label(
+                    (souther.compiler.coverage.CoverageSites.Site) gap.args().get(0));
             case INPUT_CASE_UNSPECIFIED, OUTPUT_CASE_UNSPECIFIED ->
                     String.valueOf(gap.args().get(0));
             // Not gaps a build refuses, and a disposition is not held for one. Listed rather than

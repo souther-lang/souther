@@ -2003,13 +2003,13 @@ public final class Adequacy {
                         // against whichever file the reader has in mind. Where a fork of a body
                         // drew the line, the place is pointed at rather than said, and which
                         // construct it was is a phrase the catalog holds in every language.
-                        case BOUNDARY_UNMET -> rule(said).isAGuard()
+                        case BOUNDARY_UNMET -> rule(said).wasDrawnInABodyFork()
                                 ? new ExampleMessage.NoRowIsAtTheLineAConstructDrew(
                                         text(said, 0), text(said, 1), constructOf(said))
                                 : new ExampleMessage.NoRowIsAtThatBoundary(
                                         text(said, 0), text(said, 1), rule(said).named());
                         case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
-                                arm(said).said(), text(said, 1));
+                                phraseFor(arm(said)), text(said, 1));
                         default -> throw new IllegalArgumentException(
                                 "no message for " + finding.kind());
                     });
@@ -2098,6 +2098,51 @@ public final class Adequacy {
          *  language supplies. Asked of the rule, which is where the source's own answer is. */
         private static souther.compiler.diag.Localizable constructOf(List<Object> said) {
             return rule(said).constructThatDrewIt().said();
+        }
+
+        /**
+         * What a sentence calls one arm, as a phrase the catalog holds in every language.
+         *
+         * <p>Chosen here and not where the arm was found. The measurement answers what the arm is —
+         * a construct and a way through it — and what to call one is a question only a sentence with
+         * a reader has; the report writes a short word for the same arm and this writes a phrase, and
+         * neither is the other's to decide. Written off the name the pair already settles, so a
+         * construct added to the language arrives here as a case with no phrase rather than as one
+         * quietly answered with a neighbour's.
+         */
+        private static souther.compiler.diag.Localizable phraseFor(
+                souther.compiler.coverage.CoverageSites.Site arm) {
+            return switch (arm.name()) {
+                case THEN -> souther.compiler.diag.Localizable.of("arm.then");
+                case ELSE -> souther.compiler.diag.Localizable.of("arm.else");
+                case CONTINUED -> souther.compiler.diag.Localizable.of("arm.continued");
+                case KEPT -> souther.compiler.diag.Localizable.of("arm.kept");
+                case DROPPED -> souther.compiler.diag.Localizable.of("arm.dropped");
+                case CONSTRUCTED -> souther.compiler.diag.Localizable.of("arm.constructed");
+                case CASE -> souther.compiler.diag.Localizable.of("arm.case", casesOf(arm));
+                case DEPARTURE -> clauseOf(arm)
+                        .map(c -> souther.compiler.diag.Localizable.of("arm.departure.clause", c))
+                        .orElseGet(() -> souther.compiler.diag.Localizable.of("arm.departure"));
+                // Not an arm, so no warning is about one. Reaching this is the branch measure and
+                // this sentence disagreeing about what it counts.
+                case COMPARISON -> throw new IllegalStateException(
+                        "no arm was unreached here: " + arm);
+            };
+        }
+
+        private static String casesOf(souther.compiler.coverage.CoverageSites.Site arm) {
+            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Matched matched
+                    ? matched.cases().stream()
+                            .map(souther.compiler.types.TypeSymbol::name)
+                            .collect(java.util.stream.Collectors.joining(" | "))
+                    : "";
+        }
+
+        private static java.util.Optional<String> clauseOf(
+                souther.compiler.coverage.CoverageSites.Site arm) {
+            return arm.outcome() instanceof souther.compiler.coverage.SourceOutcome.Failed(
+                    souther.compiler.coverage.SourceOutcome.FailedBy.Construction(var clause))
+                    ? clause : java.util.Optional.empty();
         }
 
         /** What a finding put at {@code at}, as the text a message carries. */

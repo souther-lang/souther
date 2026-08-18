@@ -6,7 +6,6 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -80,9 +79,10 @@ public final class CoverageSites {
      *
      * <p>Two halves and one meaning. {@link #obligation} carries the construct the source wrote, and
      * {@link #outcome} what this way through it means; neither says the other, so nothing here can
-     * hold two answers about one construct. What a reader is told is {@link #name}, and it is the
-     * pair that settles it — a condition holding is a {@code then} under an {@code if} and the rest
-     * of the block under a {@code guard}.
+     * hold two answers about one construct. Which of them the pair comes to is {@link #name}, and
+     * that is as far as this goes — a condition holding is a {@code then} under an {@code if} and the
+     * rest of the block under a {@code guard}, and both of those are said in a language, by whoever
+     * has a reader in front of them.
      *
      * @param outcome     what this way through the construct means, in the source's terms
      * @param at          where the arm is written, as a report may say it. A {@link Citation} and
@@ -119,63 +119,6 @@ public final class CoverageSites {
         /** Whether this is one of the arms a branch measure counts. */
         public boolean isArm() {
             return outcome.isArm();
-        }
-
-        /**
-         * What a sentence in the reader's language calls this arm.
-         *
-         * <p>A key and what goes in it, chosen from the pair and not from either half: a condition
-         * holding is a {@code then} to quote under an {@code if} and the rest of the block under a
-         * {@code guard}, and the words for both are the catalog's.
-         */
-        public souther.compiler.diag.Localizable said() {
-            return switch (outcome) {
-                case SourceOutcome.Matched(List<TypeSymbol> cases) ->
-                        souther.compiler.diag.Localizable.of("arm.case", namesOf(cases));
-                case SourceOutcome.Failed(SourceOutcome.FailedBy.Construction(var clause)) ->
-                        clause.map(c -> souther.compiler.diag.Localizable.of(
-                                        "arm.departure.clause", c))
-                                .orElseGet(() -> souther.compiler.diag.Localizable.of(
-                                        "arm.departure"));
-                case SourceOutcome.Held _, SourceOutcome.Failed _, SourceOutcome.Compared _ ->
-                        switch (name()) {
-                            case THEN -> souther.compiler.diag.Localizable.of("arm.then");
-                            case ELSE -> souther.compiler.diag.Localizable.of("arm.else");
-                            case CONTINUED ->
-                                    souther.compiler.diag.Localizable.of("arm.continued");
-                            case KEPT -> souther.compiler.diag.Localizable.of("arm.kept");
-                            case DROPPED -> souther.compiler.diag.Localizable.of("arm.dropped");
-                            case CONSTRUCTED ->
-                                    souther.compiler.diag.Localizable.of("arm.constructed");
-                            // Neither is reachable here — a `case` and a departure are answered
-                            // above, and a comparison is not an arm, so nothing asks a sentence
-                            // about one.
-                            case CASE, DEPARTURE, COMPARISON -> throw new IllegalStateException(
-                                    "no sentence names this: " + name());
-                        };
-            };
-        }
-
-        /**
-         * The same, as the reports that are written in one language spell it.
-         *
-         * <p>Short where {@link #said} is a phrase: this goes in a field a consumer joins on and in a
-         * line of a table, and neither is a sentence.
-         */
-        public String label() {
-            return switch (outcome) {
-                case SourceOutcome.Matched(List<TypeSymbol> cases) -> "case " + namesOf(cases);
-                case SourceOutcome.Failed(SourceOutcome.FailedBy.Construction(var clause)) ->
-                        clause.map(c -> "else " + c).orElse("else");
-                case SourceOutcome.Compared(Hir.BinOp op) -> op.toString();
-                case SourceOutcome.Held _, SourceOutcome.Failed _ ->
-                        name().name().toLowerCase(java.util.Locale.ROOT);
-            };
-        }
-
-        private static String namesOf(List<TypeSymbol> cases) {
-            return cases.stream().map(TypeSymbol::name)
-                    .collect(java.util.stream.Collectors.joining(" | "));
         }
     }
 

@@ -134,7 +134,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         assertEquals(List.of("constructed", "else"),
                 planOf(AN_ATTEMPTED_GUARD).sites().stream()
                         .filter(CoverageSites.Site::isArm)
-                        .map(CoverageSites.Site::label).toList());
+                        .map(souther.compiler.report.ArmVocabulary::label).toList());
     }
 
     /**
@@ -169,6 +169,39 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         assertEquals(CoverageConstruct.COMPREHENSION, written.lowered(1).kind());
     }
 
+    /**
+     * A binary expression is what the source wrote; being read as a comparison a row can reach is
+     * what happened to some of them.
+     *
+     * <p>{@code a + b} is minted exactly the way {@code a >= b} is — one call of the builder, one
+     * ordinal — so naming the construct after the use the analysis puts a few of them to would put a
+     * word on every arithmetic node in every body that is untrue of it. Only the comparisons of a
+     * fork's condition become sites, and a {@code &&} is descended through rather than numbered, so
+     * what a construct is and what was made of it have to be two answers.
+     */
+    @Test
+    void everyBinaryTheSourceWroteIsABinaryAndOnlySomeAreSites() {
+        String source = """
+                module demo
+
+                behavior total : (a: Int, b: Int) -> Int
+                let total (a, b) = if a + b >= 10 && a > 0 then a * b else a - b
+                """;
+
+        List<CoverageConstruct> written = binariesIn(source);
+        assertEquals(6, written.size(), () -> "four arithmetic, two comparisons, one `&&`: "
+                + written);
+        assertTrue(written.stream().allMatch(k -> k == CoverageConstruct.BINARY),
+                () -> "what the source wrote is a binary expression, whichever operator: " + written);
+
+        // And two of the six are sites: the comparisons the fork's condition settles on. The `&&`
+        // is walked into rather than numbered, and nothing outside a condition is numbered at all.
+        assertEquals(2, planOf(source).sites().stream()
+                        .filter(site -> site.outcome() instanceof SourceOutcome.Compared)
+                        .count(),
+                "a comparison of the condition is a site; a binary expression is not");
+    }
+
     // --- what the pair admits -----------------------------------------------------------------------
 
     /**
@@ -192,7 +225,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         assertEquals(OutcomeName.DEPARTURE, OutcomeName.of(CoverageConstruct.GUARD, refused()));
         assertEquals(OutcomeName.CASE, OutcomeName.of(CoverageConstruct.MATCH,
                 new SourceOutcome.Matched(List.of())));
-        assertEquals(OutcomeName.COMPARISON, OutcomeName.of(CoverageConstruct.COMPARISON,
+        assertEquals(OutcomeName.COMPARISON, OutcomeName.of(CoverageConstruct.BINARY,
                 new SourceOutcome.Compared(souther.compiler.ast.Hir.BinOp.GE)));
     }
 
@@ -204,7 +237,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         assertThrows(IllegalArgumentException.class,
                 () -> OutcomeName.of(CoverageConstruct.MATCH, held()));
         assertThrows(IllegalArgumentException.class,
-                () -> OutcomeName.of(CoverageConstruct.COMPARISON, failed()));
+                () -> OutcomeName.of(CoverageConstruct.BINARY, failed()));
         assertThrows(IllegalArgumentException.class,
                 () -> OutcomeName.of(CoverageConstruct.NOT_WRITTEN, held()));
     }
@@ -286,13 +319,30 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         return guards.get(0).origin().kind();
     }
 
-    private static CoverageSites.Plan planOf(String source) {
+    /** The construct every binary expression of this body was written as. */
+    private static List<CoverageConstruct> binariesIn(String source) {
+        List<CoverageConstruct> out = new java.util.ArrayList<>();
+        bodiesOf(source).values().forEach(body -> collectBinaries(body, out));
+        return out;
+    }
+
+    private static void collectBinaries(Core e, List<CoverageConstruct> out) {
+        if (e instanceof Core.Binary binary) {
+            out.add(binary.origin().kind());
+        }
+        Core.forEachChild(e, child -> collectBinaries(child, out));
+    }
+
+    private static Map<String, Core> bodiesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
-        Map<String, Core> bodies = checked.behaviorBodies();
-        return CoverageSites.of(bodies);
+        return checked.behaviorBodies();
+    }
+
+    private static CoverageSites.Plan planOf(String source) {
+        return CoverageSites.of(bodiesOf(source));
     }
 }

@@ -833,7 +833,7 @@ public final class AstBuilder {
         // Anchored at the operator, which is what a report about the operation is about, and written
         // over both operands, which is what the operation is.
         return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)),
-                construct(CoverageConstruct.COMPARISON), posOf(op), region(n));
+                construct(CoverageConstruct.BINARY), posOf(op), region(n));
     }
 
     private static Ast.BinOp binOp(SyntaxKind k) {

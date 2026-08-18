@@ -40,16 +40,24 @@ public enum CoverageConstruct {
     /** {@code match}. */
     MATCH,
 
-    /** One comparison, which is where a row's answer to it is recorded rather than an arm. */
-    COMPARISON,
+    /**
+     * A binary expression — a comparison, a conjunction, an arithmetic operation, a concatenation.
+     *
+     * <p>What was written, and not what was made of it. Only a comparison inside a fork's condition
+     * is ever numbered, and whether this one was is {@link souther.compiler.coverage.SourceOutcome}'s
+     * answer rather than this one's: {@code a + b} is as much a binary expression the source wrote as
+     * {@code a > b} is, and naming the construct after the use the analysis puts a few of them to
+     * would make this value say something untrue of every arithmetic node in every body.
+     */
+    BINARY,
 
     /**
      * No source wrote it.
      *
      * <p>What {@link CoverageOrigin#unwritten} carries. A comparison rebuilt for an analysis is a
-     * comparison, and giving it {@link #COMPARISON} would make it a value that passes for a coverage
-     * obligation — which is the thing that origin exists not to be. Named here so that a switch
-     * needing a construct the author wrote has somewhere to refuse it.
+     * binary expression, and giving it {@link #BINARY} would make it a value that passes for a
+     * coverage obligation — which is the thing that origin exists not to be. Named here so that a
+     * switch needing a construct the author wrote has somewhere to refuse it.
      */
     NOT_WRITTEN;
 
@@ -68,7 +76,7 @@ public enum CoverageConstruct {
             case IF -> souther.compiler.diag.Localizable.of("construct.if");
             case GUARD -> souther.compiler.diag.Localizable.of("construct.guard");
             case COMPREHENSION -> souther.compiler.diag.Localizable.of("construct.comprehension");
-            case MATCH, COMPARISON, NOT_WRITTEN -> throw new IllegalStateException(
+            case MATCH, BINARY, NOT_WRITTEN -> throw new IllegalStateException(
                     "not a fork of a body: " + this);
         };
     }

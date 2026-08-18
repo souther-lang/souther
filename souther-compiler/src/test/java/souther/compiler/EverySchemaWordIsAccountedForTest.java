@@ -101,11 +101,11 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The constructs an arm can be an outcome of. Fewer than the kinds an origin carries: a
-     *  comparison is inside a fork rather than being one, and nothing wrote the last. */
+    /** The constructs an arm can be an outcome of. Fewer than the kinds an origin carries: a binary
+     *  expression is inside a fork rather than being one, and nothing wrote the last. */
     private static Set<String> constructWords() {
         return Arrays.stream(souther.compiler.types.CoverageConstruct.values())
-                .filter(c -> c != souther.compiler.types.CoverageConstruct.COMPARISON
+                .filter(c -> c != souther.compiler.types.CoverageConstruct.BINARY
                         && c != souther.compiler.types.CoverageConstruct.NOT_WRITTEN)
                 .map(AdequacyReport::word)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));

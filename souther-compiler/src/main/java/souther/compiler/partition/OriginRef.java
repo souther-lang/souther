@@ -235,7 +235,7 @@ public sealed interface OriginRef {
             case COMPREHENSION -> "comprehension";
             // A line is read off a fork's condition, and these are not forks. Reaching one is this
             // reader and the walk that numbered the fork disagreeing about what drew the line.
-            case MATCH, COMPARISON, NOT_WRITTEN -> throw new IllegalStateException(
+            case MATCH, BINARY, NOT_WRITTEN -> throw new IllegalStateException(
                     "a line was drawn in something that is not a fork: "
                             + g.guard().origin().kind());
         };
@@ -281,12 +281,22 @@ public sealed interface OriginRef {
                 + (e.clause().isEmpty() ? "" : " (" + e.clause() + ")");
     }
 
-    /** Whether a guard drew this line, through however many narrowings. Asked rather than matched
-     *  on the text: what a rule is called is a rendering, and two of them read the same word. */
-    default boolean isAGuard() {
+    /**
+     * Whether a fork of a body drew this line, through however many narrowings.
+     *
+     * <p>Not whether the author wrote {@code guard}. Three constructs put a line on a condition and
+     * one of them is spelled that way, so a predicate reading as the keyword would be answered
+     * {@code true} about an {@code if} — and the next reader to notice the mismatch would repair the
+     * name into a test of the construct and break the other two. What this separates is a rule with a
+     * place from a rule with a name, which is what every caller wants of it.
+     *
+     * <p>Asked rather than matched on the text: what a rule is called is a rendering, and two of them
+     * read the same word.
+     */
+    default boolean wasDrawnInABodyFork() {
         return switch (this) {
             case GuardOrigin _ -> true;
-            case NarrowedOrigin n -> n.bound().isAGuard();
+            case NarrowedOrigin n -> n.bound().wasDrawnInABodyFork();
             case TypeOrigin _, InvariantOrigin _, EnsuresOrigin _ -> false;
         };
     }
@@ -300,8 +310,8 @@ public sealed interface OriginRef {
      * source was read.
      *
      * @throws IllegalStateException where no fork drew the line. An invariant, a type and a clause
-     *                               have names rather than places, and {@link #isAGuard} is what
-     *                               tells them apart from this
+     *                               have names rather than places, and {@link #wasDrawnInABodyFork}
+     *                               is what tells them apart from this
      */
     default souther.compiler.types.CoverageConstruct constructThatDrewIt() {
         return switch (this) {
