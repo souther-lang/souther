@@ -1130,6 +1130,11 @@ final class Terms {
      *
      * <p>A head nothing entered is a value this reading knows nothing about, and it takes an atom of
      * its own — the same answer a shape outside the grammar gets, for the same reason.
+     *
+     * <p>Always answers. Every value has an identity, whether or not anything can be said about it,
+     * so there is no reading here that comes back with nothing and no step that has to allow for one.
+     * The reading beside this one does — what the term grammar can name runs out, and says so with
+     * {@code null} — and the two are not the same question.
      */
     private Term subjectKey(Core e, Denotations at) {
         return switch (e) {
@@ -1138,13 +1143,10 @@ final class Terms {
                 yield subject != null ? subject.identity()
                         : interned.evaluated(evaluationIdOf(e));
             }
-            case Core.FieldAccess fa -> {
-                if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
-                    yield subjectKey(fa.target(), at);
-                }
-                Term base = subjectKey(fa.target(), at);
-                yield base == null ? null : interned.on(base, List.of(fa.field()));
-            }
+            case Core.FieldAccess fa ->
+                    Location.isStep(fa.target().type(), fa.field(), symbols)
+                            ? interned.on(subjectKey(fa.target(), at), List.of(fa.field()))
+                            : subjectKey(fa.target(), at);
             default -> interned.evaluated(evaluationIdOf(e));
         };
     }
