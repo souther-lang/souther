@@ -1525,13 +1525,6 @@ public final class Bodies {
         }
     }
 
-    /**
-     * One behavior's body checked against the behavior it implements, as the Core the backend emits.
-     *
-     * <p>What it reads is the behavior, its {@code let}, and what the module around it means. Not
-     * another body — so a mistake in one behavior is that behavior's, and editing one leaves the rest
-     * of the file alone.
-     */
     /** What each contract states, out of the values a caller's dependency on it is compared by. */
     private static Map<ValueName.Behavior, StatedContract> stated(
             Answer<Map<ValueName.Behavior, Assumed>> contracts) {
@@ -1543,6 +1536,13 @@ public final class Bodies {
         return out;
     }
 
+    /**
+     * One behavior's body checked against the behavior it implements, as the Core the backend emits.
+     *
+     * <p>What it reads is the behavior, its {@code let}, and what the module around it means. Not
+     * another body — so a mistake in one behavior is that behavior's, and editing one leaves the rest
+     * of the file alone.
+     */
     public record CheckedBehavior(String module, String behavior) implements Key<Core> {
 
         @Override
