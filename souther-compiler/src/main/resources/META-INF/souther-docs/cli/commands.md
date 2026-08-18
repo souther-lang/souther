@@ -271,6 +271,12 @@ Reports how well the `example` rows cover the model — which partitions, bounda
 no row reaches. `--generate` prints commented rows for what nothing covers, `--boundaries` adds
 rows at the untried boundaries, and `--strict` exits non-zero on a gap the report names.
 
+A generated row leaves the answer as `<?>`, and where the behavior carries an `ensures`, part of that
+answer is already written down. So the clauses are quoted over the rows of the behavior they are
+written on, in the author's own words, cut out of the source. They are quoted whether or not this
+compiler could make a rule of them, which is all the heading claims: these are the words in the
+declaration.
+
 This is the command worth running on a model you believe is finished. It names gaps that reading
 the rows does not reveal.
 
