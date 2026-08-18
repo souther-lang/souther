@@ -39,9 +39,12 @@ that check while the module is compiled and refused where it does not hold (E192
 the policy ADR-0093 said the language did not have. That decision is about two descriptions of one
 behavior — a stand-in and a recorded row — where nothing names either as the right one, and it
 stands: E1919 remains a warning naming both. A written value against a declaration is a different
-pair, and the declaration decides it. A row whose expectation is a bare case name, a `_` row of
-a fake, and a `with` each write only one side of the relation, and are held only where the behavior
-answers.
+pair, and the declaration decides it. An arm is part of what a row wrote, so a bare case name naming a unit case
+is a whole answer and is held; a `_` row of a fake and a `with` write only one side of the relation
+and are held only where the behavior answers. A bare case name carrying fields is not held yet: the
+arm names the answer, but the check is asked about an answer rather than about an arm, so a rule
+reading only the inputs is decidable from such a row and is not decided. A table with a row that is
+refused is not one to stand in with, as a table that will not build is not.
 
 Callers seed a clause only after the output arm is known and only where parameter-to-argument
 substitution leaves terms the existing analysis can name. Classification uses the invariant

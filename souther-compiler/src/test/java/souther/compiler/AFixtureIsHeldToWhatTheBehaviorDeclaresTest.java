@@ -9,6 +9,7 @@ import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 
@@ -115,18 +116,63 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     }
 
     /**
-     * A bare case name states the arm and no value under it, so there is nothing to hand the check.
-     * The clause below is one the row's input does not keep — {@code Id(0)} is not {@code > 0} — and
-     * the row is kept, which is what says the check was not reached rather than reached and passed.
+     * A bare case name that is a unit case is the whole answer. There is one value of that type, so
+     * naming it writes the answer rather than standing for values the row did not write — and the
+     * spec's reading of an arm as a reference to the answer is exactly that. The clause below is one
+     * the row's input does not keep, and the row is refused although it wrote no construction.
      */
     @Test
-    void aRowStatingOnlyACaseIsNotHeldToTheClause() {
+    void aRowStatingOnlyAUnitCaseIsHeldToTheClause() {
+        CompileException refused = err("""
+                module example.todo
+
+                data Id = Int
+                data Todo = { id: Id, title: String }
+                data NotFound
+
+                behavior findTodo : (id: Id) -> Todo | NotFound
+                    ensures positive = NotFound -> id.value > 0
+
+                example findTodo
+                    | "nothing is found for zero" : (Id(0)) -> NotFound
+                """);
+
+        assertTrue(codesOf(refused).contains("E1928"),
+                "the arm names the answer, and the input is written: " + codesOf(refused));
+    }
+
+    /** The same row with an input the clause keeps. */
+    @Test
+    void aRowStatingOnlyAUnitCaseTheClauseAdmitsIsKept() {
         assertDoesNotThrow(() -> Compiler.compile("""
                 module example.todo
 
                 data Id = Int
                 data Todo = { id: Id, title: String }
                 data NotFound
+
+                behavior findTodo : (id: Id) -> Todo | NotFound
+                    ensures positive = NotFound -> id.value > 0
+
+                example findTodo
+                    | "nothing is found for one" : (Id(1)) -> NotFound
+                """));
+    }
+
+    /**
+     * A bare case name that carries fields is not held, and this records where that limit is rather
+     * than claiming it is right. The arm does name the answer, so a rule reading only the inputs is
+     * decidable here — but the check is handed the answer as a value, and this row wrote none. What
+     * would close it is a check that can be asked about an arm rather than about a value.
+     */
+    @Test
+    void aRowStatingOnlyACaseThatCarriesFieldsIsNotHeldYet() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module example.todo
+
+                data Id = Int
+                data Todo = { id: Id, title: String }
+                data NotFound = { asked: Id }
 
                 behavior findTodo : (id: Id) -> Todo | NotFound
                     ensures positive = NotFound -> id.value > 0
@@ -201,6 +247,32 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
         assertTrue(said.contains("lookup"), "the dependency whose declaration it does not keep: " + said);
     }
 
+    /**
+     * A table with such a row is not one to stand in with, as a table that will not build is not. A
+     * row reaching it stops without a fake and says nothing of its own — what is wrong is wrong
+     * about the table, and is said once where the table is written.
+     *
+     * <p>Not left to the check the stand-in's answer would meet at the crossing. That would run the
+     * rest of the behavior with a dependency in a state the model rules out, and everything the row
+     * then reported would be about a run that cannot happen.
+     */
+    @Test
+    void aRowReachingSuchATableDoesNotRunAgainstIt() {
+        List<RowOutcome> rows = rows(DEPENDS + """
+
+                fake lookup
+                    | (Id(1)) -> Found { id = Id(2) }
+
+                example place
+                    | "it is placed for the one asked" : (Id(1)) -> Placed { by = Id(1) }
+                """);
+
+        assertEquals(1, rows.size());
+        assertEquals(Disposition.FAILED, rows.get(0).disposition());
+        assertEquals(FailurePhase.FAKE_RESOLUTION, rows.get(0).failurePhase(),
+                "the row had no table it could stand in with");
+    }
+
     @Test
     void aFakeRowStatingValuesTheClauseRelatesIsKept() {
         assertDoesNotThrow(() -> Compiler.compile(DEPENDS + """
@@ -246,6 +318,53 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
                 "the row was stopped by the dependency's own check: " + said);
     }
 
+    /**
+     * What another module declares is checked with that module's contracts, and a fixture here has
+     * none of them. The language does not admit one either: a {@code fake} names an injection target
+     * of its own module, and a behavior another module declares is not one — so this is refused
+     * before anything would be held.
+     *
+     * <p>Written down because the check's own refusal rests on it. {@code EnsuresChecks} holds one
+     * module's contracts and raises rather than answering "declares nothing" when asked about
+     * another module's behavior, so the day this refusal is lifted the fixture side has to be given
+     * that module's contracts rather than quietly passing everything.
+     */
+    @Test
+    void aFakeForABehaviorAnotherModuleDeclaresIsNotAdmitted() {
+        List<String> codes = codesOf(Compilation.ofSources(List.of("""
+                module up exposing ( Id, Found, lookup )
+
+                data Id = Int
+                data Found = { id: Id }
+
+                behavior lookup : (id: Id) -> Found
+                    ensures asked = value.id.value == id.value
+                """, """
+                module down
+
+                import up ( Id, Found, lookup )
+
+                data Placed = { by: Id }
+
+                behavior place : (id: Id) -> Placed
+                    depends on lookup
+                    constructs Placed
+
+                let place (id, lookup) = Placed { by = lookup(id).id }
+
+                fake lookup
+                    | (Id(1)) -> Found { id = Id(2) }
+
+                example place
+                    | "placed for the one asked" : (Id(1)) -> Placed { by = Id(1) }
+                """), ModulePath.EMPTY));
+
+        assertTrue(codes.contains("E1908"),
+                "`lookup` is not an injected behavior of `down`, so nothing stands in: " + codes);
+        assertFalse(codes.contains("E1929"), "nothing was held against a contract this module has "
+                + "none of: " + codes);
+    }
+
     // --- harness --------------------------------------------------------------------------------
 
     private static CompileException err(String model) {
@@ -271,6 +390,15 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
 
     private static String rendered(Diagnostic d) {
         return new HumanRenderer(false).render(d, null, Locale.ENGLISH);
+    }
+
+    /** The codes a multi-source compile says, in the order they were said. */
+    private static List<String> codesOf(Compilation c) {
+        c.answerEverything();
+        List<String> codes = new ArrayList<>();
+        c.diagnostics().values().stream().flatMap(List::stream)
+                .forEach(d -> codes.add(d.diagnostic().code()));
+        return codes;
     }
 
     private static List<RowOutcome> rows(String model) {

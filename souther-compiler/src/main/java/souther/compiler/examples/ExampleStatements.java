@@ -20,6 +20,7 @@ import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -89,6 +90,38 @@ public final class ExampleStatements {
         this.deadline = deadline;
         this.policy = policy;
         this.rendering = new FixtureReader(module, symbols, values, loader);
+    }
+
+    /**
+     * Where a row of {@code built} states values the faked behavior declares cannot go together.
+     *
+     * <p>Asked after the table is built rather than while it is being built, so that the two readers
+     * of a table ask it in the two ways each needs: where the fake is written it is reported on, and
+     * where a row would stand in with it, it is what says the table is not one to stand in with. The
+     * second is why this is not left to the check the stand-in's answer would meet at the crossing:
+     * a row run against a dependency state the model rules out reaches the rest of its behavior in a
+     * state nothing can arise in, and what that row then reports is about a run that cannot happen.
+     *
+     * <p>The rows the table can answer with, which is what {@link Standins#explicit} is. A row the
+     * dispatch never reaches states nothing the fake stands in with, and what is wrong with it is
+     * that it answers nothing ({@link #cannotAnswer}). The {@code _} row is not here either: it
+     * states no input, so there is no relation to hold its answer to.
+     */
+    static List<Diagnostic> notKept(EnsuresChecks ensures, String module, Hir.Fake fk,
+                                    BuiltTable built) {
+        List<Diagnostic> said = new ArrayList<>();
+        for (Standin standin : built.standins().explicit()) {
+            String why = ensures.notHeld(new ValueName.Behavior(module, fk.target()),
+                    standin.arguments(), standin.answer().value());
+            if (why != null) {
+                said.add(Diagnostic.at(standin.row().pos())
+                        .say(new ExampleMessage.AFakeRowDoesNotKeepWhatTheDependencyStates(
+                                fk.target(), why))
+                        .hint(new ExampleMessage.TheDeclarationIsWhatSaysWhatItAnswers(fk.target()))
+                        .build());
+            }
+        }
+        return said;
     }
 
     /**
@@ -210,11 +243,12 @@ public final class ExampleStatements {
             // built the table of a fake nothing reads, so this is the first thing that would run it.
             Read<List<Diagnostic>> read = v.within(reader -> {
                 List<Diagnostic> wrong = new ArrayList<>();
-                BuiltTable built = standins(reader, fk, sig.ins(), sig.out(), v.ensures, wrong);
+                BuiltTable built = standins(reader, fk, sig.ins(), sig.out(), wrong);
                 if (built != null) {
                     for (Shadowed dead : built.shadowed()) {
                         wrong.add(cannotAnswer(fk, dead));
                     }
+                    wrong.addAll(notKept(v.ensures, module.name(), fk, built));
                 }
                 return wrong;
             }, new Deadline.Work.Table(fk.target(), fk.pos()));
@@ -495,7 +529,7 @@ public final class ExampleStatements {
         }
         // The whole table, built the one way the proxy builds it.
         Read<BuiltTable> read = within(
-                reader -> standins(reader, fk, sig.ins(), sig.out(), ensures, new ArrayList<>()),
+                reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
                 new Deadline.Work.Table(fk.target(), fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
@@ -913,14 +947,13 @@ public final class ExampleStatements {
      * so a table with an arity slip and a slow or non-terminating output reported the second problem
      * instead of the first, or ran out of time before reporting either.
      *
-     * <p>A row that builds is then held to what the dependency declares of what it answers, which is
-     * a row stating an input and the answer it stands in with — the two sides of the relation, in
-     * hand at once. A {@code _} row states no input, so there is nothing here to relate its answer
-     * to; what it answers is held where it answers, at the crossing into generated code.
+     * <p>Building only. What a table states is held to what the dependency declares where the table
+     * is reported on ({@link #notKept}), which is where a diagnostic about it can be said — this is
+     * called from three places and two of them discard what they are told, so holding it here would
+     * be work done for an answer nobody reads.
      */
     static BuiltTable standins(FixtureReader fixtures, Hir.Fake fk, List<BoundaryInput> ins,
-                                     BoundaryOutput outType, EnsuresChecks ensures,
-                                     List<Diagnostic> out) {
+                                     BoundaryOutput outType, List<Diagnostic> out) {
         for (Hir.FakeRow r : fk.rows()) {
             if (!r.isDefault() && r.inputs().size() != ins.size()) {
                 out.add(unbuildableFake(r.pos(), fk.target(), "a row has " + r.inputs().size()
@@ -980,17 +1013,7 @@ public final class ExampleStatements {
                 reachable.add(written);
                 // A dependency that returns a sum has no single decoder; each row names one case, so
                 // decode the row's output against that case's type (as an expected value is).
-                FixtureReader.BuiltFixture answer = fixtures.buildFixture(r.output(), outType);
-                String why = ensures.notHeld(fk.target(), arguments, answer.value());
-                if (why != null) {
-                    out.add(Diagnostic.at(r.pos())
-                            .say(new ExampleMessage.AFakeRowDoesNotKeepWhatTheDependencyStates(
-                                    fk.target(), why))
-                            .hint(new ExampleMessage.TheDeclarationIsWhatSaysWhatItAnswers(
-                                    fk.target()))
-                            .build());
-                }
-                explicit.add(new Standin(arguments, r, answer));
+                explicit.add(new Standin(arguments, r, fixtures.buildFixture(r.output(), outType)));
             }
         } catch (FixtureException fe) {
             out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));

@@ -11,6 +11,7 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.coverage.Probe;
@@ -1022,9 +1023,18 @@ public final class ExampleVerifier {
         // expectation, and comparing a result against a value nothing built reported a mismatch
         // against an empty expected value — a wrong answer for a row that was right.
         FixtureReader.ExpectedValue expected;
+        // What the row states as a value, which is not always what it states. A bare case name
+        // asserts the arm; where that arm is a unit case the arm and the value are the same thing —
+        // there is one value of that type, so a row naming it has written the whole answer and not
+        // a name standing for values it did not write.
+        Object stated;
         try {
-            expected = fixtures.caseOnly(row.expected()) != null ? null
-                    : fixtures.assertedExpected(row.expected(), sig.out());
+            TypeSymbol only = fixtures.caseOnly(row.expected());
+            expected = only != null ? null : fixtures.assertedExpected(row.expected(), sig.out());
+            stated = only == null ? expected.live()
+                    : symbols.declarations().declaration(only.key()) instanceof Hir.UnitData
+                            ? fixtures.buildFixture(row.expected(), sig.out()).value()
+                            : null;
         } catch (FixtureException fe) {
             out.add(Diagnostic.at(row.pos())
                     .say(new ExampleMessage.TheExpectedValueCouldNotBeBuilt(target.name(),
@@ -1040,11 +1050,10 @@ public final class ExampleVerifier {
         // values are here either way, and a recorded row stating an answer the model rules out is a
         // wrong record however long it waits for a body.
         //
-        // A row writing a bare case name is not held: it asserts the arm and nothing under it, so
-        // there is no answer to hand over. What such a row states is held where the behavior
-        // answers, like anything else the compiler is not given a value for.
-        if (expected != null && !keepsWhatIsDeclared(row, target, args, expected.live(), sig, out,
-                state)) {
+        // A row writing a bare case name that carries fields is not held: it asserts the arm and
+        // nothing under it, and a rule may read what it did not write. What such a row states is
+        // held where the behavior answers.
+        if (stated != null && !keepsWhatIsDeclared(row, target, args, stated, sig, out, state)) {
             return;
         }
         // Stated as a switch and not as a test for one of the two: what a run can have for a behavior
@@ -1203,7 +1212,8 @@ public final class ExampleVerifier {
     private boolean keepsWhatIsDeclared(Hir.ExampleRow row, ExampleTarget target, Object[] args,
                                         Object answer, Sig sig, List<Diagnostic> out,
                                         RowState state) {
-        String why = ensures.notHeld(target.name(), args, projected(answer, sig.outputType()));
+        String why = ensures.notHeld(new ValueName.Behavior(module.name(), target.name()), args,
+                projected(answer, sig.outputType()));
         if (why == null) {
             return true;
         }
@@ -1327,9 +1337,17 @@ public final class ExampleVerifier {
         // is wrong with the table is said where the fake is written, and said once: this row and every
         // other row reaching the same fake would each repeat the one thing wrong with the one table.
         ExampleStatements.BuiltTable built =
-                ExampleStatements.standins(fixtures, fk, paramTypes, depSig.out(), ensures,
-                        new ArrayList<>());
+                ExampleStatements.standins(fixtures, fk, paramTypes, depSig.out(), new ArrayList<>());
         if (built == null) {
+            return null;
+        }
+        if (!ExampleStatements.notKept(ensures, module.name(), fk, built).isEmpty()) {
+            // A table stating what the dependency declares cannot happen is not one to stand in
+            // with, as a table that will not build is not. The row stops without a fake and says
+            // nothing of its own: what is wrong is wrong about the table, and is said once where the
+            // table is written. Running against it would put the rest of this behavior in a state
+            // the model rules out, and everything the row then reported would be about a run that
+            // cannot happen.
             return null;
         }
         // The dispatch, which is what a row runs against. What the table was written with and cannot

@@ -3,12 +3,13 @@ package souther.compiler.examples;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.GeneratedClasses;
+import souther.compiler.types.ValueName;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The emitted check, run over values a row or a fake's table states.
@@ -26,6 +27,13 @@ import java.util.Map;
  * <p>The one place a check is invoked from a fixture: loading the class, spelling the call, and
  * unwrapping what reflection wraps are the same three steps wherever a stated value is held, and
  * writing them twice is two answers to how a check is called.
+ *
+ * <p>A behavior is named by the module that declares it and not by the word a caller writes. What is
+ * held here is one module's contracts, and being asked about another module's behavior is refused
+ * rather than answered with "declares nothing" — a fixture for a behavior declared elsewhere is a
+ * thing the language does not admit today (a {@code fake} names an injection target of its own
+ * module), and the day it does, this has to be given that module's contracts and load its class.
+ * Answered by name against the current module, that day arrives as silence.
  */
 final class EnsuresChecks {
 
@@ -33,11 +41,21 @@ final class EnsuresChecks {
      *  fake write. */
     private final Map<String, BehaviorContract> contracts;
 
+    /** The module whose contracts these are, and whose classes carry their checks. */
     private final String module;
     private final ClassLoader loader;
 
-    /** The check of each behavior that has one, once it has been looked up. */
-    private final Map<String, Method> found = new HashMap<>();
+    /**
+     * The check of each behavior that has one, once it has been looked up.
+     *
+     * <p>Concurrent because one of these is the module's and a row is a thread. A row that overruns
+     * its budget is abandoned rather than stopped — a pure computation reaches no interrupt point,
+     * which is why every row is given a {@link FixtureReader} of its own — so a worker still inside
+     * a check can be writing here while the next row's worker reads. Two workers looking one method
+     * up is work done twice and nothing else; the map coming apart while they do is a failure that
+     * would not reproduce.
+     */
+    private final Map<String, Method> found = new ConcurrentHashMap<>();
 
     EnsuresChecks(String module, ClassLoader loader, Map<String, BehaviorContract> contracts) {
         this.module = module;
@@ -45,21 +63,25 @@ final class EnsuresChecks {
         this.contracts = contracts;
     }
 
-    /** Whether {@code behavior} states anything about what it answers. */
-    boolean states(String behavior) {
-        return contracts.containsKey(behavior);
-    }
-
     /**
      * What {@code behavior}'s check said of an answer of {@code answer} to {@code args}, or null
      * where every rule held — and where the behavior states nothing, which is every rule it has
      * holding.
      *
-     * @throws FixtureException where the check could not be reached, which is this compiler failing
-     *                          to call its own output rather than anything about the values
+     * @throws IllegalStateException where the check could not be called, which is this compiler
+     *                               failing to reach its own output rather than anything about the
+     *                               values. Not a {@link FixtureException}: that says a written
+     *                               fixture is at fault, and a caller catching one would report a
+     *                               broken emission as an author's mistake
      */
-    String notHeld(String behavior, Object[] args, Object answer) {
-        BehaviorContract contract = contracts.get(behavior);
+    String notHeld(ValueName.Behavior behavior, Object[] args, Object answer) {
+        if (!module.equals(behavior.module())) {
+            throw new IllegalStateException("these are `" + module + "`'s contracts and `"
+                    + behavior.module() + "." + behavior.name() + "` is not one of them; what a "
+                    + "module other than the one being evaluated declares is checked with that "
+                    + "module's contracts and its own class");
+        }
+        BehaviorContract contract = contracts.get(behavior.name());
         if (contract == null) {
             return null;
         }
@@ -67,13 +89,14 @@ final class EnsuresChecks {
             // Whoever built the arguments built them against the signature, so this is that reading
             // and this one disagreeing. Said rather than passed on to reflection, which would report
             // it as a method that is not there.
-            throw new FixtureException("`" + behavior + "` takes " + contract.params().size()
-                    + " input(s) and the check was handed " + args.length);
+            throw new IllegalStateException("`" + behavior.name() + "` takes "
+                    + contract.params().size() + " input(s) and the check was handed "
+                    + args.length);
         }
         Object[] handed = Arrays.copyOf(args, args.length + 1);
         handed[args.length] = answer;
         try {
-            check(behavior, contract).invoke(null, handed);
+            check(behavior.name(), contract).invoke(null, handed);
             return null;
         } catch (InvocationTargetException ite) {
             Throwable cause = ite.getCause();
@@ -94,8 +117,10 @@ final class EnsuresChecks {
                         "a check threw a checked exception: " + cause, cause);
             }
         } catch (ReflectiveOperationException e) {
-            throw new FixtureException(
-                    "what `" + behavior + "` declares could not be checked: " + e.getMessage());
+            // The class is emitted for every contract this answer holds, so a miss is that
+            // correspondence broken rather than a behavior with nothing to check.
+            throw new IllegalStateException("what `" + behavior.name()
+                    + "` declares could not be checked: " + e.getMessage(), e);
         }
     }
 
