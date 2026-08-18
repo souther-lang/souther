@@ -137,10 +137,12 @@ has no smallest step this language names"; it steps by a second now, so a strict
 day count. `BoundaryDomain.MOMENT` names that neighbour instead of answering *not derivable*, and
 the counts on the carrier are whole.
 
-`Time` and `Instant` are carriers of nothing, which is the same question read the other way: each
-has a count that would embed — a second of the day, a second from an epoch — and a carrier owes a
-conversion both ways and a spacing of its own, so neither may borrow `MOMENT`'s. Two units in one
-carrier is what `DATE` and `MOMENT` are separate to avoid.
+`Time` and `Instant` carried nothing when this was written, which is the same question read the
+other way: each had a count that would embed — a second of the day, a nanosecond from an epoch —
+and a carrier owes a conversion both ways, which neither had been given. Two units in one carrier
+is what `DATE` and `MOMENT` are separate to avoid, so neither could borrow `MOMENT`'s either.
+Superseded on the first half in #846: the two conversions are written and each of the two has a
+carrier of its own, which is what the second half said it would have to be.
 
 ## The rule, and how far it reaches
 

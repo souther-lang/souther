@@ -50,8 +50,15 @@ public final class Times {
      * carrying a fraction is floored rather than written as a time no model could have named, which
      * is the answer {@link DateTimes#written} gives for the same reason. */
     public static String written(Place count) {
-        return LocalTime.ofSecondOfDay(Count.number(count).at()
-                .setScale(0, RoundingMode.FLOOR).longValueExact()).format(WRITTEN);
+        return written(LocalTime.ofSecondOfDay(Count.number(count).at()
+                .setScale(0, RoundingMode.FLOOR).longValueExact()));
+    }
+
+    /** The same text, for a caller holding the value rather than the count. Every place a time of
+     * day is written down goes through here, so a line's label and the value a report says came
+     * back are the same text for the same value. */
+    public static String written(LocalTime at) {
+        return at.format(WRITTEN);
     }
 
     private Times() {}

@@ -170,6 +170,12 @@ class EveryOrderedTypeCarriesAValueBothWaysTest {
                 moment.written(Instants.nanoOf("2026-08-01T00:00:00Z")));
         assertEquals("2026-07-31T23:59:59.999999999Z",
                 moment.written(Instants.nanoOf("2026-08-01T00:00:00Z").minus(1)));
+        // Before the epoch, where a count divided towards zero lands in the second after the one
+        // the moment is in. The epoch itself minus a nanosecond is the shortest way to reach it.
+        assertEquals("1969-12-31T23:59:59.999999999Z",
+                moment.written(Instants.nanoOf("1970-01-01T00:00:00Z").minus(1)));
+        assertEquals("1969-12-31T23:59:58.999999999Z",
+                moment.written(Instants.nanoOf("1970-01-01T00:00:00Z").minus(1_000_000_001L)));
     }
 
     /** A count no value of the order stands for is not one of its places. */

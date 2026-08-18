@@ -494,8 +494,6 @@ public final class GuardThresholds {
             return null;
         }
         return switch (e) {
-            case Core.Int i -> carrier.onTheGrid(Count.of(i.value()));
-            case Core.Decimal d -> carrier.onTheGrid(Count.of(d.value()));
             case Core.Neg n -> {
                 Place inner = constantOf(n.operand(), carrier, symbols);
                 yield inner == null ? null : Count.number(inner).negate();
@@ -505,28 +503,11 @@ public final class GuardThresholds {
             // rather than being it.
             case Core.Construct nd when TypeOps.numericBase(Type.ref(nd.typeName()), symbols) != null ->
                     constantOf(nd.values().get(0).value(), carrier, symbols);
-            // A temporal written the way a model writes one. Read by what the construction answers
-            // with rather than by the name in front of it, so one reaches this however it is spelled.
-            //
-            // Which temporal it is decided by asking the constructed type for its carrier, rather
-            // than by listing the pairs that go together. A list is a copy of the table in
-            // `Carrier.ofValue` and goes stale the way that copy always does: it named a date and a
-            // date-time, and a time of day written the same way was refused for being neither.
-            case Core.Call call when call.args().size() == 1
-                    && call.args().get(0) instanceof Core.Str iso ->
-                    carrier.equals(Carrier.ofValue(call.type(), symbols))
-                            ? carrier.placeOf(new souther.compiler.observe.ObservedValue.Temporal(
-                                    iso.value()))
-                            : null;
-            // A case, which is named rather than written. Where the position counts in some other
-            // enumeration's declaration this is a value of neither, and the carrier says so.
-            case Core.UnitValue unit -> carrier instanceof Carrier.Ordinal ordinal
-                    ? ordinal.at(unit.data()) : null;
-            // A string, which stands for itself. Refused where the position is not on that order,
-            // so a string compared against something counted is not read as its place.
-            case Core.Str str -> carrier instanceof Carrier.Text
-                    ? souther.compiler.numeric.Text.of(str.value()) : null;
-            case null, default -> null;
+            // Everything else is a value written down or is not one, which the carrier answers —
+            // the same question an invariant's bound asks it, so the two cannot admit different
+            // rules at one position. What this reader adds is how a value can be built up around
+            // one: a minus in front of it, and a newtype around it.
+            case null, default -> carrier.literalOf(e);
         };
     }
 

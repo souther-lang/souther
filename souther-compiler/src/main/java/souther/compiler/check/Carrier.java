@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
@@ -309,10 +310,10 @@ public sealed interface Carrier {
         return switch (this) {
             case Whole _ -> Count.of(InvariantBound.wholeLiteral(e));
             case Dense _ -> Count.of(InvariantBound.literalOf(e));
-            case Days _ -> temporal(e, "Date", Dates::dayOf);
-            case Seconds _ -> temporal(e, "DateTime", DateTimes::secondOf);
-            case SecondsOfDay _ -> temporal(e, "Time", Times::secondOf);
-            case Nanos _ -> temporal(e, "Instant", Instants::nanoOf);
+            case Days _ -> temporal(e, Dates::dayOf);
+            case Seconds _ -> temporal(e, DateTimes::secondOf);
+            case SecondsOfDay _ -> temporal(e, Times::secondOf);
+            case Nanos _ -> temporal(e, Instants::nanoOf);
             // A case is named rather than written, so the literal is a name and what it denotes says
             // which case it is. Read off the denotation and not the text: a case is reachable under
             // an alias, and two enumerations may declare cases spelled the same way.
@@ -324,13 +325,62 @@ public sealed interface Carrier {
         };
     }
 
+    /**
+     * The count a rule's literal names on this carrier, read from the body's own representation.
+     *
+     * <p>The pair of the reading above. A {@code guard}'s comparison reaches its reader as
+     * {@code Core} and an invariant's bound as {@code Hir}, and a rule read at one and not the other
+     * is a rule about the representation rather than about the model — which is what the two readers
+     * deciding separately what a literal is already cost once.
+     */
+    default Place literalOf(Core e) {
+        return switch (this) {
+            case Whole _, Dense _ -> switch (e) {
+                case Core.Int i -> onTheGrid(Count.of(i.value()));
+                case Core.Decimal d -> onTheGrid(Count.of(d.value()));
+                case null, default -> null;
+            };
+            case Days _, Seconds _, SecondsOfDay _, Nanos _ -> written(e) instanceof Core.Str iso
+                    ? placeOf(new ObservedValue.Temporal(iso.value())) : null;
+            // A case, which is named rather than written. Where the position counts in some other
+            // enumeration's declaration this is a value of neither, and that is said by `at`.
+            case Ordinal ordinal ->
+                    e instanceof Core.UnitValue unit ? ordinal.at(unit.data()) : null;
+            case Text _ -> e instanceof Core.Str str
+                    ? souther.compiler.numeric.Text.of(str.value()) : null;
+        };
+    }
+
+    /**
+     * The text a temporal construction was written with, or null where {@code e} is not one.
+     *
+     * <p>What makes it one is the callee, and never the type of what comes back. A call answering
+     * with a {@code Time} is not a {@code Time} anyone here wrote down: an injected behavior
+     * {@code openingAt("16:00:00")} answers whatever its implementation makes of that text, and read
+     * off the answer's type the argument became a line — a boundary this compiler made up, at a
+     * value no rule in the model states, reported as one the model drew.
+     *
+     * <p>A construction is a library namespace applied ({@link ValueName.Stdlib}), which is the one
+     * shape that builds a value rather than computing one, and {@code isNamespace} is how that is
+     * asked. Not by the name: an operation a library gave its own module's name renders the same
+     * either way, which is the reading-a-name-back-out that type exists to stop.
+     */
+    private static Core written(Core e) {
+        return e instanceof Core.Call call
+                && call.fn() instanceof Core.Reached reached
+                && reached.denotes() instanceof ValueName.Stdlib lib && lib.isNamespace()
+                && call.args().size() == 1
+                ? call.args().get(0) : null;
+    }
+
     /** The count a written temporal is, or null where the expression is not one of that kind. A
      *  temporal is written as a literal with its text spelled out (spec
-     *  §a-temporal-value-is-written-as-a-literal), so it is read here rather than run. */
-    private static Count temporal(Hir.Expr e, String written,
+     *  §a-temporal-value-is-written-as-a-literal), so it is read here rather than run. Which
+     *  construction it is comes from the callee, for the reason {@link #written} gives. */
+    private static Count temporal(Hir.Expr e,
                                   java.util.function.Function<String, Count> countOf) {
         return e instanceof Hir.Apply call && call.answered() != null
-                && written.equals(call.answered().reaches())
+                && call.answered().denotes() instanceof ValueName.Stdlib lib && lib.isNamespace()
                 && call.args().size() == 1 && call.args().get(0) instanceof Hir.StringLit iso
                 ? countOf.apply(iso.value()) : null;
     }

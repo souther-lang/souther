@@ -48,21 +48,18 @@ public final class Instants {
     /**
      * The moment {@code count} counts to, written the way a model writes one.
      *
-     * <p>Divided towards the count below rather than towards zero, so the second a moment falls in
-     * is the second before it on both sides of the epoch. Truncating instead would put the moment a
-     * nanosecond before midnight in 1969 into the second after it.
+     * <p>Split rather than handed over whole because the count runs past what a {@code long} holds
+     * at either end of the timeline, and {@code ofEpochSecond} takes two of them. Which way the
+     * division goes does not matter: below the epoch it leaves a negative count of nanoseconds
+     * within the second, and {@code ofEpochSecond} normalises that onto the second before — the
+     * same moment a division towards the count below would have named.
      */
     public static String written(Place count) {
         BigInteger nanos = Count.number(count).at()
                 .setScale(0, RoundingMode.FLOOR).toBigIntegerExact();
         BigInteger[] parts = nanos.divideAndRemainder(PER_SECOND.toBigIntegerExact());
-        BigInteger second = parts[0];
-        BigInteger within = parts[1];
-        if (within.signum() < 0) {
-            second = second.subtract(BigInteger.ONE);
-            within = within.add(PER_SECOND.toBigIntegerExact());
-        }
-        return Instant.ofEpochSecond(second.longValueExact(), within.longValueExact()).toString();
+        return Instant.ofEpochSecond(parts[0].longValueExact(), parts[1].longValueExact())
+                .toString();
     }
 
     private Instants() {}
