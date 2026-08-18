@@ -1080,10 +1080,29 @@ public final class InvariantChecker {
      * contradict.
      */
     private void entering(Core e, Known given, Denotations at, int depth) {
+        entering(e, e, given, at, depth);
+    }
+
+    /**
+     * The same, where part of what is being walked has already been read: {@code unread} is what has
+     * not, and {@code given} is what holds of the rest.
+     *
+     * <p>The two places that rebuild an expression are where this is so: a binding standing inside a
+     * value is walked with its body put where it was, and a conditional given to a value is walked
+     * once with each of its branches there. Either way the tree is the whole of the expression —
+     * which is what the source would have written without the helper or the conditional, and what
+     * the rest of this walk reads — and only the part put in is new.
+     *
+     * <p>What stands beside it was read where the region was entered, and reading it again under
+     * what was put in lands on the same subjects. A binder an expansion introduced was written
+     * around its own body, and the binders a conditional stands inside scope over the conditional
+     * and no further, so nothing standing beside either was written where it could name them.
+     */
+    private void entering(Core e, Core unread, Known given, Denotations at, int depth) {
         if (given.reachesNothing()) {
             return;
         }
-        walk(e, engine.answering(e, given, at), at, depth);
+        walk(e, engine.answering(unread, given, at), at, depth);
     }
 
     /**
@@ -1111,7 +1130,8 @@ public final class InvariantChecker {
                 walk(standing.value(), k, at, depth);
             }
             Entered in = bindLet(standing, k, at);
-            entering(without(e, Set.of(standing), standing.body()), in.known(), in.at(), depth);
+            entering(without(e, Set.of(standing), standing.body()), standing.body(), in.known(),
+                    in.at(), depth);
             return;
         }
         ConditionalSite site = conditionalValueIn(e);
@@ -1134,9 +1154,12 @@ public final class InvariantChecker {
             // The readings start from where the conditional stood, not from outside it. The tree each
             // is given still holds those binders and walks into them again, which is why entering one
             // already entered is nothing: a second transition would forget what the branch settled.
-            say(reading(without(e, alike, value.then()),
+            // Only the branch is unread. Everything beside the conditional was read where this
+            // region was entered and stands in `within`, and the two readings differ in what the
+            // condition settles rather than in what stands outside it.
+            say(reading(without(e, alike, value.then()), value.then(),
                             predicates.assumeCond(value.cond(), within, there, true).known(), there, depth),
-                    reading(without(e, alike, value.els()),
+                    reading(without(e, alike, value.els()), value.els(),
                             predicates.assumeCond(value.cond(), within, there, false).known(), there, depth));
             return;
         }
@@ -1805,12 +1828,13 @@ public final class InvariantChecker {
     /** What reading {@code e} finds. A branch nothing reaches finds nothing, which is the walk's
      * answer ({@link Known#reachesNothing}) and not a second one taken here: this collects what the
      * reading found and decides nothing about whether there was anything to find. */
-    private Map<Occurrence, Reported> reading(Core e, Known k, Denotations at, int depth) {
+    private Map<Occurrence, Reported> reading(Core e, Core unread, Known k, Denotations at,
+                                              int depth) {
         Capture outer = capturing;
         Capture mine = Capture.empty();
         capturing = mine;
         try {
-            entering(e, k, at, depth + 1);
+            entering(e, unread, k, at, depth + 1);
         } finally {
             capturing = outer;
         }

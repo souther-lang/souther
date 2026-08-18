@@ -72,16 +72,106 @@ class AnAnswerIsSeededOnceWhereItStandsTest {
         return List.copyOf(seeded);
     }
 
+    /**
+     * A construction given a helper call in one field and an answer in another. {@code HelperInliner}
+     * writes the call out as bindings around the helper's body, so the first field holds a binding
+     * standing inside a value — which the walk enters by putting the body where the binding was and
+     * reading the whole expression from there. The answer in the second field is standing beside it,
+     * and was read where the region was entered.
+     */
+    private static String beside(int helpers, int answers) {
+        StringBuilder left = new StringBuilder("a");
+        for (int i = 0; i < helpers; i++) {
+            left.insert(0, "bump(").append(")");
+        }
+        StringBuilder right = new StringBuilder("a");
+        for (int i = 0; i < answers; i++) {
+            right.insert(0, "step(").append(")");
+        }
+        return """
+                module demo exposing ( Amount, Pair, step, run )
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Pair = { l: Amount, r: Amount }
+
+                behavior step : (a: Amount) -> Amount
+                    constructs Amount
+
+                let step (a) = Amount(a.value + 1)
+
+                let bump (x: Amount): Amount = Amount(x.value + 1)
+
+                behavior run : (a: Amount) -> Pair
+                    constructs Pair, Amount
+
+                let run (a) = Pair { l = %s, r = %s }
+                """.formatted(left, right);
+    }
+
+    /** Every answer seeded while compiling {@code source} is a distinct one, and there are
+     * {@code expected} of them. */
+    private static void seededOnce(int expected, String source, String what) {
+        List<Core> seeded = seededIn(source);
+        Map<Core, Boolean> distinct = new IdentityHashMap<>();
+        seeded.forEach(answer -> distinct.put(answer, true));
+        assertEquals(expected, distinct.size(), "answers seeded over " + what);
+        assertEquals(distinct.size(), seeded.size(), "an answer was seeded twice over " + what);
+    }
+
+    @Test
+    void anAnswerBesideAnEnteredBindingIsNotReadAgain() {
+        for (int helpers : List.of(1, 2, 3)) {
+            for (int answers : List.of(1, 2, 4)) {
+                seededOnce(answers, beside(helpers, answers),
+                        answers + " answers beside " + helpers + " expanded helper calls");
+            }
+        }
+    }
+
+    /**
+     * A conditional in one field, and answers standing beside it in another. A conditional given to
+     * a value is one of its two branches, so the walk reads the expression once with each branch put
+     * where the conditional stood — two readings of the branch, and one of everything else.
+     */
+    private static String besideAConditional(int answers) {
+        StringBuilder right = new StringBuilder("a");
+        for (int i = 0; i < answers; i++) {
+            right.insert(0, "step(").append(")");
+        }
+        return """
+                module demo exposing ( Amount, Pair, step, run )
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Pair = { l: Amount, r: Amount }
+
+                behavior step : (a: Amount) -> Amount
+                    constructs Amount
+
+                let step (a) = Amount(a.value + 1)
+
+                behavior run : (a: Amount) -> Pair
+                    constructs Pair, Amount
+
+                let run (a) = Pair { l = if a.value > 3 then Amount(1) else Amount(2), r = %s }
+                """.formatted(right);
+    }
+
+    @Test
+    void anAnswerBesideAnOpenedConditionalIsNotReadAgain() {
+        for (int answers : List.of(1, 2, 4)) {
+            seededOnce(answers, besideAConditional(answers),
+                    answers + " answers beside a conditional in a value");
+        }
+    }
+
     @Test
     void aCallNestedInsideAnotherIsSeededOnce() {
         for (int depth : List.of(1, 2, 4, 8, 16)) {
-            List<Core> seeded = seededIn(nested(depth));
-            assertEquals(depth, seeded.size(),
-                    "answers seeded over a body of " + depth + " nested calls");
-            Map<Core, Boolean> distinct = new IdentityHashMap<>();
-            seeded.forEach(answer -> distinct.put(answer, true));
-            assertEquals(seeded.size(), distinct.size(),
-                    "one of the " + depth + " nested calls was seeded twice");
+            seededOnce(depth, nested(depth), "a body of " + depth + " nested calls");
         }
     }
 }

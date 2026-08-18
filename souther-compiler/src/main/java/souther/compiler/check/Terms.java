@@ -344,10 +344,10 @@ final class Terms {
         if (size != null) {
             return size;
         }
-        // Read where it is going to be an answer, and not before: an identity is a walk of the whole
-        // expression, and a value of a type the domain carries nothing of takes no atom however it
-        // was written.
-        return carriesANumber(e) ? atomOfIdentity(FactSubject.of(identityOf(e, at)), e, at) : null;
+        // Read where it is going to be an answer, and not before: what a value is called is a walk
+        // of the whole expression, and a value of a type the domain carries nothing of takes no atom
+        // however it was written.
+        return carriesANumber(e) ? atomOfIdentity(subjectOf(e, at), e, at) : null;
     }
 
     /**
